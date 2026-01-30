@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: digitus_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: digitus_db
+    environment:
+      POSTGRES_USER: digitus
+      POSTGRES_PASSWORD: digitus_secret_123
+      POSTGRES_DB: digitus_engine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digitus -d digitus_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: digitus_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    container_name: digitus_celery_worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  celery_beat:
+    build: .
+    container_name: digitus_celery_beat
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  digitus_network:
+    driver: bridge

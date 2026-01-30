@@ -1,0 +1,125 @@
+.channels-page {
+  max-width: 1200px;
+}
+
+/* Run Selection */
+.run-selection {
+  margin-bottom: var(--space-xl);
+}
+
+.run-selection h3 {
+  margin-bottom: var(--space-md);
+}
+
+.run-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Strategic Section */
+.strategic-section {
+  margin-bottom: var(--space-xl);
+  border-left: 4px solid var(--warning);
+}
+
+.strategic-section h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.strategic-icon {
+  color: var(--warning);
+}
+
+.strategic-desc {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: var(--space-md);
+}
+
+.strategic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Pools Grid */
+.pools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
+}
+
+.pool-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.pool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: var(--space-md);
+  margin-bottom: var(--space-md);
+  border-bottom: 2px solid;
+}
+
+.pool-count {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.pool-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.pool-item:hover {
+  background: var(--bg-card);
+}
+
+.pool-rank {
+  width: 32px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.pool-keyword {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.strategic-star {
+  color: var(--warning);
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-2xl);
+  color: var(--text-muted);
+}
+
+@media (max-width: 1024px) {
+  .pools-grid {
+    grid-template-columns: 1fr;
+  }
+}

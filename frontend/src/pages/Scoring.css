@@ -1,0 +1,72 @@
+.scoring-page {
+  max-width: 1200px;
+}
+
+/* Runs Section */
+.runs-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.runs-section h2 {
+  margin-bottom: var(--space-lg);
+}
+
+.runs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-lg);
+}
+
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.run-card.active {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.run-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.run-name {
+  font-weight: 600;
+}
+
+.run-capacities {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.run-actions {
+  margin-top: var(--space-sm);
+}
+
+/* Scores Section */
+.scores-section {
+  margin-top: var(--space-xl);
+}
+
+.scores-section h2 {
+  margin-bottom: var(--space-lg);
+}
+
+.top-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.empty-text {
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-xl);
+}

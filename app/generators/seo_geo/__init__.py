@@ -1,0 +1,1 @@
+# SEO+GEO generator package

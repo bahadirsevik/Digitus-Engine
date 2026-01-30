@@ -1,0 +1,1 @@
+# Ads generator package
