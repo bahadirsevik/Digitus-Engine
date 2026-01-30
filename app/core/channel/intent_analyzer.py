@@ -127,13 +127,8 @@ class IntentAnalyzer:
                     temperature=0.3
                 )
                 
-                # JSON parse
+                # JSON parse - Cleaning now handled in AIService
                 content = response
-                # Markdown temizliği
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0].strip()
-                elif "```" in content:
-                    content = content.split("```")[1].strip()
                 
                 print(f"DEBUG: Raw AI Response: {content[:200]}...")  # Log first 200 chars
                 

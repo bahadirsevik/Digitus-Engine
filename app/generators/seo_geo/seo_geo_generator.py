@@ -2,9 +2,12 @@
 SEO+GEO optimized content generator.
 """
 from typing import Dict, Any, List
+import logging
+import json
 
 from app.generators.ai_service import AIService
 
+logger = logging.getLogger(__name__)
 
 class SEOGeoGenerator:
     """SEO ve GEO uyumlu içerik üretici."""
@@ -62,9 +65,22 @@ JSON formatında yanıt ver:
   "geo_score_estimate": 0.80
 }}"""
         
-        response = self.ai.complete_json(prompt, max_tokens=4000)
-        import json
-        return json.loads(response)
+        try:
+            response = self.ai.complete_json(prompt, max_tokens=4000)
+            return json.loads(response)
+        except Exception as e:
+            logger.error(f"Failed to generate blog post for keyword '{keyword}': {e}")
+            # Fallback structure
+            return {
+                "error": str(e),
+                "title": f"Guide to {keyword}",
+                "meta_description": f"Everything you need to know about {keyword}.",
+                "h1": f"{keyword} Explained",
+                "sections": [],
+                "schema_markup": {},
+                "seo_score_estimate": 0.0,
+                "geo_score_estimate": 0.0
+            }
     
     def generate_landing_page(
         self,
@@ -86,6 +102,14 @@ Bölümler:
 
 JSON formatında yanıt ver."""
         
-        response = self.ai.complete_json(prompt, max_tokens=3000)
-        import json
-        return json.loads(response)
+        try:
+            response = self.ai.complete_json(prompt, max_tokens=3000)
+            return json.loads(response)
+        except Exception as e:
+            logger.error(f"Failed to generate landing page for keyword '{keyword}': {e}")
+            # Fallback structure
+            return {
+                "error": str(e),
+                "hero": {"title": f"Welcome to {keyword}", "subtitle": ""},
+                "sections": []
+            }

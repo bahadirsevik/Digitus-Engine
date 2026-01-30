@@ -2,9 +2,12 @@
 Google Ads content generator.
 """
 from typing import List, Dict, Any
+import logging
+import json
 
 from app.generators.ai_service import AIService
 
+logger = logging.getLogger(__name__)
 
 class AdsGenerator:
     """Google Ads içerik üretici."""
@@ -47,9 +50,19 @@ JSON formatında yanıt ver:
   "path2": "..."
 }}"""
         
-        response = self.ai.complete_json(prompt)
-        import json
-        return json.loads(response)
+        try:
+            response = self.ai.complete_json(prompt)
+            return json.loads(response)
+        except Exception as e:
+            logger.error(f"Failed to generate RSA for keyword '{keyword}': {e}")
+            # Fallback structure
+            return {
+                "error": str(e),
+                "headlines": [f"Explore {keyword}"],
+                "descriptions": [f"Learn more about {keyword} today."],
+                "path1": "info",
+                "path2": "more"
+            }
     
     def generate_ad_extensions(
         self,
@@ -76,6 +89,15 @@ Oluştur:
 
 JSON formatında yanıt ver."""
         
-        response = self.ai.complete_json(prompt)
-        import json
-        return json.loads(response)
+        try:
+            response = self.ai.complete_json(prompt)
+            return json.loads(response)
+        except Exception as e:
+            logger.error(f"Failed to generate ad extensions for keyword '{keyword}': {e}")
+            # Fallback structure
+            return {
+                "error": str(e),
+                "sitelinks": [],
+                "callouts": [],
+                "structured_snippets": {}
+            }

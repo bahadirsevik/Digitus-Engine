@@ -2,11 +2,16 @@
 Google Gemini, OpenAI ve Anthropic API'leri için birleşik wrapper.
 """
 import os
-from typing import Optional
+import time
+import random
+import logging
+from typing import Optional, Callable, Any
 from abc import ABC, abstractmethod
 
 import google.generativeai as genai
+import google.api_core.exceptions
 
+logger = logging.getLogger(__name__)
 
 class AIService(ABC):
     """Abstract base class for AI services."""
@@ -40,19 +45,44 @@ class GeminiService(AIService):
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel("gemini-2.0-flash")
     
+    def _retry_on_rate_limit(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Executes a function with exponential backoff for Rate Limit errors.
+        """
+        max_retries = 3
+        base_delay = 2
+
+        for attempt in range(max_retries + 1):
+            try:
+                return func(*args, **kwargs)
+            except google.api_core.exceptions.ResourceExhausted as e:
+                if attempt == max_retries:
+                    logger.error(f"Gemini API rate limit exceeded after {max_retries} retries.")
+                    raise e
+
+                delay = (base_delay * (2 ** attempt)) + random.uniform(0, 1)
+                logger.warning(f"Rate limit hit. Retrying in {delay:.2f}s... (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(delay)
+            except Exception as e:
+                # Other errors are raised immediately
+                raise e
+
     def complete(
         self,
         prompt: str,
         max_tokens: int = 1000,
         temperature: float = 0.7
     ) -> str:
-        response = self.model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature
+        def _call_api():
+            return self.model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens,
+                    temperature=temperature
+                )
             )
-        )
+
+        response = self._retry_on_rate_limit(_call_api)
         return response.text
     
     def complete_json(
@@ -62,15 +92,27 @@ class GeminiService(AIService):
         temperature: float = 0.3
     ) -> str:
         json_prompt = f"{prompt}\n\nSADECE geçerli JSON formatında yanıt ver, başka hiçbir şey yazma."
-        response = self.model.generate_content(
-            json_prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-                response_mime_type="application/json"
+
+        def _call_api():
+            return self.model.generate_content(
+                json_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens,
+                    temperature=temperature,
+                    response_mime_type="application/json"
+                )
             )
-        )
-        return response.text
+
+        response = self._retry_on_rate_limit(_call_api)
+        text = response.text
+
+        # Centralized Markdown cleanup
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].strip()
+
+        return text
 
 
 class MockAIService(AIService):
