@@ -3,6 +3,7 @@ AI ile niyet analizi yapar.
 Her kanal için uygun niyet tiplerini filtreler.
 """
 from typing import List, Dict, Any, Optional
+import logging
 from sqlalchemy.orm import Session
 import json
 
@@ -11,6 +12,9 @@ from app.database.models import (
 )
 from app.core.constants import CHANNEL_ACCEPTED_INTENTS, INTENT_TYPES
 from app.generators.ai_service import AIService
+
+
+logger = logging.getLogger(__name__)
 
 
 class IntentAnalyzer:
@@ -135,7 +139,7 @@ class IntentAnalyzer:
                 elif "```" in content:
                     content = content.split("```")[1].strip()
                 
-                print(f"DEBUG: Raw AI Response: {content[:200]}...")  # Log first 200 chars
+                logger.debug(f"Raw AI Response: {content[:200]}...")  # Log first 200 chars
                 
                 batch_results = json.loads(content)
                 
@@ -143,12 +147,12 @@ class IntentAnalyzer:
                 if isinstance(batch_results, dict):
                     batch_results = batch_results.get('results', batch_results.get('keywords', [batch_results]))
                 
-                print(f"DEBUG: Parsed {len(batch_results)} results")
+                logger.debug(f"Parsed {len(batch_results)} results")
                 all_results.extend(batch_results)
                 
             except (json.JSONDecodeError, Exception) as e:
-                print(f"ERROR: Intent Analysis Failed: {e}")
-                print(f"ERROR: Content that failed: {response if response else 'No response received'}")
+                logger.error(f"Intent Analysis Failed: {e}")
+                logger.error(f"Content that failed: {response if response else 'No response received'}")
                 # Fallback: her kelime için kanal bazlı varsayılan değer
                 for kw in batch:
                     all_results.append({
