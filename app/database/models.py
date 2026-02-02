@@ -202,6 +202,10 @@ class ContentOutput(Base):
     keyword = relationship("Keyword", back_populates="content_outputs")
     compliance_checks = relationship("ComplianceCheck", back_populates="content_output", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index('idx_content_outputs_run_channel', 'scoring_run_id', 'channel'),
+    )
+
 
 class ComplianceCheck(Base):
     """

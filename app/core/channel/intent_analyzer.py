@@ -5,6 +5,8 @@ Her kanal için uygun niyet tiplerini filtreler.
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 import json
+import time
+import random
 
 from app.database.models import (
     ChannelCandidate, IntentAnalysis, Keyword, ScoringRun
@@ -101,11 +103,11 @@ class IntentAnalyzer:
     ) -> List[Dict[str, Any]]:
         """
         Kelimeleri batch halinde AI'a gönderir.
-        Maliyet optimizasyonu için toplu işlem yapar.
+        Maliyet optimizasyonu ve rate limit yönetimi için dinamik batchleme yapar.
         
         Args:
             keywords: Analiz edilecek kelimeler
-            batch_size: Her batch'teki kelime sayısı
+            batch_size: Başlangıç batch boyutu
             channel: Kanal adı (fallback intent tipi için)
         
         Returns:
@@ -114,49 +116,113 @@ class IntentAnalyzer:
         all_results = []
         
         # Fallback için kanal bazlı varsayılan niyet tipi
-        fallback_intent = CHANNEL_ACCEPTED_INTENTS.get(channel, ['informational'])[0]        
-        for i in range(0, len(keywords), batch_size):
-            batch = keywords[i:i + batch_size]
+        fallback_intent = CHANNEL_ACCEPTED_INTENTS.get(channel, ['informational'])[0]
+
+        # Dinamik ayarlar
+        current_batch_size = batch_size
+        current_sleep = 1.0
+        min_batch_size = 1
+        max_batch_size = 50
+        max_retries = 3
+
+        i = 0
+        while i < len(keywords):
+            # Batch'i belirle
+            end_index = min(i + current_batch_size, len(keywords))
+            batch = keywords[i:end_index]
+
             prompt = self._build_intent_prompt(batch)
-            response = None  # Initialize before try block
             
-            try:
-                response = self.ai_service.complete_json(
-                    prompt=prompt,
-                    max_tokens=2000,
-                    temperature=0.3
-                )
-                
-                # JSON parse
-                content = response
-                # Markdown temizliği
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0].strip()
-                elif "```" in content:
-                    content = content.split("```")[1].strip()
-                
-                print(f"DEBUG: Raw AI Response: {content[:200]}...")  # Log first 200 chars
-                
-                batch_results = json.loads(content)
-                
-                # Eğer sonuç dict ise ve içinde liste varsa
-                if isinstance(batch_results, dict):
-                    batch_results = batch_results.get('results', batch_results.get('keywords', [batch_results]))
-                
-                print(f"DEBUG: Parsed {len(batch_results)} results")
+            retry_count = 0
+            success = False
+            batch_results = []
+
+            while retry_count <= max_retries:
+                try:
+                    start_time = time.time()
+                    response = self.ai_service.complete_json(
+                        prompt=prompt,
+                        max_tokens=2000,
+                        temperature=0.3
+                    )
+                    duration = time.time() - start_time
+
+                    # JSON parse
+                    content = response
+                    # Markdown temizliği
+                    if "```json" in content:
+                        content = content.split("```json")[1].split("```")[0].strip()
+                    elif "```" in content:
+                        content = content.split("```")[1].strip()
+
+                    print(f"DEBUG: Raw AI Response: {content[:200]}...")  # Log first 200 chars
+
+                    batch_data = json.loads(content)
+
+                    # Eğer sonuç dict ise ve içinde liste varsa
+                    if isinstance(batch_data, dict):
+                        batch_results = batch_data.get('results', batch_data.get('keywords', [batch_data]))
+                    else:
+                        batch_results = batch_data
+
+                    print(f"DEBUG: Parsed {len(batch_results)} results")
+
+                    # Başarılı oldu
+                    success = True
+
+                    # Hızlı yanıt alındıysa batch boyutunu artır (rate limit yoksa)
+                    if duration < 2.0 and current_batch_size < max_batch_size:
+                        current_batch_size += 5
+
+                    # Bekleme süresini yavaşça azalt (decay)
+                    current_sleep = max(1.0, current_sleep * 0.8)
+
+                    time.sleep(current_sleep)
+                    break
+
+                except Exception as e:
+                    error_str = str(e).lower()
+                    is_rate_limit = "429" in error_str or "resource" in error_str or "exhausted" in error_str or "quota" in error_str
+
+                    if is_rate_limit:
+                        retry_count += 1
+                        if retry_count > max_retries:
+                            print(f"ERROR: Max retries reached for batch starting at {i}. Error: {e}")
+                            break
+
+                        # Backoff stratejisi
+                        wait_time = (2 ** retry_count) + random.uniform(0, 1)
+                        print(f"WARNING: Rate limit hit. Waiting {wait_time:.2f}s. Reducing batch size.")
+                        time.sleep(wait_time)
+
+                        # Batch boyutunu azalt
+                        current_batch_size = max(min_batch_size, current_batch_size // 2)
+
+                        # Gelecek çağrılar için base sleep süresini artır
+                        current_sleep = min(10.0, current_sleep * 2)
+
+                        # Not: Döngü başa dönecek ve aynı batch (prompt) tekrar denenecek.
+                        # Eğer çok büyükse yine hata verebilir, ama current_batch_size sonraki iterasyonlarda küçülecek.
+
+                    else:
+                        print(f"ERROR: Intent Analysis Failed: {e}")
+                        break
+
+            if success:
                 all_results.extend(batch_results)
-                
-            except (json.JSONDecodeError, Exception) as e:
-                print(f"ERROR: Intent Analysis Failed: {e}")
-                print(f"ERROR: Content that failed: {response if response else 'No response received'}")
-                # Fallback: her kelime için kanal bazlı varsayılan değer
+            else:
+                # Fallback: Bu batch için varsayılan değerler
+                print(f"WARNING: Fallback used for {len(batch)} keywords due to errors.")
                 for kw in batch:
                     all_results.append({
                         'keyword_id': kw['id'],
                         'intent_type': fallback_intent,
                         'confidence': 0.5,
-                        'reasoning': f'AI çağrısı başarısız, varsayılan değer kullanıldı: {str(e)}'
+                        'reasoning': 'AI çağrısı başarısız, varsayılan değer kullanıldı.'
                     })
+
+            # Sonraki gruba geç
+            i += len(batch)
         
         return all_results
     
