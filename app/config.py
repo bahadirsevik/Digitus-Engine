@@ -4,6 +4,7 @@ Loads settings from environment variables and .env file.
 """
 import os
 from typing import Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -42,6 +43,15 @@ class Settings(BaseSettings):
             return self.DATABASE_URL
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
+    @model_validator(mode='after')
+    def check_production_security(self) -> 'Settings':
+        if self.APP_ENV == "production":
+            if self.SECRET_KEY == "your-secret-key-change-in-production":
+                raise ValueError("Insecure SECRET_KEY usage in production environment!")
+            if self.POSTGRES_PASSWORD == "digitus_secret_123":
+                raise ValueError("Insecure POSTGRES_PASSWORD usage in production environment!")
+        return self
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
