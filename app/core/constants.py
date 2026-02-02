@@ -27,6 +27,8 @@ ADS_FINAL_CAPACITY = 60
 SEO_FINAL_CAPACITY = 30
 SOCIAL_FINAL_CAPACITY = 30
 
+# Havuz çarpanı (testlerde kullanılıyor olabilir)
+POOL_MULTIPLIER = 2.0
 
 # ==================== NİYET TİPLERİ ====================
 
