@@ -3,14 +3,12 @@ AI ile niyet analizi yapar.
 Her kanal için uygun niyet tiplerini filtreler.
 """
 from typing import List, Dict, Any, Optional
-from sqlalchemy.orm import Session
 import json
 
-from app.database.models import (
-    ChannelCandidate, IntentAnalysis, Keyword, ScoringRun
-)
+from app.database.models import IntentAnalysis
 from app.core.constants import CHANNEL_ACCEPTED_INTENTS, INTENT_TYPES
 from app.generators.ai_service import AIService
+from app.repositories.intent_repository import IntentRepository
 
 
 class IntentAnalyzer:
@@ -19,8 +17,8 @@ class IntentAnalyzer:
     Anahtar kelimelerin kullanıcı niyetini analiz eder.
     """
     
-    def __init__(self, db: Session, ai_service: AIService):
-        self.db = db
+    def __init__(self, intent_repository: IntentRepository, ai_service: AIService):
+        self.repo = intent_repository
         self.ai_service = ai_service
     
     def analyze_candidates(self, scoring_run_id: int, channel: str) -> Dict[str, Any]:
@@ -35,14 +33,7 @@ class IntentAnalyzer:
             Analiz özeti
         """
         # Adayları al
-        candidates = (
-            self.db.query(ChannelCandidate, Keyword)
-            .join(Keyword, ChannelCandidate.keyword_id == Keyword.id)
-            .filter(ChannelCandidate.scoring_run_id == scoring_run_id)
-            .filter(ChannelCandidate.channel == channel)
-            .order_by(ChannelCandidate.rank_in_channel)
-            .all()
-        )
+        candidates = self.repo.get_candidates(scoring_run_id, channel)
         
         if not candidates:
             return {'analyzed': 0, 'passed': 0}
@@ -60,6 +51,7 @@ class IntentAnalyzer:
         intent_results = self._batch_analyze_intent(keywords_to_analyze, channel=channel)
         
         passed_count = 0
+        intent_analyses = []
         
         for (candidate, keyword), intent_result in zip(candidates, intent_results):
             intent_type = intent_result.get('intent_type', 'informational')
@@ -82,9 +74,9 @@ class IntentAnalyzer:
                 ai_reasoning=reasoning,
                 is_passed=is_passed
             )
-            self.db.add(intent_analysis)
+            intent_analyses.append(intent_analysis)
         
-        self.db.commit()
+        self.repo.save_intent_analyses(intent_analyses)
         
         return {
             'channel': channel,
