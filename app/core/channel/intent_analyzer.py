@@ -62,14 +62,10 @@ class IntentAnalyzer:
         passed_count = 0
         
         for (candidate, keyword), intent_result in zip(candidates, intent_results):
-            intent_type = intent_result.get('intent_type', 'informational')
-            confidence = intent_result.get('confidence', 0.5)
-            reasoning = intent_result.get('reasoning', '')
+            # Tekil sonuç işleme
+            processed_result = self._process_intent_result(intent_result, accepted_intents)
             
-            # Filtreyi geçti mi?
-            is_passed = intent_type in accepted_intents
-            
-            if is_passed:
+            if processed_result['is_passed']:
                 passed_count += 1
             
             # Veritabanına kaydet
@@ -77,10 +73,10 @@ class IntentAnalyzer:
                 scoring_run_id=scoring_run_id,
                 keyword_id=candidate.keyword_id,
                 channel=channel,
-                intent_type=intent_type,
-                confidence_score=confidence,
-                ai_reasoning=reasoning,
-                is_passed=is_passed
+                intent_type=processed_result['intent_type'],
+                confidence_score=processed_result['confidence'],
+                ai_reasoning=processed_result['reasoning'],
+                is_passed=processed_result['is_passed']
             )
             self.db.add(intent_analysis)
         
@@ -93,6 +89,47 @@ class IntentAnalyzer:
             'filtered_out': len(candidates) - passed_count
         }
     
+    def _process_intent_result(
+        self,
+        intent_result: Dict[str, Any],
+        accepted_intents: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Tekil niyet analiz sonucunu işler ve kurallara göre değerlendirir.
+
+        Args:
+            intent_result: AI'dan gelen ham sonuç
+            accepted_intents: Kanal için kabul edilen niyet tipleri
+
+        Returns:
+            İşlenmiş sonuç ve geçme durumu
+        """
+        intent_type = intent_result.get('intent_type', 'informational')
+
+        # Güven skoru kontrolü ve dönüşümü
+        confidence_raw = intent_result.get('confidence', 0.5)
+        try:
+            confidence = float(confidence_raw)
+        except (ValueError, TypeError):
+            confidence = 0.5
+
+        reasoning = intent_result.get('reasoning', '')
+
+        # Filtre kuralları:
+        # 1. Niyet tipi kabul edilenler listesinde olmalı
+        # 2. Güven skoru 0.45'ten büyük olmalı
+        is_intent_accepted = intent_type in accepted_intents
+        is_confidence_sufficient = confidence > 0.45
+
+        is_passed = is_intent_accepted and is_confidence_sufficient
+
+        return {
+            'intent_type': intent_type,
+            'confidence': confidence,
+            'reasoning': reasoning,
+            'is_passed': is_passed
+        }
+
     def _batch_analyze_intent(
         self,
         keywords: List[Dict[str, Any]],
