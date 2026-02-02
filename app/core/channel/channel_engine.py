@@ -10,6 +10,7 @@ from app.database.models import (
 )
 from app.core.channel.pool_builder import PoolBuilder
 from app.core.channel.intent_analyzer import IntentAnalyzer
+from app.repositories.intent_repository import IntentRepository
 from app.core.constants import ADS_FINAL_CAPACITY, SEO_FINAL_CAPACITY, SOCIAL_FINAL_CAPACITY
 from app.generators.ai_service import AIService
 
@@ -24,7 +25,10 @@ class ChannelEngine:
         self.db = db
         self.ai_service = ai_service
         self.pool_builder = PoolBuilder(db)
-        self.intent_analyzer = IntentAnalyzer(db, ai_service)
+
+        # Instantiate repository and inject into analyzer
+        self.intent_repository = IntentRepository(db)
+        self.intent_analyzer = IntentAnalyzer(self.intent_repository, ai_service)
     
     def run_channel_assignment(self, scoring_run_id: int) -> Dict[str, Any]:
         """

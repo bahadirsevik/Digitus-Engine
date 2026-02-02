@@ -27,6 +27,7 @@ ADS_FINAL_CAPACITY = 60
 SEO_FINAL_CAPACITY = 30
 SOCIAL_FINAL_CAPACITY = 30
 
+POOL_MULTIPLIER = 2
 
 # ==================== NİYET TİPLERİ ====================
 
