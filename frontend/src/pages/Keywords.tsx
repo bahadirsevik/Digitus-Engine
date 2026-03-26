@@ -114,61 +114,173 @@ export default function Keywords() {
     const text = await uploadedFile.text()
     const lines = text.split('\n').filter((line: string) => line.trim())
     
-    // Find header row - Google Ads CSVs have metadata rows before header
-    // Header row contains "Keyword" and "Currency" columns
-    let startIndex = 0
+    // Auto-detect separator from multiple lines (not just first line)
+    // Google KP exports may have metadata rows before the header
+    const detectSep = (sampleLines: string[]): string => {
+      const seps = ['\t', ';', ',']
+      for (const s of seps) {
+        const counts = sampleLines.map(l => l.split(s).length)
+        const maxCols = Math.max(...counts)
+        if (maxCols >= 4 && counts.filter(c => c >= 4).length >= Math.min(2, sampleLines.length)) {
+          return s
+        }
+      }
+      return ','
+    }
+    let sep = detectSep(lines.slice(0, Math.min(10, lines.length)))
+
+    // Find header row by checking for known column names (Turkish + English)
+    const headerPatterns = [
+      'keyword', 'avg. monthly searches', 'monthly searches',
+      'competition', 'üç aylık', 'yıldan yıla', 'three month change',
+      'year over year', 'rekabet'
+    ]
+    let headerIndex = -1
     for (let i = 0; i < Math.min(10, lines.length); i++) {
-      const lowerLine = lines[i]?.toLowerCase() || ''
-      if (lowerLine.includes('keyword') && lowerLine.includes('currency')) {
-        startIndex = i + 1  // Skip header, start from next row
+      const lower = lines[i]?.toLowerCase() || ''
+      const matchCount = headerPatterns.filter(p => lower.includes(p)).length
+      if (matchCount >= 2) {
+        headerIndex = i
+        // Re-detect separator from header row specifically
+        sep = detectSep([lines[i]])
         break
       }
     }
+
+    if (headerIndex === -1) {
+      // Fallback: use line 0 if no header found
+      headerIndex = 0
+    }
     
-    const allParsed = lines.slice(startIndex).map((line: string) => {
-      const parts = line.split('\t').length > 1 ? line.split('\t') : line.split(',')
-      const rawCompetition = parseFloat(parts[6]?.replace(/[^0-9.]/g, ''))
-      
-      // Helper to parse trend values, handling infinity (∞) and extreme values
-      const parseTrend = (val: string | undefined): number => {
-        if (!val) return 0
-        // Check for infinity symbol or text
-        if (val.includes('∞') || val.toLowerCase().includes('inf')) return 0
-        const num = parseFloat(val.replace(/[^0-9.-]/g, ''))
-        // Cap extreme values to prevent database overflow
-        if (isNaN(num) || !isFinite(num) || Math.abs(num) > 9999) return 0
-        return num
-      }
-      
-      return {
-        keyword: parts[0]?.trim().replace(/^"|"$/g, '') || '',
-        sector: parts[1]?.trim().replace(/^"|"$/g, '') || undefined,
-        monthly_volume: (() => { const v = parseInt(parts[2]?.replace(/[^0-9]/g, '')); return isNaN(v) ? 1000 : v; })(),
-        trend_3m: parseTrend(parts[3]),
-        trend_12m: parseTrend(parts[4]),
-        competition_score: rawCompetition / 100,
-        _rawCompetition: rawCompetition,
-      }
+    // Parse header to find column indices dynamically
+    const headerCols = lines[headerIndex].split(sep).map((h: string) => h.trim().toLowerCase().replace(/"/g, ''))
+    
+    // Map column names to indices
+    const colMap: Record<string, number> = {}
+    headerCols.forEach((col: string, idx: number) => {
+      if (col.includes('keyword') && !col.includes('negative')) colMap.keyword = idx
+      if (col.includes('avg') && col.includes('search')) colMap.volume = idx
+      if (col === 'competition' || col === 'rekabet') colMap.competition_text = idx
+      if (col.includes('competition') && col.includes('indexed') || col.includes('rekabet') && col.includes('endeks')) colMap.competition_idx = idx
+      if (col.includes('üç aylık') || col.includes('three month')) colMap.trend3m = idx
+      if (col.includes('yıldan yıla') || col.includes('year over year') || col.includes('yildan yila')) colMap.trend12m = idx
     })
     
-    const totalParsed = allParsed.filter(kw => kw.keyword).length
+    // Fallback for simple CSV format: keyword, sector, volume, trend3m, trend12m, competition
+    const isSimpleFormat = colMap.keyword === undefined
+    
+    // Parse helper: handle comma decimal (Turkish locale "0,53" → 0.53)
+    const parseNum = (val: string | undefined): number => {
+      if (!val) return 0
+      // Remove quotes, whitespace
+      val = val.trim().replace(/"/g, '')
+      // Replace comma with dot for decimal
+      val = val.replace(',', '.')
+      // Remove non-numeric except dot and minus
+      val = val.replace(/[^0-9.\-]/g, '')
+      const n = parseFloat(val)
+      return isNaN(n) ? 0 : n
+    }
+    
+    // Competition text to numeric score (0-1)
+    const parseCompetition = (text: string | undefined, indexed: string | undefined): number => {
+      // Try indexed value first (0-100)
+      if (indexed) {
+        const val = parseNum(indexed)
+        if (val > 0) return val / 100
+      }
+      // Fallback: text labels
+      if (!text) return 0.5
+      const lower = text.trim().toLowerCase().replace(/"/g, '')
+      if (lower === 'düşük' || lower === 'dusuk' || lower === 'low') return 0.20
+      if (lower === 'orta' || lower === 'medium') return 0.50
+      if (lower === 'yüksek' || lower === 'yuksek' || lower === 'high') return 0.80
+      // Numeric string
+      const num = parseNum(text)
+      if (num > 1) return num / 100  // 0-100 range
+      if (num > 0) return num
+      return 0.5
+    }
+    
+    // Helper to parse trend values, handling infinity and extreme values
+    const parseTrend = (val: string | undefined): number => {
+      if (!val) return 0
+      val = val.trim().replace(/"/g, '')
+      if (val.includes('∞') || val.toLowerCase().includes('inf')) return 0
+      // Handle percentage format: "22%" or "-18%"
+      const num = parseNum(val)
+      if (Math.abs(num) > 9999) return 0
+      return num
+    }
+    
+    const dataLines = lines.slice(headerIndex + 1)
+    
+    const allParsed = dataLines.map((line: string) => {
+      const parts = line.split(sep)
+      
+      // Skip empty rows (only separators)
+      const hasContent = parts.some((p: string) => p.trim().replace(/"/g, ''))
+      if (!hasContent) return null
+      
+      if (isSimpleFormat) {
+        // Simple format: keyword, sector, volume, trend3m, trend12m, competition
+        const rawComp = parseNum(parts[5])
+        return {
+          keyword: parts[0]?.trim().replace(/^"|"$/g, '') || '',
+          sector: parts[1]?.trim().replace(/^"|"$/g, '') || undefined,
+          monthly_volume: (() => { const v = parseInt(parts[2]?.replace(/[^0-9]/g, '')); return isNaN(v) ? 1 : v; })(),
+          trend_3m: parseTrend(parts[3]),
+          trend_12m: parseTrend(parts[4]),
+          competition_score: rawComp > 1 ? rawComp / 100 : rawComp,
+          _valid: true,
+        }
+      }
+      
+      // Google Keyword Planner format
+      const kw = parts[colMap.keyword ?? 0]?.trim().replace(/^"|"$/g, '') || ''
+      const volume = parseInt((parts[colMap.volume ?? 1] || '0').replace(/[^0-9]/g, ''))
+      const trend3m = parseTrend(parts[colMap.trend3m ?? -1])
+      const trend12m = parseTrend(parts[colMap.trend12m ?? -1])
+      const compScore = parseCompetition(
+        parts[colMap.competition_text ?? -1],
+        parts[colMap.competition_idx ?? -1]
+      )
+      
+      return {
+        keyword: kw,
+        sector: undefined,
+        monthly_volume: isNaN(volume) || volume === 0 ? 1 : volume,
+        trend_3m: trend3m,
+        trend_12m: trend12m,
+        competition_score: compScore,
+        _valid: true,
+      }
+    }).filter(Boolean)
+    
+    const totalParsed = allParsed.filter((kw: any) => kw?.keyword).length
     const keywordsToImport = allParsed
-      .filter(kw => kw.keyword && !isNaN(kw._rawCompetition) && kw._rawCompetition > 0)
-      .map(({ _rawCompetition, ...rest }) => rest)
+      .filter((kw: any) => kw?.keyword)
+      .map(({ _valid, ...rest }: any) => ({
+        ...rest,
+        // Clamp competition_score to 0-1 range (safety net)
+        competition_score: Math.min(1, Math.max(0, rest.competition_score > 1 ? rest.competition_score / 100 : rest.competition_score)),
+        // Ensure monthly_volume is positive integer
+        monthly_volume: Math.max(1, Math.round(rest.monthly_volume || 1)),
+      }))
     
     const skippedCount = totalParsed - keywordsToImport.length
     
     try {
       // Send to backend API
       await keywordsApi.import(keywordsToImport)
-      setUploadStatus(`✅ ${keywordsToImport.length} keyword kaydedildi. (${skippedCount} satır rekabet verisi eksik/0 olduğu için atlandı)`)
+      setUploadStatus(`✅ ${keywordsToImport.length} keyword kaydedildi.${skippedCount > 0 ? ` (${skippedCount} satır geçersiz veri nedeniyle atlandı)` : ''}`)
       
       // Refresh from API
       fetchKeywords()
     } catch (err) {
       console.error('API import failed, adding locally:', err)
       // Fallback: add locally if API fails
-      const localKeywords: Keyword[] = keywordsToImport.map((kw, idx) => ({
+      const localKeywords: Keyword[] = keywordsToImport.map((kw: any, idx: number) => ({
         id: Date.now() + idx,
         ...kw,
         is_active: true
@@ -187,7 +299,7 @@ export default function Keywords() {
   }
   
   const handleDelete = async (id: number) => {
-    if (!confirm('Bu keyword silinecek. Emin misiniz?')) return
+    if (!confirm('Bu anahtar kelime silinecek. Emin misiniz?')) return
     try {
       await keywordsApi.delete(id)
       fetchKeywords()
@@ -206,7 +318,7 @@ export default function Keywords() {
     <div className="keywords-page animate-fade-in">
       <header className="page-header">
         <div>
-          <h1>Keywords</h1>
+          <h1>Anahtar Kelimeler</h1>
           <p>Anahtar kelime yönetimi</p>
         </div>
         <div className="header-actions">
@@ -216,7 +328,7 @@ export default function Keywords() {
           <button 
             className="btn btn-danger" 
             onClick={async () => {
-              if (!confirm('TÜM KEYWORDLERİ SİLMEK İSTEDİĞİNİZE EMİN MİSİNİZ? Bu işlem geri alınamaz!')) return
+              if (!confirm('TÜM ANAHTAR KELİMELERİ SİLMEK İSTEDİĞİNİZE EMİN MİSİNİZ? Bu işlem geri alınamaz!')) return
               try {
                 await keywordsApi.deleteAll()
                 fetchKeywords()
@@ -254,7 +366,7 @@ export default function Keywords() {
         <input 
           type="text" 
           className="input" 
-          placeholder="Keyword veya sektör ara..."
+          placeholder="Anahtar kelime veya sektör ara..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -277,7 +389,7 @@ export default function Keywords() {
         <table className="table">
           <thead>
             <tr>
-              <th>Keyword</th>
+              <th>Anahtar Kelime</th>
               <th>Sektör</th>
               <th>Hacim</th>
               <th>Trend 12M</th>
@@ -298,9 +410,9 @@ export default function Keywords() {
               <tr>
                 <td colSpan={7} className="empty-cell">
                   <FileSpreadsheet size={48} />
-                  <p>Keyword bulunamadı</p>
+                  <p>Anahtar kelime bulunamadı</p>
                   <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-                    <Plus size={16} /> İlk Keyword'ü Ekle
+                    <Plus size={16} /> İlk Anahtar Kelimeyi Ekle
                   </button>
                 </td>
               </tr>
@@ -346,14 +458,14 @@ export default function Keywords() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal glass-card" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Yeni Keyword Ekle</h2>
+              <h2>Yeni Anahtar Kelime Ekle</h2>
               <button className="btn btn-icon" onClick={() => setShowModal(false)}>
                 <X size={20} />
               </button>
             </div>
             
             <div className="form-group">
-              <label>Keyword *</label>
+              <label>Anahtar Kelime *</label>
               <input 
                 className="input" 
                 value={newKeyword.keyword}
@@ -507,3 +619,5 @@ export default function Keywords() {
     </div>
   )
 }
+
+

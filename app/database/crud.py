@@ -4,12 +4,14 @@ CRUD operations for database models.
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
+from loguru import logger
 
 from app.database.models import (
     Keyword, ScoringRun, KeywordScore, 
     ChannelCandidate, IntentAnalysis, ChannelPool,
     ContentOutput, ComplianceCheck
 )
+from app.core.keyword_dedup import deduplicate_keywords
 
 
 # ==================== KEYWORD CRUD ====================
@@ -62,15 +64,9 @@ def create_keywords_bulk(db: Session, keywords_data: List[Dict[str, Any]]) -> in
     created = 0
     skipped = 0
     
-    # Sanitize and filter data before inserting
+    # Sanitize data before inserting
     sanitized_keywords = []
     for kw_data in keywords_data:
-        # Skip if keyword already exists
-        existing = get_keyword_by_text(db, kw_data.get('keyword', ''))
-        if existing:
-            skipped += 1
-            continue
-        
         # Sanitize trend values to prevent overflow (Numeric(7,2) max is 99999.99)
         if 'trend_12m' in kw_data:
             try:
@@ -90,10 +86,77 @@ def create_keywords_bulk(db: Session, keywords_data: List[Dict[str, Any]]) -> in
         
         sanitized_keywords.append(kw_data)
     
+    # Fuzzy deduplication: merge within-batch duplicates (Turkish stemming + Levenshtein)
+    before_dedup = len(sanitized_keywords)
+    sanitized_keywords = deduplicate_keywords(sanitized_keywords)
+    fuzzy_merged = before_dedup - len(sanitized_keywords)
+    if fuzzy_merged > 0:
+        logger.info(f"Fuzzy dedup: {fuzzy_merged} within-batch duplicate(s) merged")
+    
+    # Cross-batch fuzzy dedup: also check new keywords against existing DB keywords
+    # Load existing active keywords for fuzzy comparison
+    from app.core.keyword_dedup import strip_turkish_suffixes, are_metrics_equal, FUZZY_THRESHOLD
+    try:
+        from thefuzz import fuzz
+    except ImportError:
+        fuzz = None
+
+    existing_keywords = db.query(Keyword).filter(Keyword.is_active == True).all()
+    
+    unique_keywords = []
+    cross_batch_merged = 0
+    
+    for kw_data in sanitized_keywords:
+        keyword_text = kw_data.get('keyword', '')
+        if not keyword_text:
+            unique_keywords.append(kw_data)
+            continue
+        
+        # 1) Exact match check (fast path)
+        existing = get_keyword_by_text(db, keyword_text)
+        if existing:
+            skipped += 1
+            continue
+        
+        # 2) Fuzzy match against existing DB keywords (if thefuzz available)
+        is_fuzzy_dup = False
+        if fuzz and existing_keywords:
+            stemmed_new = strip_turkish_suffixes(keyword_text.lower().strip())
+            for ex_kw in existing_keywords:
+                stemmed_ex = strip_turkish_suffixes(ex_kw.keyword.lower().strip())
+                ratio = fuzz.ratio(stemmed_new, stemmed_ex)
+                if ratio >= FUZZY_THRESHOLD:
+                    # Check metrics match
+                    new_metrics = {
+                        'monthly_volume': kw_data.get('monthly_volume', 0),
+                        'competition_score': kw_data.get('competition_score', 0)
+                    }
+                    ex_metrics = {
+                        'monthly_volume': ex_kw.monthly_volume,
+                        'competition_score': ex_kw.competition_score
+                    }
+                    if are_metrics_equal(new_metrics, ex_metrics):
+                        is_fuzzy_dup = True
+                        cross_batch_merged += 1
+                        logger.debug(
+                            f"Cross-batch fuzzy dup skipped: '{keyword_text}' ≈ '{ex_kw.keyword}' "
+                            f"(ratio={ratio}%)"
+                        )
+                        break
+        
+        if is_fuzzy_dup:
+            skipped += 1
+            continue
+        
+        unique_keywords.append(kw_data)
+    
+    if cross_batch_merged > 0:
+        logger.info(f"Cross-batch fuzzy dedup: {cross_batch_merged} duplicate(s) skipped")
+    
     # Insert in batches
     batch_size = 50
-    for i in range(0, len(sanitized_keywords), batch_size):
-        batch = sanitized_keywords[i:i + batch_size]
+    for i in range(0, len(unique_keywords), batch_size):
+        batch = unique_keywords[i:i + batch_size]
         try:
             for kw_data in batch:
                 db_keyword = Keyword(**kw_data)

@@ -53,6 +53,7 @@ def create_and_run_scoring(
     ads_capacity: int,
     seo_capacity: int,
     social_capacity: int,
+    default_relevance_coefficient: float = 1.0,
     run_name: str = None
 ):
     """
@@ -69,6 +70,7 @@ def create_and_run_scoring(
             ads_capacity=ads_capacity,
             seo_capacity=seo_capacity,
             social_capacity=social_capacity,
+            default_relevance_coefficient=default_relevance_coefficient,
             run_name=run_name
         )
         

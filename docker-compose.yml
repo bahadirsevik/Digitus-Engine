@@ -89,6 +89,20 @@ services:
       - digitus_network
     restart: unless-stopped
 
+  site_fetch_smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile.smoke
+    container_name: digitus_site_fetch_smoke
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    networks:
+      - digitus_network
+    profiles:
+      - smoke
+    restart: "no"
+
 volumes:
   postgres_data:
   redis_data:

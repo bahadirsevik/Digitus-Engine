@@ -4,20 +4,19 @@ ADS SKORLAMA - The ROI Hunter
 Amaç: Talebi yüksek, trendi yükselen, maliyeti makul kelimeleri bul.
 
 Formül:
-    ADS_Skor = (√(Hacim+1) × Trend_Kombine) / √(Rekabet + ε)
+    ADS_Skor = (√(Hacim+1) × Trend_Kombine) / √(Rekabet + 1)
 
 Açıklama:
     - Hacim yükseldikçe skor artar
     - Trend pozitifse skor artar
     - Rekabet yükseldikçe skor AZALIR (ama √ ile yumuşatılır)
-    - ε sıfıra bölmeyi önler
+    - +1 sıfıra bölmeyi önler ve taban değer sağlar
 """
 import math
 from decimal import Decimal
 from typing import List, Dict, Any
 
 from app.core.constants import (
-    ADS_EPSILON,
     ADS_TREND_3M_WEIGHT,
     ADS_TREND_12M_WEIGHT
 )
@@ -36,8 +35,8 @@ def calculate_ads_score(
     """
     Tek bir kelime için ADS skoru hesaplar.
     
-    Formül: (√(Hacim+1) × Trend_Kombine) / √(Rekabet + ε)
-    
+    Formül: (√(Hacim+1) × Trend_Kombine) / √(Rekabet + 1)
+    #rekabet +1 yap
     Args:
         monthly_volume: Aylık arama hacmi
         trend_3m: Son 3 aylık trend (% değişim)
@@ -62,9 +61,9 @@ def calculate_ads_score(
     # Rekabet normalize et (0-1 arası olmalı)
     competition_normalized = normalize_competition(competition_score)
     
-    # Formül: (√(Hacim+1) × Trend) / √(Rekabet + ε)
+    # Formül: (√(Hacim+1) × Trend) / √(Rekabet + 1)
     numerator = math.sqrt(monthly_volume + 1) * trend_combined
-    denominator = math.sqrt(competition_normalized + ADS_EPSILON)
+    denominator = math.sqrt(competition_normalized + 1)
     
     score = numerator / denominator
     

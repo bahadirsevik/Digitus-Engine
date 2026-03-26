@@ -108,3 +108,62 @@ def import_keywords(
         skipped=skipped,
         message=f"{created} keywords created, {skipped} skipped (already exist)"
     )
+
+
+@router.post("/cleanup-duplicates")
+def cleanup_duplicate_keywords(db: Session = Depends(get_db)):
+    """
+    Mevcut aktif keyword'ler arasındaki fuzzy duplicate'leri bul ve deaktif et.
+    
+    Türkçe ek bazlı stemming + Levenshtein benzerliği (≥85%) ile 
+    aynı metriğe sahip benzer keyword'leri tespit eder.
+    İlk bulunan keyword korunur, sonraki duplicate'ler is_active=False yapılır.
+    """
+    from app.core.keyword_dedup import deduplicate_keywords
+    from loguru import logger
+    
+    # Tüm aktif keyword'leri çek
+    active_keywords = db.query(Keyword).filter(Keyword.is_active == True).all()
+    
+    if len(active_keywords) <= 1:
+        return {
+            "total_active": len(active_keywords),
+            "duplicates_deactivated": 0,
+            "deactivated_keywords": [],
+            "message": "No duplicates found"
+        }
+    
+    # Dict listesine çevir
+    keyword_dicts = [
+        {
+            'keyword': kw.keyword,
+            'monthly_volume': kw.monthly_volume,
+            'competition_score': kw.competition_score,
+            '_db_id': kw.id
+        }
+        for kw in active_keywords
+    ]
+    
+    # Dedup uygula
+    deduped = deduplicate_keywords(keyword_dicts)
+    survived_ids = {d['_db_id'] for d in deduped}
+    
+    # Elenen keyword'leri deaktif et
+    deactivated = []
+    for kw in active_keywords:
+        if kw.id not in survived_ids:
+            kw.is_active = False
+            deactivated.append({"id": kw.id, "keyword": kw.keyword})
+    
+    if deactivated:
+        db.commit()
+        logger.info(f"Cleanup: {len(deactivated)} duplicate keyword(s) deactivated")
+    
+    return {
+        "total_active_before": len(active_keywords),
+        "total_active_after": len(deduped),
+        "duplicates_deactivated": len(deactivated),
+        "deactivated_keywords": deactivated[:50],  # İlk 50'sini göster
+        "message": f"{len(deactivated)} duplicate keyword(s) deactivated"
+    }
+

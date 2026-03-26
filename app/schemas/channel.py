@@ -7,6 +7,16 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
 
+class ChannelAssignRequest(BaseModel):
+    """Request schema for channel assignment execution."""
+    relevance_override: Optional[float] = Field(
+        None,
+        ge=0.1,
+        le=3.0,
+        description="Optional relevance coefficient override for this assignment"
+    )
+
+
 class ChannelCandidateResponse(BaseModel):
     """Schema for channel candidate response."""
     keyword_id: int
@@ -38,6 +48,8 @@ class ChannelPoolResponse(BaseModel):
     channel: str
     final_rank: int
     is_strategic: bool
+    relevance_score: Optional[Decimal] = None
+    adjusted_score: Optional[Decimal] = None
     
     model_config = ConfigDict(from_attributes=True)
 

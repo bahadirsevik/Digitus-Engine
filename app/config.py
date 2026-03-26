@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     ADS_EPSILON: float = 0.01
     SEO_COMPETITION_WEIGHT: float = 1.0
     SOCIAL_TREND_WEIGHT: float = 3.0
+
+    # Ads generation feature flags
+    ADS_FALLBACK_ENABLED: bool = True
+
+    # Site Analyzer Feature Flags
+    ENABLE_SITE_PROFILE_ANALYSIS: bool = True
+    ENABLE_RELEVANCE_RERANK: bool = True
     
     @property
     def database_url(self) -> str:

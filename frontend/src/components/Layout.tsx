@@ -1,13 +1,15 @@
 import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { 
-  LayoutDashboard, 
-  Key, 
-  BarChart3, 
-  Layers, 
+import {
+  LayoutDashboard,
+  Key,
+  BarChart3,
+  Layers,
   Download,
-  Settings,
-  Zap
+  Sparkles,
+  ListTodo,
+  Zap,
+  Globe2
 } from 'lucide-react'
 import './Layout.css'
 
@@ -16,11 +18,14 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/keywords', icon: Key, label: 'Keywords' },
-  { path: '/scoring', icon: BarChart3, label: 'Scoring' },
-  { path: '/channels', icon: Layers, label: 'Channels' },
-  { path: '/export', icon: Download, label: 'Export' },
+  { path: '/', icon: LayoutDashboard, label: 'Ana Panel' },
+  { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
+  { path: '/scoring', icon: BarChart3, label: 'Skorlama' },
+  { path: '/brand-profile', icon: Globe2, label: 'Marka Profili' },
+  { path: '/channels', icon: Layers, label: 'Kanallar' },
+  { path: '/generation', icon: Sparkles, label: 'İçerik Üretimi' },
+  { path: '/tasks', icon: ListTodo, label: 'Görevler' },
+  { path: '/export', icon: Download, label: 'Dışa Aktarım' },
 ]
 
 export default function Layout({ children }: LayoutProps) {
@@ -28,7 +33,6 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="layout">
-      {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-header">
           <Zap className="logo-icon" />
@@ -40,9 +44,9 @@ export default function Layout({ children }: LayoutProps) {
 
         <nav className="sidebar-nav">
           {navItems.map(({ path, icon: Icon, label }) => (
-            <Link 
+            <Link
               key={path}
-              to={path} 
+              to={path}
               className={`nav-item ${location.pathname === path ? 'active' : ''}`}
             >
               <Icon size={20} />
@@ -54,12 +58,11 @@ export default function Layout({ children }: LayoutProps) {
         <div className="sidebar-footer">
           <div className="api-status">
             <div className="status-dot"></div>
-            <span>API Connected</span>
+            <span>API Bağlı</span>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="main-content">
         {children}
       </main>

@@ -1,0 +1,93 @@
+.validation-log {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+
+.validation-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.validation-total {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.validation-counts {
+  display: flex;
+  gap: 12px;
+}
+
+.count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.count.passed {
+  color: var(--success);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.count.modified {
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.count.rejected {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-details {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.btn-details:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.validation-details {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.validation-details table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.validation-details th,
+.validation-details td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.validation-details th {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.row-modified td:first-child { color: var(--warning); }
+.row-rejected td:first-child { color: var(--error); }

@@ -1,0 +1,171 @@
+.tasks-page {
+  padding-bottom: 40px;
+}
+
+/* Filters */
+.task-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.filter-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+/* Task List */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 60px;
+  color: var(--text-secondary);
+}
+
+/* Task Card */
+.task-card {
+  padding: 16px 20px;
+  transition: all 0.2s;
+}
+
+.task-card:hover {
+  border-color: var(--accent-primary);
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.status-icon {
+  flex-shrink: 0;
+}
+
+.status-icon.pending { color: var(--warning); }
+.status-icon.running { color: var(--accent-primary); }
+.status-icon.completed { color: var(--success); }
+.status-icon.failed { color: var(--error); }
+
+.task-type {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.task-id {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.task-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+/* Progress */
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 40px;
+}
+
+/* Error & Result */
+.task-error {
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--error);
+  margin-bottom: 12px;
+}
+
+.task-result {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.task-result pre {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Actions */
+.task-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-danger {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}

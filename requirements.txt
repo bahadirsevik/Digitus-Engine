@@ -35,3 +35,13 @@ pytest-cov==4.1.0
 
 # Logging
 loguru==0.7.2
+
+# Text Similarity
+thefuzz[speedup]==0.22.1
+
+# HTML Parsing (Site Analyzer)
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Numerical (Embedding cosine similarity)
+numpy==1.26.4

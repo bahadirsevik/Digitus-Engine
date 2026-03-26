@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import io
-import csv
 
 from app.dependencies import get_db
 from app.core.scoring.score_engine import ScoreEngine
@@ -34,7 +33,10 @@ def create_scoring_run(
         ads_capacity=run_data.ads_capacity,
         seo_capacity=run_data.seo_capacity,
         social_capacity=run_data.social_capacity,
-        run_name=run_data.run_name
+        default_relevance_coefficient=run_data.default_relevance_coefficient,
+        run_name=run_data.run_name,
+        company_url=run_data.company_url,
+        competitor_urls=run_data.competitor_urls
     )
     return ScoringRunResponse.model_validate(scoring_run)
 
@@ -146,12 +148,15 @@ def get_top_by_channel(
     }
 
 
-@router.get("/runs/{run_id}/export/csv")
-def export_scoring_csv(
+@router.get("/runs/{run_id}/export/xlsx")
+def export_scoring_xlsx(
     run_id: int,
     db: Session = Depends(get_db)
 ):
-    """Export scoring results as CSV file."""
+    """Export scoring results as XLSX file (native Excel format, no date auto-format issues)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, numbers
+
     run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Scoring run not found")
@@ -163,24 +168,35 @@ def export_scoring_csv(
         .all()
     )
     
-    # Create CSV in memory
-    output = io.StringIO()
-    writer = csv.writer(output)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Skorlama Sonuçları"
     
-    # Header
-    writer.writerow([
-        'Keyword ID', 'Keyword', 'Monthly Volume', 'Sector',
-        'ADS Score', 'ADS Rank', 'SEO Score', 'SEO Rank', 
-        'SOCIAL Score', 'SOCIAL Rank'
-    ])
+    # Header row
+    headers = [
+        'Keyword ID', 'Keyword', 'Sektör',
+        'Aylık Hacim', 'Trend 3M (%)', 'Trend 12M (%)', 'Rekabet Skoru',
+        'ADS Skor', 'ADS Sıra', 'SEO Skor', 'SEO Sıra',
+        'SOCIAL Skor', 'SOCIAL Sıra'
+    ]
+    ws.append(headers)
+    
+    # Style header row — bold + auto-filter
+    bold_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = bold_font
+    ws.auto_filter.ref = ws.dimensions
     
     # Data rows
     for score, keyword in scores:
-        writer.writerow([
+        ws.append([
             keyword.id,
             keyword.keyword,
-            keyword.monthly_volume,
             keyword.sector or '',
+            keyword.monthly_volume or 0,
+            float(keyword.trend_3m) if keyword.trend_3m is not None else 0,
+            float(keyword.trend_12m) if keyword.trend_12m is not None else 0,
+            float(keyword.competition_score) if keyword.competition_score is not None else 0,
             float(score.ads_score) if score.ads_score else 0,
             score.ads_rank or 0,
             float(score.seo_score) if score.seo_score else 0,
@@ -189,12 +205,30 @@ def export_scoring_csv(
             score.social_rank or 0
         ])
     
+    # Set number format on score columns to prevent date interpretation
+    # Columns: E(5)=Trend3M, F(6)=Trend12M, G(7)=Rekabet,
+    #          H(8)=ADS Skor, J(10)=SEO Skor, L(12)=SOCIAL Skor
+    score_cols = [5, 6, 7, 8, 10, 12]  # 1-indexed column numbers
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+        for col_idx in score_cols:
+            cell = row[col_idx - 1]  # 0-indexed in row tuple
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = '0.0000'
+    
+    # Auto-fit column widths
+    col_widths = [12, 40, 8, 12, 12, 13, 13, 12, 9, 12, 9, 13, 12]
+    for i, width in enumerate(col_widths, 1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = width
+    
+    # Write to bytes buffer
+    output = io.BytesIO()
+    wb.save(output)
     output.seek(0)
     
-    filename = f"scoring_run_{run_id}_{run.run_name or 'export'}.csv"
+    filename = f"scoring_run_{run_id}_{run.run_name or 'export'}.xlsx"
     
     return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )

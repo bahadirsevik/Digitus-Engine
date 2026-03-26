@@ -11,17 +11,20 @@ def normalize_competition(value: float, min_val: float = 0, max_val: float = 100
     Rekabet skorunu 0-1 arasına normalize eder.
     Gelen değer 0-100 arası ise 0-1'e çevirir.
     
+    Minimum 0.01 döner — competition=0 olan kelimelerde
+    sıfıra bölünme veya çarpanın sıfırlanması engellenir.
+    
     Args:
         value: Rekabet skoru
         min_val: Minimum değer (varsayılan 0)
         max_val: Maximum değer (varsayılan 100)
     
     Returns:
-        0-1 arası normalize edilmiş değer
+        0.01-1 arası normalize edilmiş değer
     """
     if value <= 1:
-        return value  # Zaten normalize
-    return (value - min_val) / (max_val - min_val)
+        return max(0.01, value)  # Minimum 0.01 — sıfıra bölünme/çarpma engeli
+    return max(0.01, (value - min_val) / (max_val - min_val))
 
 
 def normalize_trend(value: float) -> float:

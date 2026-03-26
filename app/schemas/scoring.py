@@ -1,4 +1,4 @@
-"""
+﻿"""
 Pydantic schemas for Scoring operations.
 """
 from datetime import datetime
@@ -9,10 +9,18 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class ScoringRunCreate(BaseModel):
     """Schema for creating a new scoring run."""
-    run_name: Optional[str] = Field(None, max_length=200, description="Çalıştırma adı")
-    ads_capacity: int = Field(..., gt=0, description="ADS kanalı için kelime kapasitesi")
-    seo_capacity: int = Field(..., gt=0, description="SEO kanalı için kelime kapasitesi")
-    social_capacity: int = Field(..., gt=0, description="SOCIAL kanalı için kelime kapasitesi")
+    run_name: Optional[str] = Field(None, max_length=200, description="Run name")
+    ads_capacity: int = Field(..., gt=0, description="ADS channel capacity")
+    seo_capacity: int = Field(..., gt=0, description="SEO channel capacity")
+    social_capacity: int = Field(..., gt=0, description="SOCIAL channel capacity")
+    default_relevance_coefficient: float = Field(
+        1.0,
+        ge=0.1,
+        le=3.0,
+        description="Default relevance coefficient used in channel assignment"
+    )
+    company_url: Optional[str] = Field(None, max_length=500, description="Company website URL")
+    competitor_urls: Optional[List[str]] = Field(None, max_length=3, description="Competitor URL list (max 3)")
 
 
 class ScoringRunResponse(BaseModel):
@@ -23,9 +31,10 @@ class ScoringRunResponse(BaseModel):
     ads_capacity: int
     seo_capacity: int
     social_capacity: int
+    default_relevance_coefficient: Decimal
     status: str
     created_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -33,11 +42,15 @@ class ScoringRunStatus(BaseModel):
     """Schema for scoring run status."""
     id: int
     run_name: Optional[str]
+    ads_capacity: int
+    seo_capacity: int
+    social_capacity: int
+    default_relevance_coefficient: Decimal
     status: str
     total_keywords: int
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

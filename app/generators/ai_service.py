@@ -2,7 +2,7 @@
 Google Gemini, OpenAI ve Anthropic API'leri için birleşik wrapper.
 """
 import os
-from typing import Optional
+from typing import Optional, Dict, Any
 from abc import ABC, abstractmethod
 
 import google.generativeai as genai
@@ -26,7 +26,8 @@ class AIService(ABC):
         self,
         prompt: str,
         max_tokens: int = 2000,
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        response_schema: Optional[Dict[str, Any]] = None
     ) -> str:
         """Generate a JSON completion for the given prompt."""
         pass
@@ -38,7 +39,7 @@ class GeminiService(AIService):
     def __init__(self, api_key: Optional[str] = None):
         api_key = api_key or os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel("gemini-2.0-flash")
+        self.model = genai.GenerativeModel("gemini-3-flash-preview")
     
     def complete(
         self,
@@ -59,16 +60,21 @@ class GeminiService(AIService):
         self,
         prompt: str,
         max_tokens: int = 2000,
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        response_schema: Optional[Dict[str, Any]] = None
     ) -> str:
         json_prompt = f"{prompt}\n\nSADECE geçerli JSON formatında yanıt ver, başka hiçbir şey yazma."
+        generation_kwargs: Dict[str, Any] = {
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+            "response_mime_type": "application/json"
+        }
+        if response_schema is not None:
+            generation_kwargs["response_schema"] = response_schema
+
         response = self.model.generate_content(
             json_prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-                response_mime_type="application/json"
-            )
+            generation_config=genai.types.GenerationConfig(**generation_kwargs)
         )
         return response.text
 
@@ -91,7 +97,8 @@ class MockAIService(AIService):
         self,
         prompt: str,
         max_tokens: int = 2000,
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        response_schema: Optional[Dict[str, Any]] = None
     ) -> str:
         # Return mock intent analysis
         import json

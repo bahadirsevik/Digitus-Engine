@@ -127,6 +127,7 @@ Thumbs.db
 exports/
 uploads/
 veri/
+artifacts/
 *.csv
 app_logs.txt
 full_logs.txt

@@ -5,11 +5,13 @@ Tüm skorlamaları orkestra eder ve veritabanına kaydeder.
 from typing import List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from datetime import datetime
+from loguru import logger
 
 from app.database.models import Keyword, ScoringRun, KeywordScore
 from app.core.scoring.ads_scorer import calculate_bulk_ads_scores
 from app.core.scoring.seo_scorer import calculate_bulk_seo_scores
 from app.core.scoring.social_scorer import calculate_bulk_social_scores
+from app.core.keyword_dedup import deduplicate_keywords
 
 
 class ScoreEngine:
@@ -21,34 +23,93 @@ class ScoreEngine:
     def __init__(self, db: Session):
         self.db = db
     
+    def _deactivate_duplicate_keywords(self, keywords: List[Keyword]) -> List[Keyword]:
+        """
+        Aktif keyword'ler arasındaki fuzzy duplicate'leri bul ve deaktif et.
+        
+        İlk bulunan keyword korunur, sonraki duplicate'ler is_active=False yapılır.
+        
+        Args:
+            keywords: Aktif Keyword ORM nesneleri
+            
+        Returns:
+            Duplicate'ler çıkarılmış keyword listesi
+        """
+        if len(keywords) <= 1:
+            return keywords
+        
+        # ORM nesnelerinden dict listesi oluştur (dedup fonksiyonu dict bekliyor)
+        keyword_dicts = [
+            {
+                'keyword': kw.keyword,
+                'monthly_volume': kw.monthly_volume,
+                'competition_score': kw.competition_score,
+                '_db_id': kw.id  # Dahili referans için
+            }
+            for kw in keywords
+        ]
+        
+        # Dedup uygula
+        deduped = deduplicate_keywords(keyword_dicts)
+        
+        # Hayatta kalan ID'leri belirle
+        survived_ids = {d['_db_id'] for d in deduped}
+        
+        # Elenen keyword'leri deaktif et
+        deactivated_count = 0
+        deactivated_names = []
+        for kw in keywords:
+            if kw.id not in survived_ids:
+                kw.is_active = False
+                deactivated_count += 1
+                deactivated_names.append(kw.keyword)
+        
+        if deactivated_count > 0:
+            self.db.commit()
+            logger.info(
+                f"Scoring pre-dedup: {deactivated_count} duplicate keyword(s) deactivated: "
+                f"{deactivated_names[:10]}{'...' if deactivated_count > 10 else ''}"
+            )
+        
+        # Hayatta kalan ORM nesnelerini döndür
+        return [kw for kw in keywords if kw.id in survived_ids]
+    
     def create_scoring_run(
         self,
         ads_capacity: int,
         seo_capacity: int,
         social_capacity: int,
-        run_name: str = None
+        default_relevance_coefficient: float = 1.0,
+        run_name: str = None,
+        company_url: str = None,
+        competitor_urls: list = None
     ) -> ScoringRun:
         """
         Yeni bir skorlama çalıştırması oluşturur.
-        
+
         Args:
             ads_capacity: ADS kanalı için hedef kelime sayısı
             seo_capacity: SEO kanalı için hedef kelime sayısı
             social_capacity: SOCIAL kanalı için hedef kelime sayısı
             run_name: Opsiyonel çalıştırma adı
-        
+            company_url: Opsiyonel firma URL (site profil analizi için)
+            competitor_urls: Opsiyonel rakip URL listesi (max 3)
+
         Returns:
             Oluşturulan ScoringRun nesnesi
         """
         # Aktif kelime sayısını al
         total_keywords = self.db.query(Keyword).filter(Keyword.is_active == True).count()
-        
+
         scoring_run = ScoringRun(
             run_name=run_name or f"Run_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             total_keywords=total_keywords,
             ads_capacity=ads_capacity,
             seo_capacity=seo_capacity,
             social_capacity=social_capacity,
+            default_relevance_coefficient=default_relevance_coefficient,
+            company_url=company_url,
+            competitor_urls=competitor_urls,
             status="pending"
         )
         
@@ -82,6 +143,9 @@ class ScoreEngine:
         try:
             # Aktif kelimeleri al
             keywords = self.db.query(Keyword).filter(Keyword.is_active == True).all()
+            
+            # Skorlama öncesi fuzzy dedup: benzer keyword'leri deaktif et
+            keywords = self._deactivate_duplicate_keywords(keywords)
             
             # Dict listesine çevir
             keyword_dicts = [

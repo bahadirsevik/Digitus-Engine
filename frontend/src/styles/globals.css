@@ -224,6 +224,22 @@ body {
   background: var(--success);
 }
 
+.status-running::before {
+  background: var(--warning);
+}
+
+.status-draft::before {
+  background: #60a5fa;
+}
+
+.status-confirmed::before {
+  background: var(--success);
+}
+
+.status-intent_analysis::before {
+  background: var(--warning);
+}
+
 .status-failed::before {
   background: var(--error);
 }

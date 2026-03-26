@@ -56,14 +56,36 @@ export const scoringApi = {
   deleteRun: (runId: number) => 
     api.delete(`/scoring/runs/${runId}`),
   
-  exportCsv: (runId: number) => 
-    api.get(`/scoring/runs/${runId}/export/csv`, { responseType: 'blob' })
+  exportXlsx: (runId: number) => 
+    api.get(`/scoring/runs/${runId}/export/xlsx`, { responseType: 'blob' })
+}
+
+// Brand Profile API
+export const brandProfileApi = {
+  getProfile: (runId: number) =>
+    api.get(`/brand-profile/runs/${runId}/profile`),
+
+  analyzeProfile: (runId: number, data: ProfileAnalyzeRequest) =>
+    api.post(`/brand-profile/runs/${runId}/profile/analyze`, data),
+
+  confirmProfile: (runId: number, data?: ProfileConfirmRequest) =>
+    api.put(`/brand-profile/runs/${runId}/profile/confirm`, data || {}),
+
+  computeRelevance: (runId: number) =>
+    api.post(`/brand-profile/runs/${runId}/relevance/compute`),
+
+  getRelevance: (runId: number, minScore = 0) =>
+    api.get(`/brand-profile/runs/${runId}/relevance`, {
+      params: { min_score: minScore }
+    })
 }
 
 // Channels API
 export const channelsApi = {
-  assign: (runId: number) => 
-    api.post(`/channels/runs/${runId}/assign`),
+  assign: (runId: number, relevanceOverride?: number) => 
+    api.post(`/channels/runs/${runId}/assign`, relevanceOverride !== undefined
+      ? { relevance_override: relevanceOverride }
+      : undefined),
   
   getPools: (runId: number) => 
     api.get(`/channels/runs/${runId}/pools`),
@@ -80,8 +102,11 @@ export const exportApi = {
   create: (data: ExportRequest) => 
     api.post('/export', data),
   
-  download: (filename: string) => 
-    api.get(`/export/download/${filename}`, { responseType: 'blob' })
+  status: (exportId: string) =>
+    api.get(`/export/${exportId}/status`),
+  
+  download: (exportId: string) => 
+    api.get(`/export/${exportId}/download`, { responseType: 'blob' })
 }
 
 // Generation API
@@ -109,6 +134,22 @@ export const healthApi = {
   detailed: () => axios.get('http://localhost:8000/health')
 }
 
+// Tasks API
+export const tasksApi = {
+  getStatus: (taskId: string) =>
+    api.get(`/tasks/${taskId}`),
+  
+  listByRun: (runId: number) =>
+    api.get(`/tasks/run/${runId}`),
+  
+  list: (params?: { limit?: number; status_filter?: string }) =>
+    api.get('/tasks/', { params }),
+  
+  cancel: (taskId: string) =>
+    api.post(`/tasks/${taskId}/cancel`)
+}
+
+
 // Types
 export interface KeywordCreate {
   keyword: string
@@ -125,15 +166,55 @@ export interface ScoringRunCreate {
   ads_capacity: number
   seo_capacity: number
   social_capacity: number
+  default_relevance_coefficient?: number
+  company_url?: string
+  competitor_urls?: string[]
+}
+
+export interface ProfileAnalyzeRequest {
+  company_url: string
+  competitor_urls?: string[]
+}
+
+export interface ProfileConfirmRequest {
+  profile_data?: Record<string, unknown>
+}
+
+export interface BrandProfileResponse {
+  id: number
+  scoring_run_id: number
+  company_url: string
+  competitor_urls?: string[]
+  status: string
+  profile_data?: Record<string, unknown>
+  validation_data?: Record<string, unknown>
+  source_pages?: Array<{ url: string; title: string; status: number }>
+  error_message?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface RelevanceComputeResponse {
+  scoring_run_id: number
+  total_keywords: number
+  computed: number
+  failed: number
+  average_relevance: number
+}
+
+export interface KeywordRelevanceResponse {
+  keyword_id: number
+  keyword: string
+  relevance_score: number
+  matched_anchor?: string
+  method: string
 }
 
 export interface ExportRequest {
   scoring_run_id: number
-  format: 'docx' | 'pdf' | 'excel'
-  channels?: string[]
-  include_scores?: boolean
-  include_intent_analysis?: boolean
-  include_content?: boolean
+  format: 'docx' | 'pdf' | 'excel' | 'csv'
+  sections?: string[]
+  include_compliance_details?: boolean
 }
 
 export default api
