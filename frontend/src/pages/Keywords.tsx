@@ -13,6 +13,7 @@ interface Keyword {
   trend_3m?: number
   competition_score?: number
   is_active: boolean
+  data_source?: string
 }
 
 export default function Keywords() {
@@ -419,7 +420,12 @@ export default function Keywords() {
             ) : (
               filteredKeywords.map(kw => (
                 <tr key={kw.id}>
-                  <td><strong>{kw.keyword}</strong></td>
+                  <td>
+                    <strong>{kw.keyword}</strong>
+                    {kw.data_source === 'google_ads_api' && (
+                      <span className="kw-source-badge">API</span>
+                    )}
+                  </td>
                   <td><span className="sector-badge">{kw.sector || '-'}</span></td>
                   <td>{kw.monthly_volume?.toLocaleString() || '-'}</td>
                   <td className={kw.trend_12m && kw.trend_12m > 0 ? 'positive' : 'negative'}>

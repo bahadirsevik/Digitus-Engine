@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Float,
-    ForeignKey, Numeric, JSON, UniqueConstraint, Index
+    ForeignKey, Numeric, JSON, UniqueConstraint, Index, CheckConstraint
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.sql import func
@@ -33,9 +33,17 @@ class Keyword(Base):
     sector = Column(String(200), index=True)
     target_market = Column(String(200))
     is_active = Column(Boolean, default=True, index=True)
+    data_source = Column(String(20), nullable=False, server_default="csv", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
+    __table_args__ = (
+        CheckConstraint(
+            "data_source IN ('csv', 'google_ads_api')",
+            name='ck_keywords_data_source'
+        ),
+    )
+
     # Relationships
     scores = relationship("KeywordScore", back_populates="keyword", cascade="all, delete-orphan")
     intent_analyses = relationship("IntentAnalysis", back_populates="keyword", cascade="all, delete-orphan")
@@ -66,10 +74,19 @@ class ScoringRun(Base):
     status = Column(String(50), default="pending")   # pending, scoring, intent_analysis, completed, failed
     company_url = Column(String(500))  # Opsiyonel firma URL (site profil analizi iÃ§in)
     competitor_urls = Column(JSON)     # Opsiyonel rakip URL listesi (max 3)
+    keyword_source_filter = Column(String(20), nullable=True)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
+    __table_args__ = (
+        CheckConstraint(
+            "keyword_source_filter IS NULL "
+            "OR keyword_source_filter IN ('csv', 'google_ads_api')",
+            name='ck_scoring_runs_source_filter'
+        ),
+    )
+
     # Relationships
     keyword_scores = relationship("KeywordScore", back_populates="scoring_run", cascade="all, delete-orphan")
     channel_candidates = relationship("ChannelCandidate", back_populates="scoring_run", cascade="all, delete-orphan")

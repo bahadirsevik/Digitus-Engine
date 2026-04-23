@@ -39,9 +39,10 @@ class KeywordResponse(KeywordBase):
     """Schema for keyword response."""
     id: int
     is_active: bool
+    data_source: str = "csv"
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

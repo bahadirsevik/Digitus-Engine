@@ -78,6 +78,54 @@ SADECE aşağıdaki JSON formatında yanıt ver:
 }}
 """
 
+PROFILE_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "company_name": {"type": "string"},
+        "sector": {"type": "string"},
+        "products": {"type": "array", "items": {"type": "string"}},
+        "services": {"type": "array", "items": {"type": "string"}},
+        "target_audience": {"type": "string"},
+        "use_cases": {"type": "array", "items": {"type": "string"}},
+        "problems_solved": {"type": "array", "items": {"type": "string"}},
+        "brand_terms": {"type": "array", "items": {"type": "string"}},
+        "exclude_themes": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "company_name",
+        "sector",
+        "products",
+        "services",
+        "target_audience",
+        "use_cases",
+        "problems_solved",
+        "brand_terms",
+        "exclude_themes",
+    ],
+}
+
+COMPETITOR_VALIDATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "consistency_score": {"type": "number"},
+        "competitors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "status": {"type": "string"},
+                    "summary": {"type": "string"},
+                },
+                "required": ["url", "status", "summary"],
+            },
+        },
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "profile_adjustments": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["consistency_score", "competitors", "warnings", "profile_adjustments"],
+}
+
 
 class ProfileExtractor:
     """Extracts structured brand profile from crawled website content."""
@@ -115,8 +163,12 @@ class ProfileExtractor:
         # Extract profile via AI
         try:
             prompt = PROFILE_EXTRACTION_PROMPT.format(site_content=site_content)
-            response = self.ai_service.complete_json(prompt, max_tokens=2000)
-            profile = json.loads(response)
+            response = self.ai_service.complete_json(
+                prompt,
+                max_tokens=2000,
+                response_schema=PROFILE_RESPONSE_SCHEMA,
+            )
+            profile = self._parse_json_response(response)
         except Exception as e:
             logger.error(f"Profile extraction AI error: {e}")
             return {
@@ -182,8 +234,12 @@ class ProfileExtractor:
                     competitor_profiles, ensure_ascii=False, indent=2
                 ),
             )
-            response = self.ai_service.complete_json(prompt, max_tokens=1500)
-            return json.loads(response)
+            response = self.ai_service.complete_json(
+                prompt,
+                max_tokens=1500,
+                response_schema=COMPETITOR_VALIDATION_SCHEMA,
+            )
+            return self._parse_json_response(response)
         except Exception as e:
             logger.error(f"Competitor validation AI error: {e}")
             return {
@@ -261,3 +317,37 @@ class ProfileExtractor:
             anchors.append(f"{sector} {audience}".strip())
 
         return anchors
+
+    def _parse_json_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse model response defensively.
+        Supports clean JSON and JSON followed by extra text.
+        """
+        text = (response_text or "").strip()
+        if not text:
+            raise ValueError("Empty AI response")
+
+        # Fast path: fully valid JSON
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+            raise ValueError("AI response root must be an object")
+        except json.JSONDecodeError:
+            pass
+
+        # Recovery path: find first JSON object and decode only that part
+        decoder = json.JSONDecoder()
+        for start_char in ("{", "["):
+            start_idx = text.find(start_char)
+            if start_idx == -1:
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(text[start_idx:])
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+
+        preview = text[:200].replace("\n", " ")
+        raise ValueError(f"Failed to parse AI JSON response. preview={preview!r}")

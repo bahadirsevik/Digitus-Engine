@@ -3,6 +3,7 @@ Celery tasks for scoring operations.
 """
 from celery import shared_task
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.tasks.celery_app import celery_app
 from app.database.connection import SessionLocal
@@ -54,7 +55,8 @@ def create_and_run_scoring(
     seo_capacity: int,
     social_capacity: int,
     default_relevance_coefficient: float = 1.0,
-    run_name: str = None
+    run_name: str = None,
+    keyword_source_filter: Optional[str] = None,
 ):
     """
     Skorlama çalıştırması oluşturur ve çalıştırır.
@@ -71,7 +73,8 @@ def create_and_run_scoring(
             seo_capacity=seo_capacity,
             social_capacity=social_capacity,
             default_relevance_coefficient=default_relevance_coefficient,
-            run_name=run_name
+            run_name=run_name,
+            keyword_source_filter=keyword_source_filter,
         )
         
         # Execute scoring

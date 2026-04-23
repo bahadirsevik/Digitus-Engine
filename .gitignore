@@ -145,3 +145,35 @@ frontend/node_modules/
 # Database
 *.db
 *.sqlite3
+
+# Tests
+tests/
+
+# Gereksiz scriptler
+scripts/run_google_ads_probe.py
+scripts/site_fetch_smoke.py
+scripts/site_profile_extract_test.py
+scripts/test_gemini_simple.py
+
+# Gelistirme / analiz dosyalari
+.claude/
+_repo_check/
+labs/
+ACTION-PLAN.md
+FULL-AUDIT-REPORT.md
+Roadmap2.md
+claud.md
+last.md
+newprompts.md
+plan.md
+AI_STABILITY_REPORT.md
+SECURITY_AUDIT.md
+
+# Log ve cikti dosyalari
+*.txt
+*.docx
+discrepancy_report*.txt
+nul
+
+# Ortam dosyalari (credentials iceren)
+.env.google_ads_lab

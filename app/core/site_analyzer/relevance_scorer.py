@@ -4,6 +4,7 @@ Calculates cosine similarity between keywords and brand profile anchors.
 """
 import logging
 import re
+import time
 from typing import List, Dict, Tuple, Optional
 
 import numpy as np
@@ -17,6 +18,10 @@ EMBEDDING_MODEL = "models/gemini-embedding-2-preview"
 EMBEDDING_DIMENSIONS = 768
 EMBEDDING_TASK_TYPE = "SEMANTIC_SIMILARITY"
 BATCH_SIZE = 50  # Gemini embedding batch limit
+EMBEDDING_MAX_RETRIES = 3
+EMBEDDING_RETRY_BASE_DELAY = 1.0
+EMBEDDING_RATE_LIMIT_DELAY = 65.0  # wait > 60s for per-minute quota reset on 429
+INTER_BATCH_DELAY = 0.3  # seconds between batches to avoid quota bursting
 
 # Blend formula: adjusted = raw_score * (FLOOR + SLOPE * relevance)
 # At relevance=0.0 → keeps 35% of score (doesn't zero out)
@@ -77,6 +82,9 @@ class RelevanceScorer:
             kw_batch = normalized_keywords[batch_start:batch_end]
             original_batch = keywords[batch_start:batch_end]
 
+            if batch_start > 0:
+                time.sleep(INTER_BATCH_DELAY)
+
             kw_embeddings = self._embed_batch(kw_batch)
             if kw_embeddings is None:
                 # Fallback for this batch
@@ -129,19 +137,39 @@ class RelevanceScorer:
 
     def _embed_batch(self, texts: List[str]) -> Optional[List[np.ndarray]]:
         """Embed a batch of texts using Gemini Embedding 2."""
-        try:
-            result = genai.embed_content(
-                model=EMBEDDING_MODEL,
-                content=texts,
-                task_type=EMBEDDING_TASK_TYPE,
-                output_dimensionality=EMBEDDING_DIMENSIONS,
-            )
-            # result['embedding'] is a list of lists for batch input
-            embeddings = result["embedding"]
-            return [np.array(e, dtype=np.float32) for e in embeddings]
-        except Exception as e:
-            logger.error(f"Embedding API error: {e}")
-            return None
+        for attempt in range(1, EMBEDDING_MAX_RETRIES + 1):
+            try:
+                result = genai.embed_content(
+                    model=EMBEDDING_MODEL,
+                    content=texts,
+                    task_type=EMBEDDING_TASK_TYPE,
+                    output_dimensionality=EMBEDDING_DIMENSIONS,
+                )
+                # result['embedding'] is a list of lists for batch input
+                embeddings = result["embedding"]
+                return [np.array(e, dtype=np.float32) for e in embeddings]
+            except Exception as e:
+                is_last_attempt = attempt == EMBEDDING_MAX_RETRIES
+                if is_last_attempt:
+                    logger.error(
+                        "Embedding API error after %s attempts: %s",
+                        EMBEDDING_MAX_RETRIES,
+                        e,
+                    )
+                    return None
+
+                is_rate_limit = "429" in str(e) or "quota" in str(e).lower()
+                delay = EMBEDDING_RATE_LIMIT_DELAY if is_rate_limit else EMBEDDING_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    "Embedding API error (attempt %s/%s): %s. Retrying in %.1fs",
+                    attempt,
+                    EMBEDDING_MAX_RETRIES,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+
+        return None
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

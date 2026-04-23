@@ -2,7 +2,7 @@
 Ana skorlama motoru.
 Tüm skorlamaları orkestra eder ve veritabanına kaydeder.
 """
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 from loguru import logger
@@ -82,7 +82,8 @@ class ScoreEngine:
         default_relevance_coefficient: float = 1.0,
         run_name: str = None,
         company_url: str = None,
-        competitor_urls: list = None
+        competitor_urls: list = None,
+        keyword_source_filter: Optional[str] = None,
     ) -> ScoringRun:
         """
         Yeni bir skorlama çalıştırması oluşturur.
@@ -98,8 +99,11 @@ class ScoreEngine:
         Returns:
             Oluşturulan ScoringRun nesnesi
         """
-        # Aktif kelime sayısını al
-        total_keywords = self.db.query(Keyword).filter(Keyword.is_active == True).count()
+        # Aktif kelime sayısını al (kaynak filtresi varsa filtrele)
+        kw_query = self.db.query(Keyword).filter(Keyword.is_active == True)
+        if keyword_source_filter:
+            kw_query = kw_query.filter(Keyword.data_source == keyword_source_filter)
+        total_keywords = kw_query.count()
 
         scoring_run = ScoringRun(
             run_name=run_name or f"Run_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
@@ -110,6 +114,7 @@ class ScoreEngine:
             default_relevance_coefficient=default_relevance_coefficient,
             company_url=company_url,
             competitor_urls=competitor_urls,
+            keyword_source_filter=keyword_source_filter,
             status="pending"
         )
         
@@ -141,8 +146,13 @@ class ScoreEngine:
         self.db.commit()
         
         try:
-            # Aktif kelimeleri al
-            keywords = self.db.query(Keyword).filter(Keyword.is_active == True).all()
+            # Aktif kelimeleri al (kaynak filtresi varsa filtrele)
+            kw_query = self.db.query(Keyword).filter(Keyword.is_active == True)
+            if scoring_run.keyword_source_filter:
+                kw_query = kw_query.filter(
+                    Keyword.data_source == scoring_run.keyword_source_filter
+                )
+            keywords = kw_query.all()
             
             # Skorlama öncesi fuzzy dedup: benzer keyword'leri deaktif et
             keywords = self._deactivate_duplicate_keywords(keywords)

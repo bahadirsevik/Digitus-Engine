@@ -3,6 +3,7 @@ Kanal atama sÃ¼recini orkestra eden ana modÃ¼l.
 Pre-Filter AI katmanÄ± entegre (Faz 2).
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List
 from decimal import Decimal
 from sqlalchemy.orm import Session
@@ -13,8 +14,12 @@ from app.database.models import (
     ScoringRun, ChannelCandidate, IntentAnalysis, ChannelPool,
     PreFilterResult, KeywordScore, KeywordRelevance
 )
+from app.database.connection import SessionLocal
 from app.core.channel.pool_builder import PoolBuilder
 from app.core.channel.intent_analyzer import IntentAnalyzer
+from app.core.channel.pre_filters.ads_prefilter import AdsPreFilter
+from app.core.channel.pre_filters.seo_prefilter import SeoPreFilter
+from app.core.channel.pre_filters.social_prefilter import SocialPreFilter
 from app.core.constants import (
     ADS_FINAL_CAPACITY, SEO_FINAL_CAPACITY, SOCIAL_FINAL_CAPACITY,
     BACKFILL_MAX_RATIO, BACKFILL_EXCLUDED_REASONS,
@@ -85,12 +90,8 @@ class ChannelEngine:
             pool_counts = self.pool_builder.build_candidate_pools(scoring_run_id, relevance_coefficient=relevance_coefficient)
             results['steps']['pool_building'] = pool_counts
             
-            # AdÄ±m 2: Her kanal iÃ§in niyet analizi
-            intent_results = {}
-            for channel in ['ADS', 'SEO', 'SOCIAL']:
-                intent_results[channel] = self.intent_analyzer.analyze_candidates(
-                    scoring_run_id, channel
-                )
+            # Adim 2: Her kanal icin niyet analizi — paralel (ayri DB session)
+            intent_results = self._analyze_intent_parallel(scoring_run_id)
             results['steps']['intent_analysis'] = intent_results
             
             # AdÄ±m 2.5: Pre-Filter AI katmanÄ±
@@ -136,33 +137,73 @@ class ChannelEngine:
     # AdÄ±m 2.5: Pre-Filter AI katmanÄ±
     # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
+
+    # ─────────────────────────────────────────────────────────
+    # Adim 2: Paralel intent analizi
+    # ─────────────────────────────────────────────────────────
+
+    def _analyze_intent_parallel(self, scoring_run_id: int) -> Dict[str, Any]:
+        """
+        ADS / SEO / SOCIAL intent analizini paralel olarak calistirir.
+        Her kanal kendi DB session'ini olusturur — SQLAlchemy thread safety.
+        """
+        def _worker(channel: str):
+            db = SessionLocal()
+            try:
+                analyzer = IntentAnalyzer(db, self.ai_service)
+                result = analyzer.analyze_candidates(scoring_run_id, channel)
+                db.commit()
+                return channel, result
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+        intent_results: Dict[str, Any] = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(_worker, ch): ch for ch in ["ADS", "SEO", "SOCIAL"]}
+            for future in as_completed(futures):
+                channel, result = future.result()
+                intent_results[channel] = result
+
+        return intent_results
+
     def _run_pre_filters(self, scoring_run_id: int) -> Dict[str, Any]:
         """
-        TÃ¼m kanallar iÃ§in AI pre-filter Ã§alÄ±ÅŸtÄ±rÄ±r.
-        Cross-channel transfer AKTÄ°F (Faz 4).
+        Tum kanallar icin AI pre-filter calistirir.
+        Faz A (ADS/SEO/SOCIAL) paralel; Faz B (cross-channel) sequential.
         """
-        from app.core.channel.pre_filters.ads_prefilter import AdsPreFilter
-        from app.core.channel.pre_filters.seo_prefilter import SeoPreFilter
-        from app.core.channel.pre_filters.social_prefilter import SocialPreFilter
+        FILTER_CLS = {'ADS': AdsPreFilter, 'SEO': SeoPreFilter, 'SOCIAL': SocialPreFilter}
 
+        def _run_filter(channel: str):
+            db = SessionLocal()
+            try:
+                pf = FILTER_CLS[channel](db, self.ai_service)
+                result = pf.filter_candidates(scoring_run_id)
+                db.commit()
+                return channel, result
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+        # Faz A: paralel
         results = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(_run_filter, ch): ch for ch in ['ADS', 'SEO', 'SOCIAL']}
+            for future in as_completed(futures):
+                channel, result = future.result()
+                results[channel] = result
 
-        # Her kanal iÃ§in pre-filter Ã§alÄ±ÅŸtÄ±r
-        ads_pf = AdsPreFilter(self.db, self.ai_service)
+        # Faz B: Cross-channel transfer (ADS -> SEO) — sequential, main session
         seo_pf = SeoPreFilter(self.db, self.ai_service)
-        social_pf = SocialPreFilter(self.db, self.ai_service)
-
-        # Faz A: TÃ¼m kanallarÄ± filtrele
-        results['ADS'] = ads_pf.filter_candidates(scoring_run_id)
-        results['SEO'] = seo_pf.filter_candidates(scoring_run_id)
-        results['SOCIAL'] = social_pf.filter_candidates(scoring_run_id)
-
-        # Faz B: Cross-channel transfer (ADS â†’ SEO)
         results['cross_channel'] = self._process_cross_channel_transfers(
             scoring_run_id, seo_pf)
 
         logger.info(
-            f"Pre-filter tamamlandÄ±: "
+            f"Pre-filter tamamlandi: "
             f"ADS={results['ADS']}, SEO={results['SEO']}, "
             f"SOCIAL={results['SOCIAL']}, "
             f"Cross-channel={results['cross_channel']}"
@@ -203,7 +244,7 @@ class ChannelEngine:
         transfer_keyword_ids = [tc.keyword_id for tc in transfer_candidates]
         logger.info(
             f"Cross-channel: {len(transfer_keyword_ids)} keyword "
-            f"ADSâ†’SEO transferi baÅŸlatÄ±lÄ±yor"
+            f"ADSâ†'SEO transferi baÅŸlatÄ±lÄ±yor"
         )
 
         # Faz B: Synthetic kayÄ±tlar oluÅŸtur
@@ -271,7 +312,7 @@ class ChannelEngine:
                     channel='SEO',
                     intent_type='informational',
                     confidence_score=0.70,
-                    ai_reasoning='ADSâ†’SEO cross-channel transfer',
+                    ai_reasoning='ADS->SEO cross-channel transfer',
                     is_passed=True,
                     source='transfer'
                 ))
@@ -302,7 +343,7 @@ class ChannelEngine:
         }
 
     # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    # AdÄ±m 3: Final HavuzlarÄ± (v2 â€” intent + prefilter + backfill)
+    # AdÄ±m 3: Final HavuzlarÄ± (v2 â€" intent + prefilter + backfill)
     # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     def _load_relevance_map_for_pooling(self, scoring_run_id: int) -> Dict[int, float]:
@@ -366,7 +407,7 @@ class ChannelEngine:
         relevance_coefficient: float = 1.0
     ) -> Dict[str, int]:
         """
-        Intent âœ“ + Pre-filter âœ“ keyword'lerden final havuz oluÅŸturur.
+        Intent âœ" + Pre-filter âœ" keyword'lerden final havuz oluÅŸturur.
         Kapasite altÄ±na dÃ¼ÅŸerse backfill uygular (max %30).
         """
         final_counts = {}

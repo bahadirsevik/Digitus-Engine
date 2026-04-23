@@ -2,7 +2,7 @@
 Pydantic schemas for Scoring operations.
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -21,6 +21,7 @@ class ScoringRunCreate(BaseModel):
     )
     company_url: Optional[str] = Field(None, max_length=500, description="Company website URL")
     competitor_urls: Optional[List[str]] = Field(None, max_length=3, description="Competitor URL list (max 3)")
+    keyword_source_filter: Optional[Literal["csv", "google_ads_api"]] = None
 
 
 class ScoringRunResponse(BaseModel):
@@ -33,6 +34,7 @@ class ScoringRunResponse(BaseModel):
     social_capacity: int
     default_relevance_coefficient: Decimal
     status: str
+    keyword_source_filter: Optional[Literal["csv", "google_ads_api"]] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -50,6 +52,7 @@ class ScoringRunStatus(BaseModel):
     total_keywords: int
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
+    keyword_source_filter: Optional[Literal["csv", "google_ads_api"]] = None
 
     model_config = ConfigDict(from_attributes=True)
 

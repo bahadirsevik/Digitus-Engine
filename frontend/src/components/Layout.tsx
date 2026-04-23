@@ -9,7 +9,8 @@ import {
   Sparkles,
   ListTodo,
   Zap,
-  Globe2
+  Globe2,
+  TrendingUp
 } from 'lucide-react'
 import './Layout.css'
 
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Ana Panel' },
   { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
   { path: '/scoring', icon: BarChart3, label: 'Skorlama' },
+  { path: '/google-ads', icon: TrendingUp, label: 'Google Ads' },
   { path: '/brand-profile', icon: Globe2, label: 'Marka Profili' },
   { path: '/channels', icon: Layers, label: 'Kanallar' },
   { path: '/generation', icon: Sparkles, label: 'İçerik Üretimi' },

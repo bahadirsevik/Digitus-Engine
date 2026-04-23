@@ -42,6 +42,19 @@ class Settings(BaseSettings):
     # Site Analyzer Feature Flags
     ENABLE_SITE_PROFILE_ANALYSIS: bool = True
     ENABLE_RELEVANCE_RERANK: bool = True
+
+    # Google Ads Probe / future integration envs
+    GOOGLE_ADS_DEVELOPER_TOKEN: Optional[str] = None
+    GOOGLE_ADS_CLIENT_ID: Optional[str] = None
+    GOOGLE_ADS_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_ADS_REFRESH_TOKEN: Optional[str] = None
+    GOOGLE_ADS_LOGIN_CUSTOMER_ID: Optional[str] = None
+    GOOGLE_ADS_CUSTOMER_ID: Optional[str] = None
+    GOOGLE_ADS_LANGUAGE_ID: str = "1037"
+    GOOGLE_ADS_GEO_TARGET_ID: str = "2792"
+    GOOGLE_ADS_PROBE_PAGE_SIZE: int = 1000
+    GOOGLE_ADS_PROBE_MAX_RESULTS: int = 300
+    GOOGLE_ADS_PROBE_SEEDS: str = ""
     
     @property
     def database_url(self) -> str:

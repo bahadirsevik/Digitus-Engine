@@ -134,6 +134,41 @@ export const healthApi = {
   detailed: () => axios.get('http://localhost:8000/health')
 }
 
+// Google Ads API
+export const googleAdsApi = {
+  health: () =>
+    api.get('/google-ads/health'),
+
+  listCustomers: () =>
+    api.get<CustomerIdItem[]>('/google-ads/customers'),
+
+  getCustomer: (customerId: string) =>
+    api.get<CustomerDetailOut>(`/google-ads/customers/${customerId}`),
+
+  enrich: (data: EnrichRequest) =>
+    api.post<EnrichResponse>('/google-ads/enrich', data),
+
+  import: (data: ImportRequest) =>
+    api.post<ImportResponse>('/google-ads/import', data),
+
+  listCampaigns: (customerId: string) =>
+    api.get<CampaignInfo[]>('/google-ads/campaigns', {
+      params: { customer_id: customerId }
+    }),
+
+  listCampaignKeywords: (params: {
+    customer_id: string
+    campaign_id?: string
+    min_impressions?: number
+    date_range?: string
+    limit?: number
+  }) =>
+    api.get<CampaignKeywordsResponse>('/google-ads/campaigns/keywords', { params }),
+
+  importCampaignKeywords: (data: CampaignKeywordsImportRequest) =>
+    api.post<ImportResponse>('/google-ads/campaigns/keywords/import', data),
+}
+
 // Tasks API
 export const tasksApi = {
   getStatus: (taskId: string) =>
@@ -169,6 +204,98 @@ export interface ScoringRunCreate {
   default_relevance_coefficient?: number
   company_url?: string
   competitor_urls?: string[]
+  keyword_source_filter?: 'csv' | 'google_ads_api' | null
+}
+
+export interface CustomerIdItem {
+  customer_id: string
+}
+
+export interface CustomerDetailOut {
+  customer_id: string
+  name: string
+  currency_code: string
+  time_zone: string
+}
+
+export interface EnrichRequest {
+  customer_id: string
+  seeds: string[]
+  max_results: number
+  min_volume: number
+  language_id?: string
+  geo_target_id?: string
+}
+
+export interface EnrichedKeywordOut {
+  keyword: string
+  avg_monthly_searches: number
+  competition_index: number | null
+  competition_score: number
+  trend_3m: number
+  trend_12m: number
+  cpc_low: number
+  cpc_high: number
+}
+
+export interface EnrichResponse {
+  count: number
+  truncated: boolean
+  truncated_at: number | null
+  truncated_reason: string | null
+  keywords: EnrichedKeywordOut[]
+}
+
+export interface ImportRequest {
+  customer_id: string
+  seeds: string[]
+  max_results: number
+  min_volume: number
+  sector?: string
+  target_market?: string
+}
+
+export interface ImportResponse {
+  created: number
+  already_existing: number
+  skipped_fuzzy: number
+  truncated: boolean
+  truncated_reason: string | null
+  message: string
+}
+
+export interface CampaignInfo {
+  campaign_id: string
+  campaign_name: string
+  status: string
+}
+
+export interface CampaignKeywordOut {
+  keyword: string
+  match_type: string
+  campaign_name: string
+  campaign_id: string
+  ad_group_name: string
+  impressions: number
+  clicks: number
+  cost: number
+  avg_cpc: number
+  ctr: number
+}
+
+export interface CampaignKeywordsResponse {
+  count: number
+  keywords: CampaignKeywordOut[]
+}
+
+export interface CampaignKeywordsImportRequest {
+  customer_id: string
+  campaign_id?: string
+  min_impressions?: number
+  date_range?: string
+  limit?: number
+  sector?: string
+  target_market?: string
 }
 
 export interface ProfileAnalyzeRequest {

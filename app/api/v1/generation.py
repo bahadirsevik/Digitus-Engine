@@ -255,12 +255,17 @@ def list_seo_geo_contents(
         ChannelPool.scoring_run_id == scoring_run_id,
         ChannelPool.channel == 'SEO'
     ).all()
-    
+
     keyword_ids = [p.keyword_id for p in pool_items]
-    
-    # Get contents for these keywords
-    query = db.query(SEOGeoContent).filter(
-        SEOGeoContent.keyword_id.in_(keyword_ids)
+
+    # Get contents for these keywords — only content generated for this specific run
+    query = (
+        db.query(SEOGeoContent)
+        .join(ContentOutput, SEOGeoContent.content_output_id == ContentOutput.id)
+        .filter(
+            SEOGeoContent.keyword_id.in_(keyword_ids),
+            ContentOutput.scoring_run_id == scoring_run_id,
+        )
     )
     
     total = query.count()

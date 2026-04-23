@@ -8,6 +8,7 @@ import Generation from './pages/Generation'
 import Tasks from './pages/Tasks'
 import Export from './pages/Export'
 import BrandProfile from './pages/BrandProfile'
+import GoogleAds from './pages/GoogleAds'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/scoring" element={<Scoring />} />
           <Route path="/channels" element={<Channels />} />
           <Route path="/generation" element={<Generation />} />
+          <Route path="/google-ads" element={<GoogleAds />} />
           <Route path="/brand-profile" element={<BrandProfile />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/export" element={<Export />} />

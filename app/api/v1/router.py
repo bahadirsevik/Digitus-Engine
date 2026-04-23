@@ -10,6 +10,7 @@ from app.api.v1.generation import router as generation_router
 from app.api.v1.export import router as export_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.brand_profile import router as brand_profile_router
+from app.api.v1.google_ads import router as google_ads_router
 
 
 api_router = APIRouter()
@@ -55,4 +56,10 @@ api_router.include_router(
     brand_profile_router,
     prefix="/brand-profile",
     tags=["Brand Profile"]
+)
+
+api_router.include_router(
+    google_ads_router,
+    prefix="/google-ads",
+    tags=["Google Ads"]
 )

@@ -36,7 +36,8 @@ def create_scoring_run(
         default_relevance_coefficient=run_data.default_relevance_coefficient,
         run_name=run_data.run_name,
         company_url=run_data.company_url,
-        competitor_urls=run_data.competitor_urls
+        competitor_urls=run_data.competitor_urls,
+        keyword_source_filter=run_data.keyword_source_filter,
     )
     return ScoringRunResponse.model_validate(scoring_run)
 

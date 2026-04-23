@@ -12,6 +12,7 @@ interface ScoringRun {
   seo_capacity: number
   social_capacity: number
   default_relevance_coefficient?: number
+  keyword_source_filter?: 'csv' | 'google_ads_api' | null
   created_at: string
 }
 
@@ -39,7 +40,8 @@ export default function Scoring() {
     ads_capacity: 20,
     seo_capacity: 30,
     social_capacity: 25,
-    default_relevance_coefficient: 1.0
+    default_relevance_coefficient: 1.0,
+    keyword_source_filter: null
   })
 
   useEffect(() => {
@@ -64,7 +66,8 @@ export default function Scoring() {
         ads_capacity: 20,
         seo_capacity: 30,
         social_capacity: 25,
-        default_relevance_coefficient: 1.0
+        default_relevance_coefficient: 1.0,
+        keyword_source_filter: null
       })
       fetchRuns()
       setSelectedRun(res.data.id)
@@ -120,7 +123,14 @@ export default function Scoring() {
                 className={`run-card glass-card ${selectedRun === run.id ? 'active' : ''}`}
               >
                 <div className="run-header">
-                  <span className="run-name">{run.run_name || `Çalışma #${run.id}`}</span>
+                  <span className="run-name">
+                    {run.run_name || `Çalışma #${run.id}`}
+                    {run.keyword_source_filter && (
+                      <span className={`source-badge source-badge--${run.keyword_source_filter === 'google_ads_api' ? 'ads' : 'csv'}`}>
+                        {run.keyword_source_filter === 'google_ads_api' ? 'Google Ads' : 'CSV'}
+                      </span>
+                    )}
+                  </span>
                   <span className={`status status-${run.status}`}>{run.status}</span>
                 </div>
                 <div className="run-capacities">
@@ -320,6 +330,25 @@ export default function Scoring() {
                 value={newRun.default_relevance_coefficient ?? 1.0}
                 onChange={e => setNewRun({ ...newRun, default_relevance_coefficient: parseFloat(e.target.value) })}
               />
+            </div>
+
+            <div className="form-group">
+              <label>Keyword Kaynağı</label>
+              <select
+                className="input"
+                title="Keyword Kaynağı"
+                value={newRun.keyword_source_filter ?? ''}
+                onChange={e => setNewRun({
+                  ...newRun,
+                  keyword_source_filter: e.target.value === ''
+                    ? null
+                    : e.target.value as 'csv' | 'google_ads_api'
+                })}
+              >
+                <option value="">Tüm Kaynaklar (CSV + Google Ads)</option>
+                <option value="csv">Sadece CSV</option>
+                <option value="google_ads_api">Sadece Google Ads API</option>
+              </select>
             </div>
 
             <div className="modal-actions">
