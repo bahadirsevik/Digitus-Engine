@@ -566,7 +566,7 @@ class ChannelEngine:
         for channel in ['ADS', 'SEO', 'SOCIAL']:
             pools = (
                 self.db.query(ChannelPool, Keyword)
-                .join(Keyword, ChannelPool.keyword_id == Keyword.id)
+                .outerjoin(Keyword, ChannelPool.keyword_id == Keyword.id)
                 .filter(ChannelPool.scoring_run_id == scoring_run_id)
                 .filter(ChannelPool.channel == channel)
                 .order_by(ChannelPool.final_rank)
@@ -577,7 +577,12 @@ class ChannelEngine:
                 {
                     'rank': pool.final_rank,
                     'keyword_id': pool.keyword_id,
-                    'keyword': keyword.keyword,
+                    'keyword': (
+                        keyword.keyword
+                        if keyword is not None
+                        else f"[missing keyword #{pool.keyword_id}]"
+                    ),
+                    'keyword_missing': keyword is None,
                     'is_strategic': pool.is_strategic,
                     'relevance_score': float(pool.relevance_score) if pool.relevance_score is not None else None,
                     'adjusted_score': float(pool.adjusted_score) if pool.adjusted_score is not None else None,
