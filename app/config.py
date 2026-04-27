@@ -3,19 +3,27 @@ Application configuration using Pydantic Settings.
 Loads settings from environment variables and .env file.
 """
 import os
-from typing import Optional
-from pydantic import model_validator
+from typing import List, Optional
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     """Application settings."""
-    
+
     # App
     APP_ENV: str = "development"
     DEBUG: bool = True
     SECRET_KEY: str = "your-secret-key-change-in-production"
+
+    # Auth (opt-in). None birakilirsa API key korumasi devre disi.
+    # Production'da zorunlu: bos birakilamaz (bkz. check_production_security).
+    API_KEY: Optional[str] = None
+
+    # CORS allow-list. Virgul ile ayrilmis liste veya "*".
+    # Production'da "*" kullanimi yasaklidir.
+    CORS_ORIGINS: str = "*"
     
     # Database
     POSTGRES_USER: str = "digitus"
@@ -24,6 +32,7 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
     DATABASE_URL: Optional[str] = None
+    SQL_ECHO: bool = False
     
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
@@ -62,7 +71,19 @@ class Settings(BaseSettings):
         if self.DATABASE_URL:
             return self.DATABASE_URL
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-    
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        raw = (self.CORS_ORIGINS or "").strip()
+        if raw == "*":
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
+
+    @property
+    def auth_enabled(self) -> bool:
+        """API key korumasi aktif mi? API_KEY env set ise aktif."""
+        return bool(self.API_KEY)
+
     @model_validator(mode='after')
     def check_production_security(self) -> 'Settings':
         if self.APP_ENV == "production":
@@ -70,6 +91,16 @@ class Settings(BaseSettings):
                 raise ValueError("Insecure SECRET_KEY usage in production environment!")
             if self.POSTGRES_PASSWORD == "digitus_secret_123":
                 raise ValueError("Insecure POSTGRES_PASSWORD usage in production environment!")
+            if not self.API_KEY:
+                raise ValueError(
+                    "API_KEY zorunludur (production). Feature-flag'i aktive etmek icin "
+                    "ortamda API_KEY=<rastgele-64-hex> ayarlayin."
+                )
+            if self.CORS_ORIGINS.strip() == "*":
+                raise ValueError(
+                    "CORS_ORIGINS='*' production'da yasaktir. Virgul ile ayrilmis "
+                    "whitelist kullanin (ornek: https://app.example.com)."
+                )
         return self
 
     class Config:
