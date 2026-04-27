@@ -355,9 +355,13 @@ class IntentAnalyzer:
                     logger.error(
                         f"Intent Analysis Failed (attempt {attempt+1}/{INTENT_MAX_RETRIES}): {e}"
                     )
-                    logger.error(
-                        f"Content that failed: {response if 'response' in dir() else 'No response received'}"
+                    failed_response = locals().get("response")
+                    response_preview = (
+                        str(failed_response)[:500]
+                        if failed_response is not None
+                        else "No response received"
                     )
+                    logger.error(f"Content that failed: {response_preview}")
                     for kw in batch:
                         all_results.append({
                             'keyword_id': kw['id'],
