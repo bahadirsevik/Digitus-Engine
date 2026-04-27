@@ -1,0 +1,103 @@
+services:
+  app:
+    build: .
+    container_name: digitus_app_prod
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    expose:
+      - "8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: digitus_db_prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: digitus_redis_prod
+    volumes:
+      - redis_data:/data
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    container_name: digitus_celery_worker_prod
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  celery_beat:
+    build: .
+    container_name: digitus_celery_beat_prod
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: digitus_frontend_prod
+    ports:
+      - "80:80"
+    env_file:
+      - .env
+    depends_on:
+      - app
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  digitus_network:
+    driver: bridge
