@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_ai
 from app.generators.ai_service import AIService
 from app.database.models import Keyword, ContentOutput, SEOGeoContent, ChannelPool, AdGroup
+from app.core.error_responses import safe_500_detail
 from app.core.site_analyzer.brand_defaults import BrandDefaultsResolver, BrandResolveError
 from app.schemas.content import (
     AdGroupRequest, AdGroupResponse,
@@ -58,7 +59,10 @@ def generate_seo_geo_content(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Content generation failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Icerik uretimi basarisiz oldu")
+        )
 
 
 @router.post("/seo-geo/bulk/{scoring_run_id}", response_model=None)
@@ -343,7 +347,10 @@ def generate_ads_rsa(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"RSA generation failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "RSA uretimi basarisiz oldu")
+        )
 
 
 @router.get("/ads/rsa/{scoring_run_id}", response_model=AdGroupListResponse)
@@ -362,7 +369,10 @@ def get_ads_groups(
         result = generator.get_ad_groups(scoring_run_id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get ad groups: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Reklam gruplari alinamadi")
+        )
 
 
 @router.get("/ads/rsa/group/{group_id}")
@@ -387,7 +397,10 @@ def get_ads_group_detail(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get ad group: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Reklam grubu alinamadi")
+        )
 
 
 @router.post("/ads/rsa/group/{group_id}/regenerate")
@@ -436,7 +449,10 @@ def regenerate_ads_group(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to regenerate ad group: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Reklam grubu yeniden uretilemedi")
+        )
 
 
 # ==================== SOCIAL MEDIA ENDPOINTS (Roadmap2 Bölüm 8) ====================
@@ -484,7 +500,10 @@ def generate_social_categories(
         generator = SocialGenerator(db, ai)
         return generator.generate_categories(effective_request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate categories: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Sosyal kategoriler uretilemedi")
+        )
 
 
 @router.post("/social/ideas", response_model=List[SocialIdeasResponse])
@@ -518,7 +537,10 @@ def generate_social_ideas(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate ideas: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Sosyal fikirler uretilemedi")
+        )
 
 
 @router.post("/social/contents", response_model=SocialContentsResponse)
@@ -558,7 +580,10 @@ def generate_social_contents(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate contents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Sosyal icerikler uretilemedi")
+        )
 
 
 @router.post("/social/bulk", response_model=SocialBulkResponse)
@@ -586,7 +611,10 @@ def generate_social_bulk(
         generator = SocialGenerator(db, ai)
         return generator.generate_full_pipeline(effective_request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate social content: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Sosyal medya icerigi uretilemedi")
+        )
 
 
 @router.get("/social/{scoring_run_id}", response_model=SocialFullResponse)
@@ -604,7 +632,10 @@ def get_social_content(
         generator = SocialGenerator(db, ai)
         return generator.get_all(scoring_run_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get social content: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Sosyal medya icerigi alinamadi")
+        )
 
 
 @router.post("/social/ideas/{idea_id}/select")
@@ -626,7 +657,10 @@ def select_social_idea(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update idea: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Fikir secimi guncellenemedi")
+        )
 
 
 @router.post("/social/ideas/{idea_id}/regenerate", response_model=SocialIdeaDBSchema)
@@ -667,7 +701,10 @@ def regenerate_social_idea(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to regenerate idea: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Fikir yeniden uretilemedi")
+        )
 
 
 @router.post("/social/contents/{content_id}/regenerate", response_model=SocialContentDBSchema)
@@ -708,7 +745,10 @@ def regenerate_social_content(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to regenerate content: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "Icerik yeniden uretilemedi")
+        )
 
 
 # ==================== LEGACY ENDPOINTS ====================
@@ -767,7 +807,7 @@ JSON formatında yanıt ver."""
             results.append({
                 'keyword_id': kw.id,
                 'keyword': kw.keyword,
-                'error': str(e)
+                'error': safe_500_detail(e, "Reklam icerigi uretilemedi")
             })
     
     db.commit()
@@ -820,7 +860,7 @@ JSON formatında şunları içer:
             except Exception as e:
                 platform_posts.append({
                     'platform': platform,
-                    'error': str(e)
+                    'error': safe_500_detail(e, "Sosyal medya icerigi uretilemedi")
                 })
         
         content_output = ContentOutput(
