@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
+from app.core.error_responses import safe_500_detail
 from app.database.models import ScoringRun
 from app.schemas.export import (
     ExportRequest, ExportStatusResponse, ExportListResponse,
@@ -84,7 +85,10 @@ def _run_export(export_id: str, request: ExportRequest, db: Session):
         
     except Exception as e:
         _export_status[export_id]['status'] = ExportStatusEnum.FAILED
-        _export_status[export_id]['error_message'] = str(e)
+        _export_status[export_id]['error_message'] = safe_500_detail(
+            e,
+            "Export basarisiz oldu"
+        )
 
 
 @router.post("/", response_model=ExportStatusResponse)

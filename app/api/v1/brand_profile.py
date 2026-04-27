@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_ai
 from app.generators.ai_service import AIService
 from app.config import settings
+from app.core.error_responses import safe_500_detail
 from app.database.models import (
     ScoringRun, BrandProfile, KeywordRelevance, Keyword, KeywordScore
 )
@@ -432,7 +433,10 @@ def _run_profile_analysis(
             ).first()
             if profile:
                 profile.status = "failed"
-                profile.error_message = str(e)
+                profile.error_message = safe_500_detail(
+                    e,
+                    "Profil analizi basarisiz oldu"
+                )
                 db.commit()
         except Exception:
             pass
