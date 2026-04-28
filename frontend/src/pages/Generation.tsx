@@ -91,6 +91,22 @@ export default function Generation() {
     }
   }, [])
 
+  const fetchAdsResults = useCallback(async (runId: number) => {
+    try {
+      const res = await fetch(`/api/v1/generation/ads/rsa/${runId}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.total_groups > 0) {
+          setAdsResults(data)
+        } else {
+          setAdsResults(null)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch Ads results:', e)
+    }
+  }, [])
+
   useEffect(() => {
     fetchRuns()
   }, [])
@@ -114,7 +130,7 @@ export default function Generation() {
     }
   }, [seoPolling.isCompleted, seoRunId, fetchSeoResults])
 
-  // Fetch results when run is selected
+  // Fetch SEO results when run is selected
   useEffect(() => {
     if (seoRunId) {
       fetchSeoResults(Number(seoRunId))
@@ -122,6 +138,15 @@ export default function Generation() {
       setSeoResults([])
     }
   }, [seoRunId, fetchSeoResults])
+
+  // Fetch Ads results when run is selected
+  useEffect(() => {
+    if (adsRunId) {
+      fetchAdsResults(Number(adsRunId))
+    } else {
+      setAdsResults(null)
+    }
+  }, [adsRunId, fetchAdsResults])
 
   const fetchRuns = async () => {
     try {
@@ -179,8 +204,8 @@ export default function Generation() {
         throw new Error(detail || 'Ads üretimi başarısız')
       }
 
-      const data = await res.json()
-      setAdsResults(data)
+      await res.json()
+      await fetchAdsResults(Number(adsRunId))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bir hata oluştu')
     } finally {
@@ -374,15 +399,21 @@ export default function Generation() {
                   <span className="ads-stat-label">Reklam Grubu</span>
                 </div>
                 <div className="ads-stat glass-card">
-                  <span className="ads-stat-value">{adsResults.total_headlines}</span>
+                  <span className="ads-stat-value">
+                    {adsResults.total_headlines ?? adsResults.ad_groups?.reduce((s: number, g: any) => s + (g.headlines?.length || 0), 0) ?? 0}
+                  </span>
                   <span className="ads-stat-label">Başlık</span>
                 </div>
                 <div className="ads-stat glass-card">
-                  <span className="ads-stat-value">{adsResults.total_descriptions}</span>
+                  <span className="ads-stat-value">
+                    {adsResults.total_descriptions ?? adsResults.ad_groups?.reduce((s: number, g: any) => s + (g.descriptions?.length || 0), 0) ?? 0}
+                  </span>
                   <span className="ads-stat-label">Açıklama</span>
                 </div>
                 <div className="ads-stat glass-card">
-                  <span className="ads-stat-value">{adsResults.total_negative_keywords}</span>
+                  <span className="ads-stat-value">
+                    {adsResults.total_negative_keywords ?? adsResults.ad_groups?.reduce((s: number, g: any) => s + (g.negative_keywords?.length || 0), 0) ?? 0}
+                  </span>
                   <span className="ads-stat-label">Negatif Kelime</span>
                 </div>
               </div>
