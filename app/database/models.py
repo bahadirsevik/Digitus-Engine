@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Float,
-    ForeignKey, Numeric, JSON, UniqueConstraint, Index, CheckConstraint
+    ForeignKey, Numeric, JSON, UniqueConstraint, Index, CheckConstraint,
+    text
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.sql import func
@@ -126,6 +127,9 @@ class KeywordScore(Base):
     
     __table_args__ = (
         UniqueConstraint('scoring_run_id', 'keyword_id', name='uq_keyword_scores_run_keyword'),
+        Index('idx_keyword_scores_run_ads_rank', 'scoring_run_id', 'ads_rank'),
+        Index('idx_keyword_scores_run_seo_rank', 'scoring_run_id', 'seo_rank'),
+        Index('idx_keyword_scores_run_social_rank', 'scoring_run_id', 'social_rank'),
     )
 
 
@@ -151,6 +155,7 @@ class ChannelCandidate(Base):
     __table_args__ = (
         UniqueConstraint('scoring_run_id', 'keyword_id', 'channel', name='uq_channel_candidates'),
         Index('idx_channel_candidates_run_channel', 'scoring_run_id', 'channel'),
+        Index('idx_channel_candidates_run_ch_rank', 'scoring_run_id', 'channel', 'rank_in_channel'),
     )
 
 
@@ -179,6 +184,11 @@ class IntentAnalysis(Base):
     __table_args__ = (
         UniqueConstraint('scoring_run_id', 'keyword_id', 'channel', name='uq_intent_analysis'),
         Index('idx_intent_analysis_run_channel', 'scoring_run_id', 'channel'),
+        Index(
+            'idx_intent_analysis_passed_lookup',
+            'scoring_run_id', 'channel', 'keyword_id',
+            postgresql_where=text('is_passed = true'),
+        ),
     )
 
 class PreFilterResult(Base):
@@ -237,6 +247,7 @@ class ChannelPool(Base):
     __table_args__ = (
         UniqueConstraint('scoring_run_id', 'keyword_id', 'channel', name='uq_channel_pools'),
         Index('idx_channel_pools_run_channel', 'scoring_run_id', 'channel'),
+        Index('idx_channel_pools_run_channel_rank', 'scoring_run_id', 'channel', 'final_rank'),
     )
 
 

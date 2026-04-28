@@ -1,7 +1,7 @@
 """
 Main API router that includes all sub-routers.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.v1.keywords import router as keywords_router
 from app.api.v1.scoring import router as scoring_router
@@ -11,9 +11,12 @@ from app.api.v1.export import router as export_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.brand_profile import router as brand_profile_router
 from app.api.v1.google_ads import router as google_ads_router
+from app.core.security import verify_api_key
 
 
-api_router = APIRouter()
+# verify_api_key feature-flag'li: API_KEY set degilse no-op.
+# Set ise tum /api/v1/* endpoint'leri X-API-Key header ister.
+api_router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 # Include all sub-routers
 api_router.include_router(

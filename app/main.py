@@ -31,13 +31,15 @@ async def lifespan(app: FastAPI):
     logger.info("👋 DIGITUS ENGINE shutting down...")
 
 
+_is_production = settings.APP_ENV == "production"
+
 app = FastAPI(
     title="DIGITUS ENGINE API",
     description="""
     Anahtar kelime skorlama ve kanal atama motoru.
-    
+
     ## Özellikler
-    
+
     * **Keyword Yönetimi**: Anahtar kelime ekleme, güncelleme, silme
     * **Skorlama**: ADS, SEO, SOCIAL kanalları için skorlama
     * **Kanal Atama**: AI destekli niyet analizi ve kanal ataması
@@ -45,14 +47,21 @@ app = FastAPI(
     * **Export**: DOCX, PDF, Excel formatlarında dışa aktarım
     """,
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    # Production'da Swagger/ReDoc arayuzlerini kapat.
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
-# CORS middleware
+# CORS middleware. Wildcard + credentials kombinasyonu tarayicilar tarafindan
+# reddedilir; credentials yalnizca explicit origin listesi varken aktif olur.
+_cors_origins = settings.cors_origins_list
+_allow_credentials = _cors_origins != ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Production'da sınırlandırılmalı
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
