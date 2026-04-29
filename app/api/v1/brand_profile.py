@@ -308,7 +308,7 @@ def compute_relevance(
     db.query(KeywordRelevance).filter(
         KeywordRelevance.scoring_run_id == run_id
     ).delete(synchronize_session=False)
-    db.flush()
+    db.commit()  # Commit the delete before inserting new records
 
     # Save results (batch insert, not N+1)
     computed = 0
