@@ -130,8 +130,8 @@ export const generationApi = {
 
 // Health API (uses base URL without /api/v1 prefix)
 export const healthApi = {
-  check: () => axios.get('http://localhost:8000/'),
-  detailed: () => axios.get('http://localhost:8000/health')
+  check: () => axios.get('/health'),
+  detailed: () => axios.get('/health')
 }
 
 // Google Ads API
