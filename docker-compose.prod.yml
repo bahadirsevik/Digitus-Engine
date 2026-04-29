@@ -85,7 +85,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: digitus_frontend_prod
     ports:
-      - "80:80"
+      - "9005:80"
     env_file:
       - .env
     depends_on:
