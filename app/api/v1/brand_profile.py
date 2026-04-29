@@ -310,18 +310,21 @@ def compute_relevance(
     ).delete(synchronize_session=False)
     db.commit()  # Commit the delete before inserting new records
 
+    # Deduplicate results by keyword_id (keep highest score per keyword)
+    deduped: dict = {}
+    for result in relevance_results:
+        kw_id = keyword_id_map.get(result["keyword"])
+        if not kw_id:
+            continue
+        if kw_id not in deduped or result["relevance_score"] > deduped[kw_id]["relevance_score"]:
+            deduped[kw_id] = result
+
     # Save results (batch insert, not N+1)
     computed = 0
-    failed = 0
+    failed = len(relevance_results) - len(deduped)
     total_relevance = 0.0
 
-    for result in relevance_results:
-        kw_text = result["keyword"]
-        kw_id = keyword_id_map.get(kw_text)
-        if not kw_id:
-            failed += 1
-            continue
-
+    for kw_id, result in deduped.items():
         db.add(KeywordRelevance(
             scoring_run_id=run_id,
             keyword_id=kw_id,
@@ -493,12 +496,17 @@ def _run_relevance_computation(scoring_run_id: int):
         ).delete(synchronize_session=False)
         db.flush()
 
-        computed = 0
+        # Deduplicate results by keyword_id (keep highest score per keyword)
+        deduped: dict = {}
         for result in relevance_results:
             kw_id = keyword_id_map.get(result["keyword"])
             if not kw_id:
                 continue
+            if kw_id not in deduped or result["relevance_score"] > deduped[kw_id]["relevance_score"]:
+                deduped[kw_id] = result
 
+        computed = 0
+        for kw_id, result in deduped.items():
             db.add(KeywordRelevance(
                 scoring_run_id=scoring_run_id,
                 keyword_id=kw_id,
