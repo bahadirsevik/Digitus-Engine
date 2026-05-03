@@ -41,6 +41,11 @@ interface Keyword {
   trend_12m?: number;
   trend_3m?: number;
   competition_score?: number;
+  wk_monthly_volume?: number;
+  wk_trend_12m?: number;
+  wk_trend_3m?: number;
+  wk_competition_score?: number;
+  wk_data_source?: string;
   is_active: boolean;
   data_source?: string;
 }
@@ -83,57 +88,35 @@ export default function Keywords() {
   };
 
   const fetchKeywords = async () => {
+    if (!activeWorkspace) {
+      setKeywords([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await keywordsApi.list({
         limit: 2000,
-        brand_profile_id: activeWorkspace?.id,
+        brand_profile_id: activeWorkspace.id,
       });
       setKeywords(res.data.items || []);
     } catch (err: any) {
       console.error("Error fetching keywords:", err);
       setError("API bağlantısı kurulamadı. Backend çalışıyor mu?");
-      setKeywords([
-        {
-          id: 1,
-          keyword: "laptop satın al",
-          sector: "teknoloji",
-          monthly_volume: 12000,
-          trend_12m: 15,
-          trend_3m: 22,
-          competition_score: 0.72,
-          is_active: true,
-        },
-        {
-          id: 2,
-          keyword: "en iyi telefon 2024",
-          sector: "teknoloji",
-          monthly_volume: 8500,
-          trend_12m: 45,
-          trend_3m: 80,
-          competition_score: 0.65,
-          is_active: true,
-        },
-        {
-          id: 3,
-          keyword: "python öğren",
-          sector: "eğitim",
-          monthly_volume: 5200,
-          trend_12m: 30,
-          trend_3m: 25,
-          competition_score: 0.45,
-          is_active: true,
-        },
-      ]);
+      setKeywords([]);
     }
     setLoading(false);
   };
 
   const handleCreate = async () => {
     if (!newKeyword.keyword.trim()) return;
+    if (!activeWorkspace) {
+      alert("Önce bir marka çalışması seçin");
+      return;
+    }
     try {
-      await keywordsApi.create(newKeyword, activeWorkspace?.id);
+      await keywordsApi.create(newKeyword, activeWorkspace.id);
       setShowModal(false);
       setNewKeyword({
         keyword: "",
@@ -212,6 +195,10 @@ export default function Keywords() {
 
   const handleUpload = async () => {
     if (!uploadedFile) return;
+    if (!activeWorkspace) {
+      setUploadStatus("Önce bir marka çalışması seçin");
+      return;
+    }
     setUploadStatus("Yükleniyor...");
     try {
       const text = await uploadedFile.text();
@@ -255,7 +242,7 @@ export default function Keywords() {
         imported.push(kwData);
       }
 
-      await keywordsApi.import(imported, activeWorkspace?.id);
+      await keywordsApi.import(imported, activeWorkspace.id);
       setUploadStatus(`✓ ${imported.length} kelime içe aktarıldı`);
       setUploadedFile(null);
       fetchKeywords();
@@ -265,6 +252,10 @@ export default function Keywords() {
   };
 
   const handleGoogleAdsImport = async (keywords: EnrichedKeywordOut[]) => {
+    if (!activeWorkspace) {
+      alert("Önce bir marka çalışması seçin");
+      return;
+    }
     const mapped: KeywordCreate[] = keywords.map((kw) => ({
       keyword: kw.keyword,
       monthly_volume: kw.avg_monthly_searches,
@@ -273,7 +264,7 @@ export default function Keywords() {
       competition_score: kw.competition_score,
     }));
     try {
-      await keywordsApi.import(mapped, activeWorkspace?.id);
+      await keywordsApi.import(mapped, activeWorkspace.id);
       alert(`${mapped.length} keyword içe aktarıldı`);
       fetchKeywords();
     } catch (err: any) {
@@ -282,6 +273,10 @@ export default function Keywords() {
   };
 
   const handleUrlSeedImport = async (keywords: UrlSeedIdea[]) => {
+    if (!activeWorkspace) {
+      alert("Önce bir marka çalışması seçin");
+      return;
+    }
     const mapped: KeywordCreate[] = keywords.map((idea) => ({
       keyword: idea.keyword,
       monthly_volume: idea.monthly_volume,
@@ -290,7 +285,7 @@ export default function Keywords() {
       competition_score: idea.competition,
     }));
     try {
-      await keywordsApi.import(mapped, activeWorkspace?.id);
+      await keywordsApi.import(mapped, activeWorkspace.id);
       alert(`${mapped.length} keyword içe aktarıldı`);
       fetchKeywords();
     } catch (err: any) {
@@ -510,31 +505,37 @@ export default function Keywords() {
                 </tr>
               </thead>
               <tbody>
-                {filteredKeywords.map((kw) => (
-                  <tr key={kw.id}>
-                    <td>
-                      <strong>{kw.keyword}</strong>
-                    </td>
-                    <td>{kw.sector || "—"}</td>
-                    <td>{kw.monthly_volume?.toLocaleString() || "—"}</td>
-                    <td>{kw.trend_12m != null ? `${kw.trend_12m}%` : "—"}</td>
-                    <td>{kw.trend_3m != null ? `${kw.trend_3m}%` : "—"}</td>
-                    <td>
-                      {kw.competition_score != null
-                        ? kw.competition_score.toFixed(2)
-                        : "—"}
-                    </td>
-                    <td>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        title="Sil"
-                        onClick={() => handleDelete(kw.id)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredKeywords.map((kw) => {
+                  const monthlyVolume = kw.wk_monthly_volume ?? kw.monthly_volume;
+                  const trend12m = kw.wk_trend_12m ?? kw.trend_12m;
+                  const trend3m = kw.wk_trend_3m ?? kw.trend_3m;
+                  const competition =
+                    kw.wk_competition_score ?? kw.competition_score;
+
+                  return (
+                    <tr key={kw.id}>
+                      <td>
+                        <strong>{kw.keyword}</strong>
+                      </td>
+                      <td>{kw.sector || "—"}</td>
+                      <td>{monthlyVolume?.toLocaleString() || "—"}</td>
+                      <td>{trend12m != null ? `${trend12m}%` : "—"}</td>
+                      <td>{trend3m != null ? `${trend3m}%` : "—"}</td>
+                      <td>
+                        {competition != null ? competition.toFixed(2) : "—"}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          title="Sil"
+                          onClick={() => handleDelete(kw.id)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -10,7 +10,8 @@ from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
 from app.schemas.keyword import (
     KeywordCreate, KeywordUpdate, KeywordResponse,
-    KeywordListResponse, KeywordImportRequest, KeywordImportResponse
+    KeywordListResponse, KeywordImportRequest, KeywordImportResponse,
+    WorkspaceKeywordResponse,
 )
 
 
@@ -41,17 +42,47 @@ def list_keywords(
         verify_workspace(db, brand_profile_id)
 
         base_query = (
-            db.query(Keyword)
+            db.query(Keyword, WorkspaceKeyword)
             .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
             .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
         )
         if active_only:
             base_query = base_query.filter(Keyword.is_active == True)
         if sector:
-            base_query = base_query.filter(Keyword.sector == sector)
+            base_query = base_query.filter(WorkspaceKeyword.sector == sector)
 
         total = base_query.count()
-        keywords = base_query.order_by(Keyword.id).offset(skip).limit(limit).all()
+        rows = (
+            base_query
+            .order_by(Keyword.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+        items = []
+        for kw, wk in rows:
+            resp = WorkspaceKeywordResponse.model_validate(kw)
+            resp.monthly_volume = wk.monthly_volume or 0
+            resp.trend_3m = wk.trend_3m or 0
+            resp.trend_12m = wk.trend_12m or 0
+            resp.competition_score = wk.competition_score or 0.5
+            resp.sector = wk.sector
+            resp.target_market = wk.target_market
+            resp.data_source = wk.data_source or "csv"
+            resp.wk_monthly_volume = resp.monthly_volume
+            resp.wk_trend_3m = float(resp.trend_3m)
+            resp.wk_trend_12m = float(resp.trend_12m)
+            resp.wk_competition_score = float(resp.competition_score)
+            resp.wk_data_source = resp.data_source
+            items.append(resp)
+
+        return KeywordListResponse(
+            items=items,
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
     else:
         # Legacy: global keyword list
         keywords = crud.get_keywords(db, skip=skip, limit=limit, active_only=active_only, sector=sector)
@@ -86,7 +117,7 @@ def create_keyword(
         verify_workspace(db, brand_profile_id)
         result = crud.create_keywords_bulk(
             db,
-            [keyword_data.model_dump()],
+            [keyword_data.model_dump(exclude={"brand_profile_id"})],
             brand_profile_id=brand_profile_id,
             return_details=True
         )
@@ -178,7 +209,7 @@ def import_keywords(
 
     result = crud.create_keywords_bulk(
         db,
-        [kw.model_dump() for kw in import_data.keywords],
+        [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
         brand_profile_id=brand_profile_id,
         return_details=True
     )
@@ -253,4 +284,3 @@ def cleanup_duplicate_keywords(db: Session = Depends(get_db)):
         "deactivated_keywords": deactivated[:50],  # İlk 50'sini göster
         "message": f"{len(deactivated)} duplicate keyword(s) deactivated"
     }
-

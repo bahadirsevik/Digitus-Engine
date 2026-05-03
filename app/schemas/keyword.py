@@ -40,10 +40,24 @@ class KeywordResponse(KeywordBase):
     id: int
     is_active: bool
     data_source: str = "csv"
+    wk_monthly_volume: Optional[int] = None
+    wk_trend_3m: Optional[float] = None
+    wk_trend_12m: Optional[float] = None
+    wk_competition_score: Optional[float] = None
+    wk_data_source: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class WorkspaceKeywordResponse(KeywordResponse):
+    """Keyword response with workspace snapshot metrics."""
+    wk_monthly_volume: int = 0
+    wk_trend_3m: float = 0.0
+    wk_trend_12m: float = 0.0
+    wk_competition_score: float = 0.5
+    wk_data_source: str = "csv"
 
 
 class KeywordListResponse(BaseModel):
