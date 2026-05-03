@@ -244,7 +244,7 @@ export default function Keywords() {
         imported.push(kwData);
       }
 
-      await keywordsApi.import(imported);
+      await keywordsApi.import(imported, activeWorkspace?.id);
       setUploadStatus(`✓ ${imported.length} kelime içe aktarıldı`);
       setUploadedFile(null);
       fetchKeywords();
@@ -262,7 +262,7 @@ export default function Keywords() {
       competition_score: kw.competition_score,
     }));
     try {
-      await keywordsApi.import(mapped);
+      await keywordsApi.import(mapped, activeWorkspace?.id);
       alert(`${mapped.length} keyword içe aktarıldı`);
       fetchKeywords();
     } catch (err: any) {
@@ -279,7 +279,7 @@ export default function Keywords() {
       competition_score: idea.competition,
     }));
     try {
-      await keywordsApi.import(mapped);
+      await keywordsApi.import(mapped, activeWorkspace?.id);
       alert(`${mapped.length} keyword içe aktarıldı`);
       fetchKeywords();
     } catch (err: any) {

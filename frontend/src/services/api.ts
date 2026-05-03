@@ -23,8 +23,8 @@ export const keywordsApi = {
 
   delete: (id: number) => api.delete(`/keywords/${id}`),
 
-  import: (keywords: KeywordCreate[]) =>
-    api.post("/keywords/import", { keywords }),
+  import: (keywords: KeywordCreate[], brand_profile_id?: number) =>
+    api.post("/keywords/import", { keywords, brand_profile_id }),
 
   deleteAll: () => api.delete("/keywords/all"),
 };

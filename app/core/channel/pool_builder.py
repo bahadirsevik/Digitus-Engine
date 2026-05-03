@@ -141,10 +141,24 @@ class PoolBuilder:
         if not settings.ENABLE_RELEVANCE_RERANK:
             return {}
 
-        profile = self.db.query(BrandProfile).filter(
-            BrandProfile.scoring_run_id == scoring_run_id,
-            BrandProfile.status == "confirmed",
+        # Yeni mimari: ScoringRun.brand_profile_id üzerinden; eski 1:1 fallback
+        scoring_run = self.db.query(ScoringRun).filter(
+            ScoringRun.id == scoring_run_id
         ).first()
+
+        profile = None
+        if scoring_run and scoring_run.brand_profile_id:
+            profile = self.db.query(BrandProfile).filter(
+                BrandProfile.id == scoring_run.brand_profile_id,
+                BrandProfile.status == "confirmed",
+                BrandProfile.deleted_at.is_(None),
+            ).first()
+
+        if not profile:
+            profile = self.db.query(BrandProfile).filter(
+                BrandProfile.scoring_run_id == scoring_run_id,
+                BrandProfile.status == "confirmed",
+            ).first()
 
         if not profile:
             return {}

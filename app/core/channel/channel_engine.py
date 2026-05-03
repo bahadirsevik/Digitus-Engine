@@ -24,6 +24,7 @@ from app.core.constants import (
     ADS_FINAL_CAPACITY, SEO_FINAL_CAPACITY, SOCIAL_FINAL_CAPACITY,
     BACKFILL_MAX_RATIO, BACKFILL_EXCLUDED_REASONS,
 )
+from app.core.scoring.state_machine import transition
 from app.generators.ai_service import AIService
 
 logger = logging.getLogger(__name__)
@@ -79,10 +80,9 @@ class ChannelEngine:
             )
         
         self._scoring_run = scoring_run  # Cache for helper methods
-        
-        # Durumu güncelle
-        scoring_run.status = "intent_analysis"
-        self.db.commit()
+
+        # Durumu güncelle — state machine üzerinden
+        transition(self.db, scoring_run, target="channel_assigning")
         
         results = {
             'scoring_run_id': scoring_run_id,
@@ -129,17 +129,13 @@ class ChannelEngine:
             results['steps']['final_pools'] = final_counts
             
 
+            # Durumu gÃ¼ncelle — state machine üzerinden
+            transition(self.db, scoring_run, target="channel_assigned")
             
-            # Durumu gÃ¼ncelle
-            scoring_run.status = "completed"
-            scoring_run.completed_at = datetime.utcnow()
-            self.db.commit()
-            
-            results['status'] = 'completed'
+            results['status'] = 'channel_assigned'
         
         except Exception as e:
-            scoring_run.status = "failed"
-            self.db.commit()
+            transition(self.db, scoring_run, target="failed")
             results['status'] = 'failed'
             results['error'] = str(e)
             raise e
@@ -173,9 +169,10 @@ class ChannelEngine:
             finally:
                 db.close()
 
+        active_channels = self._get_active_channels(self._scoring_run)
         intent_results: Dict[str, Any] = {}
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(_worker, ch): ch for ch in ["ADS", "SEO", "SOCIAL"]}
+        with ThreadPoolExecutor(max_workers=len(active_channels) or 1) as executor:
+            futures = {executor.submit(_worker, ch): ch for ch in active_channels}
             for future in as_completed(futures):
                 channel, result = future.result()
                 intent_results[channel] = result
@@ -202,18 +199,24 @@ class ChannelEngine:
             finally:
                 db.close()
 
-        # Faz A: paralel
+        active_channels = self._get_active_channels(self._scoring_run)
+
+        # Faz A: paralel (sadece aktif kanallar için)
         results = {}
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(_run_filter, ch): ch for ch in ['ADS', 'SEO', 'SOCIAL']}
+        with ThreadPoolExecutor(max_workers=len(active_channels) or 1) as executor:
+            futures = {executor.submit(_run_filter, ch): ch for ch in active_channels}
             for future in as_completed(futures):
                 channel, result = future.result()
                 results[channel] = result
 
-        # Faz B: Cross-channel transfer (ADS -> SEO) — sequential, main session
-        seo_pf = SeoPreFilter(self.db, self.ai_service)
-        results['cross_channel'] = self._process_cross_channel_transfers(
-            scoring_run_id, seo_pf)
+        # Faz B: Cross-channel transfer (ADS -> SEO) — sadece iki kanal da aktifse
+        if self._scoring_run.enable_ads and self._scoring_run.enable_seo:
+            seo_pf = SeoPreFilter(self.db, self.ai_service)
+            results['cross_channel'] = self._process_cross_channel_transfers(
+                scoring_run_id, seo_pf)
+        else:
+            logger.info("Cross-channel transfer atlandı: ADS ve SEO aynı anda aktif değil")
+            results['cross_channel'] = {"transferred": 0, "seo_kept": 0, "seo_eliminated": 0}
 
         logger.info(
             f"Pre-filter tamamlandi: "
@@ -427,11 +430,14 @@ class ChannelEngine:
         relevance_map = self._load_relevance_map_for_pooling(scoring_run_id)
         channel_score_maps = self._load_channel_score_maps(scoring_run_id)
 
-        for channel, capacity in [
-            ('ADS', ADS_FINAL_CAPACITY),
-            ('SEO', SEO_FINAL_CAPACITY),
-            ('SOCIAL', SOCIAL_FINAL_CAPACITY)
-        ]:
+        active_channels = self._get_active_channels(scoring_run)
+        capacity_map = {
+            'ADS': ADS_FINAL_CAPACITY,
+            'SEO': SEO_FINAL_CAPACITY,
+            'SOCIAL': SOCIAL_FINAL_CAPACITY,
+        }
+        for channel in active_channels:
+            capacity = capacity_map[channel]
             # Birincil: intent geÃ§en + prefilter geÃ§en
             passed_candidates = (
                 self.db.query(IntentAnalysis, ChannelCandidate)
@@ -576,7 +582,9 @@ class ChannelEngine:
             'channels': {}
         }
         
-        for channel in ['ADS', 'SEO', 'SOCIAL']:
+        run = self.db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+        active_channels = self._get_active_channels(run) if run else ['ADS', 'SEO', 'SOCIAL']
+        for channel in active_channels:
             pools = (
                 self.db.query(ChannelPool, Keyword)
                 .outerjoin(Keyword, ChannelPool.keyword_id == Keyword.id)

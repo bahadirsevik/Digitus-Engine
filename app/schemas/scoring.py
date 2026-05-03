@@ -36,6 +36,7 @@ class ScoringRunResponse(BaseModel):
     """Schema for scoring run response."""
     id: int
     run_name: Optional[str]
+    brand_profile_id: Optional[int] = None
     total_keywords: int
     ads_capacity: int
     seo_capacity: int
@@ -43,6 +44,12 @@ class ScoringRunResponse(BaseModel):
     default_relevance_coefficient: Decimal
     status: str
     keyword_source_filter: Optional[Literal["csv", "google_ads_api"]] = None
+    enable_ads: Optional[bool] = None
+    enable_seo: Optional[bool] = None
+    enable_social: Optional[bool] = None
+    keyword_selection_mode: Optional[str] = None
+    keyword_limit: Optional[int] = None
+    skip_relevance: Optional[bool] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -52,6 +59,7 @@ class ScoringRunStatus(BaseModel):
     """Schema for scoring run status."""
     id: int
     run_name: Optional[str]
+    brand_profile_id: Optional[int] = None
     ads_capacity: int
     seo_capacity: int
     social_capacity: int
@@ -61,6 +69,12 @@ class ScoringRunStatus(BaseModel):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     keyword_source_filter: Optional[Literal["csv", "google_ads_api"]] = None
+    enable_ads: Optional[bool] = None
+    enable_seo: Optional[bool] = None
+    enable_social: Optional[bool] = None
+    keyword_selection_mode: Optional[str] = None
+    keyword_limit: Optional[int] = None
+    skip_relevance: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -99,14 +99,31 @@ def import_keywords(
     import_data: KeywordImportRequest,
     db: Session = Depends(get_db)
 ):
-    """Bulk import keywords."""
-    created = crud.create_keywords_bulk(db, [kw.model_dump() for kw in import_data.keywords])
-    skipped = len(import_data.keywords) - created
-    
+    """Bulk import keywords with optional workspace scope."""
+    from app.core.workspace import verify_workspace
+
+    brand_profile_id = import_data.brand_profile_id
+    if brand_profile_id is not None:
+        verify_workspace(db, brand_profile_id)
+
+    result = crud.create_keywords_bulk(
+        db,
+        [kw.model_dump() for kw in import_data.keywords],
+        brand_profile_id=brand_profile_id,
+        return_details=True
+    )
+
+    if isinstance(result, dict):
+        created = result["created"] + result["linked"]
+        skipped = result["skipped_exact"] + result["skipped_fuzzy"]
+    else:
+        created = result
+        skipped = len(import_data.keywords) - created
+
     return KeywordImportResponse(
         created=created,
         skipped=skipped,
-        message=f"{created} keywords created, {skipped} skipped (already exist)"
+        message=f"{created} keywords created/linked, {skipped} skipped (already exist)"
     )
 
 

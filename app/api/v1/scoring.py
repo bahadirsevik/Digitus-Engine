@@ -53,16 +53,28 @@ def create_scoring_run(
 @router.post("/runs/{run_id}/execute", response_model=dict)
 def execute_scoring(
     run_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
     Execute scoring for all keywords in the run.
     Calculates ADS, SEO, and SOCIAL scores for all active keywords.
+    If should_compute_relevance=True, triggers relevance computation in background.
     """
+    from app.core.scoring.state_machine import transition_atomic
+    from app.tasks.scoring_tasks import _run_relevance_computation
+
     engine = ScoreEngine(db)
     
     try:
         result = engine.run_scoring(run_id)
+
+        # Path B: Auto-trigger relevance if scoring completed successfully
+        if result.get("should_compute_relevance"):
+            run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
+            if run and transition_atomic(db, run, target="relevance_computing", from_status="scored"):
+                background_tasks.add_task(_run_relevance_computation, scoring_run_id=run_id)
+
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -703,8 +703,18 @@ class BrandProfile(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    scoring_run = relationship("ScoringRun", backref="brand_profile")
-    scoring_runs = relationship("ScoringRun", back_populates="brand_profile_workspace", foreign_keys="ScoringRun.brand_profile_id")
+    scoring_run = relationship(
+        "ScoringRun",
+        backref="brand_profile",
+        foreign_keys="BrandProfile.scoring_run_id",
+        primaryjoin="BrandProfile.scoring_run_id == ScoringRun.id",
+        viewonly=True
+    )
+    scoring_runs = relationship(
+        "ScoringRun",
+        back_populates="brand_profile_workspace",
+        foreign_keys="ScoringRun.brand_profile_id"
+    )
     workspace_keywords = relationship("WorkspaceKeyword", back_populates="brand_profile", cascade="all, delete-orphan")
 
 

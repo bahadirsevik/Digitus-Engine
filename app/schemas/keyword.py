@@ -57,6 +57,7 @@ class KeywordListResponse(BaseModel):
 class KeywordImportRequest(BaseModel):
     """Schema for bulk keyword import."""
     keywords: List[KeywordCreate]
+    brand_profile_id: Optional[int] = Field(None, description="Workspace ID for workspace-scoped import")
 
 
 class KeywordImportResponse(BaseModel):
