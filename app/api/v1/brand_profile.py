@@ -710,10 +710,22 @@ def _run_relevance_computation(scoring_run_id: int):
 
     db = SessionLocal()
     try:
-        profile = db.query(BrandProfile).filter(
-            BrandProfile.scoring_run_id == scoring_run_id,
-            BrandProfile.status == "confirmed",
-        ).first()
+        # Yeni mimari: ScoringRun.brand_profile_id üzerinden; eski 1:1 fallback
+        scoring_run = db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+        profile = None
+
+        if scoring_run and scoring_run.brand_profile_id:
+            profile = db.query(BrandProfile).filter(
+                BrandProfile.id == scoring_run.brand_profile_id,
+                BrandProfile.status == "confirmed",
+                BrandProfile.deleted_at.is_(None),
+            ).first()
+
+        if not profile:
+            profile = db.query(BrandProfile).filter(
+                BrandProfile.scoring_run_id == scoring_run_id,
+                BrandProfile.status == "confirmed",
+            ).first()
 
         if not profile:
             logger.warning(f"Relevance compute skipped: no confirmed profile for run {scoring_run_id}")

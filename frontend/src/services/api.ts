@@ -11,8 +11,12 @@ const api = axios.create({
 
 // Keywords API
 export const keywordsApi = {
-  list: (params?: { skip?: number; limit?: number; active_only?: boolean }) =>
-    api.get("/keywords", { params }),
+  list: (params?: {
+    skip?: number;
+    limit?: number;
+    active_only?: boolean;
+    brand_profile_id?: number;
+  }) => api.get("/keywords", { params }),
 
   get: (id: number) => api.get(`/keywords/${id}`),
 

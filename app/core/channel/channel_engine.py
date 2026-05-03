@@ -218,11 +218,13 @@ class ChannelEngine:
             logger.info("Cross-channel transfer atlandı: ADS ve SEO aynı anda aktif değil")
             results['cross_channel'] = {"transferred": 0, "seo_kept": 0, "seo_eliminated": 0}
 
+        channel_summary = ", ".join(
+            f"{ch}={results.get(ch, 'N/A')}"
+            for ch in active_channels
+        )
         logger.info(
-            f"Pre-filter tamamlandi: "
-            f"ADS={results['ADS']}, SEO={results['SEO']}, "
-            f"SOCIAL={results['SOCIAL']}, "
-            f"Cross-channel={results['cross_channel']}"
+            f"Pre-filter tamamlandi: {channel_summary}, "
+            f"Cross-channel={results.get('cross_channel', {})}"
         )
 
         return results

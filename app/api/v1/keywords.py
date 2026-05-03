@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
 from app.database import crud
-from app.database.models import Keyword
+from app.database.models import Keyword, WorkspaceKeyword
 from app.schemas.keyword import (
     KeywordCreate, KeywordUpdate, KeywordResponse,
     KeywordListResponse, KeywordImportRequest, KeywordImportResponse
@@ -23,6 +23,7 @@ def list_keywords(
     limit: int = Query(100, ge=1, le=2000),
     active_only: bool = Query(True),
     sector: Optional[str] = Query(None),
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope filter"),
     db: Session = Depends(get_db)
 ):
     """
@@ -32,10 +33,30 @@ def list_keywords(
     - **limit**: Max number of records to return
     - **active_only**: Filter only active keywords
     - **sector**: Filter by sector
+    - **brand_profile_id**: If provided, only return keywords linked to this workspace
     """
-    keywords = crud.get_keywords(db, skip=skip, limit=limit, active_only=active_only, sector=sector)
-    total = db.query(Keyword).filter(Keyword.is_active == True if active_only else True).count()
-    
+    if brand_profile_id is not None:
+        # Workspace-scoped: sadece bu workspace'in WorkspaceKeyword bağlantılı keyword'leri
+        from app.core.workspace import verify_workspace
+        verify_workspace(db, brand_profile_id)
+
+        base_query = (
+            db.query(Keyword)
+            .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
+            .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
+        )
+        if active_only:
+            base_query = base_query.filter(Keyword.is_active == True)
+        if sector:
+            base_query = base_query.filter(Keyword.sector == sector)
+
+        total = base_query.count()
+        keywords = base_query.order_by(Keyword.id).offset(skip).limit(limit).all()
+    else:
+        # Legacy: global keyword list
+        keywords = crud.get_keywords(db, skip=skip, limit=limit, active_only=active_only, sector=sector)
+        total = db.query(Keyword).filter(Keyword.is_active == True if active_only else True).count()
+
     return KeywordListResponse(
         items=[KeywordResponse.model_validate(kw) for kw in keywords],
         total=total,
@@ -86,8 +107,24 @@ def delete_all_keywords(db: Session = Depends(get_db)):
 
 
 @router.delete("/{keyword_id}", status_code=204)
-def delete_keyword(keyword_id: int, db: Session = Depends(get_db)):
-    """Delete a keyword."""
+def delete_keyword(
+    keyword_id: int,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope for safe unlink"),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a keyword.
+    If brand_profile_id is provided, only removes the workspace link (WorkspaceKeyword).
+    Otherwise deletes the global Keyword record (legacy behavior).
+    """
+    if brand_profile_id is not None:
+        from app.core.workspace import verify_workspace
+        verify_workspace(db, brand_profile_id)
+        success = crud.remove_keyword_from_workspace(db, keyword_id, brand_profile_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Keyword not found in this workspace")
+        return None
+
     success = crud.delete_keyword(db, keyword_id)
     if not success:
         raise HTTPException(status_code=404, detail="Keyword not found")

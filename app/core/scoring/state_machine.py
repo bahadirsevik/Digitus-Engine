@@ -16,7 +16,7 @@ _VALID_TRANSITIONS: Dict[str, set] = {
     "pending": {"scoring"},
     "scoring": {"scored", "failed"},
     "scored": {"relevance_computing", "channel_assigning", "failed"},
-    "relevance_computing": {"relevance_computed", "failed"},
+    "relevance_computing": {"relevance_computed", "failed", "channel_assigning"},
     "relevance_computed": {"channel_assigning", "failed"},
     "channel_assigning": {"channel_assigned", "failed"},
     "channel_assigned": {"completed", "relevance_computing", "failed"},

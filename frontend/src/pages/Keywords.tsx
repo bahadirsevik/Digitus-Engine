@@ -86,7 +86,10 @@ export default function Keywords() {
     setLoading(true);
     setError(null);
     try {
-      const res = await keywordsApi.list({ limit: 2000 });
+      const res = await keywordsApi.list({
+        limit: 2000,
+        brand_profile_id: activeWorkspace?.id,
+      });
       setKeywords(res.data.items || []);
     } catch (err: any) {
       console.error("Error fetching keywords:", err);

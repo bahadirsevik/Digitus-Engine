@@ -376,6 +376,31 @@ def delete_keyword(db: Session, keyword_id: int) -> bool:
     return False
 
 
+def remove_keyword_from_workspace(
+    db: Session,
+    keyword_id: int,
+    brand_profile_id: int,
+) -> bool:
+    """
+    Remove a keyword link from a workspace (WorkspaceKeyword soft-remove).
+    Does NOT delete the global Keyword record — other workspaces may still use it.
+    Returns True if link existed and was removed, False if no link found.
+    """
+    wk = (
+        db.query(WorkspaceKeyword)
+        .filter(
+            WorkspaceKeyword.keyword_id == keyword_id,
+            WorkspaceKeyword.brand_profile_id == brand_profile_id,
+        )
+        .first()
+    )
+    if wk:
+        db.delete(wk)
+        db.commit()
+        return True
+    return False
+
+
 def delete_all_keywords(db: Session) -> int:
     """Delete all keywords. Returns number of deleted items."""
     count = db.query(Keyword).delete()
