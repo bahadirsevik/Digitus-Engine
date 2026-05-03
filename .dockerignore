@@ -1,0 +1,17 @@
+.git
+.venv
+.pytest_cache
+.playwright-mcp
+_repo_check
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+artifacts
+exports
+tests
+google
+*.md
+*.docx
+celerybeat-schedule

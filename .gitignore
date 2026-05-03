@@ -1,0 +1,180 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+exports/
+uploads/
+veri/
+artifacts/
+backups/
+*.csv
+app_logs.txt
+full_logs.txt
+latest_logs.txt
+final_analysis.txt
+analyze_data.py
+exclusion_log.csv
+duplicates_log.csv
+
+# Node modules
+node_modules/
+.next/
+frontend/node_modules/
+
+# Database
+*.db
+*.sqlite3
+
+# Tests
+tests/
+
+# Gereksiz scriptler
+scripts/run_google_ads_probe.py
+scripts/site_fetch_smoke.py
+scripts/site_profile_extract_test.py
+scripts/test_gemini_simple.py
+
+# Gelistirme / analiz dosyalari
+.claude/
+_repo_check/
+labs/
+ACTION-PLAN.md
+FULL-AUDIT-REPORT.md
+Roadmap2.md
+claud.md
+last.md
+newprompts.md
+plan.md
+AI_STABILITY_REPORT.md
+SECURITY_AUDIT.md
+
+# Log ve cikti dosyalari
+*.txt
+*.docx
+discrepancy_report*.txt
+nul
+
+# Ortam dosyalari (credentials iceren)
+.env.google_ads_lab
