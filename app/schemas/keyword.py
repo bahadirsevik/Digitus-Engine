@@ -20,7 +20,7 @@ class KeywordBase(BaseModel):
 
 class KeywordCreate(KeywordBase):
     """Schema for creating a new keyword."""
-    pass
+    brand_profile_id: Optional[int] = Field(None, description="Workspace ID for workspace-scoped creation")
 
 
 class KeywordUpdate(BaseModel):

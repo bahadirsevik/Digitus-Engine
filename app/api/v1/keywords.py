@@ -77,10 +77,10 @@ def get_keyword(keyword_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=KeywordResponse, status_code=201)
 def create_keyword(
     keyword_data: KeywordCreate,
-    brand_profile_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """Create a new keyword, optionally linked to a workspace."""
+    brand_profile_id = keyword_data.brand_profile_id
     if brand_profile_id is not None:
         from app.core.workspace import verify_workspace
         verify_workspace(db, brand_profile_id)
