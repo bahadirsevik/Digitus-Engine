@@ -75,13 +75,32 @@ def get_keyword(keyword_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=KeywordResponse, status_code=201)
-def create_keyword(keyword_data: KeywordCreate, db: Session = Depends(get_db)):
-    """Create a new keyword."""
-    # Check if already exists
+def create_keyword(
+    keyword_data: KeywordCreate,
+    brand_profile_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """Create a new keyword, optionally linked to a workspace."""
+    if brand_profile_id is not None:
+        from app.core.workspace import verify_workspace
+        verify_workspace(db, brand_profile_id)
+        result = crud.create_keywords_bulk(
+            db,
+            [keyword_data.model_dump()],
+            brand_profile_id=brand_profile_id,
+            return_details=True
+        )
+        if isinstance(result, dict) and (result["created"] + result["linked"]) > 0:
+            keyword = crud.get_keyword_by_text(db, keyword_data.keyword)
+            if keyword:
+                return KeywordResponse.model_validate(keyword)
+        raise HTTPException(status_code=400, detail="Keyword could not be created")
+
+    # Legacy: global keyword
     existing = crud.get_keyword_by_text(db, keyword_data.keyword)
     if existing:
         raise HTTPException(status_code=400, detail="Keyword already exists")
-    
+
     keyword = crud.create_keyword(db, keyword_data.model_dump())
     return KeywordResponse.model_validate(keyword)
 
@@ -100,8 +119,22 @@ def update_keyword(
 
 
 @router.delete("/all", status_code=204)
-def delete_all_keywords(db: Session = Depends(get_db)):
-    """Delete all keywords."""
+def delete_all_keywords(
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope for safe bulk unlink"),
+    db: Session = Depends(get_db)
+):
+    """Delete all keywords. If brand_profile_id, only removes workspace links."""
+    if brand_profile_id is not None:
+        from app.core.workspace import verify_workspace
+        verify_workspace(db, brand_profile_id)
+        count = (
+            db.query(WorkspaceKeyword)
+            .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        return None
+
     crud.delete_all_keywords(db)
     return None
 

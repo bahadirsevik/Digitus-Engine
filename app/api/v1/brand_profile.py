@@ -781,6 +781,14 @@ def _run_relevance_computation(scoring_run_id: int):
             computed += 1
 
         db.commit()
+
+        # Status geçişi: relevance_computing → relevance_computed
+        if scoring_run:
+            try:
+                transition(db, scoring_run, target="relevance_computed")
+            except ValueError as ve:
+                logger.warning(f"Relevance status transition failed: {ve}")
+
         logger.info(
             f"Auto relevance computation completed for run {scoring_run_id}: "
             f"{computed}/{len(keywords)} keywords scored"
@@ -789,5 +797,10 @@ def _run_relevance_computation(scoring_run_id: int):
     except Exception as e:
         logger.error(f"Auto relevance computation failed for run {scoring_run_id}: {e}")
         # Fail-open: pipeline continues without relevance, using default scores
+        if scoring_run:
+            try:
+                transition(db, scoring_run, target="failed")
+            except ValueError:
+                pass
     finally:
         db.close()

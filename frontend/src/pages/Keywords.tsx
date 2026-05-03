@@ -75,7 +75,7 @@ export default function Keywords() {
 
   useEffect(() => {
     fetchKeywords();
-  }, []);
+  }, [activeWorkspace?.id]);
 
   const switchTab = (tab: TabId) => {
     setActiveTab(tab);
@@ -133,7 +133,7 @@ export default function Keywords() {
   const handleCreate = async () => {
     if (!newKeyword.keyword.trim()) return;
     try {
-      await keywordsApi.create(newKeyword);
+      await keywordsApi.create(newKeyword, activeWorkspace?.id);
       setShowModal(false);
       setNewKeyword({
         keyword: "",
@@ -157,7 +157,7 @@ export default function Keywords() {
 
   const handleDelete = async (id: number) => {
     try {
-      await keywordsApi.delete(id);
+      await keywordsApi.delete(id, activeWorkspace?.id);
       fetchKeywords();
     } catch (err) {
       setKeywords(keywords.filter((k) => k.id !== id));
@@ -165,13 +165,21 @@ export default function Keywords() {
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm("Tüm anahtar kelimeleri silmek istediğinize emin misiniz?"))
+    if (!activeWorkspace) {
+      alert("Önce bir marka çalışması seçin");
+      return;
+    }
+    if (
+      !confirm(
+        "Bu çalışmadaki TÜM anahtar kelimelerin bağlantısı kaldırılacak. Emin misiniz?",
+      )
+    )
       return;
     try {
-      await keywordsApi.deleteAll();
+      await keywordsApi.deleteAll(activeWorkspace.id);
       fetchKeywords();
     } catch (err) {
-      setKeywords([]);
+      alert("Silme başarısız oldu");
     }
   };
 

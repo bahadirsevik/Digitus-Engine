@@ -20,17 +20,20 @@ export const keywordsApi = {
 
   get: (id: number) => api.get(`/keywords/${id}`),
 
-  create: (data: KeywordCreate) => api.post("/keywords", data),
+  create: (data: KeywordCreate, brand_profile_id?: number) =>
+    api.post("/keywords", { ...data, brand_profile_id }),
 
   update: (id: number, data: Partial<KeywordCreate>) =>
     api.put(`/keywords/${id}`, data),
 
-  delete: (id: number) => api.delete(`/keywords/${id}`),
+  delete: (id: number, brand_profile_id?: number) =>
+    api.delete(`/keywords/${id}`, { params: { brand_profile_id } }),
 
   import: (keywords: KeywordCreate[], brand_profile_id?: number) =>
     api.post("/keywords/import", { keywords, brand_profile_id }),
 
-  deleteAll: () => api.delete("/keywords/all"),
+  deleteAll: (brand_profile_id?: number) =>
+    api.delete("/keywords/all", { params: { brand_profile_id } }),
 };
 
 // Scoring API
