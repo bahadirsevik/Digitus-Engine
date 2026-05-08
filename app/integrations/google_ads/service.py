@@ -92,6 +92,15 @@ class EnrichedKeyword:
 
 
 @dataclass
+class UrlSeedKeyword:
+    keyword: str
+    monthly_volume: int
+    trend_3m: float
+    trend_12m: float
+    competition: float
+
+
+@dataclass
 class CampaignKeyword:
     keyword: str
     match_type: str
@@ -293,6 +302,111 @@ class GoogleAdsService:
                 break
 
         return results, truncated, truncated_reason
+
+    def _build_keyword_ideas_request(
+        self,
+        client: Any,
+        customer_id: str,
+        max_results: int,
+        language_id: Optional[str] = None,
+        geo_target_id: Optional[str] = None,
+    ) -> Any:
+        lang_id = language_id or getattr(self.settings, "GOOGLE_ADS_LANGUAGE_ID", None)
+        geo_id = geo_target_id or getattr(self.settings, "GOOGLE_ADS_GEO_TARGET_ID", None)
+
+        request = client.get_type("GenerateKeywordIdeasRequest")
+        request.customer_id = customer_id
+        if lang_id:
+            request.language = client.get_service("GoogleAdsService").language_constant_path(lang_id)
+        if geo_id:
+            request.geo_target_constants.append(
+                client.get_service("GeoTargetConstantService").geo_target_constant_path(geo_id)
+            )
+        request.page_size = min(max_results, 1000)
+        request.include_adult_keywords = False
+        request.keyword_plan_network = client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH
+        return request
+
+    def _collect_url_seed_keywords(self, response: Any, max_results: int) -> tuple[List[UrlSeedKeyword], bool, Optional[str]]:
+        results: List[UrlSeedKeyword] = []
+        truncated = False
+        truncated_reason = None
+
+        for idx, row in enumerate(response, start=1):
+            metrics = getattr(row, "keyword_idea_metrics", None)
+            avg_searches = int(getattr(metrics, "avg_monthly_searches", 0) or 0)
+            competition_index = getattr(metrics, "competition_index", None)
+
+            monthly_volumes_raw = []
+            for mv in (getattr(metrics, "monthly_search_volumes", []) or []):
+                monthly_volumes_raw.append({
+                    "year": int(getattr(mv, "year", 0)),
+                    "month": int(getattr(mv, "month", 0)),
+                    "monthly_searches": int(getattr(mv, "monthly_searches", 0) or 0),
+                })
+
+            trend_3m, trend_12m = compute_trends(monthly_volumes_raw)
+            ci = int(competition_index) if competition_index is not None else 0
+
+            results.append(UrlSeedKeyword(
+                keyword=getattr(row, "text", ""),
+                monthly_volume=avg_searches,
+                trend_3m=trend_3m,
+                trend_12m=trend_12m,
+                competition=round(ci / 100, 2),
+            ))
+
+            if idx >= max_results:
+                truncated = True
+                truncated_reason = "max_results reached"
+                break
+
+        return results, truncated, truncated_reason
+
+    def keyword_ideas_by_url(
+        self,
+        customer_id: str,
+        url: str,
+        max_results: int = 300,
+        language_id: Optional[str] = None,
+        geo_target_id: Optional[str] = None,
+        min_volume: int = 0,
+        include_keyword_seed: bool = False,
+        keyword_seeds: Optional[List[str]] = None,
+    ) -> tuple[List[UrlSeedKeyword], bool, Optional[str]]:
+        """
+        GenerateKeywordIdeas URL seed cagrisi. DB'ye yazmaz.
+        Returns: (ideas, truncated, truncated_reason)
+        """
+        if not url or not url.strip():
+            raise ValueError("url is required")
+
+        client = _call_with_retry(self._build_client)
+        service = client.get_service("KeywordPlanIdeaService")
+        request = self._build_keyword_ideas_request(
+            client=client,
+            customer_id=customer_id,
+            max_results=max_results,
+            language_id=language_id,
+            geo_target_id=geo_target_id,
+        )
+
+        clean_url = url.strip()
+        clean_seeds = [s.strip() for s in (keyword_seeds or []) if s and s.strip()]
+        if include_keyword_seed and clean_seeds:
+            request.keyword_and_url_seed.url = clean_url
+            request.keyword_and_url_seed.keywords.extend(clean_seeds[:20])
+        else:
+            request.url_seed.url = clean_url
+
+        def _fetch():
+            return service.generate_keyword_ideas(request=request)
+
+        response = _call_with_retry(_fetch)
+        ideas, truncated, truncated_reason = self._collect_url_seed_keywords(response, max_results)
+        if min_volume > 0:
+            ideas = [idea for idea in ideas if idea.monthly_volume >= min_volume]
+        return ideas, truncated, truncated_reason
 
     def import_keywords(
         self,

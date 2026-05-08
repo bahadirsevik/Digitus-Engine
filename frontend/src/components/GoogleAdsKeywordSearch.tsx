@@ -16,10 +16,10 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
   const [maxResults, setMaxResults] = useState(100);
   const [minVolume, setMinVolume] = useState(0);
   const [languageId, setLanguageId] = useState(
-    activeWorkspace?.profile_data?.default_language_id || "1055",
+    activeWorkspace?.default_language_id || "1055",
   );
   const [geoId, setGeoId] = useState(
-    activeWorkspace?.profile_data?.default_geo_target_id || "2792",
+    activeWorkspace?.default_geo_target_id || "2792",
   );
   const [ideas, setIdeas] = useState<EnrichedKeywordOut[]>([]);
   const [loading, setLoading] = useState(false);

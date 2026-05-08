@@ -28,6 +28,10 @@ def create_scoring_run(
     Create a new scoring run.
     This initializes a scoring session with specified capacities and workspace binding.
     """
+    if run_data.brand_profile_id is not None:
+        from app.core.workspace import verify_workspace
+        verify_workspace(db, run_data.brand_profile_id)
+
     engine = ScoreEngine(db)
     scoring_run = engine.create_scoring_run(
         ads_capacity=run_data.ads_capacity,

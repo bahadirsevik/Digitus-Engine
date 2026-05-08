@@ -8,6 +8,8 @@ export interface ActiveWorkspace {
   status: string;
   profile_data: any;
   suggested_keywords: string[] | null;
+  default_geo_target_id?: string | null;
+  default_language_id?: string | null;
 }
 
 interface BrandStore {

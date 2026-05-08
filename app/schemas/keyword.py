@@ -2,7 +2,7 @@
 Pydantic schemas for Keyword model.
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -16,6 +16,12 @@ class KeywordBase(BaseModel):
     competition_score: Decimal = Field(default=Decimal("0.50"), ge=0, le=1, description="Rekabet skoru (0-1)")
     sector: Optional[str] = Field(None, max_length=200, description="Sektör")
     target_market: Optional[str] = Field(None, max_length=200, description="Hedef pazar")
+    data_source: Literal["csv", "google_ads_api", "url_seed", "manual"] = Field(
+        "csv",
+        description="Import source stored on the workspace keyword snapshot"
+    )
+    geo_target_id: Optional[str] = Field(None, max_length=20, description="Workspace keyword geo target")
+    language_id: Optional[str] = Field(None, max_length=10, description="Workspace keyword language")
 
 
 class KeywordCreate(KeywordBase):

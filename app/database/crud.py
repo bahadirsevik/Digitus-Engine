@@ -16,6 +16,35 @@ from app.core.keyword_dedup import deduplicate_keywords
 from app.core.keyword_normalize import normalize_keyword
 
 
+_KEYWORD_MODEL_FIELDS = {
+    "keyword",
+    "normalized_keyword",
+    "monthly_volume",
+    "trend_12m",
+    "trend_3m",
+    "competition_score",
+    "sector",
+    "target_market",
+    "is_active",
+    "data_source",
+}
+_LEGACY_KEYWORD_DATA_SOURCES = {"csv", "google_ads_api"}
+
+
+def _legacy_keyword_data_source(source: Optional[str]) -> str:
+    """
+    Keyword.data_source has a legacy DB check constraint.
+    New source labels live on WorkspaceKeyword.data_source.
+    """
+    return source if source in _LEGACY_KEYWORD_DATA_SOURCES else "csv"
+
+
+def _keyword_insert_data(kw_data: Dict[str, Any]) -> Dict[str, Any]:
+    data = {k: v for k, v in kw_data.items() if k in _KEYWORD_MODEL_FIELDS}
+    data["data_source"] = _legacy_keyword_data_source(data.get("data_source"))
+    return data
+
+
 # ==================== KEYWORD CRUD ====================
 
 def get_keyword(db: Session, keyword_id: int) -> Optional[Keyword]:
@@ -54,7 +83,7 @@ def get_all_active_keywords(db: Session) -> List[Keyword]:
 
 def create_keyword(db: Session, keyword_data: Dict[str, Any]) -> Keyword:
     """Create a new keyword."""
-    db_keyword = Keyword(**keyword_data)
+    db_keyword = Keyword(**_keyword_insert_data(keyword_data))
     db.add(db_keyword)
     db.commit()
     db.refresh(db_keyword)
@@ -201,7 +230,7 @@ def create_keywords_bulk(
         batch = unique_keywords[i:i + batch_size]
         try:
             for kw_data in batch:
-                db_keyword = Keyword(**kw_data)
+                db_keyword = Keyword(**_keyword_insert_data(kw_data))
                 db.add(db_keyword)
             db.commit()
             created += len(batch)
@@ -210,7 +239,7 @@ def create_keywords_bulk(
             # Try one by one if batch failed
             for kw_data in batch:
                 try:
-                    db_keyword = Keyword(**kw_data)
+                    db_keyword = Keyword(**_keyword_insert_data(kw_data))
                     db.add(db_keyword)
                     db.commit()
                     created += 1
@@ -312,7 +341,7 @@ def _import_with_workspace_link(
         trend_3m=kw_data.get('trend_3m', 0),
         trend_12m=kw_data.get('trend_12m', 0),
         competition_score=kw_data.get('competition_score', 0.5),
-        data_source=kw_data.get('data_source', 'csv'),
+        data_source=_legacy_keyword_data_source(kw_data.get('data_source', 'csv')),
         sector=kw_data.get('sector'),
         target_market=kw_data.get('target_market'),
     )
@@ -433,8 +462,8 @@ def update_scoring_run_status(db: Session, run_id: int, status: str) -> Optional
     """Update scoring run status."""
     db_run = get_scoring_run(db, run_id)
     if db_run:
-        db_run.status = status
-        db.commit()
+        from app.core.scoring.state_machine import transition
+        transition(db, db_run, status)
         db.refresh(db_run)
     return db_run
 

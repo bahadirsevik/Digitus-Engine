@@ -218,6 +218,9 @@ export interface KeywordCreate {
   trend_12m?: number;
   trend_3m?: number;
   competition_score?: number;
+  data_source?: "csv" | "google_ads_api" | "url_seed" | "manual";
+  geo_target_id?: string;
+  language_id?: string;
 }
 
 export interface ScoringRunCreate {
@@ -255,6 +258,8 @@ export interface WorkspaceResponse {
   status: string;
   profile_data: any;
   suggested_keywords: string[] | null;
+  default_geo_target_id?: string | null;
+  default_language_id?: string | null;
   deleted_at: string | null;
   created_at: string;
 }

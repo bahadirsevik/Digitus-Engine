@@ -121,6 +121,9 @@ class WorkspaceListResponse(BaseModel):
     company_url: str
     status: str
     profile_data: Optional[Dict[str, Any]] = None
+    suggested_keywords: Optional[List[str]] = None
+    default_geo_target_id: Optional[str] = None
+    default_language_id: Optional[str] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
     run_count: int = 0

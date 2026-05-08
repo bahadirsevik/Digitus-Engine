@@ -262,6 +262,9 @@ export default function Keywords() {
       trend_3m: kw.trend_3m,
       trend_12m: kw.trend_12m,
       competition_score: kw.competition_score,
+      data_source: "google_ads_api",
+      geo_target_id: activeWorkspace.default_geo_target_id || undefined,
+      language_id: activeWorkspace.default_language_id || undefined,
     }));
     try {
       await keywordsApi.import(mapped, activeWorkspace.id);
@@ -283,6 +286,9 @@ export default function Keywords() {
       trend_3m: idea.trend_3m,
       trend_12m: idea.trend_12m,
       competition_score: idea.competition,
+      data_source: "url_seed",
+      geo_target_id: activeWorkspace.default_geo_target_id || undefined,
+      language_id: activeWorkspace.default_language_id || undefined,
     }));
     try {
       await keywordsApi.import(mapped, activeWorkspace.id);
@@ -342,6 +348,7 @@ export default function Keywords() {
             key={tab.id}
             className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
             onClick={() => switchTab(tab.id)}
+            disabled={workspaceDisabled}
             title={workspaceDisabled ? disableMessage : undefined}
           >
             {tab.label}
@@ -352,7 +359,7 @@ export default function Keywords() {
       {/* Tab Content */}
       <div className="tab-content">
         {/* CSV Upload */}
-        {activeTab === "csv" && (
+        {!workspaceDisabled && activeTab === "csv" && (
           <div className="upload-section glass-card">
             <h3>CSV Dosyası Yükle</h3>
             <p>
@@ -409,7 +416,7 @@ export default function Keywords() {
         )}
 
         {/* Manual Add */}
-        {activeTab === "manual" && (
+        {!workspaceDisabled && activeTab === "manual" && (
           <div className="manual-section glass-card">
             <h3>Manuel Ekle</h3>
             <div className="form-group">
@@ -446,12 +453,12 @@ export default function Keywords() {
         )}
 
         {/* Google Ads Search */}
-        {activeTab === "google-ads" && (
+        {!workspaceDisabled && activeTab === "google-ads" && (
           <GoogleAdsKeywordSearch onImport={handleGoogleAdsImport} />
         )}
 
         {/* URL Seed */}
-        {activeTab === "url" && (
+        {!workspaceDisabled && activeTab === "url" && (
           <UrlKeywordExtractor onImport={handleUrlSeedImport} />
         )}
       </div>

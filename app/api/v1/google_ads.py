@@ -4,8 +4,10 @@ Mevcut hicbir endpoint'i degistirmez.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -122,6 +124,47 @@ class CampaignKeywordsImportRequest(BaseModel):
     target_market: Optional[str] = None
 
 
+class UrlSeedRequest(BaseModel):
+    url: str = Field(..., min_length=1)
+    language_id: Optional[str] = None
+    geo_target_id: Optional[str] = None
+    max_results: int = Field(300, ge=1, le=5000)
+    min_volume: int = Field(0, ge=0)
+    include_keyword_seed: bool = False
+    brand_profile_id: int
+    customer_id: Optional[str] = None
+    refresh: bool = False
+
+
+class UrlSeedIdeaOut(BaseModel):
+    keyword: str
+    monthly_volume: int
+    trend_3m: float
+    trend_12m: float
+    competition: float
+
+
+class UrlSeedResponse(BaseModel):
+    ideas: List[UrlSeedIdeaOut]
+    total: int
+    cached: bool
+    cache_key: Optional[str]
+    quota_remaining: Optional[int] = None
+
+
+def _url_seed_cache_key(customer_id: str, url: str, language_id: str, geo_target_id: str) -> str:
+    url_hash = hashlib.md5(url.strip().lower().encode("utf-8")).hexdigest()
+    return f"gads:url_seed:{customer_id}:{url_hash}:{language_id}:{geo_target_id}"
+
+
+def _get_redis_client():
+    try:
+        import redis
+        return redis.from_url(settings.REDIS_URL, decode_responses=True)
+    except Exception:
+        return None
+
+
 # --- Endpoint'ler ---
 
 @router.get("/health")
@@ -202,6 +245,97 @@ def enrich_keywords(payload: EnrichRequest):
             )
             for e in enriched
         ],
+    )
+
+
+@router.post("/keyword-ideas-by-url", response_model=UrlSeedResponse)
+def keyword_ideas_by_url(
+    payload: UrlSeedRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    KeywordPlanIdeaService URL seed onerileri.
+    DB'ye yazmaz; frontend onizleme ve sonra /keywords/import ile workspace bind yapar.
+    """
+    from app.core.workspace import verify_workspace
+
+    workspace = verify_workspace(db, payload.brand_profile_id)
+    customer_id = (
+        payload.customer_id
+        or settings.GOOGLE_ADS_CUSTOMER_ID
+        or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
+    )
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="customer_id gerekli")
+
+    language_id = payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
+    geo_target_id = payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
+    cache_key = _url_seed_cache_key(customer_id, payload.url, language_id, geo_target_id)
+
+    redis_client = _get_redis_client()
+    if redis_client and not payload.refresh:
+        try:
+            cached_raw = redis_client.get(cache_key)
+            if cached_raw:
+                cached = json.loads(cached_raw)
+                return UrlSeedResponse(
+                    ideas=[UrlSeedIdeaOut(**idea) for idea in cached.get("ideas", [])],
+                    total=int(cached.get("total", 0)),
+                    cached=True,
+                    cache_key=cache_key,
+                )
+        except Exception:
+            pass
+
+    svc = _get_service()
+    keyword_seeds = workspace.suggested_keywords or []
+    try:
+        ideas, truncated, truncated_reason = svc.keyword_ideas_by_url(
+            customer_id=customer_id,
+            url=payload.url,
+            max_results=payload.max_results,
+            language_id=language_id,
+            geo_target_id=geo_target_id,
+            min_volume=payload.min_volume,
+            include_keyword_seed=payload.include_keyword_seed,
+            keyword_seeds=keyword_seeds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        exc_name = type(exc).__name__
+        if exc_name == "ResourceExhausted":
+            response.headers["retry-after"] = "600"
+            raise HTTPException(status_code=429, detail="Google Ads kotasi doldu, daha sonra tekrar deneyin")
+        if exc_name in {"InvalidArgument", "GoogleAdsException"}:
+            raise HTTPException(status_code=400, detail=str(exc))
+        raise
+
+    out_ideas = [
+        UrlSeedIdeaOut(
+            keyword=idea.keyword,
+            monthly_volume=idea.monthly_volume,
+            trend_3m=idea.trend_3m,
+            trend_12m=idea.trend_12m,
+            competition=idea.competition,
+        )
+        for idea in ideas
+    ]
+
+    payload_to_cache = {"ideas": [idea.model_dump() for idea in out_ideas], "total": len(out_ideas)}
+    if redis_client:
+        try:
+            redis_client.setex(cache_key, 24 * 60 * 60, json.dumps(payload_to_cache))
+        except Exception:
+            pass
+
+    return UrlSeedResponse(
+        ideas=out_ideas,
+        total=len(out_ideas),
+        cached=False,
+        cache_key=cache_key,
+        quota_remaining=None,
     )
 
 

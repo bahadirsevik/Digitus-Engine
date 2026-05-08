@@ -31,10 +31,8 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
         max_results: maxResults,
         min_volume: minVolume,
         include_keyword_seed: includeSeed,
-        language_id:
-          activeWorkspace.profile_data?.default_language_id || "1055",
-        geo_target_id:
-          activeWorkspace.profile_data?.default_geo_target_id || "2792",
+        language_id: activeWorkspace.default_language_id || "1055",
+        geo_target_id: activeWorkspace.default_geo_target_id || "2792",
       });
       const data = res.data;
       setIdeas(data.ideas || []);

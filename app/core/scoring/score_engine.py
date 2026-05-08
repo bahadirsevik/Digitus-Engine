@@ -9,6 +9,7 @@ v2: WorkspaceKeyword snapshot metrikleriyle çalışır.
 """
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 from datetime import datetime
 from loguru import logger
 
@@ -278,7 +279,11 @@ class ScoreEngine:
             except ValueError:
                 # Zaten failed ise sessizce devam et
                 self.db.rollback()
-                scoring_run.status = "failed"
+                self.db.execute(
+                    update(ScoringRun)
+                    .where(ScoringRun.id == scoring_run.id)
+                    .values(status="failed")
+                )
                 self.db.commit()
             raise e
 

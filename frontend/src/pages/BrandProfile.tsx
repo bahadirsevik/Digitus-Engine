@@ -144,6 +144,9 @@ interface WorkspaceListRow {
   company_url: string;
   status: string;
   profile_data: any;
+  suggested_keywords?: string[] | null;
+  default_geo_target_id?: string | null;
+  default_language_id?: string | null;
   deleted_at: string | null;
   created_at: string;
   run_count: number;
@@ -305,7 +308,7 @@ function WorkspaceDetail({
   onRefresh,
 }: {
   workspace: WorkspaceListRow & {
-    suggested_keywords?: string[];
+    suggested_keywords?: string[] | null;
     preliminary_info?: string;
   };
   onArchive: () => void;
@@ -355,6 +358,8 @@ function WorkspaceDetail({
       status: workspace.status,
       profile_data: workspace.profile_data,
       suggested_keywords: workspace.suggested_keywords || null,
+      default_geo_target_id: workspace.default_geo_target_id || null,
+      default_language_id: workspace.default_language_id || null,
     });
     navigate("/keywords?tab=google-ads");
   };
