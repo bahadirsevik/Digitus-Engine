@@ -18,6 +18,8 @@ from app.integrations.google_ads.service import GoogleAdsService
 
 router = APIRouter()
 
+URL_SEED_CACHE_TTL_SECONDS = 24 * 60 * 60
+
 
 def _get_service() -> GoogleAdsService:
     svc = GoogleAdsService(settings)
@@ -363,7 +365,7 @@ def keyword_ideas_by_url(
     payload_to_cache = {"ideas": [idea.model_dump() for idea in out_ideas], "total": len(out_ideas)}
     if redis_client:
         try:
-            redis_client.setex(cache_key, 24 * 60 * 60, json.dumps(payload_to_cache))
+            redis_client.setex(cache_key, URL_SEED_CACHE_TTL_SECONDS, json.dumps(payload_to_cache))
         except Exception:
             pass
 

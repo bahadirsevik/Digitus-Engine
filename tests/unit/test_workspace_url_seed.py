@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.api.v1.google_ads import _url_seed_cache_key
+from app.api.v1.google_ads import URL_SEED_CACHE_TTL_SECONDS, _url_seed_cache_key
 from app.database.crud import _legacy_keyword_data_source
 from app.integrations.google_ads.service import GoogleAdsService
 from app.schemas.keyword import KeywordCreate
@@ -134,3 +134,7 @@ def test_url_seed_cache_key_includes_result_shape_params():
     assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 300, 0, False)
     assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 50, False)
     assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 0, True)
+
+
+def test_url_seed_cache_ttl_is_24_hours():
+    assert URL_SEED_CACHE_TTL_SECONDS == 24 * 60 * 60

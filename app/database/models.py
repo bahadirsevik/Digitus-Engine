@@ -796,6 +796,10 @@ class WorkspaceKeyword(Base):
     brand_profile = relationship("BrandProfile", back_populates="workspace_keywords")
 
     __table_args__ = (
+        CheckConstraint(
+            "data_source IN ('csv', 'google_ads_api', 'url_seed', 'manual')",
+            name="ck_workspace_keywords_data_source",
+        ),
         UniqueConstraint('brand_profile_id', 'keyword_id', name='uq_workspace_keyword'),
         Index('idx_workspace_kw_workspace', 'brand_profile_id'),
         Index('idx_workspace_kw_keyword', 'keyword_id'),
