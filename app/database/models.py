@@ -7,7 +7,7 @@ from typing import Optional, List
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Float,
     ForeignKey, Numeric, JSON, UniqueConstraint, Index, CheckConstraint,
-    text
+    text, event, inspect
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.sql import func
@@ -668,7 +668,7 @@ class BrandProfile(Base):
         Integer,
         ForeignKey("scoring_runs.id", ondelete="SET NULL"),
         nullable=True,
-        unique=True
+        unique=False
     )  # DEPRECATED — Phase A'da SET NULL yapÄ±lÄ±r
 
     # Workspace metadata
@@ -801,3 +801,32 @@ class WorkspaceKeyword(Base):
         Index('idx_workspace_kw_keyword', 'keyword_id'),
         Index('idx_workspace_kw_volume', 'brand_profile_id', 'monthly_volume'),
     )
+
+
+@event.listens_for(WorkspaceKeyword, "before_update")
+def _prevent_workspace_keyword_snapshot_update(mapper, connection, target):
+    """WorkspaceKeyword import-time snapshot fields are immutable; notes remains mutable."""
+    immutable_fields = {
+        "brand_profile_id",
+        "keyword_id",
+        "monthly_volume",
+        "trend_3m",
+        "trend_12m",
+        "competition_score",
+        "data_source",
+        "sector",
+        "target_market",
+        "geo_target_id",
+        "language_id",
+        "imported_at",
+    }
+    state = inspect(target)
+    changed = [
+        field for field in immutable_fields
+        if state.attrs[field].history.has_changes()
+    ]
+    if changed:
+        raise ValueError(
+            "WorkspaceKeyword snapshot fields are immutable: "
+            + ", ".join(sorted(changed))
+        )

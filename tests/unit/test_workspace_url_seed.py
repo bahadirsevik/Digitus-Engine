@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from app.api.v1.google_ads import _url_seed_cache_key
 from app.database.crud import _legacy_keyword_data_source
 from app.integrations.google_ads.service import GoogleAdsService
 from app.schemas.keyword import KeywordCreate
@@ -125,3 +126,11 @@ def test_non_legacy_sources_do_not_hit_keyword_table_constraint():
     assert _legacy_keyword_data_source("google_ads_api") == "google_ads_api"
     assert _legacy_keyword_data_source("url_seed") == "csv"
     assert _legacy_keyword_data_source("manual") == "csv"
+
+
+def test_url_seed_cache_key_includes_result_shape_params():
+    base = _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 0, False)
+
+    assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 300, 0, False)
+    assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 50, False)
+    assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 0, True)

@@ -152,9 +152,21 @@ class UrlSeedResponse(BaseModel):
     quota_remaining: Optional[int] = None
 
 
-def _url_seed_cache_key(customer_id: str, url: str, language_id: str, geo_target_id: str) -> str:
+def _url_seed_cache_key(
+    customer_id: str,
+    url: str,
+    language_id: str,
+    geo_target_id: str,
+    max_results: int,
+    min_volume: int,
+    include_keyword_seed: bool,
+) -> str:
     url_hash = hashlib.md5(url.strip().lower().encode("utf-8")).hexdigest()
-    return f"gads:url_seed:{customer_id}:{url_hash}:{language_id}:{geo_target_id}"
+    seed_mode = "kwurl" if include_keyword_seed else "url"
+    return (
+        f"gads:url_seed:{customer_id}:{url_hash}:{language_id}:{geo_target_id}:"
+        f"{max_results}:{min_volume}:{seed_mode}"
+    )
 
 
 def _get_redis_client():
@@ -271,7 +283,15 @@ def keyword_ideas_by_url(
 
     language_id = payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
     geo_target_id = payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
-    cache_key = _url_seed_cache_key(customer_id, payload.url, language_id, geo_target_id)
+    cache_key = _url_seed_cache_key(
+        customer_id,
+        payload.url,
+        language_id,
+        geo_target_id,
+        payload.max_results,
+        payload.min_volume,
+        payload.include_keyword_seed,
+    )
 
     redis_client = _get_redis_client()
     if redis_client and not payload.refresh:

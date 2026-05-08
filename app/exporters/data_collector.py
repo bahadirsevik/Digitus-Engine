@@ -371,7 +371,9 @@ class ExportDataCollector:
         # eski kayıtlarda NULL kalabiliyor).
         contents = (
             self.db.query(SEOGeoContent)
+            .outerjoin(ContentOutput, SEOGeoContent.content_output_id == ContentOutput.id)
             .filter(SEOGeoContent.keyword_id.in_(seo_keyword_ids))
+            .filter((SEOGeoContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False))
             .order_by(SEOGeoContent.id.desc())
             .all()
         )
@@ -466,9 +468,13 @@ class ExportDataCollector:
     
     def _collect_ads(self, scoring_run_id: int) -> AdsData:
         """Reklam gruplarını toplar."""
-        groups = self.db.query(AdGroup).filter(
-            AdGroup.scoring_run_id == scoring_run_id
-        ).all()
+        groups = (
+            self.db.query(AdGroup)
+            .outerjoin(ContentOutput, AdGroup.content_output_id == ContentOutput.id)
+            .filter(AdGroup.scoring_run_id == scoring_run_id)
+            .filter((AdGroup.content_output_id.is_(None)) | (ContentOutput.is_stale == False))
+            .all()
+        )
         
         group_data = []
         for g in groups:
@@ -541,8 +547,12 @@ class ExportDataCollector:
             SocialIdea, SocialContent.idea_id == SocialIdea.id
         ).join(
             SocialCategory, SocialIdea.category_id == SocialCategory.id
+        ).outerjoin(
+            ContentOutput, SocialContent.content_output_id == ContentOutput.id
         ).filter(
             SocialCategory.scoring_run_id == scoring_run_id
+        ).filter(
+            (SocialContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
         ).all()
         
         content_data = []

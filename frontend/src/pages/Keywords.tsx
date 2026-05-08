@@ -76,6 +76,7 @@ export default function Keywords() {
     trend_12m: 10,
     trend_3m: 15,
     competition_score: 0.5,
+    data_source: "manual",
   });
 
   useEffect(() => {
@@ -125,6 +126,7 @@ export default function Keywords() {
         trend_12m: 10,
         trend_3m: 15,
         competition_score: 0.5,
+        data_source: "manual",
       });
       fetchKeywords();
     } catch (err) {
