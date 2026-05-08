@@ -77,6 +77,12 @@ export const workspaceApi = {
   archive: (id: number) => api.post(`/brand-profile/workspaces/${id}/archive`),
 
   restore: (id: number) => api.post(`/brand-profile/workspaces/${id}/restore`),
+
+  refreshKeywords: (id: number, data?: WorkspaceKeywordRefreshRequest) =>
+    api.post<WorkspaceKeywordRefreshResponse>(
+      `/brand-profile/workspaces/${id}/keywords/refresh`,
+      data || {},
+    ),
 };
 
 // Brand Profile API
@@ -264,6 +270,22 @@ export interface WorkspaceResponse {
   created_at: string;
 }
 
+export interface WorkspaceKeywordRefreshRequest {
+  customer_id?: string;
+  max_results?: number;
+  min_volume?: number;
+  include_new_ideas?: boolean;
+}
+
+export interface WorkspaceKeywordRefreshResponse {
+  workspace_id: number;
+  refreshed: number;
+  unchanged: number;
+  added: number;
+  removed: number;
+  total_after: number;
+}
+
 export interface UrlSeedRequest {
   url: string;
   language_id?: string;
@@ -426,6 +448,7 @@ export interface ExportRequest {
   format: "docx" | "pdf" | "excel" | "csv";
   sections?: string[];
   include_compliance_details?: boolean;
+  include_stale_content?: boolean;
 }
 
 export default api;

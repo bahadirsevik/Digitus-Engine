@@ -93,6 +93,24 @@ class WorkspaceCreateRequest(BaseModel):
     default_language_id: Optional[str] = Field("1055", description="Language ID")
 
 
+class WorkspaceKeywordRefreshRequest(BaseModel):
+    """Workspace keyword metriklerini Google Ads ile yenileme isteği."""
+    customer_id: Optional[str] = Field(None, description="Google Ads customer ID")
+    max_results: int = Field(300, ge=1, le=5000)
+    min_volume: int = Field(0, ge=0)
+    include_new_ideas: bool = Field(False, description="Google Ads'in döndürdüğü yeni fikirleri de ekle")
+
+
+class WorkspaceKeywordRefreshResponse(BaseModel):
+    """Workspace keyword refresh diff raporu."""
+    workspace_id: int
+    refreshed: int
+    unchanged: int
+    added: int
+    removed: int
+    total_after: int
+
+
 class WorkspaceResponse(BaseModel):
     """Marka çalışması detay yanıtı."""
     id: int

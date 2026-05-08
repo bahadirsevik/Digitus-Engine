@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, AlertCircle, X } from "lucide-react";
 import { useBrandStore } from "../stores/brandStore";
 import { googleAdsApi, EnrichedKeywordOut } from "../services/api";
@@ -12,6 +12,7 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
 
   const [customerId, setCustomerId] = useState("");
+  const [customers, setCustomers] = useState<string[]>([]);
   const [seeds, setSeeds] = useState("");
   const [maxResults, setMaxResults] = useState(100);
   const [minVolume, setMinVolume] = useState(0);
@@ -27,6 +28,20 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
   const [showAutoFill, setShowAutoFill] = useState(
     !!activeWorkspace?.suggested_keywords?.length,
   );
+
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        const res = await googleAdsApi.listCustomers();
+        const ids = (res.data || []).map((item) => item.customer_id);
+        setCustomers(ids);
+        if (!customerId && ids.length === 1) setCustomerId(ids[0]);
+      } catch {
+        setCustomers([]);
+      }
+    };
+    loadCustomers();
+  }, []);
 
   const handleAutoFill = () => {
     if (activeWorkspace?.suggested_keywords?.length) {
@@ -90,12 +105,26 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
       <div className="search-form">
         <div className="form-group">
           <label>Müşteri Google Ads Hesabı</label>
-          <input
-            type="text"
-            placeholder="xxx-xxx-xxxx"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          />
+          {customers.length > 0 ? (
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+            >
+              <option value="">Hesap seÃ§in</option>
+              {customers.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              placeholder="xxx-xxx-xxxx"
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+            />
+          )}
         </div>
 
         <div className="form-group full-width">

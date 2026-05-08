@@ -65,6 +65,7 @@ def _run_export(export_id: str, request: ExportRequest, db: Session):
         _export_status[export_id]['progress'] = 10
         
         exporter = _get_exporter(request.format, db)
+        exporter.data_collector.include_stale_content = request.include_stale_content
         
         ext = _get_file_extension(request.format)
         filename = f"digitus_report_{request.scoring_run_id}_{export_id[:8]}{ext}"
@@ -125,7 +126,8 @@ def create_export(
         'created_at': datetime.utcnow(),
         'scoring_run_id': request.scoring_run_id,
         'format': request.format.value,
-        'sections': [s.value for s in request.sections]
+        'sections': [s.value for s in request.sections],
+        'include_stale_content': request.include_stale_content,
     }
     
     # Background task olarak çalıştır

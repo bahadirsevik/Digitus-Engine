@@ -8,6 +8,7 @@ export default function Export() {
   const [selectedRun, setSelectedRun] = useState<number | null>(null)
   const [format, setFormat] = useState<'docx' | 'pdf' | 'excel'>('excel')
   const [channels, setChannels] = useState<string[]>(['ADS', 'SEO', 'SOCIAL'])
+  const [includeStaleContent, setIncludeStaleContent] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [success, setSuccess] = useState(false)
 
@@ -43,7 +44,8 @@ export default function Export() {
         scoring_run_id: selectedRun,
         format,
         sections: ['all'],
-        include_compliance_details: true
+        include_compliance_details: true,
+        include_stale_content: includeStaleContent
       }
 
       const res = await exportApi.create(req)
@@ -166,6 +168,17 @@ export default function Export() {
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="form-section">
+          <label className="channel-checkbox">
+            <input
+              type="checkbox"
+              checked={includeStaleContent}
+              onChange={(e) => setIncludeStaleContent(e.target.checked)}
+            />
+            <span>Güncel değil işaretlenen içerikleri dahil et</span>
+          </label>
         </div>
 
         <div className="export-action">

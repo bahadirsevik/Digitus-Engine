@@ -8,6 +8,7 @@ import hashlib
 import json
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -177,6 +178,21 @@ def _get_redis_client():
         return None
 
 
+def _assert_url_reachable(url: str) -> None:
+    try:
+        with httpx.Client(timeout=8.0, follow_redirects=True) as client:
+            resp = client.get(url)
+        if resp.status_code >= 400:
+            raise HTTPException(
+                status_code=422,
+                detail=f"URL erişilemedi veya hata döndü: HTTP {resp.status_code}",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"URL erişilemedi: {exc}")
+
+
 # --- Endpoint'ler ---
 
 @router.get("/health")
@@ -310,6 +326,7 @@ def keyword_ideas_by_url(
 
     svc = _get_service()
     keyword_seeds = workspace.suggested_keywords or []
+    _assert_url_reachable(payload.url)
     try:
         ideas, truncated, truncated_reason = svc.keyword_ideas_by_url(
             customer_id=customer_id,

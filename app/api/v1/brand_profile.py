@@ -20,9 +20,15 @@ from app.schemas.brand_profile import (
     ProfileAnalyzeRequest, ProfileConfirmRequest,
     BrandProfileResponse, KeywordRelevanceResponse, RelevanceComputeResponse,
     WorkspaceCreateRequest, WorkspaceResponse, WorkspaceListResponse,
+    WorkspaceKeywordRefreshRequest, WorkspaceKeywordRefreshResponse,
 )
 from app.core.workspace import verify_workspace
 from app.core.scoring.state_machine import transition, transition_atomic
+from app.core.keyword_normalize import normalize_keyword
+from app.core.workspace_refresh import (
+    ExistingWorkspaceKeyword,
+    build_refreshed_workspace_keywords,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -574,6 +580,146 @@ def restore_workspace(workspace_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(workspace)
     return WorkspaceResponse.model_validate(workspace)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/keywords/refresh",
+    response_model=WorkspaceKeywordRefreshResponse,
+)
+def refresh_workspace_keywords(
+    workspace_id: int,
+    request: WorkspaceKeywordRefreshRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Workspace keyword metriklerini Google Ads ile yeniler.
+    Network çağrısı DB delete+insert transaction'ından önce tamamlanır.
+    """
+    workspace = verify_workspace(db, workspace_id)
+    rows = (
+        db.query(WorkspaceKeyword, Keyword)
+        .join(Keyword, WorkspaceKeyword.keyword_id == Keyword.id)
+        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
+        .order_by(WorkspaceKeyword.id)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=400, detail="Bu workspace'te yenilenecek keyword yok")
+
+    existing = [
+        ExistingWorkspaceKeyword(
+            keyword_id=kw.id,
+            keyword=kw.keyword,
+            monthly_volume=wk.monthly_volume,
+            trend_3m=wk.trend_3m,
+            trend_12m=wk.trend_12m,
+            competition_score=wk.competition_score,
+            data_source=wk.data_source,
+            sector=wk.sector,
+            target_market=wk.target_market,
+            geo_target_id=wk.geo_target_id,
+            language_id=wk.language_id,
+            notes=wk.notes,
+        )
+        for wk, kw in rows
+    ]
+    seed_keywords = [item.keyword for item in existing]
+
+    db.commit()
+
+    from app.api.v1.google_ads import _get_service
+
+    customer_id = (
+        request.customer_id
+        or settings.GOOGLE_ADS_CUSTOMER_ID
+        or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
+    )
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="customer_id gerekli")
+
+    svc = _get_service()
+    refreshed_ideas = []
+    for start in range(0, len(seed_keywords), 20):
+        chunk = seed_keywords[start:start + 20]
+        ideas, _, _ = svc.enrich_keywords(
+            customer_id=customer_id,
+            seeds=chunk,
+            max_results=request.max_results,
+            language_id=workspace.default_language_id,
+            geo_target_id=workspace.default_geo_target_id,
+        )
+        if request.min_volume > 0:
+            ideas = [idea for idea in ideas if idea.avg_monthly_searches >= request.min_volume]
+        refreshed_ideas.extend(ideas)
+
+    merged = build_refreshed_workspace_keywords(
+        existing,
+        refreshed_ideas,
+        include_new_ideas=request.include_new_ideas,
+        data_source="google_ads_api",
+    )
+
+    existing_keywords_by_norm = {
+        normalize_keyword(item.keyword): item.keyword_id
+        for item in existing
+    }
+
+    try:
+        db.query(WorkspaceKeyword).filter(
+            WorkspaceKeyword.brand_profile_id == workspace_id
+        ).delete(synchronize_session=False)
+
+        for row in merged["rows"]:
+            keyword_id = row["keyword_id"]
+            if keyword_id is None:
+                normalized = normalize_keyword(row["keyword"])
+                keyword_id = existing_keywords_by_norm.get(normalized)
+                if keyword_id is None:
+                    kw = db.query(Keyword).filter(Keyword.normalized_keyword == normalized).first()
+                    if not kw:
+                        kw = Keyword(
+                            keyword=row["keyword"],
+                            normalized_keyword=normalized,
+                            monthly_volume=row["monthly_volume"],
+                            trend_3m=row["trend_3m"],
+                            trend_12m=row["trend_12m"],
+                            competition_score=row["competition_score"],
+                            data_source="google_ads_api",
+                            is_active=True,
+                        )
+                        db.add(kw)
+                        db.flush()
+                    keyword_id = kw.id
+
+            db.add(WorkspaceKeyword(
+                brand_profile_id=workspace_id,
+                keyword_id=keyword_id,
+                monthly_volume=row["monthly_volume"],
+                trend_3m=row["trend_3m"],
+                trend_12m=row["trend_12m"],
+                competition_score=row["competition_score"],
+                data_source=row["data_source"],
+                sector=row["sector"],
+                target_market=row["target_market"],
+                geo_target_id=row["geo_target_id"] or workspace.default_geo_target_id,
+                language_id=row["language_id"] or workspace.default_language_id,
+                notes=row["notes"],
+            ))
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    diff = merged["diff"]
+    return WorkspaceKeywordRefreshResponse(
+        workspace_id=workspace_id,
+        refreshed=diff["refreshed"],
+        unchanged=diff["unchanged"],
+        added=diff["added"],
+        removed=diff["removed"],
+        total_after=len(merged["rows"]),
+    )
 
 
 # ==================== Background task function ====================

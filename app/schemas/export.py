@@ -56,6 +56,10 @@ class ExportRequest(BaseModel):
         default=True,
         description="SEO/GEO compliance detayları dahil mi?"
     )
+    include_stale_content: bool = Field(
+        default=False,
+        description="Yeniden kanal ataması sonrası güncel değil işaretlenen içerikler dahil mi?"
+    )
 
 
 class ExportStatusResponse(BaseModel):

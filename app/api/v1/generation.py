@@ -278,6 +278,9 @@ def list_seo_geo_contents(
     results = []
     for content in contents:
         keyword = db.query(Keyword).filter(Keyword.id == content.keyword_id).first()
+        content_output = db.query(ContentOutput).filter(
+            ContentOutput.id == content.content_output_id
+        ).first() if content.content_output_id else None
         
         seo_score = float(content.seo_compliance.total_score) if content.seo_compliance and content.seo_compliance.total_score else 0
         geo_score = float(content.geo_compliance.total_score) if content.geo_compliance and content.geo_compliance.total_score else 0
@@ -291,6 +294,7 @@ def list_seo_geo_contents(
             'seo_score': seo_score,
             'geo_score': geo_score,
             'combined_score': round((seo_score + geo_score) / 2, 2),
+            'is_stale': bool(content_output.is_stale) if content_output else False,
             'created_at': content.created_at.isoformat() if content.created_at else None
         })
     

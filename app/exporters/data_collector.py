@@ -35,6 +35,7 @@ class ExportDataCollector:
     
     def __init__(self, db: Session):
         self.db = db
+        self.include_stale_content = False
     
     def collect(
         self,
@@ -373,10 +374,13 @@ class ExportDataCollector:
             self.db.query(SEOGeoContent)
             .outerjoin(ContentOutput, SEOGeoContent.content_output_id == ContentOutput.id)
             .filter(SEOGeoContent.keyword_id.in_(seo_keyword_ids))
-            .filter((SEOGeoContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False))
             .order_by(SEOGeoContent.id.desc())
-            .all()
         )
+        if not self.include_stale_content:
+            contents = contents.filter(
+                (SEOGeoContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
+            )
+        contents = contents.all()
 
         # Her keyword için yalnızca en son içeriği tut
         seen_keyword_ids: set = set()
@@ -472,9 +476,12 @@ class ExportDataCollector:
             self.db.query(AdGroup)
             .outerjoin(ContentOutput, AdGroup.content_output_id == ContentOutput.id)
             .filter(AdGroup.scoring_run_id == scoring_run_id)
-            .filter((AdGroup.content_output_id.is_(None)) | (ContentOutput.is_stale == False))
-            .all()
         )
+        if not self.include_stale_content:
+            groups = groups.filter(
+                (AdGroup.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
+            )
+        groups = groups.all()
         
         group_data = []
         for g in groups:
@@ -551,9 +558,12 @@ class ExportDataCollector:
             ContentOutput, SocialContent.content_output_id == ContentOutput.id
         ).filter(
             SocialCategory.scoring_run_id == scoring_run_id
-        ).filter(
-            (SocialContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
-        ).all()
+        )
+        if not self.include_stale_content:
+            contents = contents.filter(
+                (SocialContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
+            )
+        contents = contents.all()
         
         content_data = []
         for c in contents:
