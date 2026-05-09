@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, AlertCircle, X } from "lucide-react";
+import { CheckCircle, Search } from "lucide-react";
 import { useBrandStore } from "../stores/brandStore";
 import { googleAdsApi, EnrichedKeywordOut } from "../services/api";
 import "./GoogleAdsKeywordSearch.css";
@@ -7,6 +7,9 @@ import "./GoogleAdsKeywordSearch.css";
 interface Props {
   onImport: (keywords: EnrichedKeywordOut[]) => void;
 }
+
+const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
+  languageId === "1055" ? "1037" : languageId || "1037";
 
 export default function GoogleAdsKeywordSearch({ onImport }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
@@ -17,7 +20,7 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
   const [maxResults, setMaxResults] = useState(100);
   const [minVolume, setMinVolume] = useState(0);
   const [languageId, setLanguageId] = useState(
-    activeWorkspace?.default_language_id || "1055",
+    normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id),
   );
   const [geoId, setGeoId] = useState(
     activeWorkspace?.default_geo_target_id || "2792",
@@ -25,9 +28,12 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
   const [ideas, setIdeas] = useState<EnrichedKeywordOut[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAutoFill, setShowAutoFill] = useState(
-    !!activeWorkspace?.suggested_keywords?.length,
-  );
+  const suggestedSeeds =
+    activeWorkspace?.suggested_keywords
+      ?.map((kw) => kw.trim())
+      .filter(Boolean)
+      .slice(0, 10) || [];
+  const suggestedSeedText = suggestedSeeds.join("\n");
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -43,12 +49,18 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
     loadCustomers();
   }, []);
 
-  const handleAutoFill = () => {
-    if (activeWorkspace?.suggested_keywords?.length) {
-      setSeeds(activeWorkspace.suggested_keywords.join("\n"));
-      setShowAutoFill(false);
-    }
-  };
+  useEffect(() => {
+    setLanguageId(normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id));
+    setGeoId(activeWorkspace?.default_geo_target_id || "2792");
+    setSeeds(suggestedSeedText);
+    setIdeas([]);
+    setError(null);
+  }, [
+    activeWorkspace?.id,
+    activeWorkspace?.default_language_id,
+    activeWorkspace?.default_geo_target_id,
+    suggestedSeedText,
+  ]);
 
   const handleSearch = async () => {
     if (!customerId || !seeds.trim()) return;
@@ -83,22 +95,12 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
 
   return (
     <div className="google-ads-component">
-      {activeWorkspace && showAutoFill && (
+      {activeWorkspace && suggestedSeeds.length > 0 && (
         <div className="autofill-info">
-          <AlertCircle size={14} />
+          <CheckCircle size={15} />
           <span>
-            Marka profilinden {activeWorkspace.suggested_keywords?.length}{" "}
-            kelime önerisi yüklendi
+            Marka profilinden {suggestedSeeds.length} seed kelime yüklendi
           </span>
-          <button className="autofill-btn" onClick={handleAutoFill}>
-            Seed'e Yükle
-          </button>
-          <button
-            className="autofill-close"
-            onClick={() => setShowAutoFill(false)}
-          >
-            <X size={12} />
-          </button>
         </div>
       )}
 

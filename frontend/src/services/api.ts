@@ -16,7 +16,7 @@ export const keywordsApi = {
     limit?: number;
     active_only?: boolean;
     brand_profile_id?: number;
-  }) => api.get("/keywords", { params }),
+  }) => api.get("/keywords/", { params }),
 
   get: (id: number) => api.get(`/keywords/${id}`),
 
@@ -295,6 +295,7 @@ export interface UrlSeedRequest {
   include_keyword_seed?: boolean;
   brand_profile_id: number;
   customer_id?: string;
+  refresh?: boolean;
 }
 
 export interface UrlSeedResponse {

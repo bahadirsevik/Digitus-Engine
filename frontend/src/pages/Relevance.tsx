@@ -50,7 +50,13 @@ export default function Relevance() {
         const runs = (res.data || []).filter(
           (r: any) =>
             r.brand_profile_id === activeWorkspace.id &&
-            ["scored", "channel_assigned", "completed"].includes(r.status),
+            [
+              "scored",
+              "relevance_computing",
+              "relevance_computed",
+              "channel_assigned",
+              "completed",
+            ].includes(r.status),
         );
         setScoringRuns(runs);
       })

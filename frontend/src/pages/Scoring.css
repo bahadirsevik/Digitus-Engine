@@ -48,6 +48,44 @@
   margin-top: var(--space-sm);
 }
 
+.badge-muted {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.channel-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.channel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  min-height: 44px;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.channel-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+}
+
+.channel-toggle.active {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.14);
+  color: var(--text-primary);
+}
+
 /* Scores Section */
 .scores-section {
   margin-top: var(--space-xl);

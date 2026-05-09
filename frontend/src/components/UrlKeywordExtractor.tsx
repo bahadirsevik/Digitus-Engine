@@ -1,11 +1,15 @@
-import { useState } from "react";
-import { Globe, RefreshCw, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Globe, Info } from "lucide-react";
 import { useBrandStore } from "../stores/brandStore";
 import { googleAdsUrlSeedApi, UrlSeedIdea } from "../services/api";
+import "./GoogleAdsKeywordSearch.css";
 
 interface Props {
   onImport: (keywords: UrlSeedIdea[]) => void;
 }
+
+const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
+  languageId === "1055" ? "1037" : languageId || "1037";
 
 export default function UrlKeywordExtractor({ onImport }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
@@ -20,19 +24,31 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleExtract = async () => {
+  useEffect(() => {
+    setUrl(activeWorkspace?.company_url || "");
+    setIdeas([]);
+    setTotal(0);
+    setCached(false);
+    setError(null);
+  }, [activeWorkspace?.id]);
+
+  const handleExtract = async (forceRefresh = false) => {
     if (!url.trim() || !activeWorkspace?.id) return;
+    const normalizedUrl = /^https?:\/\//i.test(url.trim())
+      ? url.trim()
+      : `https://${url.trim()}`;
     setLoading(true);
     setError(null);
     try {
       const res = await googleAdsUrlSeedApi.keywordIdeasByUrl({
-        url: url.trim(),
+        url: normalizedUrl,
         brand_profile_id: activeWorkspace.id,
         max_results: maxResults,
         min_volume: minVolume,
         include_keyword_seed: includeSeed,
-        language_id: activeWorkspace.default_language_id || "1055",
+        language_id: normalizeGoogleAdsLanguageId(activeWorkspace.default_language_id),
         geo_target_id: activeWorkspace.default_geo_target_id || "2792",
+        refresh: forceRefresh,
       });
       const data = res.data;
       setIdeas(data.ideas || []);
@@ -88,14 +104,14 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
                 checked={includeSeed}
                 onChange={(e) => setIncludeSeed(e.target.checked)}
               />
-              Sayfadaki kelimeler de seed olsun
+              Marka seed kelimeleri de kullan
             </label>
           </div>
         </div>
 
         <button
           className="btn btn-primary"
-          onClick={handleExtract}
+          onClick={() => handleExtract(false)}
           disabled={loading || !url.trim() || !activeWorkspace?.id}
         >
           <Globe size={16} />
@@ -105,8 +121,19 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
 
       {cached && (
         <div className="cache-badge">
-          <Info size={14} />
-          Cache'den geldi — 24 saat içinde yenilenmez
+          <div className="cache-copy">
+            <Info size={14} />
+            <span>
+              Önceki sonuç kullanıldı. Parametreleri değiştirerek veya yeniden çek seçeneğiyle güncel sorgu yapabilirsiniz.
+            </span>
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleExtract(true)}
+            disabled={loading || !url.trim() || !activeWorkspace?.id}
+          >
+            Google Ads'ten yeniden çek
+          </button>
         </div>
       )}
 
@@ -117,7 +144,7 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
           <div className="preview-header">
             <span>
               {ideas.length} / {total} keyword bulundu
-              {cached && " (cache)"}
+              {cached && " (önceki sonuç)"}
             </span>
             <button className="btn btn-primary" onClick={handleImport}>
               Sisteme Aktar

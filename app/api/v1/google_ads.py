@@ -19,6 +19,16 @@ from app.integrations.google_ads.service import GoogleAdsService
 router = APIRouter()
 
 URL_SEED_CACHE_TTL_SECONDS = 24 * 60 * 60
+GOOGLE_ADS_LANGUAGE_ALIASES = {
+    "1055": "1037",  # Windows/Turkish locale -> Google Ads Turkish criterion ID
+}
+
+
+def _normalize_language_id(language_id: Optional[str]) -> Optional[str]:
+    if language_id is None:
+        return None
+    value = str(language_id).strip()
+    return GOOGLE_ADS_LANGUAGE_ALIASES.get(value, value)
 
 
 def _get_service() -> GoogleAdsService:
@@ -29,6 +39,27 @@ def _get_service() -> GoogleAdsService:
             detail="Google Ads credentials not configured. Check .env file."
         )
     return svc
+
+
+def _raise_google_ads_error(exc: Exception) -> None:
+    exc_name = type(exc).__name__
+    detail = str(exc)
+    if exc_name == "RefreshError" or "invalid_grant" in detail:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Google Ads yetkilendirmesi gecersiz veya suresi dolmus. "
+                "GOOGLE_ADS_REFRESH_TOKEN yenilenmeli."
+            ),
+        )
+    if exc_name == "ResourceExhausted":
+        raise HTTPException(
+            status_code=429,
+            detail="Google Ads kotasi doldu, daha sonra tekrar deneyin",
+        )
+    if exc_name in {"InvalidArgument", "GoogleAdsException"}:
+        raise HTTPException(status_code=400, detail=detail)
+    raise HTTPException(status_code=502, detail=f"Google Ads istegi basarisiz oldu: {detail}")
 
 
 # --- Request/Response Modelleri ---
@@ -215,7 +246,10 @@ def list_customers():
     Detay icin GET /google-ads/customers/{customer_id} kullan.
     """
     svc = _get_service()
-    ids = svc.list_customer_ids()
+    try:
+        ids = svc.list_customer_ids()
+    except Exception as exc:
+        _raise_google_ads_error(exc)
     return [{"customer_id": cid} for cid in ids]
 
 
@@ -225,7 +259,10 @@ def get_customer_detail(customer_id: str):
     Tek bir hesap icin isim, para birimi, zaman dilimi.
     """
     svc = _get_service()
-    info = svc.get_customer_detail(customer_id)
+    try:
+        info = svc.get_customer_detail(customer_id)
+    except Exception as exc:
+        _raise_google_ads_error(exc)
     return CustomerDetailOut(
         customer_id=info.customer_id,
         name=info.name,
@@ -245,13 +282,16 @@ def enrich_keywords(payload: EnrichRequest):
     - truncated=True ise max_results'a ulasilmistir
     """
     svc = _get_service()
-    enriched, truncated, truncated_reason = svc.enrich_keywords(
-        customer_id=payload.customer_id,
-        seeds=payload.seeds,
-        max_results=payload.max_results,
-        language_id=payload.language_id,
-        geo_target_id=payload.geo_target_id,
-    )
+    try:
+        enriched, truncated, truncated_reason = svc.enrich_keywords(
+            customer_id=payload.customer_id,
+            seeds=payload.seeds,
+            max_results=payload.max_results,
+            language_id=_normalize_language_id(payload.language_id),
+            geo_target_id=payload.geo_target_id,
+        )
+    except Exception as exc:
+        _raise_google_ads_error(exc)
 
     # min_volume filtresi
     if payload.min_volume > 0:
@@ -299,7 +339,9 @@ def keyword_ideas_by_url(
     if not customer_id:
         raise HTTPException(status_code=400, detail="customer_id gerekli")
 
-    language_id = payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
+    language_id = _normalize_language_id(
+        payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
+    )
     geo_target_id = payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
     cache_key = _url_seed_cache_key(
         customer_id,
@@ -343,13 +385,9 @@ def keyword_ideas_by_url(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
-        exc_name = type(exc).__name__
-        if exc_name == "ResourceExhausted":
+        if type(exc).__name__ == "ResourceExhausted":
             response.headers["retry-after"] = "600"
-            raise HTTPException(status_code=429, detail="Google Ads kotasi doldu, daha sonra tekrar deneyin")
-        if exc_name in {"InvalidArgument", "GoogleAdsException"}:
-            raise HTTPException(status_code=400, detail=str(exc))
-        raise
+        _raise_google_ads_error(exc)
 
     out_ideas = [
         UrlSeedIdeaOut(
@@ -395,15 +433,18 @@ def import_keywords(payload: ImportRequest, db: Session = Depends(get_db)):
     ile run olusturun (tum aktif keywordler).
     """
     svc = _get_service()
-    result = svc.import_keywords(
-        db=db,
-        customer_id=payload.customer_id,
-        seeds=payload.seeds,
-        max_results=payload.max_results,
-        min_volume=payload.min_volume,
-        sector=payload.sector,
-        target_market=payload.target_market,
-    )
+    try:
+        result = svc.import_keywords(
+            db=db,
+            customer_id=payload.customer_id,
+            seeds=payload.seeds,
+            max_results=payload.max_results,
+            min_volume=payload.min_volume,
+            sector=payload.sector,
+            target_market=payload.target_market,
+        )
+    except Exception as exc:
+        _raise_google_ads_error(exc)
 
     return ImportResponse(
         created=result.created,
@@ -423,7 +464,10 @@ def import_keywords(payload: ImportRequest, db: Session = Depends(get_db)):
 def list_campaigns(customer_id: str = Query(..., min_length=1)):
     """List campaigns for selected customer account."""
     svc = _get_service()
-    items = svc.list_campaigns(customer_id=customer_id)
+    try:
+        items = svc.list_campaigns(customer_id=customer_id)
+    except Exception as exc:
+        _raise_google_ads_error(exc)
     return [CampaignInfo(**vars(item)) for item in items]
 
 
@@ -450,6 +494,8 @@ def list_campaign_keywords(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        _raise_google_ads_error(exc)
 
     return CampaignKeywordsResponse(
         count=len(keywords),
@@ -477,6 +523,8 @@ def import_campaign_keywords(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        _raise_google_ads_error(exc)
 
     return ImportResponse(
         created=result.created,

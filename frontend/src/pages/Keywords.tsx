@@ -7,10 +7,12 @@ import {
   Search,
   RefreshCw,
   FileSpreadsheet,
-  X,
   FileUp,
   CheckCircle,
   AlertCircle,
+  Keyboard,
+  Link2,
+  Megaphone,
 } from "lucide-react";
 import {
   keywordsApi,
@@ -25,11 +27,36 @@ import "./Keywords.css";
 
 type TabId = "csv" | "manual" | "google-ads" | "url";
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "csv", label: "CSV Yükle" },
-  { id: "manual", label: "Manuel Ekle" },
-  { id: "google-ads", label: "Google Ads Arama" },
-  { id: "url", label: "URL'den Çıkar" },
+const TABS: {
+  id: TabId;
+  label: string;
+  description: string;
+  icon: typeof Megaphone;
+}[] = [
+  {
+    id: "google-ads",
+    label: "Google Ads Arama",
+    description: "Marka profilindeki seed kelimelerle hacim ve rekabet verisi al",
+    icon: Megaphone,
+  },
+  {
+    id: "url",
+    label: "URL'den Çıkar",
+    description: "Sayfa URL'sinden yeni anahtar kelime önerileri üret",
+    icon: Link2,
+  },
+  {
+    id: "manual",
+    label: "Manuel Ekle",
+    description: "Tekil kelimeyi hızlıca çalışma alanına bağla",
+    icon: Keyboard,
+  },
+  {
+    id: "csv",
+    label: "CSV Yükle",
+    description: "Hazır keyword listesini toplu içe aktar",
+    icon: FileSpreadsheet,
+  },
 ];
 
 interface Keyword {
@@ -53,10 +80,14 @@ interface Keyword {
 export default function Keywords() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
+  const hasBrandSuggestedKeywords =
+    (activeWorkspace?.suggested_keywords?.filter((kw) => kw.trim()).length || 0) > 0;
+  const getDefaultTab = (): TabId =>
+    hasBrandSuggestedKeywords ? "google-ads" : "url";
 
-  const initialTab = (searchParams.get("tab") as TabId) || "csv";
+  const initialTab = (searchParams.get("tab") as TabId) || getDefaultTab();
   const [activeTab, setActiveTab] = useState<TabId>(
-    TABS.some((t) => t.id === initialTab) ? initialTab : "csv",
+    TABS.some((t) => t.id === initialTab) ? initialTab : getDefaultTab(),
   );
 
   const [keywords, setKeywords] = useState<Keyword[]>([]);
@@ -82,6 +113,15 @@ export default function Keywords() {
   useEffect(() => {
     fetchKeywords();
   }, [activeWorkspace?.id]);
+
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab") as TabId | null;
+    if (tabFromUrl && TABS.some((tab) => tab.id === tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+      return;
+    }
+    setActiveTab(getDefaultTab());
+  }, [activeWorkspace?.id, activeWorkspace?.suggested_keywords, searchParams]);
 
   const switchTab = (tab: TabId) => {
     setActiveTab(tab);
@@ -343,19 +383,28 @@ export default function Keywords() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="tabs-bar">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
-            onClick={() => switchTab(tab.id)}
-            disabled={workspaceDisabled}
-            title={workspaceDisabled ? disableMessage : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Import Methods */}
+      <div className="keyword-methods">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              className={`keyword-method ${activeTab === tab.id ? "active" : ""}`}
+              onClick={() => switchTab(tab.id)}
+              disabled={workspaceDisabled}
+              title={workspaceDisabled ? disableMessage : undefined}
+            >
+              <span className="keyword-method-icon">
+                <Icon size={18} />
+              </span>
+              <span className="keyword-method-copy">
+                <strong>{tab.label}</strong>
+                <small>{tab.description}</small>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}

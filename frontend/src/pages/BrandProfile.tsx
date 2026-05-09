@@ -138,6 +138,15 @@ function buildProfilePayload(
   return payload;
 }
 
+function hasGeneratedProfile(workspace: { profile_data: any; status: string }) {
+  const profile = workspace.profile_data;
+  if (!profile || typeof profile !== "object") return false;
+  const anchors = Array.isArray(profile.anchor_texts)
+    ? profile.anchor_texts.filter((item: unknown) => String(item || "").trim())
+    : [];
+  return workspace.status === "confirmed" && anchors.length > 0;
+}
+
 interface WorkspaceListRow {
   id: number;
   name: string;
@@ -170,7 +179,7 @@ function CreateWorkspaceModal({
   const [competitor3, setCompetitor3] = useState("");
   const [preliminaryInfo, setPreliminaryInfo] = useState("");
   const [geoId, setGeoId] = useState("2792");
-  const [languageId, setLanguageId] = useState("1055");
+  const [languageId, setLanguageId] = useState("1037");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -272,7 +281,7 @@ function CreateWorkspaceModal({
               value={languageId}
               onChange={(e) => setLanguageId(e.target.value)}
             >
-              <option value="1055">Türkçe (1055)</option>
+              <option value="1037">Türkçe (1037)</option>
               <option value="1001">Almanca (1001)</option>
               <option value="1000">İngilizce (1000)</option>
             </select>
@@ -351,6 +360,12 @@ function WorkspaceDetail({
   };
 
   const handleGoKeywords = () => {
+    if (!hasGeneratedProfile(workspace)) {
+      setError(
+        "Anahtar kelimelere gecmeden once sirket ozellikleri cikarilmali ve profil onaylanmali.",
+      );
+      return;
+    }
     setActiveWorkspace({
       id: workspace.id,
       name: workspace.name,
@@ -367,6 +382,7 @@ function WorkspaceDetail({
   const isArchived = !!workspace.deleted_at;
   const isDraft = workspace.status === "draft";
   const isConfirmed = workspace.status === "confirmed";
+  const canContinueToKeywords = hasGeneratedProfile(workspace);
 
   return (
     <div className="workspace-detail">
@@ -381,7 +397,16 @@ function WorkspaceDetail({
           </span>
           {!isArchived && (
             <>
-              <button className="btn btn-secondary" onClick={handleGoKeywords}>
+              <button
+                className="btn btn-secondary"
+                onClick={handleGoKeywords}
+                disabled={!canContinueToKeywords}
+                title={
+                  canContinueToKeywords
+                    ? ""
+                    : "Devam etmek icin once sirket ozellikleri cikarilip profil onaylanmali"
+                }
+              >
                 Anahtar Kelimelere Geç <ArrowRight size={14} />
               </button>
               <button
@@ -416,6 +441,14 @@ function WorkspaceDetail({
         )}
 
       {error && <div className="error-banner">{error}</div>}
+
+      {!isArchived && !canContinueToKeywords && (
+        <div className="disabled-hint">
+          <AlertCircle size={14} />
+          Anahtar kelimelere gecmeden once sirket ozellikleri cikarilmali ve
+          profil onaylanmali.
+        </div>
+      )}
 
       {(isDraft || isConfirmed) && workspace.profile_data && (
         <div className="profile-form">
@@ -504,6 +537,7 @@ function WorkspaceDetail({
 export default function BrandProfile() {
   const [workspaces, setWorkspaces] = useState<WorkspaceListRow[]>([]);
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [selectedWs, setSelectedWs] = useState<WorkspaceListRow | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -512,8 +546,16 @@ export default function BrandProfile() {
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await workspaceApi.list(includeArchived);
-      setWorkspaces(res.data || []);
+      const res = await workspaceApi.list(true);
+      const allWorkspaces = res.data || [];
+      setArchivedCount(
+        allWorkspaces.filter((ws: WorkspaceListRow) => !!ws.deleted_at).length,
+      );
+      setWorkspaces(
+        includeArchived
+          ? allWorkspaces
+          : allWorkspaces.filter((ws: WorkspaceListRow) => !ws.deleted_at),
+      );
     } catch (err: unknown) {
       setError(extractErrorMessage(err));
     } finally {
@@ -565,13 +607,16 @@ export default function BrandProfile() {
       </div>
 
       <div className="filter-bar">
-        <label>
+        <label className={`archive-toggle ${includeArchived ? "active" : ""}`}>
           <input
             type="checkbox"
             checked={includeArchived}
+            disabled={archivedCount === 0}
             onChange={(e) => setIncludeArchived(e.target.checked)}
           />
-          Arşivlenmiş Çalışmaları Göster
+          <span className="archive-toggle-track" />
+          <span>Arşivlenmiş Çalışmaları Göster</span>
+          <strong>{archivedCount}</strong>
         </label>
       </div>
 

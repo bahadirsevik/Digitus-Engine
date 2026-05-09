@@ -10,6 +10,19 @@ from app.database.connection import SessionLocal
 from app.core.scoring.score_engine import ScoreEngine
 
 
+def _run_relevance_computation(scoring_run_id: int):
+    """
+    Compatibility entry point for FastAPI background relevance computation.
+
+    The implementation currently lives with the workspace/profile flow because
+    profile confirmation can also trigger it directly. Keep this import lazy to
+    avoid coupling task module import to the API router graph at startup.
+    """
+    from app.api.v1.brand_profile import _run_relevance_computation as run_relevance
+
+    return run_relevance(scoring_run_id)
+
+
 @celery_app.task(bind=True, name="scoring.run_scoring")
 def run_scoring_task(self, scoring_run_id: int):
     """

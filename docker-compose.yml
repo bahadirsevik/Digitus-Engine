@@ -95,6 +95,8 @@ services:
     build: ./frontend
     container_name: digitus_frontend
     command: npm run dev -- --host 0.0.0.0 --mode docker
+    env_file:
+      - .env
     ports:
       - "3000:3000"
     volumes:

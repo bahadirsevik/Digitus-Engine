@@ -30,7 +30,12 @@ def create_scoring_run(
     """
     if run_data.brand_profile_id is not None:
         from app.core.workspace import verify_workspace
-        verify_workspace(db, run_data.brand_profile_id)
+        workspace = verify_workspace(db, run_data.brand_profile_id)
+        if workspace.status != "confirmed":
+            raise HTTPException(
+                status_code=400,
+                detail="Skorlama icin once marka profili analiz edilip onaylanmali.",
+            )
 
     engine = ScoreEngine(db)
     scoring_run = engine.create_scoring_run(

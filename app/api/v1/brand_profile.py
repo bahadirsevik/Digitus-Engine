@@ -131,6 +131,21 @@ def _sanitize_profile_data(
     return sanitized
 
 
+def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
+    if not isinstance(profile_data, dict) or not profile_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Sirket ozellikleri henuz cikarilmadi. Profil onaylanmadan once analiz tamamlanmali.",
+        )
+
+    anchor_texts = _normalize_list_items(profile_data.get("anchor_texts", []))
+    if not anchor_texts:
+        raise HTTPException(
+            status_code=400,
+            detail="Profil onaylanamaz: anchor text olusmadi. Once profil analizini tamamlayin veya profil alanlarini doldurun.",
+        )
+
+
 @router.get(
     "/runs/{run_id}/profile",
     response_model=BrandProfileResponse,
@@ -241,6 +256,7 @@ def confirm_profile(
     existing_data = profile.profile_data if isinstance(profile.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
     profile.profile_data = _sanitize_profile_data(incoming_data, existing_data)
+    _ensure_confirmable_profile(profile.profile_data)
 
     profile.status = "confirmed"
     db.commit()
@@ -518,6 +534,7 @@ def confirm_workspace(
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
     workspace.profile_data = _sanitize_profile_data(incoming_data, existing_data)
+    _ensure_confirmable_profile(workspace.profile_data)
     workspace.status = "confirmed"
     db.commit()
     db.refresh(workspace)

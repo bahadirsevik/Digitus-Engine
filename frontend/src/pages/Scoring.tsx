@@ -86,8 +86,8 @@ export default function Scoring() {
     default_relevance_coefficient: 1.0,
     keyword_source_filter: null,
     enable_ads: true,
-    enable_seo: false,
-    enable_social: false,
+    enable_seo: true,
+    enable_social: true,
     keyword_selection_mode: "top_n",
     keyword_limit: 200,
     selected_keyword_ids: undefined,
@@ -137,8 +137,8 @@ export default function Scoring() {
         default_relevance_coefficient: 1.0,
         keyword_source_filter: null,
         enable_ads: true,
-        enable_seo: false,
-        enable_social: false,
+        enable_seo: true,
+        enable_social: true,
         keyword_selection_mode: "top_n",
         keyword_limit: 200,
         selected_keyword_ids: undefined,
@@ -171,6 +171,11 @@ export default function Scoring() {
     } catch (error) {
       console.error("Error fetching scores:", error);
     }
+  };
+
+  const formatScore = (value: number | string | null | undefined) => {
+    if (value === null || value === undefined || value === "") return "-";
+    return Number(value).toFixed(4);
   };
 
   return (
@@ -229,13 +234,13 @@ export default function Scoring() {
                   </span>
                 </div>
                 <div className="run-capacities">
-                  <span className="badge badge-ads">
+                  <span className={`badge badge-ads ${run.enable_ads === false ? "badge-muted" : ""}`}>
                     ADS: {run.ads_capacity}
                   </span>
-                  <span className="badge badge-seo">
+                  <span className={`badge badge-seo ${run.enable_seo === false ? "badge-muted" : ""}`}>
                     SEO: {run.seo_capacity}
                   </span>
-                  <span className="badge badge-social">
+                  <span className={`badge badge-social ${run.enable_social === false ? "badge-muted" : ""}`}>
                     SOCIAL: {run.social_capacity}
                   </span>
                   <span className="badge badge-social">
@@ -259,7 +264,13 @@ export default function Scoring() {
                     </button>
                   )}
 
-                  {run.status === "completed" && (
+                  {[
+                    "scored",
+                    "relevance_computing",
+                    "relevance_computed",
+                    "channel_assigned",
+                    "completed",
+                  ].includes(run.status) && (
                     <>
                       <button
                         className="btn btn-secondary"
@@ -357,21 +368,9 @@ export default function Scoring() {
                     <td>
                       <strong>{score.keyword}</strong>
                     </td>
-                    <td>
-                      {typeof score.ads_score === "number"
-                        ? score.ads_score.toFixed(4)
-                        : (Number(score.ads_score) || 0).toFixed(4)}
-                    </td>
-                    <td>
-                      {typeof score.seo_score === "number"
-                        ? score.seo_score.toFixed(4)
-                        : (Number(score.seo_score) || 0).toFixed(4)}
-                    </td>
-                    <td>
-                      {typeof score.social_score === "number"
-                        ? score.social_score.toFixed(4)
-                        : (Number(score.social_score) || 0).toFixed(4)}
-                    </td>
+                    <td>{formatScore(score.ads_score)}</td>
+                    <td>{formatScore(score.seo_score)}</td>
+                    <td>{formatScore(score.social_score)}</td>
                     <td>
                       {score.ads_rank && (
                         <span className={score.ads_rank <= 3 ? "top-rank" : ""}>
@@ -413,6 +412,38 @@ export default function Scoring() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2>Yeni Skorlama Çalışması</h2>
+
+            <div className="form-group">
+              <label>Skorlanacak Kanallar</label>
+              <div className="channel-toggle-grid">
+                {[
+                  ["enable_ads", "ADS"],
+                  ["enable_seo", "SEO"],
+                  ["enable_social", "SOCIAL"],
+                ].map(([key, label]) => (
+                  <label
+                    key={key}
+                    className={`channel-toggle ${newRun[key as "enable_ads" | "enable_seo" | "enable_social"] ? "active" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        newRun[
+                          key as "enable_ads" | "enable_seo" | "enable_social"
+                        ]
+                      }
+                      onChange={(e) =>
+                        setNewRun({
+                          ...newRun,
+                          [key]: e.target.checked,
+                        })
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <div className="form-group">
               <label>Çalışma Adı</label>

@@ -7,9 +7,16 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     host: '0.0.0.0',
     proxy: {
+      '/health': {
+        target: mode === 'docker' ? 'http://app:8000' : 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/api': {
         target: mode === 'docker' ? 'http://app:8000' : 'http://localhost:8000',
         changeOrigin: true,
+        headers: process.env.API_KEY
+          ? { 'X-API-Key': process.env.API_KEY }
+          : undefined,
       }
     }
   }

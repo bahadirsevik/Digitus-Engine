@@ -90,7 +90,7 @@ class WorkspaceCreateRequest(BaseModel):
     competitor_urls: Optional[List[str]] = Field(None, max_length=3, description="Rakip URL'leri")
     preliminary_info: Optional[str] = Field(None, description="Marka vizyonu, hedef kitlesi, benzersiz satış noktaları")
     default_geo_target_id: Optional[str] = Field("2792", description="Geo target ID")
-    default_language_id: Optional[str] = Field("1055", description="Language ID")
+    default_language_id: Optional[str] = Field("1037", description="Language ID")
 
 
 class WorkspaceKeywordRefreshRequest(BaseModel):
