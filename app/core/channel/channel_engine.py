@@ -434,9 +434,9 @@ class ChannelEngine:
 
         active_channels = self._get_active_channels(scoring_run)
         capacity_map = {
-            'ADS': ADS_FINAL_CAPACITY,
-            'SEO': SEO_FINAL_CAPACITY,
-            'SOCIAL': SOCIAL_FINAL_CAPACITY,
+            'ADS': scoring_run.ads_capacity or ADS_FINAL_CAPACITY,
+            'SEO': scoring_run.seo_capacity or SEO_FINAL_CAPACITY,
+            'SOCIAL': scoring_run.social_capacity or SOCIAL_FINAL_CAPACITY,
         }
         for channel in active_channels:
             capacity = capacity_map[channel]
@@ -614,4 +614,3 @@ class ChannelEngine:
             ]
         
         return result
-

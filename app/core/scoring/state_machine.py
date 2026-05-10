@@ -19,7 +19,7 @@ _VALID_TRANSITIONS: Dict[str, set] = {
     "relevance_computing": {"relevance_computed", "failed", "channel_assigning"},
     "relevance_computed": {"channel_assigning", "failed"},
     "channel_assigning": {"channel_assigned", "failed"},
-    "channel_assigned": {"completed", "relevance_computing", "failed"},
+    "channel_assigned": {"completed", "relevance_computing", "channel_assigning", "failed"},
     "completed": {"channel_assigning", "failed"},
     "failed": {"scoring", "relevance_computing", "channel_assigning"},
     # backward-compat: eski status değerlerini de kabul et

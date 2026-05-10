@@ -188,6 +188,7 @@ class UrlSeedResponse(BaseModel):
 
 def _url_seed_cache_key(
     customer_id: str,
+    workspace_token: str,
     url: str,
     language_id: str,
     geo_target_id: str,
@@ -198,7 +199,7 @@ def _url_seed_cache_key(
     url_hash = hashlib.md5(url.strip().lower().encode("utf-8")).hexdigest()
     seed_mode = "kwurl" if include_keyword_seed else "url"
     return (
-        f"gads:url_seed:{customer_id}:{url_hash}:{language_id}:{geo_target_id}:"
+        f"gads:url_seed:{customer_id}:{workspace_token}:{url_hash}:{language_id}:{geo_target_id}:"
         f"{max_results}:{min_volume}:{seed_mode}"
     )
 
@@ -343,8 +344,10 @@ def keyword_ideas_by_url(
         payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
     )
     geo_target_id = payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
+    workspace_token = f"ws{workspace.id}:{workspace.created_at.isoformat() if workspace.created_at else 'na'}"
     cache_key = _url_seed_cache_key(
         customer_id,
+        workspace_token,
         payload.url,
         language_id,
         geo_target_id,
