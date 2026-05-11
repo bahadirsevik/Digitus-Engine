@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  test_db:
+    image: postgres:15-alpine
+    container_name: digitus_test_db
+    environment:
+      POSTGRES_USER: digitus_test
+      POSTGRES_PASSWORD: digitus_test_secret
+      POSTGRES_DB: digitus_engine_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digitus_test -d digitus_engine_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    networks:
+      - digitus_test_network
+
+  test_app:
+    build: .
+    container_name: digitus_test_app
+    working_dir: /app
+    command: >
+      sh -c "alembic upgrade head && pytest tests/ -v"
+    volumes:
+      - .:/app
+    environment:
+      APP_ENV: test
+      DEBUG: "false"
+      SECRET_KEY: test-secret-key-not-for-production-use-only
+      POSTGRES_USER: digitus_test
+      POSTGRES_PASSWORD: digitus_test_secret
+      POSTGRES_DB: digitus_engine_test
+      POSTGRES_HOST: test_db
+      POSTGRES_PORT: "5432"
+      DATABASE_URL: postgresql://digitus_test:digitus_test_secret@test_db:5432/digitus_engine_test
+      REDIS_URL: redis://localhost:6379/0
+      GEMINI_API_KEY: ""
+      CORS_ORIGINS: "*"
+    depends_on:
+      test_db:
+        condition: service_healthy
+    networks:
+      - digitus_test_network
+
+networks:
+  digitus_test_network:
+    driver: bridge

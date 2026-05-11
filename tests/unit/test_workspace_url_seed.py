@@ -129,11 +129,15 @@ def test_non_legacy_sources_do_not_hit_keyword_table_constraint():
 
 
 def test_url_seed_cache_key_includes_result_shape_params():
-    base = _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 0, False)
+    # Signature: (customer_id, workspace_token, url, language_id, geo_target_id,
+    #            max_results, min_volume, include_keyword_seed)
+    base = _url_seed_cache_key("123", "ws-token", "https://example.com", "1055", "2792", 100, 0, False)
 
-    assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 300, 0, False)
-    assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 50, False)
-    assert base != _url_seed_cache_key("123", "https://example.com", "1055", "2792", 100, 0, True)
+    assert base != _url_seed_cache_key("123", "ws-token", "https://example.com", "1055", "2792", 300, 0, False)
+    assert base != _url_seed_cache_key("123", "ws-token", "https://example.com", "1055", "2792", 100, 50, False)
+    assert base != _url_seed_cache_key("123", "ws-token", "https://example.com", "1055", "2792", 100, 0, True)
+    # Workspace token must scope the key — Codex commit c10fc88 (URL seed cache scoping fix)
+    assert base != _url_seed_cache_key("123", "other-ws", "https://example.com", "1055", "2792", 100, 0, False)
 
 
 def test_url_seed_cache_ttl_is_24_hours():
