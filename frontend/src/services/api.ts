@@ -145,6 +145,9 @@ export const exportApi = {
       params: { brand_profile_id },
       responseType: "blob",
     }),
+
+  listForRun: (runId: number, brand_profile_id?: number) =>
+    api.get(`/export/run/${runId}`, { params: { brand_profile_id } }),
 };
 
 // Generation API
@@ -168,6 +171,27 @@ export const generationApi = {
       keyword_ids: keywordIds,
       platforms: platforms || ["instagram", "twitter", "linkedin"],
     }),
+
+  listSeoGeo: (runId: number, limit = 100) =>
+    api.get(`/generation/seo-geo/list/${runId}`, { params: { limit } }),
+
+  bulkSeoGeo: (runId: number, limit = 10) =>
+    api.post(`/generation/seo-geo/bulk/${runId}`, undefined, { params: { limit } }),
+
+  getAdsRsa: (runId: number) =>
+    api.get(`/generation/ads/rsa/${runId}`),
+
+  createAdsRsa: (data: AdsRsaRequest) =>
+    api.post("/generation/ads/rsa", data),
+
+  createSocialCategories: (data: SocialCategoriesRequest) =>
+    api.post("/generation/social/categories", data),
+
+  createSocialIdeas: (data: SocialIdeasRequest, brandName: string) =>
+    api.post(`/generation/social/ideas`, data, { params: { brand_name: brandName } }),
+
+  createSocialContents: (data: SocialContentsRequest) =>
+    api.post("/generation/social/contents", data),
 };
 
 // Health API (uses base URL without /api/v1 prefix)
@@ -219,14 +243,17 @@ export const googleAdsApi = {
 
 // Tasks API
 export const tasksApi = {
-  getStatus: (taskId: string) => api.get(`/tasks/${taskId}`),
+  getStatus: (taskId: string, brand_profile_id?: number) =>
+    api.get(`/tasks/${taskId}`, { params: { brand_profile_id } }),
 
-  listByRun: (runId: number) => api.get(`/tasks/run/${runId}`),
+  listByRun: (runId: number, brand_profile_id?: number) =>
+    api.get(`/tasks/run/${runId}`, { params: { brand_profile_id } }),
 
-  list: (params?: { limit?: number; status_filter?: string }) =>
+  list: (params?: { limit?: number; status_filter?: string; brand_profile_id?: number }) =>
     api.get("/tasks/", { params }),
 
-  cancel: (taskId: string) => api.post(`/tasks/${taskId}/cancel`),
+  cancel: (taskId: string, brand_profile_id?: number) =>
+    api.post(`/tasks/${taskId}/cancel`, undefined, { params: { brand_profile_id } }),
 };
 
 // Types
@@ -464,6 +491,30 @@ export interface ExportRequest {
   sections?: string[];
   include_compliance_details?: boolean;
   include_stale_content?: boolean;
+}
+
+export interface AdsRsaRequest {
+  scoring_run_id: number;
+  brand_name?: string;
+  website_url?: string;
+  brand_usp?: string;
+}
+
+export interface SocialCategoriesRequest {
+  scoring_run_id: number;
+  brand_name?: string;
+  brand_context?: string;
+  max_categories?: number;
+}
+
+export interface SocialIdeasRequest {
+  category_ids: number[];
+  ideas_per_category?: number;
+}
+
+export interface SocialContentsRequest {
+  idea_ids: number[];
+  brand_name?: string;
 }
 
 export default api;

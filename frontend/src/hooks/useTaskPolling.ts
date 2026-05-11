@@ -1,8 +1,5 @@
-/**
- * Task Polling Hook
- * F5 persistence ile task durumu takibi
- */
 import { useState, useEffect, useCallback } from 'react'
+import { tasksApi } from '../services/api'
 
 interface TaskStatus {
   task_id: string
@@ -42,7 +39,8 @@ export const getStoredTaskId = (key: string): string | null => {
 export function useTaskPolling(
   taskId: string | null,
   storageKey: string,
-  intervalMs: number = 3000
+  intervalMs: number = 3000,
+  brand_profile_id?: number,
 ) {
   const [status, setStatus] = useState<TaskStatus | null>(null)
   const [loading, setLoading] = useState(false)
@@ -50,9 +48,8 @@ export function useTaskPolling(
 
   const fetchStatus = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/v1/tasks/${id}`)
-      if (!response.ok) throw new Error('Task not found')
-      const data = await response.json()
+      const response = await tasksApi.getStatus(id, brand_profile_id)
+      const data = response.data as TaskStatus
       setStatus(data)
       
       // Task bittiyse storage'dan sil
@@ -65,7 +62,7 @@ export function useTaskPolling(
       setError(err instanceof Error ? err.message : 'Polling error')
       return null
     }
-  }, [storageKey])
+  }, [storageKey, brand_profile_id])
 
   // taskId değiştiğinde storage'a kaydet
   useEffect(() => {

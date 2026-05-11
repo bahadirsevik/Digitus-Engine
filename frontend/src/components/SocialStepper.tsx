@@ -1,10 +1,8 @@
-/**
- * SocialStepper Component
- * 3-aşamalı sosyal medya içerik üretimi
- */
 import { useState, useEffect } from 'react'
 import { ChevronRight, ChevronLeft, Sparkles, Check } from 'lucide-react'
 import { useSocialStore } from '../stores/socialStore'
+import { useBrandStore } from '../stores/brandStore'
+import { scoringApi, brandProfileApi, generationApi } from '../services/api'
 import ErrorBanner from './ErrorBanner'
 import './SocialStepper.css'
 
@@ -17,50 +15,39 @@ interface ScoringRun {
 
 export default function SocialStepper() {
   const store = useSocialStore()
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [runs, setRuns] = useState<ScoringRun[]>([])
 
   useEffect(() => {
-    const fetchRuns = async () => {
-      try {
-        const res = await fetch('/api/v1/scoring/runs')
-        if (res.ok) {
-          const data = await res.json()
-          setRuns(data)
-        }
-      } catch (e) {
-        console.error('Failed to fetch runs:', e)
-      }
-    }
-    fetchRuns()
-  }, [])
+    if (!activeWorkspace?.id) { setRuns([]); return }
+    scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      .then((res) => setRuns(Array.isArray(res.data) ? res.data : []))
+      .catch((e) => console.error('Failed to fetch runs:', e))
+  }, [activeWorkspace?.id])
 
   // Auto-fill brand info from confirmed profile when scoring run changes
   useEffect(() => {
     if (!store.scoringRunId) return
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch(`/api/v1/brand-profile/runs/${store.scoringRunId}/profile`)
-        if (res.ok) {
-          const profile = await res.json()
-          if (profile.status === 'confirmed' && profile.profile_data) {
-            const pd = profile.profile_data
-            const updates: Record<string, any> = {}
-            if (!store.brandName && pd.company_name) updates.brandName = pd.company_name
-            if (!store.brandContext) {
-              const parts: string[] = []
-              if (pd.company_name) parts.push(`Marka: ${pd.company_name}`)
-              if (pd.products?.length) parts.push(`Ürünler: ${pd.products.join(', ')}`)
-              if (pd.use_cases?.length) parts.push(`Kullanım: ${pd.use_cases.join(', ')}`)
-              if (parts.length) updates.brandContext = parts.join('\n')
-            }
-            if (Object.keys(updates).length) store.setFormData(updates)
+    brandProfileApi.getProfile(store.scoringRunId)
+      .then((res) => {
+        const profile = res.data as any
+        if (profile.status === 'confirmed' && profile.profile_data) {
+          const pd = profile.profile_data
+          const updates: Record<string, any> = {}
+          if (!store.brandName && pd.company_name) updates.brandName = pd.company_name
+          if (!store.brandContext) {
+            const parts: string[] = []
+            if (pd.company_name) parts.push(`Marka: ${pd.company_name}`)
+            if (pd.products?.length) parts.push(`Ürünler: ${pd.products.join(', ')}`)
+            if (pd.use_cases?.length) parts.push(`Kullanım: ${pd.use_cases.join(', ')}`)
+            if (parts.length) updates.brandContext = parts.join('\n')
           }
+          if (Object.keys(updates).length) store.setFormData(updates)
         }
-      } catch { /* profile not found — ok */ }
-    }
-    fetchProfile()
+      })
+      .catch(() => { /* profile not found — ok */ })
   }, [store.scoringRunId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const steps = [
@@ -73,21 +60,13 @@ export default function SocialStepper() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/v1/generation/social/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scoring_run_id: store.scoringRunId,
-          brand_name: store.brandName,
-          brand_context: store.brandContext,
-          max_categories: store.maxCategories,
-        })
+      const res = await generationApi.createSocialCategories({
+        scoring_run_id: store.scoringRunId!,
+        brand_name: store.brandName,
+        brand_context: store.brandContext,
+        max_categories: store.maxCategories,
       })
-      
-      if (!res.ok) throw new Error(await res.text())
-      
-      const data = await res.json()
-      store.setCategories(data.categories || [])
+      store.setCategories((res.data as any).categories || [])
       store.setStep(2)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kategori üretimi başarısız')
@@ -100,21 +79,13 @@ export default function SocialStepper() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/v1/generation/social/ideas?brand_name=${encodeURIComponent(store.brandName)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          category_ids: store.selectedCategoryIds,
-          ideas_per_category: store.ideasPerCategory,
-        })
-      })
-      
-      if (!res.ok) throw new Error(await res.text())
-      
-      const data = await res.json()
-      // Response is List[SocialIdeasResponse], flatten all ideas from all categories
-      const allIdeas = Array.isArray(data) 
-        ? data.flatMap((cat: any) => cat.ideas || []) 
+      const res = await generationApi.createSocialIdeas(
+        { category_ids: store.selectedCategoryIds, ideas_per_category: store.ideasPerCategory },
+        store.brandName,
+      )
+      const data = res.data as any
+      const allIdeas = Array.isArray(data)
+        ? data.flatMap((cat: any) => cat.ideas || [])
         : data.ideas || []
       store.setIdeas(allIdeas)
       store.setStep(3)
@@ -129,21 +100,12 @@ export default function SocialStepper() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/v1/generation/social/contents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idea_ids: store.selectedIdeaIds,
-          brand_name: store.brandName,
-        })
+      const res = await generationApi.createSocialContents({
+        idea_ids: store.selectedIdeaIds,
+        brand_name: store.brandName,
       })
-      
-      if (!res.ok) throw new Error(await res.text())
-      
-      const data = await res.json()
-      // Response is SocialContentsResponse { idea_ids, total_contents, contents }
-      store.setContents(data.contents || [])
-      store.setStep(4) // Move to results view
+      store.setContents((res.data as any).contents || [])
+      store.setStep(4)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'İçerik üretimi başarısız')
     } finally {

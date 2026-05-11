@@ -10,6 +10,8 @@ import TaskProgress from '../components/TaskProgress'
 import ErrorBanner from '../components/ErrorBanner'
 import SocialStepper from '../components/SocialStepper'
 import { useSocialStore } from '../stores/socialStore'
+import { useBrandStore } from '../stores/brandStore'
+import { scoringApi, brandProfileApi, generationApi } from '../services/api'
 import './Generation.css'
 
 type TabType = 'seo' | 'ads' | 'social'
@@ -25,6 +27,7 @@ export default function Generation() {
   const [searchParams] = useSearchParams()
   const socialRunId = useSocialStore((state) => state.scoringRunId)
   const setSocialFormData = useSocialStore((state) => state.setFormData)
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
 
   const [activeTab, setActiveTab] = useState<TabType>('seo')
   const [runs, setRuns] = useState<ScoringRun[]>([])
@@ -45,7 +48,7 @@ export default function Generation() {
   const [adsResults, setAdsResults] = useState<any | null>(null)
 
   // Task polling
-  const seoPolling = useTaskPolling(seoTaskId, 'seo_task')
+  const seoPolling = useTaskPolling(seoTaskId, 'seo_task', 3000, activeWorkspace?.id)
 
   const requestedRunId = useMemo(() => {
     const raw = searchParams.get('run_id')
@@ -57,35 +60,28 @@ export default function Generation() {
   // Auto-fill Ads form context from brand profile when ADS run changes
   useEffect(() => {
     if (!adsRunId) return
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch(`/api/v1/brand-profile/runs/${adsRunId}/profile`)
-        if (res.ok) {
-          const profile = await res.json()
-          if (!websiteUrl && profile.company_url) setWebsiteUrl(profile.company_url)
-          if (profile.status === 'confirmed' && profile.profile_data) {
-            const pd = profile.profile_data
-            if (!brandName && pd.company_name) setBrandName(pd.company_name)
-            if (!usps) {
-              const products = (pd.products || []).slice(0, 3).join(', ')
-              const sector = pd.sector || ''
-              if (products && sector) setUsps(`${products} -- ${sector}`)
-              else if (products) setUsps(products)
-            }
+    brandProfileApi.getProfile(Number(adsRunId))
+      .then((res) => {
+        const profile = res.data as any
+        if (!websiteUrl && profile.company_url) setWebsiteUrl(profile.company_url)
+        if (profile.status === 'confirmed' && profile.profile_data) {
+          const pd = profile.profile_data
+          if (!brandName && pd.company_name) setBrandName(pd.company_name)
+          if (!usps) {
+            const products = (pd.products || []).slice(0, 3).join(', ')
+            const sector = pd.sector || ''
+            if (products && sector) setUsps(`${products} -- ${sector}`)
+            else if (products) setUsps(products)
           }
         }
-      } catch { /* profile not found — ok */ }
-    }
-    fetchProfile()
+      })
+      .catch(() => { /* profile not found — ok */ })
   }, [adsRunId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchSeoResults = useCallback(async (runId: number) => {
     try {
-      const res = await fetch(`/api/v1/generation/seo-geo/list/${runId}?limit=100`)
-      if (res.ok) {
-        const data = await res.json()
-        setSeoResults(data.items || [])
-      }
+      const res = await generationApi.listSeoGeo(runId, 100)
+      setSeoResults((res.data as any).items || [])
     } catch (e) {
       console.error('Failed to fetch SEO results:', e)
     }
@@ -93,23 +89,27 @@ export default function Generation() {
 
   const fetchAdsResults = useCallback(async (runId: number) => {
     try {
-      const res = await fetch(`/api/v1/generation/ads/rsa/${runId}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data.total_groups > 0) {
-          setAdsResults(data)
-        } else {
-          setAdsResults(null)
-        }
-      }
+      const res = await generationApi.getAdsRsa(runId)
+      const data = res.data as any
+      setAdsResults(data.total_groups > 0 ? data : null)
     } catch (e) {
       console.error('Failed to fetch Ads results:', e)
     }
   }, [])
 
+  const fetchRuns = useCallback(async () => {
+    if (!activeWorkspace?.id) { setRuns([]); return }
+    try {
+      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      setRuns(Array.isArray(res.data) ? res.data : [])
+    } catch (e) {
+      console.error('Failed to fetch runs:', e)
+    }
+  }, [activeWorkspace?.id])
+
   useEffect(() => {
-    fetchRuns()
-  }, [])
+    void fetchRuns()
+  }, [fetchRuns])
 
   useEffect(() => {
     if (!requestedRunId || runs.length === 0) return
@@ -148,36 +148,15 @@ export default function Generation() {
     }
   }, [adsRunId, fetchAdsResults])
 
-  const fetchRuns = async () => {
-    try {
-      const res = await fetch('/api/v1/scoring/runs')
-      if (res.ok) {
-        const data = await res.json()
-        setRuns(data)
-      }
-    } catch (e) {
-      console.error('Failed to fetch runs:', e)
-    }
-  }
-
   const startSeoGeneration = async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/v1/generation/seo-geo/bulk/${seoRunId}?limit=${seoLimit}`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const errData = await res.json()
-        const detail = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail)
-        throw new Error(detail || 'SEO üretimi başarısız')
-      }
-
-      const data = await res.json()
-      setSeoTaskId(data.task_id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bir hata oluştu')
+      const res = await generationApi.bulkSeoGeo(Number(seoRunId), seoLimit)
+      setSeoTaskId((res.data as any).task_id)
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : (err instanceof Error ? err.message : 'Bir hata oluştu'))
     } finally {
       setLoading(false)
     }
@@ -187,27 +166,16 @@ export default function Generation() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/v1/generation/ads/rsa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scoring_run_id: adsRunId,
-          brand_name: brandName,
-          website_url: websiteUrl ? websiteUrl.trim() : undefined,
-          brand_usp: usps ? usps.split(',').map(s => s.trim()).join(', ') : undefined,
-        })
+      await generationApi.createAdsRsa({
+        scoring_run_id: Number(adsRunId),
+        brand_name: brandName,
+        website_url: websiteUrl ? websiteUrl.trim() : undefined,
+        brand_usp: usps ? usps.split(',').map(s => s.trim()).join(', ') : undefined,
       })
-
-      if (!res.ok) {
-        const errData = await res.json()
-        const detail = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail)
-        throw new Error(detail || 'Ads üretimi başarısız')
-      }
-
-      await res.json()
       await fetchAdsResults(Number(adsRunId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bir hata oluştu')
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : (err instanceof Error ? err.message : 'Bir hata oluştu'))
     } finally {
       setLoading(false)
     }

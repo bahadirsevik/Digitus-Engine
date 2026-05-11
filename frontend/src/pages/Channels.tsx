@@ -89,7 +89,7 @@ export default function Channels() {
   const hasExistingPools = totalPoolKeywords > 0;
 
   // Task polling for channel assignment
-  const assignPolling = useTaskPolling(assignTaskId, "channel_assign");
+  const assignPolling = useTaskPolling(assignTaskId, "channel_assign", 3000, activeWorkspace?.id);
 
   const fetchRuns = useCallback(async () => {
     if (!activeWorkspace?.id) {

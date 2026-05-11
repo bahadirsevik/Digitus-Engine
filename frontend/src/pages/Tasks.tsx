@@ -1,9 +1,7 @@
-/**
- * Tasks Page
- * Celery task listesi ve durumu
- */
 import { useState, useEffect } from 'react'
 import { RefreshCw, Clock, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
+import { tasksApi } from '../services/api'
+import { useBrandStore } from '../stores/brandStore'
 import ErrorBanner from '../components/ErrorBanner'
 import './Tasks.css'
 
@@ -20,6 +18,7 @@ interface Task {
 }
 
 export default function Tasks() {
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,16 +26,14 @@ export default function Tasks() {
 
   useEffect(() => {
     fetchTasks()
-    const interval = setInterval(fetchTasks, 5000) // Auto-refresh
+    const interval = setInterval(fetchTasks, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, [activeWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch('/api/v1/tasks/')
-      if (!res.ok) throw new Error('Task listesi alınamadı')
-      const data = await res.json()
-      setTasks(data.tasks || [])
+      const res = await tasksApi.list({ brand_profile_id: activeWorkspace?.id })
+      setTasks((res.data as { tasks?: Task[] }).tasks || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Hata')
     } finally {
@@ -46,10 +43,7 @@ export default function Tasks() {
 
   const cancelTask = async (taskId: string) => {
     try {
-      const res = await fetch(`/api/v1/tasks/${taskId}/cancel`, {
-        method: 'POST'
-      })
-      if (!res.ok) throw new Error('İptal başarısız')
+      await tasksApi.cancel(taskId, activeWorkspace?.id)
       fetchTasks()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'İptal hatası')
