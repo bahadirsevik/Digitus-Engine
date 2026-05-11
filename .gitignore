@@ -147,8 +147,10 @@ frontend/node_modules/
 *.db
 *.sqlite3
 
-# Tests
-tests/
+# Tests — track tests so CI/teammates can run them. (Plan2 P0/C1 reverted
+# the previous blanket exclusion.) Ignore only cache artifacts.
+tests/**/__pycache__/
+.pytest_cache/
 
 # Gereksiz scriptler
 scripts/run_google_ads_probe.py
