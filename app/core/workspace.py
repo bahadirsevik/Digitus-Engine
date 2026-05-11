@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.database.models import BrandProfile, ScoringRun
+from app.database.models import BrandProfile, ScoringRun, TaskResult
 
 
 def verify_workspace(db: Session, brand_profile_id: int) -> BrandProfile:
@@ -94,3 +94,37 @@ def verify_scoring_run(
         )
 
     return run
+
+
+def verify_task_in_workspace(
+    db: Session,
+    task_id: str,
+    brand_profile_id: int,
+) -> TaskResult:
+    """Task var mı + ait olduğu run verilen workspace'e mi ait?
+
+    Plan2 §P0/C4: tasks endpoint'leri read olsa da workspace zorunlu —
+    cross-workspace task leak kritik.
+
+    Raises:
+        HTTPException 400: brand_profile_id None.
+        HTTPException 404: task yoksa veya run workspace ile eşleşmiyorsa.
+    """
+    if brand_profile_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="brand_profile_id is required",
+        )
+
+    verify_workspace(db, brand_profile_id)
+
+    row = (
+        db.query(TaskResult, ScoringRun)
+        .join(ScoringRun, TaskResult.scoring_run_id == ScoringRun.id)
+        .filter(TaskResult.task_id == task_id)
+        .filter(ScoringRun.brand_profile_id == brand_profile_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="task not found in workspace")
+    return row[0]

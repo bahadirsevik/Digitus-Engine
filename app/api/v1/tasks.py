@@ -1,16 +1,19 @@
 """
 Task Status API Endpoints.
 
-Task durumunu sorgulamak için endpoint'ler.
+Plan2 §P0/C4 — tasks endpoint'leri workspace-zorunlu. Read olsalar bile
+global task leak kritik (kullanıcı başka workspace'in görev listesini görür).
 """
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Depends
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.workspace import verify_task_in_workspace, verify_workspace
+from app.database.models import ScoringRun, TaskResult
 from app.dependencies import get_db
 from app.tasks.task_status import get_task_status, get_tasks_by_run, update_task_status
-from app.database.models import TaskResult
 
 
 router = APIRouter()
@@ -27,7 +30,7 @@ class TaskStatusResponse(BaseModel):
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     created_at: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -38,70 +41,73 @@ class TaskListResponse(BaseModel):
     total: int
 
 
+def _require_workspace(brand_profile_id: Optional[int]) -> int:
+    if brand_profile_id is None:
+        raise HTTPException(status_code=400, detail="brand_profile_id is required")
+    return brand_profile_id
+
+
 @router.get("/{task_id}", response_model=TaskStatusResponse)
-def get_task(task_id: str):
-    """
-    Tek bir task'ın durumunu getirir.
-    
-    Args:
-        task_id: Celery task ID
-        
-    Returns:
-        Task durumu ve detayları
-    """
+def get_task(
+    task_id: str,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
+):
+    """Tek bir task'ın durumunu getirir. Task'ın run'ı workspace'e ait olmalı."""
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_task_in_workspace(db, task_id, workspace_id)
+
     status = get_task_status(task_id)
-    
     if not status:
         raise HTTPException(status_code=404, detail="Task bulunamadı")
-    
+
     return TaskStatusResponse(**status)
 
 
 @router.get("/run/{run_id}", response_model=TaskListResponse)
-def get_tasks_for_run(run_id: int):
-    """
-    Bir scoring run'a ait tüm task'ları listeler.
-    
-    Args:
-        run_id: Scoring run ID
-        
-    Returns:
-        Task listesi
-    """
+def get_tasks_for_run(
+    run_id: int,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
+):
+    """Bir scoring run'a ait tüm task'ları listeler. Run workspace'e ait olmalı."""
+    from app.core.workspace import verify_scoring_run
+
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_scoring_run(db, run_id, workspace_id, mutating=True)
+
     tasks = get_tasks_by_run(run_id)
-    
     return TaskListResponse(
         tasks=[TaskStatusResponse(**t) for t in tasks],
-        total=len(tasks)
+        total=len(tasks),
     )
 
 
 @router.post("/{task_id}/cancel")
-def cancel_task(task_id: str):
-    """
-    Çalışan bir task'ı iptal eder.
-    
-    Not: Celery task'ları revoke ile iptal edilebilir,
-    ancak zaten çalışmaya başlamış task'lar hemen durmayabilir.
-    """
+def cancel_task(
+    task_id: str,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
+):
+    """Çalışan bir task'ı iptal eder. Mutating: workspace zorunlu."""
     from app.tasks.celery_app import celery_app
-    
+
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_task_in_workspace(db, task_id, workspace_id)
+
     status = get_task_status(task_id)
     if not status:
         raise HTTPException(status_code=404, detail="Task bulunamadı")
-    
+
     if status['status'] in ['completed', 'failed']:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Task zaten tamamlanmış: {status['status']}"
+            status_code=400,
+            detail=f"Task zaten tamamlanmış: {status['status']}",
         )
-    
-    # Celery task'ı iptal et
+
     celery_app.control.revoke(task_id, terminate=True)
-    
-    # DB'yi güncelle
     update_task_status(task_id, status='cancelled', error_message='User cancelled')
-    
+
     return {"message": "Task iptal edildi", "task_id": task_id}
 
 
@@ -109,22 +115,24 @@ def cancel_task(task_id: str):
 def list_recent_tasks(
     limit: int = 20,
     status_filter: Optional[str] = None,
-    db: Session = Depends(get_db)
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
 ):
-    """
-    Son task'ları listeler.
-    
-    Args:
-        limit: Maksimum sayı (default: 20)
-        status_filter: Durum filtresi (pending, running, completed, failed)
-    """
-    query = db.query(TaskResult).order_by(TaskResult.created_at.desc())
-    
+    """Son task'ları listeler. Workspace zorunlu — global task leak önlendi."""
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
+
+    query = (
+        db.query(TaskResult)
+        .join(ScoringRun, TaskResult.scoring_run_id == ScoringRun.id)
+        .filter(ScoringRun.brand_profile_id == workspace_id)
+        .order_by(TaskResult.created_at.desc())
+    )
     if status_filter:
         query = query.filter(TaskResult.status == status_filter)
-    
+
     tasks = query.limit(limit).all()
-    
+
     return TaskListResponse(
         tasks=[
             TaskStatusResponse(
@@ -140,5 +148,5 @@ def list_recent_tasks(
             )
             for t in tasks
         ],
-        total=len(tasks)
+        total=len(tasks),
     )

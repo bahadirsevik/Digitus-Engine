@@ -299,3 +299,175 @@ def test_import_keywords_requires_brand_profile_id(client):
 def test_cleanup_duplicates_requires_brand_profile_id(client):
     resp = client.post("/api/v1/keywords/cleanup-duplicates")
     assert resp.status_code == 400
+
+
+# ===========================================================================
+# Tasks endpoint isolation (plan2 §P0/C4)
+# ===========================================================================
+
+
+def _make_task_for_run(db_session, run_id, task_id="t-1", status="running"):
+    """Insert a TaskResult row for testing — bypasses Celery."""
+    from app.database.models import TaskResult
+
+    task = TaskResult(
+        task_id=task_id,
+        task_type="channel_assignment",
+        scoring_run_id=run_id,
+        status=status,
+        progress=50,
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+    return task
+
+
+def test_list_tasks_requires_brand_profile_id(client):
+    resp = client.get("/api/v1/tasks/")
+    assert resp.status_code == 400
+
+
+def test_list_tasks_filtered_by_workspace(
+    client, db_session, make_workspace, make_scoring_run
+):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    run_a = make_scoring_run(brand_profile_id=ws_a.id)
+    run_b = make_scoring_run(brand_profile_id=ws_b.id)
+    _make_task_for_run(db_session, run_a.id, task_id="task-a")
+    _make_task_for_run(db_session, run_b.id, task_id="task-b")
+
+    resp = client.get("/api/v1/tasks/", params={"brand_profile_id": ws_a.id})
+    assert resp.status_code == 200
+    ids = {t["task_id"] for t in resp.json()["tasks"]}
+    assert "task-a" in ids
+    assert "task-b" not in ids
+
+
+def test_get_task_cross_workspace_returns_404(
+    client, db_session, make_workspace, make_scoring_run
+):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    run_a = make_scoring_run(brand_profile_id=ws_a.id)
+    _make_task_for_run(db_session, run_a.id, task_id="task-secret-a")
+
+    resp = client.get(
+        "/api/v1/tasks/task-secret-a",
+        params={"brand_profile_id": ws_b.id},
+    )
+    assert resp.status_code == 404
+
+
+def test_get_tasks_for_run_cross_workspace_returns_404(
+    client, make_workspace, make_scoring_run
+):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    run_a = make_scoring_run(brand_profile_id=ws_a.id)
+
+    resp = client.get(
+        f"/api/v1/tasks/run/{run_a.id}",
+        params={"brand_profile_id": ws_b.id},
+    )
+    assert resp.status_code == 404
+
+
+def test_cancel_task_requires_brand_profile_id(client):
+    resp = client.post("/api/v1/tasks/some-id/cancel")
+    assert resp.status_code == 400
+
+
+# ===========================================================================
+# Export endpoint isolation (plan2 §P0/C4)
+# ===========================================================================
+
+
+def test_create_export_requires_brand_profile_id(client, make_workspace, make_scoring_run):
+    ws = make_workspace(name="A")
+    run = make_scoring_run(brand_profile_id=ws.id)
+
+    resp = client.post(
+        "/api/v1/export/",
+        json={
+            "scoring_run_id": run.id,
+            "format": "excel",
+            "sections": ["summary"],
+        },
+    )
+    assert resp.status_code in (400, 422)
+
+
+def test_create_export_cross_workspace_returns_404(
+    client, make_workspace, make_scoring_run
+):
+    """Workspace B cannot trigger export for workspace A's run."""
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    run_in_a = make_scoring_run(brand_profile_id=ws_a.id)
+
+    resp = client.post(
+        "/api/v1/export/",
+        params={"brand_profile_id": ws_b.id},
+        json={
+            "scoring_run_id": run_in_a.id,
+            "format": "excel",
+            "sections": ["summary"],
+        },
+    )
+    assert resp.status_code == 404
+
+
+def test_export_status_cross_workspace_returns_404(client, make_workspace):
+    """An export id from workspace A must not be readable via workspace B."""
+    from app.api.v1.export import _export_status
+    from app.schemas.export import ExportStatusEnum
+
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+
+    # Plant a fake completed export under ws_a.
+    export_id = "fake-export-1"
+    _export_status[(ws_a.id, export_id)] = {
+        'export_id': export_id,
+        'brand_profile_id': ws_a.id,
+        'status': ExportStatusEnum.COMPLETED,
+        'progress': 100,
+        'file_name': 'fake.xlsx',
+        'filepath': '/tmp/fake.xlsx',
+        'error_message': None,
+        'created_at': None,
+        'scoring_run_id': 1,
+    }
+    try:
+        resp = client.get(
+            f"/api/v1/export/{export_id}/status",
+            params={"brand_profile_id": ws_b.id},
+        )
+        assert resp.status_code == 404
+    finally:
+        _export_status.pop((ws_a.id, export_id), None)
+
+
+def test_list_exports_for_run_requires_brand_profile_id(
+    client, make_workspace, make_scoring_run
+):
+    ws = make_workspace(name="A")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    resp = client.get(f"/api/v1/export/run/{run.id}")
+    assert resp.status_code in (400, 422)
+
+
+def test_list_exports_for_run_cross_workspace_returns_404(
+    client, make_workspace, make_scoring_run
+):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    run_in_a = make_scoring_run(brand_profile_id=ws_a.id)
+
+    resp = client.get(
+        f"/api/v1/export/run/{run_in_a.id}",
+        params={"brand_profile_id": ws_b.id},
+    )
+    assert resp.status_code == 404
