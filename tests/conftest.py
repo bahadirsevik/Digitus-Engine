@@ -144,8 +144,8 @@ def make_keyword(db_session):
         *,
         brand_profile_id: int | None = None,
         data_source: str = "csv",
-        volume: int = 100,
-        competition: float = 0.5,
+        monthly_volume: int = 100,
+        competition_score: float = 0.5,
         trend_3m: float = 0.0,
         trend_12m: float = 0.0,
         **kwargs,
@@ -153,8 +153,8 @@ def make_keyword(db_session):
         keyword = Keyword(
             keyword=text_value,
             normalized_keyword=text_value.lower(),
-            volume=volume,
-            competition=competition,
+            monthly_volume=monthly_volume,
+            competition_score=competition_score,
             trend_3m=trend_3m,
             trend_12m=trend_12m,
             **kwargs,
@@ -167,10 +167,10 @@ def make_keyword(db_session):
                 brand_profile_id=brand_profile_id,
                 keyword_id=keyword.id,
                 data_source=data_source,
-                snapshot_volume=volume,
-                snapshot_competition=competition,
-                snapshot_trend_3m=trend_3m,
-                snapshot_trend_12m=trend_12m,
+                monthly_volume=monthly_volume,
+                competition_score=competition_score,
+                trend_3m=trend_3m,
+                trend_12m=trend_12m,
             )
             db_session.add(link)
             db_session.commit()

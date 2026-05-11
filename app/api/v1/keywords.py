@@ -1,21 +1,57 @@
 """
 Keyword management endpoints.
+
+Plan2 §P0/C3 — legacy global yollar kapatıldı. brand_profile_id artık
+list/get/create/update/delete/import/cleanup-duplicates için zorunlu;
+verilmezse 400 ("brand_profile_id is required"). Global Keyword
+silme yolları (crud.delete_all_keywords / crud.delete_keyword) artık
+endpoint'lerden çağrılmıyor.
 """
-from typing import List, Optional
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.core.workspace import verify_workspace
 from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
+from app.dependencies import get_db
 from app.schemas.keyword import (
-    KeywordCreate, KeywordUpdate, KeywordResponse,
-    KeywordListResponse, KeywordImportRequest, KeywordImportResponse,
+    KeywordCreate,
+    KeywordImportRequest,
+    KeywordImportResponse,
+    KeywordListResponse,
+    KeywordResponse,
+    KeywordUpdate,
     WorkspaceKeywordResponse,
 )
 
 
 router = APIRouter()
+
+
+def _require_workspace(brand_profile_id: Optional[int]) -> int:
+    if brand_profile_id is None:
+        raise HTTPException(status_code=400, detail="brand_profile_id is required")
+    return brand_profile_id
+
+
+def _verify_keyword_in_workspace(
+    db: Session, keyword_id: int, brand_profile_id: int
+) -> tuple[Keyword, WorkspaceKeyword]:
+    """Return (Keyword, WorkspaceKeyword) when the keyword is linked to the
+    workspace; otherwise raise 404 (existence leak prevention)."""
+    row = (
+        db.query(Keyword, WorkspaceKeyword)
+        .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
+        .filter(Keyword.id == keyword_id)
+        .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="keyword not found in workspace")
+    keyword, wk = row
+    return keyword, wk
 
 
 @router.get("/", response_model=KeywordListResponse)
@@ -24,194 +60,162 @@ def list_keywords(
     limit: int = Query(100, ge=1, le=2000),
     active_only: bool = Query(True),
     sector: Optional[str] = Query(None),
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope filter"),
-    db: Session = Depends(get_db)
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
 ):
+    """List keywords in a workspace.
+
+    `brand_profile_id` zorunludur. Yalnızca bu workspace'in WorkspaceKeyword
+    bağlantılı keyword'leri döner.
     """
-    List keywords with pagination and filtering.
-    
-    - **skip**: Number of records to skip (pagination)
-    - **limit**: Max number of records to return
-    - **active_only**: Filter only active keywords
-    - **sector**: Filter by sector
-    - **brand_profile_id**: If provided, only return keywords linked to this workspace
-    """
-    if brand_profile_id is not None:
-        # Workspace-scoped: sadece bu workspace'in WorkspaceKeyword bağlantılı keyword'leri
-        from app.core.workspace import verify_workspace
-        verify_workspace(db, brand_profile_id)
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
 
-        base_query = (
-            db.query(Keyword, WorkspaceKeyword)
-            .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
-            .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
-        )
-        if active_only:
-            base_query = base_query.filter(Keyword.is_active == True)
-        if sector:
-            base_query = base_query.filter(WorkspaceKeyword.sector == sector)
-
-        total = base_query.count()
-        rows = (
-            base_query
-            .order_by(Keyword.id)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-
-        items = []
-        for kw, wk in rows:
-            resp = WorkspaceKeywordResponse.model_validate(kw)
-            resp.monthly_volume = wk.monthly_volume or 0
-            resp.trend_3m = wk.trend_3m or 0
-            resp.trend_12m = wk.trend_12m or 0
-            resp.competition_score = wk.competition_score or 0.5
-            resp.sector = wk.sector
-            resp.target_market = wk.target_market
-            resp.data_source = wk.data_source or "csv"
-            resp.wk_monthly_volume = resp.monthly_volume
-            resp.wk_trend_3m = float(resp.trend_3m)
-            resp.wk_trend_12m = float(resp.trend_12m)
-            resp.wk_competition_score = float(resp.competition_score)
-            resp.wk_data_source = resp.data_source
-            items.append(resp)
-
-        return KeywordListResponse(
-            items=items,
-            total=total,
-            skip=skip,
-            limit=limit,
-        )
-    else:
-        # Legacy: global keyword list
-        keywords = crud.get_keywords(db, skip=skip, limit=limit, active_only=active_only, sector=sector)
-        total = db.query(Keyword).filter(Keyword.is_active == True if active_only else True).count()
-
-    return KeywordListResponse(
-        items=[KeywordResponse.model_validate(kw) for kw in keywords],
-        total=total,
-        skip=skip,
-        limit=limit
+    base_query = (
+        db.query(Keyword, WorkspaceKeyword)
+        .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
+        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
     )
+    if active_only:
+        base_query = base_query.filter(Keyword.is_active == True)  # noqa: E712
+    if sector:
+        base_query = base_query.filter(WorkspaceKeyword.sector == sector)
+
+    total = base_query.count()
+    rows = base_query.order_by(Keyword.id).offset(skip).limit(limit).all()
+
+    items = []
+    for kw, wk in rows:
+        resp = WorkspaceKeywordResponse.model_validate(kw)
+        resp.monthly_volume = wk.monthly_volume or 0
+        resp.trend_3m = wk.trend_3m or 0
+        resp.trend_12m = wk.trend_12m or 0
+        resp.competition_score = wk.competition_score or 0.5
+        resp.sector = wk.sector
+        resp.target_market = wk.target_market
+        resp.data_source = wk.data_source or "csv"
+        resp.wk_monthly_volume = resp.monthly_volume
+        resp.wk_trend_3m = float(resp.trend_3m)
+        resp.wk_trend_12m = float(resp.trend_12m)
+        resp.wk_competition_score = float(resp.competition_score)
+        resp.wk_data_source = resp.data_source
+        items.append(resp)
+
+    return KeywordListResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/{keyword_id}", response_model=KeywordResponse)
-def get_keyword(keyword_id: int, db: Session = Depends(get_db)):
-    """Get a specific keyword by ID."""
-    keyword = crud.get_keyword(db, keyword_id)
-    if not keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
+def get_keyword(
+    keyword_id: int,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
+):
+    """Get a specific keyword by ID. The keyword must be linked to the workspace."""
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
+    keyword, _ = _verify_keyword_in_workspace(db, keyword_id, workspace_id)
     return KeywordResponse.model_validate(keyword)
 
 
 @router.post("/", response_model=KeywordResponse, status_code=201)
 def create_keyword(
     keyword_data: KeywordCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Create a new keyword, optionally linked to a workspace."""
-    brand_profile_id = keyword_data.brand_profile_id
-    if brand_profile_id is not None:
-        from app.core.workspace import verify_workspace
-        verify_workspace(db, brand_profile_id)
-        result = crud.create_keywords_bulk(
-            db,
-            [keyword_data.model_dump(exclude={"brand_profile_id"})],
-            brand_profile_id=brand_profile_id,
-            return_details=True
-        )
-        if isinstance(result, dict) and (result["created"] + result["linked"]) > 0:
-            keyword = crud.get_keyword_by_text(db, keyword_data.keyword)
-            if keyword:
-                return KeywordResponse.model_validate(keyword)
-        raise HTTPException(status_code=400, detail="Keyword could not be created")
+    """Create a keyword and link it to a workspace.
 
-    # Legacy: global keyword
-    existing = crud.get_keyword_by_text(db, keyword_data.keyword)
-    if existing:
-        raise HTTPException(status_code=400, detail="Keyword already exists")
+    `brand_profile_id` zorunludur (request body içinden gelir).
+    """
+    workspace_id = _require_workspace(keyword_data.brand_profile_id)
+    verify_workspace(db, workspace_id)
 
-    keyword = crud.create_keyword(db, keyword_data.model_dump())
-    return KeywordResponse.model_validate(keyword)
+    result = crud.create_keywords_bulk(
+        db,
+        [keyword_data.model_dump(exclude={"brand_profile_id"})],
+        brand_profile_id=workspace_id,
+        return_details=True,
+    )
+    if isinstance(result, dict) and (result["created"] + result["linked"]) > 0:
+        keyword = crud.get_keyword_by_text(db, keyword_data.keyword)
+        if keyword:
+            return KeywordResponse.model_validate(keyword)
+    raise HTTPException(status_code=400, detail="Keyword could not be created")
 
 
 @router.put("/{keyword_id}", response_model=KeywordResponse)
 def update_keyword(
     keyword_id: int,
     keyword_data: KeywordUpdate,
-    db: Session = Depends(get_db)
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
 ):
-    """Update an existing keyword."""
+    """Update an existing keyword (must belong to the workspace)."""
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
+    _verify_keyword_in_workspace(db, keyword_id, workspace_id)
+
     keyword = crud.update_keyword(db, keyword_id, keyword_data.model_dump(exclude_unset=True))
     if not keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
+        raise HTTPException(status_code=404, detail="keyword not found")
     return KeywordResponse.model_validate(keyword)
 
 
 @router.delete("/all", status_code=204)
 def delete_all_keywords(
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope for safe bulk unlink"),
-    db: Session = Depends(get_db)
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
 ):
-    """Delete all keywords. If brand_profile_id, only removes workspace links."""
-    if brand_profile_id is not None:
-        from app.core.workspace import verify_workspace
-        verify_workspace(db, brand_profile_id)
-        count = (
-            db.query(WorkspaceKeyword)
-            .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
-            .delete(synchronize_session=False)
-        )
-        db.commit()
-        return None
+    """Unlink all keywords from a workspace.
 
-    crud.delete_all_keywords(db)
+    `brand_profile_id` zorunlu. Global Keyword tablosu KORUNUR — yalnızca
+    WorkspaceKeyword bağlantıları silinir. Global delete legacy yolu
+    plan2 §P0/C3 ile kaldırıldı (veri kaybı riski).
+    """
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
+    (
+        db.query(WorkspaceKeyword)
+        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
     return None
 
 
 @router.delete("/{keyword_id}", status_code=204)
 def delete_keyword(
     keyword_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope for safe unlink"),
-    db: Session = Depends(get_db)
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
 ):
-    """
-    Delete a keyword.
-    If brand_profile_id is provided, only removes the workspace link (WorkspaceKeyword).
-    Otherwise deletes the global Keyword record (legacy behavior).
-    """
-    if brand_profile_id is not None:
-        from app.core.workspace import verify_workspace
-        verify_workspace(db, brand_profile_id)
-        success = crud.remove_keyword_from_workspace(db, keyword_id, brand_profile_id)
-        if not success:
-            raise HTTPException(status_code=404, detail="Keyword not found in this workspace")
-        return None
+    """Unlink a keyword from a workspace.
 
-    success = crud.delete_keyword(db, keyword_id)
+    `brand_profile_id` zorunlu. Global Keyword satırı KORUNUR — yalnızca
+    WorkspaceKeyword bağlantısı silinir. (plan2 §P0/C3)
+    """
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
+
+    success = crud.remove_keyword_from_workspace(db, keyword_id, workspace_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Keyword not found")
+        raise HTTPException(status_code=404, detail="keyword not found in workspace")
     return None
 
 
 @router.post("/import", response_model=KeywordImportResponse)
 def import_keywords(
     import_data: KeywordImportRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Bulk import keywords with optional workspace scope."""
-    from app.core.workspace import verify_workspace
-
-    brand_profile_id = import_data.brand_profile_id
-    if brand_profile_id is not None:
-        verify_workspace(db, brand_profile_id)
+    """Bulk import keywords into a workspace. `brand_profile_id` zorunlu."""
+    workspace_id = _require_workspace(import_data.brand_profile_id)
+    verify_workspace(db, workspace_id)
 
     result = crud.create_keywords_bulk(
         db,
         [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
-        brand_profile_id=brand_profile_id,
-        return_details=True
+        brand_profile_id=workspace_id,
+        return_details=True,
     )
 
     if isinstance(result, dict):
@@ -224,63 +228,75 @@ def import_keywords(
     return KeywordImportResponse(
         created=created,
         skipped=skipped,
-        message=f"{created} keywords created/linked, {skipped} skipped (already exist)"
+        message=f"{created} keywords created/linked, {skipped} skipped (already exist)",
     )
 
 
 @router.post("/cleanup-duplicates")
-def cleanup_duplicate_keywords(db: Session = Depends(get_db)):
+def cleanup_duplicate_keywords(
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    db: Session = Depends(get_db),
+):
+    """Workspace içindeki fuzzy duplicate keyword'leri tespit edip deactivate eder.
+
+    `brand_profile_id` zorunlu. Sadece bu workspace'e bağlı WorkspaceKeyword'lerin
+    altındaki Keyword'lerde dedup yapar (plan2 §P0/C3 ile global cleanup kaldırıldı).
     """
-    Mevcut aktif keyword'ler arasındaki fuzzy duplicate'leri bul ve deaktif et.
-    
-    Türkçe ek bazlı stemming + Levenshtein benzerliği (≥85%) ile 
-    aynı metriğe sahip benzer keyword'leri tespit eder.
-    İlk bulunan keyword korunur, sonraki duplicate'ler is_active=False yapılır.
-    """
-    from app.core.keyword_dedup import deduplicate_keywords
     from loguru import logger
-    
-    # Tüm aktif keyword'leri çek
-    active_keywords = db.query(Keyword).filter(Keyword.is_active == True).all()
-    
-    if len(active_keywords) <= 1:
+
+    from app.core.keyword_dedup import deduplicate_keywords
+
+    workspace_id = _require_workspace(brand_profile_id)
+    verify_workspace(db, workspace_id)
+
+    # Workspace'e bağlı, aktif keyword'leri çek.
+    rows = (
+        db.query(Keyword, WorkspaceKeyword)
+        .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
+        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
+        .filter(Keyword.is_active == True)  # noqa: E712
+        .all()
+    )
+
+    if len(rows) <= 1:
         return {
-            "total_active": len(active_keywords),
+            "total_active": len(rows),
             "duplicates_deactivated": 0,
             "deactivated_keywords": [],
-            "message": "No duplicates found"
+            "message": "No duplicates found",
         }
-    
-    # Dict listesine çevir
+
     keyword_dicts = [
         {
-            'keyword': kw.keyword,
-            'monthly_volume': kw.monthly_volume,
-            'competition_score': kw.competition_score,
-            '_db_id': kw.id
+            "keyword": kw.keyword,
+            "monthly_volume": wk.monthly_volume or 0,
+            "competition_score": float(wk.competition_score or 0),
+            "_db_id": kw.id,
         }
-        for kw in active_keywords
+        for kw, wk in rows
     ]
-    
-    # Dedup uygula
+
     deduped = deduplicate_keywords(keyword_dicts)
-    survived_ids = {d['_db_id'] for d in deduped}
-    
-    # Elenen keyword'leri deaktif et
+    survived_ids = {d["_db_id"] for d in deduped}
+
     deactivated = []
-    for kw in active_keywords:
+    for kw, _wk in rows:
         if kw.id not in survived_ids:
             kw.is_active = False
             deactivated.append({"id": kw.id, "keyword": kw.keyword})
-    
+
     if deactivated:
         db.commit()
-        logger.info(f"Cleanup: {len(deactivated)} duplicate keyword(s) deactivated")
-    
+        logger.info(
+            "Workspace {} cleanup: {} duplicate keyword(s) deactivated",
+            workspace_id,
+            len(deactivated),
+        )
+
     return {
-        "total_active_before": len(active_keywords),
+        "total_active_before": len(rows),
         "total_active_after": len(deduped),
         "duplicates_deactivated": len(deactivated),
-        "deactivated_keywords": deactivated[:50],  # İlk 50'sini göster
-        "message": f"{len(deactivated)} duplicate keyword(s) deactivated"
+        "deactivated_keywords": deactivated[:50],
+        "message": f"{len(deactivated)} duplicate keyword(s) deactivated",
     }

@@ -195,3 +195,107 @@ def test_run_channel_assignment_requires_brand_profile_id(
 
     resp = client.post(f"/api/v1/channels/runs/{run.id}/assign")
     assert resp.status_code in (400, 422)
+
+
+# ===========================================================================
+# Keywords endpoint isolation (plan2 §P0/C3)
+# ===========================================================================
+
+
+def test_list_keywords_requires_brand_profile_id(client):
+    resp = client.get("/api/v1/keywords/")
+    assert resp.status_code == 400
+    assert "brand_profile_id" in resp.json()["detail"].lower()
+
+
+def test_list_keywords_filters_by_workspace(client, make_workspace, make_keyword):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    make_keyword("kw_a", brand_profile_id=ws_a.id)
+    make_keyword("kw_b", brand_profile_id=ws_b.id)
+
+    resp = client.get("/api/v1/keywords/", params={"brand_profile_id": ws_a.id})
+    assert resp.status_code == 200
+    keywords = {item["keyword"] for item in resp.json()["items"]}
+    assert "kw_a" in keywords
+    assert "kw_b" not in keywords
+
+
+def test_get_keyword_cross_workspace_returns_404(client, make_workspace, make_keyword):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    kw_in_a = make_keyword("private_to_a", brand_profile_id=ws_a.id)
+
+    resp = client.get(
+        f"/api/v1/keywords/{kw_in_a.id}",
+        params={"brand_profile_id": ws_b.id},
+    )
+    assert resp.status_code == 404
+
+
+def test_delete_all_keywords_requires_brand_profile_id(client):
+    """The most dangerous endpoint: must 400 without workspace, never silently
+    fall through to the (now removed) global delete path."""
+    resp = client.delete("/api/v1/keywords/all")
+    assert resp.status_code == 400
+    assert "brand_profile_id" in resp.json()["detail"].lower()
+
+
+def test_delete_all_keywords_only_unlinks_within_workspace(
+    client, make_workspace, make_keyword, db_session
+):
+    """DELETE /keywords/all with workspace must NOT touch global Keyword rows
+    nor other workspaces' links."""
+    from app.database.models import Keyword, WorkspaceKeyword
+
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    make_keyword("kw_in_a", brand_profile_id=ws_a.id)
+    kw_b = make_keyword("kw_in_b", brand_profile_id=ws_b.id)
+
+    resp = client.delete("/api/v1/keywords/all", params={"brand_profile_id": ws_a.id})
+    assert resp.status_code == 204
+
+    # ws_b's link must remain.
+    remaining = (
+        db_session.query(WorkspaceKeyword)
+        .filter(WorkspaceKeyword.brand_profile_id == ws_b.id)
+        .all()
+    )
+    assert any(link.keyword_id == kw_b.id for link in remaining)
+    # Global Keyword rows untouched.
+    total_keywords = db_session.query(Keyword).count()
+    assert total_keywords == 2
+
+
+def test_delete_keyword_cross_workspace_returns_404(client, make_workspace, make_keyword):
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    kw_in_a = make_keyword("kw", brand_profile_id=ws_a.id)
+
+    resp = client.delete(
+        f"/api/v1/keywords/{kw_in_a.id}",
+        params={"brand_profile_id": ws_b.id},
+    )
+    assert resp.status_code == 404
+
+
+def test_delete_keyword_requires_brand_profile_id(client, make_workspace, make_keyword):
+    ws = make_workspace(name="A")
+    kw = make_keyword("kw", brand_profile_id=ws.id)
+
+    resp = client.delete(f"/api/v1/keywords/{kw.id}")
+    assert resp.status_code == 400
+
+
+def test_import_keywords_requires_brand_profile_id(client):
+    resp = client.post(
+        "/api/v1/keywords/import",
+        json={"keywords": [{"keyword": "x"}]},
+    )
+    assert resp.status_code in (400, 422)
+
+
+def test_cleanup_duplicates_requires_brand_profile_id(client):
+    resp = client.post("/api/v1/keywords/cleanup-duplicates")
+    assert resp.status_code == 400
