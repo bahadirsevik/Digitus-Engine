@@ -4,7 +4,7 @@ Scoring endpoints.
 Plan2 §P0/C2 — workspace-aware. Mutating endpoint'lerde brand_profile_id
 zorunlu, read endpoint'lerde geçiş döneminde opsiyonel + warning.
 """
-from typing import List, Optional
+from typing import List
 import io
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
@@ -107,26 +107,15 @@ def execute_scoring(
 def list_scoring_runs(
     skip: int = 0,
     limit: int = 20,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope filter (recommended; legacy access logs a warning)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope filter"),
     db: Session = Depends(get_db),
 ):
     """List scoring runs.
 
-    Read: brand_profile_id opsiyonel ama önerilir. None ise legacy global liste
-    döner ve warning loglanır (plan2 P4'te zorunluya çekilecek).
+    Read: brand_profile_id zorunlu. Global liste workspace sızıntısı yaratır.
     """
-    query = db.query(ScoringRun)
-    if brand_profile_id is not None:
-        verify_workspace(db, brand_profile_id)
-        query = query.filter(ScoringRun.brand_profile_id == brand_profile_id)
-    else:
-        from loguru import logger
-        logger.warning(
-            "legacy scoring run listing — no brand_profile_id; will require workspace in P4"
-        )
-
+    verify_workspace(db, brand_profile_id)
+    query = db.query(ScoringRun).filter(ScoringRun.brand_profile_id == brand_profile_id)
     runs = query.order_by(ScoringRun.created_at.desc()).offset(skip).limit(limit).all()
     return [ScoringRunStatus.model_validate(run) for run in runs]
 
@@ -134,9 +123,7 @@ def list_scoring_runs(
 @router.get("/runs/{run_id}", response_model=ScoringRunStatus)
 def get_scoring_run(
     run_id: int,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope (recommended)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Get details of a specific scoring run."""
@@ -165,9 +152,7 @@ def delete_scoring_run(
 def get_scoring_results(
     run_id: int,
     limit: int = 100,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope (recommended)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Get scored keywords for a run."""
@@ -206,9 +191,7 @@ def get_top_by_channel(
     run_id: int,
     channel: str,
     limit: int = 10,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope (recommended)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Get top scoring keywords for a specific channel."""
@@ -229,9 +212,7 @@ def get_top_by_channel(
 @router.get("/runs/{run_id}/export/xlsx")
 def export_scoring_xlsx(
     run_id: int,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope (recommended)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Export scoring results as XLSX file (native Excel format)."""
@@ -302,3 +283,4 @@ def export_scoring_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+

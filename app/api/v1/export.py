@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.error_responses import safe_500_detail
-from app.core.workspace import verify_scoring_run
+from app.core.workspace import verify_scoring_run, verify_workspace
 from app.database.connection import SessionLocal
 from app.database.models import ScoringRun
 from app.dependencies import get_db
@@ -107,6 +107,12 @@ def _run_export(brand_profile_id: int, export_id: str, request: ExportRequest):
 
 
 def _lookup_export(brand_profile_id: int, export_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        verify_workspace(db, brand_profile_id)
+    finally:
+        db.close()
+
     key = (brand_profile_id, export_id)
     if key not in _export_status:
         raise HTTPException(status_code=404, detail="export not found in workspace")

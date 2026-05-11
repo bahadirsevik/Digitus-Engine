@@ -90,6 +90,14 @@ def test_list_scoring_runs_filters_by_workspace(client, make_workspace, make_sco
     assert run_b.id not in ids
 
 
+def test_list_scoring_runs_requires_brand_profile_id(client, make_workspace, make_scoring_run):
+    ws = make_workspace(name="A", status="confirmed")
+    make_scoring_run(brand_profile_id=ws.id, name="run_in_a")
+
+    resp = client.get("/api/v1/scoring/runs")
+    assert resp.status_code == 422
+
+
 def test_get_scoring_run_cross_workspace_returns_404(client, make_workspace, make_scoring_run):
     ws_a = make_workspace(name="A", status="confirmed")
     ws_b = make_workspace(name="B", status="confirmed")
@@ -140,6 +148,16 @@ def test_get_scoring_results_cross_workspace_returns_404(
     assert resp.status_code == 404
 
 
+def test_get_scoring_results_requires_brand_profile_id(
+    client, make_workspace, make_scoring_run
+):
+    ws = make_workspace(name="A", status="confirmed")
+    run = make_scoring_run(brand_profile_id=ws.id, status="scored")
+
+    resp = client.get(f"/api/v1/scoring/runs/{run.id}/scores")
+    assert resp.status_code == 422
+
+
 def test_get_top_by_channel_cross_workspace_returns_404(
     client, make_workspace, make_scoring_run
 ):
@@ -171,6 +189,16 @@ def test_get_channel_pools_cross_workspace_returns_404(
         params={"brand_profile_id": ws_b.id},
     )
     assert resp.status_code == 404
+
+
+def test_get_channel_pools_requires_brand_profile_id(
+    client, make_workspace, make_scoring_run
+):
+    ws = make_workspace(name="A", status="confirmed")
+    run = make_scoring_run(brand_profile_id=ws.id)
+
+    resp = client.get(f"/api/v1/channels/runs/{run.id}/pools")
+    assert resp.status_code == 422
 
 
 def test_get_single_channel_pool_cross_workspace_returns_404(
@@ -286,6 +314,37 @@ def test_delete_keyword_requires_brand_profile_id(client, make_workspace, make_k
 
     resp = client.delete(f"/api/v1/keywords/{kw.id}")
     assert resp.status_code == 400
+
+
+def test_update_shared_keyword_rejected_to_prevent_cross_workspace_mutation(
+    client, db_session, make_workspace, make_keyword
+):
+    from app.database.models import Keyword, WorkspaceKeyword
+
+    ws_a = make_workspace(name="A")
+    ws_b = make_workspace(name="B")
+    kw = make_keyword("shared keyword", brand_profile_id=ws_a.id)
+    db_session.add(
+        WorkspaceKeyword(
+            brand_profile_id=ws_b.id,
+            keyword_id=kw.id,
+            data_source="manual",
+            monthly_volume=10,
+            trend_3m=0,
+            trend_12m=0,
+            competition_score=0.5,
+        )
+    )
+    db_session.commit()
+
+    resp = client.put(
+        f"/api/v1/keywords/{kw.id}",
+        params={"brand_profile_id": ws_a.id},
+        json={"keyword": "changed globally"},
+    )
+    assert resp.status_code == 409
+    db_session.refresh(kw)
+    assert db_session.query(Keyword).filter(Keyword.id == kw.id).one().keyword == "shared keyword"
 
 
 def test_import_keywords_requires_brand_profile_id(client):

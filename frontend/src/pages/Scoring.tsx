@@ -96,7 +96,7 @@ export default function Scoring() {
 
   useEffect(() => {
     fetchRuns();
-  }, []);
+  }, [activeWorkspace?.id]);
 
   useEffect(() => {
     if (activeWorkspace?.id) {
@@ -105,14 +105,13 @@ export default function Scoring() {
   }, [activeWorkspace?.id]);
 
   const fetchRuns = async () => {
+    if (!activeWorkspace?.id) {
+      setRuns([]);
+      return;
+    }
     try {
-      const res = await scoringApi.listRuns();
-      let data = res.data || [];
-      if (activeWorkspace?.id) {
-        data = data.filter(
-          (r: ScoringRun) => r.brand_profile_id === activeWorkspace.id,
-        );
-      }
+      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id });
+      const data = res.data || [];
       setRuns(data);
     } catch (error) {
       console.error("Error fetching runs:", error);
@@ -120,12 +119,19 @@ export default function Scoring() {
   };
 
   const createRun = async () => {
+    if (!activeWorkspace?.id) {
+      alert("Önce Marka Çalışması seçin");
+      return;
+    }
     if (!newRun.enable_ads && !newRun.enable_seo && !newRun.enable_social) {
       alert("En az bir kanal seçilmelidir");
       return;
     }
     try {
-      const res = await scoringApi.createRun(newRun);
+      const res = await scoringApi.createRun({
+        ...newRun,
+        brand_profile_id: activeWorkspace.id,
+      });
       setShowModal(false);
       setNewRun((prev) => ({
         ...prev,
@@ -152,9 +158,10 @@ export default function Scoring() {
   };
 
   const executeRun = async (runId: number) => {
+    if (!activeWorkspace?.id) return;
     setLoading(true);
     try {
-      await scoringApi.executeRun(runId);
+      await scoringApi.executeRun(runId, activeWorkspace.id);
       fetchRuns();
       viewScores(runId);
     } catch (error) {
@@ -164,9 +171,10 @@ export default function Scoring() {
   };
 
   const viewScores = async (runId: number) => {
+    if (!activeWorkspace?.id) return;
     setSelectedRun(runId);
     try {
-      const res = await scoringApi.getScores(runId, 50);
+      const res = await scoringApi.getScores(runId, 50, activeWorkspace.id);
       setScores(res.data.scores || []);
     } catch (error) {
       console.error("Error fetching scores:", error);
@@ -283,7 +291,7 @@ export default function Scoring() {
                         className="btn btn-success"
                         onClick={async () => {
                           try {
-                            const res = await scoringApi.exportXlsx(run.id);
+                            const res = await scoringApi.exportXlsx(run.id, activeWorkspace?.id);
                             const url = window.URL.createObjectURL(
                               new Blob([res.data]),
                             );
@@ -326,7 +334,7 @@ export default function Scoring() {
                       )
                         return;
                       try {
-                        await scoringApi.deleteRun(run.id);
+                        await scoringApi.deleteRun(run.id, activeWorkspace?.id);
                         fetchRuns();
                         if (selectedRun === run.id) {
                           setSelectedRun(null);

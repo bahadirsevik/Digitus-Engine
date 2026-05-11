@@ -92,8 +92,14 @@ export default function Channels() {
   const assignPolling = useTaskPolling(assignTaskId, "channel_assign");
 
   const fetchRuns = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+      setRuns([]);
+      setSelectedRun(null);
+      setPools({});
+      return;
+    }
     try {
-      const res = await scoringApi.listRuns();
+      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id });
       let data = (Array.isArray(res.data) ? res.data : []) as ScoringRun[];
       const eligibleStatuses = [
         "scored",
@@ -102,9 +108,6 @@ export default function Channels() {
         "completed",
       ];
       data = data.filter((r) => eligibleStatuses.includes(r.status));
-      if (activeWorkspace?.id) {
-        data = data.filter((r) => r.brand_profile_id === activeWorkspace.id);
-      }
       setRuns(data);
     } catch (fetchError) {
       setError(`Çalışmalar yüklenemedi: ${extractErrorMessage(fetchError)}`);
@@ -112,9 +115,10 @@ export default function Channels() {
   }, [activeWorkspace?.id]);
 
   const fetchPools = useCallback(async (runId: number) => {
+    if (!activeWorkspace?.id) return;
     setLoading(true);
     try {
-      const poolsRes = await channelsApi.getPools(runId);
+      const poolsRes = await channelsApi.getPools(runId, activeWorkspace.id);
       setPools(poolsRes.data.channels || {});
       setError("");
     } catch (fetchError) {
@@ -123,7 +127,7 @@ export default function Channels() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeWorkspace?.id]);
 
   useEffect(() => {
     void fetchRuns();
@@ -171,6 +175,10 @@ export default function Channels() {
   ]);
 
   const runAssignment = async (runId: number) => {
+    if (!activeWorkspace?.id) {
+      setError("Önce Marka Çalışması seçin");
+      return;
+    }
     if (hasExistingPools) {
       const ok = window.confirm(
         "Mevcut içerikler güncel olmayacak şekilde işaretlenecek (stale). Devam etmek istiyor musunuz?",
@@ -184,7 +192,7 @@ export default function Channels() {
 
     try {
       const coefficient = normalizeCoefficient(relevanceCoefficient);
-      const res = await channelsApi.assign(runId, coefficient);
+      const res = await channelsApi.assign(runId, coefficient, activeWorkspace.id);
       const taskId = res.data.task_id;
       setAssignTaskId(taskId);
       setInfo(

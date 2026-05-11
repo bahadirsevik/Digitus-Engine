@@ -4,8 +4,6 @@ Channel assignment endpoints.
 Plan2 §P0/C2 — workspace-aware. Mutating /assign brand_profile_id zorunlu,
 read /pools opsiyonel + warning (P4'te zorunlu).
 """
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 
@@ -81,9 +79,7 @@ def run_channel_assignment(
 @router.get("/runs/{run_id}/pools")
 def get_channel_pools(
     run_id: int,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope (recommended; legacy access logs warning)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai),
 ):
@@ -97,9 +93,7 @@ def get_channel_pools(
 def get_single_channel_pool(
     run_id: int,
     channel: str,
-    brand_profile_id: Optional[int] = Query(
-        None, description="Workspace scope (recommended)"
-    ),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai),
 ):

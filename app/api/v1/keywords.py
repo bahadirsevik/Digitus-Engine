@@ -149,12 +149,32 @@ def update_keyword(
     brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
     db: Session = Depends(get_db),
 ):
-    """Update an existing keyword (must belong to the workspace)."""
+    """Update a keyword linked to a workspace.
+
+    Keyword rows are global and can be linked to multiple workspaces. Updating a
+    shared row would leak the change into other workspaces, so shared keywords
+    are rejected until a clone/relink flow is implemented.
+    """
     workspace_id = _require_workspace(brand_profile_id)
     verify_workspace(db, workspace_id)
     _verify_keyword_in_workspace(db, keyword_id, workspace_id)
 
-    keyword = crud.update_keyword(db, keyword_id, keyword_data.model_dump(exclude_unset=True))
+    link_count = (
+        db.query(WorkspaceKeyword)
+        .filter(WorkspaceKeyword.keyword_id == keyword_id)
+        .count()
+    )
+    if link_count > 1:
+        raise HTTPException(
+            status_code=409,
+            detail="keyword is linked to multiple workspaces; update would affect other workspaces",
+        )
+
+    keyword = crud.update_keyword(
+        db,
+        keyword_id,
+        keyword_data.model_dump(exclude_unset=True),
+    )
     if not keyword:
         raise HTTPException(status_code=404, detail="keyword not found")
     return KeywordResponse.model_validate(keyword)

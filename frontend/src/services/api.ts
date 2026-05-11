@@ -18,13 +18,14 @@ export const keywordsApi = {
     brand_profile_id?: number;
   }) => api.get("/keywords/", { params }),
 
-  get: (id: number) => api.get(`/keywords/${id}`),
+  get: (id: number, brand_profile_id?: number) =>
+    api.get(`/keywords/${id}`, { params: { brand_profile_id } }),
 
   create: (data: KeywordCreate, brand_profile_id?: number) =>
     api.post("/keywords", { ...data, brand_profile_id }),
 
-  update: (id: number, data: Partial<KeywordCreate>) =>
-    api.put(`/keywords/${id}`, data),
+  update: (id: number, data: Partial<KeywordCreate>, brand_profile_id?: number) =>
+    api.put(`/keywords/${id}`, data, { params: { brand_profile_id } }),
 
   delete: (id: number, brand_profile_id?: number) =>
     api.delete(`/keywords/${id}`, { params: { brand_profile_id } }),
@@ -38,25 +39,31 @@ export const keywordsApi = {
 
 // Scoring API
 export const scoringApi = {
-  listRuns: (params?: { skip?: number; limit?: number }) =>
+  listRuns: (params?: { skip?: number; limit?: number; brand_profile_id?: number }) =>
     api.get("/scoring/runs", { params }),
 
-  getRun: (id: number) => api.get(`/scoring/runs/${id}`),
+  getRun: (id: number, brand_profile_id?: number) =>
+    api.get(`/scoring/runs/${id}`, { params: { brand_profile_id } }),
 
   createRun: (data: ScoringRunCreate) => api.post("/scoring/runs", data),
 
-  executeRun: (id: number) => api.post(`/scoring/runs/${id}/execute`),
+  executeRun: (id: number, brand_profile_id?: number) =>
+    api.post(`/scoring/runs/${id}/execute`, undefined, { params: { brand_profile_id } }),
 
-  getScores: (runId: number, limit?: number) =>
-    api.get(`/scoring/runs/${runId}/scores`, { params: { limit } }),
+  getScores: (runId: number, limit?: number, brand_profile_id?: number) =>
+    api.get(`/scoring/runs/${runId}/scores`, { params: { limit, brand_profile_id } }),
 
-  getTopByChannel: (runId: number, channel: string, limit?: number) =>
-    api.get(`/scoring/runs/${runId}/top/${channel}`, { params: { limit } }),
+  getTopByChannel: (runId: number, channel: string, limit?: number, brand_profile_id?: number) =>
+    api.get(`/scoring/runs/${runId}/top/${channel}`, { params: { limit, brand_profile_id } }),
 
-  deleteRun: (runId: number) => api.delete(`/scoring/runs/${runId}`),
+  deleteRun: (runId: number, brand_profile_id?: number) =>
+    api.delete(`/scoring/runs/${runId}`, { params: { brand_profile_id } }),
 
-  exportXlsx: (runId: number) =>
-    api.get(`/scoring/runs/${runId}/export/xlsx`, { responseType: "blob" }),
+  exportXlsx: (runId: number, brand_profile_id?: number) =>
+    api.get(`/scoring/runs/${runId}/export/xlsx`, {
+      params: { brand_profile_id },
+      responseType: "blob",
+    }),
 };
 
 // Workspace API
@@ -107,30 +114,37 @@ export const brandProfileApi = {
 
 // Channels API
 export const channelsApi = {
-  assign: (runId: number, relevanceOverride?: number) =>
+  assign: (runId: number, relevanceOverride?: number, brand_profile_id?: number) =>
     api.post(
       `/channels/runs/${runId}/assign`,
       relevanceOverride !== undefined
         ? { relevance_override: relevanceOverride }
         : undefined,
+      { params: { brand_profile_id } },
     ),
 
-  getPools: (runId: number) => api.get(`/channels/runs/${runId}/pools`),
+  getPools: (runId: number, brand_profile_id?: number) =>
+    api.get(`/channels/runs/${runId}/pools`, { params: { brand_profile_id } }),
 
-  getPool: (runId: number, channel: string) =>
-    api.get(`/channels/runs/${runId}/pools/${channel}`),
+  getPool: (runId: number, channel: string, brand_profile_id?: number) =>
+    api.get(`/channels/runs/${runId}/pools/${channel}`, { params: { brand_profile_id } }),
 
   getStrategic: (runId: number) => api.get(`/channels/runs/${runId}/strategic`),
 };
 
 // Export API
 export const exportApi = {
-  create: (data: ExportRequest) => api.post("/export", data),
+  create: (data: ExportRequest, brand_profile_id?: number) =>
+    api.post("/export", data, { params: { brand_profile_id } }),
 
-  status: (exportId: string) => api.get(`/export/${exportId}/status`),
+  status: (exportId: string, brand_profile_id?: number) =>
+    api.get(`/export/${exportId}/status`, { params: { brand_profile_id } }),
 
-  download: (exportId: string) =>
-    api.get(`/export/${exportId}/download`, { responseType: "blob" }),
+  download: (exportId: string, brand_profile_id?: number) =>
+    api.get(`/export/${exportId}/download`, {
+      params: { brand_profile_id },
+      responseType: "blob",
+    }),
 };
 
 // Generation API

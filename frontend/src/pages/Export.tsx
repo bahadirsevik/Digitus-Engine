@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Download, FileText, Table, FileSpreadsheet, CheckCircle } from 'lucide-react'
 import { scoringApi, exportApi, ExportRequest } from '../services/api'
+import { useBrandStore } from '../stores/brandStore'
 import './Export.css'
 
 export default function Export() {
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const [runs, setRuns] = useState<any[]>([])
   const [selectedRun, setSelectedRun] = useState<number | null>(null)
   const [format, setFormat] = useState<'docx' | 'pdf' | 'excel'>('excel')
@@ -14,11 +16,16 @@ export default function Export() {
 
   useEffect(() => {
     fetchRuns()
-  }, [])
+  }, [activeWorkspace?.id])
 
   const fetchRuns = async () => {
+    if (!activeWorkspace?.id) {
+      setRuns([])
+      setSelectedRun(null)
+      return
+    }
     try {
-      const res = await scoringApi.listRuns()
+      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
       setRuns(res.data.filter((r: any) => r.status === 'completed') || [])
     } catch (error) {
       console.error('Dışa aktarım çalışmaları yüklenemedi:', error)
@@ -35,6 +42,7 @@ export default function Export() {
 
   const handleExport = async () => {
     if (!selectedRun) return
+    if (!activeWorkspace?.id) return
 
     setExporting(true)
     setSuccess(false)
@@ -48,7 +56,7 @@ export default function Export() {
         include_stale_content: includeStaleContent
       }
 
-      const res = await exportApi.create(req)
+      const res = await exportApi.create(req, activeWorkspace.id)
       const exportId = res.data.export_id
 
       let attempts = 0
@@ -56,11 +64,11 @@ export default function Export() {
 
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000))
-        const statusRes = await exportApi.status(exportId)
+        const statusRes = await exportApi.status(exportId, activeWorkspace.id)
         const status = statusRes.data.status
 
         if (status === 'completed') {
-          const downloadRes = await exportApi.download(exportId)
+          const downloadRes = await exportApi.download(exportId, activeWorkspace.id)
 
           const contentDisposition = downloadRes.headers['content-disposition']
           let filename = `digitus_rapor.${format === 'excel' ? 'xlsx' : format}`

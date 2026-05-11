@@ -8,6 +8,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { keywordsApi, scoringApi, healthApi } from '../services/api'
+import { useBrandStore } from '../stores/brandStore'
 import './Dashboard.css'
 
 interface Stats {
@@ -17,19 +18,31 @@ interface Stats {
 }
 
 export default function Dashboard() {
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const [stats, setStats] = useState<Stats>({ keywords: 0, scoringRuns: 0, apiStatus: 'kontrol ediliyor...' })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchStats()
-  }, [])
+  }, [activeWorkspace?.id])
 
   const fetchStats = async () => {
     setLoading(true)
     try {
+      if (!activeWorkspace?.id) {
+        const healthRes = await healthApi.check()
+        setStats({
+          keywords: 0,
+          scoringRuns: 0,
+          apiStatus: healthRes.data.status || 'online'
+        })
+        setLoading(false)
+        return
+      }
+
       const [keywordsRes, runsRes, healthRes] = await Promise.all([
-        keywordsApi.list({ limit: 1 }),
-        scoringApi.listRuns({ limit: 1 }),
+        keywordsApi.list({ limit: 1, brand_profile_id: activeWorkspace.id }),
+        scoringApi.listRuns({ limit: 1, brand_profile_id: activeWorkspace.id }),
         healthApi.check()
       ])
 
