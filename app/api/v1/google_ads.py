@@ -31,6 +31,41 @@ def _normalize_language_id(language_id: Optional[str]) -> Optional[str]:
     return GOOGLE_ADS_LANGUAGE_ALIASES.get(value, value)
 
 
+def _normalize_geo_target_id(geo_target_id: Optional[str]) -> Optional[str]:
+    """Strip any resource-path prefix from geo target IDs (e.g. 'geoTargetConstants/2792' → '2792')."""
+    if geo_target_id is None:
+        return None
+    value = str(geo_target_id).strip()
+    if "/" in value:
+        value = value.rsplit("/", 1)[-1]
+    return value or None
+
+
+def _translate_invalid_argument(raw: str) -> str:
+    """Convert Google Ads InvalidArgument error text to a user-friendly Turkish message."""
+    import re
+    lower = raw.lower()
+
+    m = re.search(r"languageconstants?/(\d+)", lower)
+    if m:
+        return (
+            f"Geçersiz dil kimliği: {m.group(1)}. "
+            "Türkçe için 1037 kullanın (Settings → varsayılan_dil)."
+        )
+
+    m = re.search(r"geotargetconstants?/(\d+)", lower)
+    if m:
+        return (
+            f"Geçersiz coğrafi hedef kimliği: {m.group(1)}. "
+            "Türkiye için 2792 kullanın (Settings → varsayılan_geo_hedef)."
+        )
+
+    if "customer" in lower and ("not found" in lower or "invalid" in lower):
+        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. customer_id değerini kontrol edin."
+
+    return f"Google Ads geçersiz parametre: {raw}"
+
+
 def _get_service() -> GoogleAdsService:
     svc = GoogleAdsService(settings)
     if not svc.is_configured():
@@ -58,8 +93,8 @@ def _raise_google_ads_error(exc: Exception) -> None:
             detail="Google Ads kotasi doldu, daha sonra tekrar deneyin",
         )
     if exc_name in {"InvalidArgument", "GoogleAdsException"}:
-        raise HTTPException(status_code=400, detail=detail)
-    raise HTTPException(status_code=502, detail=f"Google Ads istegi basarisiz oldu: {detail}")
+        raise HTTPException(status_code=400, detail=_translate_invalid_argument(detail))
+    raise HTTPException(status_code=502, detail=f"Google Ads isteği başarısız oldu: {detail}")
 
 
 # --- Request/Response Modelleri ---
@@ -343,7 +378,9 @@ def keyword_ideas_by_url(
     language_id = _normalize_language_id(
         payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
     )
-    geo_target_id = payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
+    geo_target_id = _normalize_geo_target_id(
+        payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
+    )
     workspace_token = f"ws{workspace.id}:{workspace.created_at.isoformat() if workspace.created_at else 'na'}"
     cache_key = _url_seed_cache_key(
         customer_id,
