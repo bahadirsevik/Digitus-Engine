@@ -88,9 +88,12 @@ class ExportDataCollector:
 
     def _collect_brand_profile(self, scoring_run_id: int) -> Optional[BrandProfileData]:
         """Run icin marka profilini toplar."""
-        profile = self.db.query(BrandProfile).filter(
-            BrandProfile.scoring_run_id == scoring_run_id
-        ).first()
+        _run = self.db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+        profile = None
+        if _run and _run.brand_profile_id:
+            profile = self.db.query(BrandProfile).filter(
+                BrandProfile.id == _run.brand_profile_id,
+            ).first()
 
         if not profile:
             return None

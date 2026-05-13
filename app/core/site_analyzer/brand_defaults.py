@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database.models import (
     BrandProfile, AdGroup,
     SocialCategory, SocialIdea, SocialContent,
+    ScoringRun,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,10 +54,14 @@ class BrandDefaultsResolver:
         if not scoring_run_id:
             return {}
 
-        profile = self.db.query(BrandProfile).filter(
-            BrandProfile.scoring_run_id == scoring_run_id,
-            BrandProfile.status == "confirmed",
-        ).first()
+        _run = self.db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+        profile = None
+        if _run and _run.brand_profile_id:
+            profile = self.db.query(BrandProfile).filter(
+                BrandProfile.id == _run.brand_profile_id,
+                BrandProfile.status == "confirmed",
+                BrandProfile.deleted_at.is_(None),
+            ).first()
 
         if not profile or not profile.profile_data:
             return {}

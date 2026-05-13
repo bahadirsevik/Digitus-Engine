@@ -155,12 +155,6 @@ class PoolBuilder:
             ).first()
 
         if not profile:
-            profile = self.db.query(BrandProfile).filter(
-                BrandProfile.scoring_run_id == scoring_run_id,
-                BrandProfile.status == "confirmed",
-            ).first()
-
-        if not profile:
             return {}
 
         relevance_rows = (

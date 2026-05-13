@@ -156,11 +156,12 @@ def get_profile(
     db: Session = Depends(get_db),
 ):
     """Get the brand profile for a scoring run."""
-    verify_scoring_run(db, run_id, brand_profile_id)
+    run = verify_scoring_run(db, run_id, brand_profile_id)
 
-    profile = db.query(BrandProfile).filter(
-        BrandProfile.scoring_run_id == run_id
-    ).first()
+    profile = (
+        db.query(BrandProfile).filter(BrandProfile.id == run.brand_profile_id).first()
+        if run.brand_profile_id else None
+    )
 
     if not profile:
         raise HTTPException(status_code=404, detail="Bu run için profil bulunamadı")
@@ -191,16 +192,13 @@ def analyze_profile(
             detail="Site profil analizi devre dışı (ENABLE_SITE_PROFILE_ANALYSIS=false)"
         )
 
-    verify_scoring_run(db, run_id, brand_profile_id)
+    scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
 
-    scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
-    if not scoring_run:
-        raise HTTPException(status_code=404, detail="Scoring run bulunamadı")
-
-    # Upsert: varsa güncelle, yoksa oluştur
-    profile = db.query(BrandProfile).filter(
-        BrandProfile.scoring_run_id == run_id
-    ).first()
+    # Upsert into the workspace BrandProfile linked to this scoring run
+    profile = (
+        db.query(BrandProfile).filter(BrandProfile.id == scoring_run.brand_profile_id).first()
+        if scoring_run.brand_profile_id else None
+    )
 
     if not profile:
         profile = BrandProfile(
@@ -249,9 +247,11 @@ def confirm_profile(
     Only confirmed profiles are used for relevance scoring.
     Automatically triggers relevance computation in the background.
     """
-    profile = db.query(BrandProfile).filter(
-        BrandProfile.scoring_run_id == run_id
-    ).first()
+    scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
+    profile = (
+        db.query(BrandProfile).filter(BrandProfile.id == scoring_run.brand_profile_id).first()
+        if scoring_run and scoring_run.brand_profile_id else None
+    )
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profil bulunamadı")
@@ -314,12 +314,6 @@ def compute_relevance(
             BrandProfile.id == scoring_run.brand_profile_id,
             BrandProfile.status == "confirmed",
             BrandProfile.deleted_at.is_(None),
-        ).first()
-
-    if not profile:
-        profile = db.query(BrandProfile).filter(
-            BrandProfile.scoring_run_id == run_id,
-            BrandProfile.status == "confirmed",
         ).first()
 
     if not profile:
@@ -912,12 +906,6 @@ def _run_relevance_computation(scoring_run_id: int):
                 BrandProfile.id == scoring_run.brand_profile_id,
                 BrandProfile.status == "confirmed",
                 BrandProfile.deleted_at.is_(None),
-            ).first()
-
-        if not profile:
-            profile = db.query(BrandProfile).filter(
-                BrandProfile.scoring_run_id == scoring_run_id,
-                BrandProfile.status == "confirmed",
             ).first()
 
         if not profile:

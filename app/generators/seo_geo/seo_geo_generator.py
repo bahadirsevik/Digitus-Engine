@@ -18,7 +18,8 @@ from app.compliance.seo_checker import SEOComplianceChecker
 # geo_checker lazy import edilir (compliance.__init__ → geo_checker → seo_geo → seo_geo_generator döngüsünü kırar)
 from app.database.models import (
     Keyword, ChannelPool, ContentOutput,
-    SEOGeoContent, SEOComplianceResult, GEOComplianceResult
+    SEOGeoContent, SEOComplianceResult, GEOComplianceResult,
+    ScoringRun,
 )
 from app.schemas.seo_geo import (
     SEOGEOGenerateRequest, SEOGEOBulkRequest,
@@ -98,10 +99,14 @@ class SEOGEOGenerator:
         try:
             from app.database.models import BrandProfile
             if scoring_run_id:
-                brand_profile = self.db.query(BrandProfile).filter(
-                    BrandProfile.scoring_run_id == scoring_run_id,
-                    BrandProfile.status == "confirmed"
-                ).first()
+                _sr = self.db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+                brand_profile = None
+                if _sr and _sr.brand_profile_id:
+                    brand_profile = self.db.query(BrandProfile).filter(
+                        BrandProfile.id == _sr.brand_profile_id,
+                        BrandProfile.status == "confirmed",
+                        BrandProfile.deleted_at.is_(None),
+                    ).first()
                 if brand_profile and brand_profile.profile_data:
                     pd = brand_profile.profile_data
                     parts = []
