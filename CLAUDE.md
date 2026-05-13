@@ -137,18 +137,16 @@ Digitus-Engine-main/
 |   |-- seed_data.py              # Ornek veri yukleme
 |-- tests/                        # Pytest test dosyalari
 |   |-- conftest.py
-|   |-- test_api.py
-|   |-- test_channel.py
-|   |-- test_database.py
-|   |-- test_schemas.py
-|   |-- test_structure.py
 |   |-- unit/
-|   |   |-- test_intent_analyzer.py
-|   |   |-- test_services.py
+|   |   |-- test_keyword_normalize.py
+|   |   |-- test_status_lint_guard.py
+|   |   |-- test_workspace_model_constraints.py
+|   |   |-- test_workspace_phase_b_migration.py
+|   |   |-- test_workspace_refresh.py
+|   |   |-- test_workspace_url_seed.py
 |   |-- integration/
-|   |   |-- test_api.py
-|   |-- async/
-|       |-- test_celery.py
+|       |-- test_migration_chain.py
+|       |-- test_workspace_isolation.py
 |-- docker-compose.yml            # 5 servis: app, db, redis, celery_worker, celery_beat
 |-- Dockerfile                    # Python 3.11-slim tabanli
 |-- requirements.txt              # Python bagimliliklar
@@ -398,24 +396,28 @@ TaskResult (Celery gorev takibi)
 ### Test Dosyalari
 ```
 tests/
-|-- conftest.py              # Fixture'lar (project_root, app_dir)
-|-- test_api.py              # API endpoint testleri
-|-- test_channel.py          # Kanal atama testleri
-|-- test_database.py         # Veritabani testleri
-|-- test_schemas.py          # Pydantic sema testleri
-|-- test_structure.py        # Proje yapi testleri
+|-- conftest.py                              # Fixtures: db_session, client, make_workspace, truncate_all
 |-- unit/
-|   |-- test_intent_analyzer.py  # Niyet analizi unit testleri
-|   |-- test_services.py         # Servis unit testleri
+|   |-- test_keyword_normalize.py            # Turkce fuzzy dedup normalizasyon
+|   |-- test_status_lint_guard.py            # Status string lint (model constraint)
+|   |-- test_workspace_model_constraints.py  # WorkspaceKeyword model constraint'leri
+|   |-- test_workspace_phase_b_migration.py  # Workspace migration yolu (phase B)
+|   |-- test_workspace_refresh.py            # Workspace refresh + is_stale semantigi
+|   |-- test_workspace_url_seed.py           # URL seed keyword extraction
 |-- integration/
-|   |-- test_api.py              # API integration testleri
-|-- async/
-    |-- test_celery.py           # Celery gorev testleri
+|   |-- test_migration_chain.py              # Bos DB'den alembic upgrade head smoke
+|   |-- test_workspace_isolation.py          # Cross-workspace 404/400 izolasyon testleri
 ```
+
+Not: `tests/test_api.py`, `test_channel.py`, `test_database.py`, `test_schemas.py`, `test_structure.py`,
+`unit/test_intent_analyzer.py`, `unit/test_services.py`, `async/test_celery.py` artik mevcut degil.
 
 ### Test Calistirma
 ```bash
-# Tum testler
+# Docker ile (onerilen — gercek Postgres gerektirir)
+docker-compose -f docker-compose.test.yml run --rm test_app pytest tests/ -v
+
+# Lokal (DATABASE_URL ayarli ise)
 pytest tests/ -v
 
 # Coverage ile
@@ -429,7 +431,7 @@ pytest tests/integration/ -v
 ```
 
 ### Coverage Hedefi
-- Tespit edilemedi (belirli bir hedef tanimlanmamis)
+- Belirlenmemis; kritik moduller: workspace.py, scoring/, channel/
 
 ---
 
