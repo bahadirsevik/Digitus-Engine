@@ -737,6 +737,10 @@ def refresh_workspace_keywords(
         db.rollback()
         raise
 
+    # Keywords changed → mark all workspace content stale
+    from app.core.scoring.state_machine import mark_workspace_content_stale
+    mark_workspace_content_stale(db, workspace_id)
+
     diff = merged["diff"]
     return WorkspaceKeywordRefreshResponse(
         workspace_id=workspace_id,

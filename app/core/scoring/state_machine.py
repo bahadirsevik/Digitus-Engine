@@ -48,9 +48,16 @@ def transition(db: Session, run: ScoringRun, target: str):
     State machine geçişi + yan etkiler.
     Geçersiz geçiş ValueError fırlatır.
 
-    Yan etkiler:
-      - channel_assigned -> relevance_computing: ChannelPool temizlenir
-      - completed -> channel_assigning: ContentOutput.is_stale = True
+    ContentOutput.is_stale matrisi (tek source-of-truth):
+      SET True  → hedef durum `channel_assigning` olan HER geçiş
+                  (channel reassign önceki içeriği geçersiz kılar)
+      SET True  → workspace keyword refresh (brand_profile.py → mark_workspace_content_stale)
+      RESET yok → content tekrar üretildiğinde yeni ContentOutput satırı oluşturulur;
+                  eski stale satır silinmez ama export'ta is_stale=False filtresiyle dışlanır.
+
+    Diğer yan etkiler:
+      channel_assigned → relevance_computing: ChannelPool temizlenir
+      (relevance yeniden sıralamaya gireceği için eski pool stale)
     """
     from_status = run.status
 
@@ -64,8 +71,8 @@ def transition(db: Session, run: ScoringRun, target: str):
             ChannelPool.scoring_run_id == run.id
         ).delete(synchronize_session=False)
 
-    if from_status == "completed" and target == "channel_assigning":
-        # Mevcut content stale işaretlenir
+    if target == "channel_assigning":
+        # Kanal yeniden atanacak → mevcut içerik stale
         db.query(ContentOutput).filter(
             ContentOutput.scoring_run_id == run.id
         ).update({"is_stale": True}, synchronize_session=False)
@@ -77,6 +84,38 @@ def transition(db: Session, run: ScoringRun, target: str):
         setattr(run, timestamp_col, datetime.utcnow())
 
     db.commit()
+
+
+def mark_workspace_content_stale(db: Session, brand_profile_id: int) -> int:
+    """
+    Workspace'e ait TÜM scoring run'larının ContentOutput'larını stale işaretle.
+
+    Çağrılma noktası: workspace keyword refresh tamamlandığında.
+    Keyword değişiklikleri skor ve kanal atamasını geçersiz kılar; dolayısıyla
+    önceki içerikler de stale sayılır.
+
+    Returns: stale işaretlenen satır sayısı.
+    """
+    from app.database.models import ScoringRun as _ScoringRun
+
+    run_ids = [
+        r.id
+        for r in db.query(_ScoringRun.id).filter(
+            _ScoringRun.brand_profile_id == brand_profile_id
+        ).all()
+    ]
+    if not run_ids:
+        return 0
+
+    result = db.execute(
+        update(ContentOutput)
+        .where(ContentOutput.scoring_run_id.in_(run_ids))
+        .where(ContentOutput.is_stale == False)  # noqa: E712
+        .values(is_stale=True)
+        .returning(ContentOutput.id)
+    )
+    db.commit()
+    return len(result.fetchall())
 
 
 def transition_atomic(
