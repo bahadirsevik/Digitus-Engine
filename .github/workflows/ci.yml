@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  migration-smoke:
+    name: Migration chain smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: digitus
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: digitus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U digitus -d digitus_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run alembic upgrade head (empty DB)
+        env:
+          DATABASE_URL: postgresql://digitus:testpassword@localhost:5432/digitus_test
+          REDIS_URL: redis://localhost:6379/0
+          APP_ENV: development
+          DEBUG: "false"
+          SECRET_KEY: ci-secret-key
+          GEMINI_API_KEY: placeholder
+        run: alembic upgrade head
+
+      - name: Run test suite
+        env:
+          DATABASE_URL: postgresql://digitus:testpassword@localhost:5432/digitus_test
+          REDIS_URL: redis://localhost:6379/0
+          APP_ENV: development
+          DEBUG: "false"
+          SECRET_KEY: ci-secret-key
+          GEMINI_API_KEY: placeholder
+        run: pytest tests/ -v --tb=short
