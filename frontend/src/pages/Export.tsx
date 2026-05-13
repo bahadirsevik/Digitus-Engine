@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Download, FileSpreadsheet, FileText, Table, CheckCircle } from 'lucide-react'
 import TaskProgress from '../components/TaskProgress'
 import { scoringApi, exportApi, ExportRequest } from '../services/api'
+import type { ScoringRun } from '../types/models'
 import { useBrandStore } from '../stores/brandStore'
 import './Export.css'
 
@@ -19,7 +20,7 @@ interface ExportJobStatus {
 
 export default function Export() {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const [runs, setRuns] = useState<any[]>([])
+  const [runs, setRuns] = useState<ScoringRun[]>([])
   const [selectedRun, setSelectedRun] = useState<number | null>(null)
   const [format, setFormat] = useState<ExportFormat>('excel')
   const [channels, setChannels] = useState<string[]>(['ADS', 'SEO', 'SOCIAL'])
@@ -81,7 +82,7 @@ export default function Export() {
 
     try {
       const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
-      setRuns(res.data.filter((r: any) => r.status === 'completed') || [])
+      setRuns(((res.data as ScoringRun[]) || []).filter((r) => r.status === 'completed'))
     } catch (err) {
       console.error('Export runs failed:', err)
     }

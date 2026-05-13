@@ -12,16 +12,10 @@ import SocialStepper from '../components/SocialStepper'
 import { useSocialStore } from '../stores/socialStore'
 import { useBrandStore } from '../stores/brandStore'
 import { scoringApi, brandProfileApi, generationApi } from '../services/api'
+import type { ScoringRun, AdsResult, SEOGeoItem, AdGroup } from '../types/models'
 import './Generation.css'
 
 type TabType = 'seo' | 'ads' | 'social'
-
-interface ScoringRun {
-  id: number
-  run_name?: string
-  status: string
-  created_at: string
-}
 
 export default function Generation() {
   const [searchParams] = useSearchParams()
@@ -39,14 +33,14 @@ export default function Generation() {
   const [seoRunId, setSeoRunId] = useState<number | ''>('')
   const [seoLimit, setSeoLimit] = useState(10)
   const [seoTaskId, setSeoTaskId] = useState<string | null>(getStoredTaskId(seoTaskStorageKey))
-  const [seoResults, setSeoResults] = useState<any[]>([])
+  const [seoResults, setSeoResults] = useState<SEOGeoItem[]>([])
 
   // Ads Form State
   const [adsRunId, setAdsRunId] = useState<number | ''>('')
   const [brandName, setBrandName] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [usps, setUsps] = useState('')
-  const [adsResults, setAdsResults] = useState<any | null>(null)
+  const [adsResults, setAdsResults] = useState<AdsResult | null>(null)
 
   // Task polling
   const seoPolling = useTaskPolling(seoTaskId, seoTaskStorageKey, 3000, activeWorkspace?.id)
@@ -63,14 +57,14 @@ export default function Generation() {
     if (!adsRunId || !activeWorkspace?.id) return
     brandProfileApi.getProfile(Number(adsRunId), activeWorkspace.id)
       .then((res) => {
-        const profile = res.data as any
+        const profile = res.data as { company_url?: string; status: string; profile_data?: Record<string, unknown> }
         if (!websiteUrl && profile.company_url) setWebsiteUrl(profile.company_url)
         if (profile.status === 'confirmed' && profile.profile_data) {
           const pd = profile.profile_data
-          if (!brandName && pd.company_name) setBrandName(pd.company_name)
+          if (!brandName && pd.company_name) setBrandName(pd.company_name as string)
           if (!usps) {
-            const products = (pd.products || []).slice(0, 3).join(', ')
-            const sector = pd.sector || ''
+            const products = ((pd.products as string[] | undefined) || []).slice(0, 3).join(', ')
+            const sector = (pd.sector as string) || ''
             if (products && sector) setUsps(`${products} -- ${sector}`)
             else if (products) setUsps(products)
           }
@@ -84,7 +78,7 @@ export default function Generation() {
 
     try {
       const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
-      setSeoResults((res.data as any).items || [])
+      setSeoResults(((res.data as { items?: SEOGeoItem[] }).items) || [])
     } catch (e) {
       console.error('Failed to fetch SEO results:', e)
     }
@@ -95,7 +89,7 @@ export default function Generation() {
 
     try {
       const res = await generationApi.getAdsRsa(runId, activeWorkspace.id)
-      const data = res.data as any
+      const data = res.data as AdsResult
       setAdsResults(data.total_groups > 0 ? data : null)
     } catch (e) {
       console.error('Failed to fetch Ads results:', e)
@@ -295,7 +289,7 @@ export default function Generation() {
                 Üretilen İçerikler ({seoResults.length})
               </h3>
               <div className="seo-results-grid">
-                {seoResults.map((item: any) => (
+                {seoResults.map((item) => (
                   <div key={item.id} className="seo-result-card glass-card">
                     <div className="seo-result-title">{item.title || item.keyword}</div>
                     <div className="seo-result-keyword">{item.keyword}</div>
@@ -394,19 +388,19 @@ export default function Generation() {
                 </div>
                 <div className="ads-stat glass-card">
                   <span className="ads-stat-value">
-                    {adsResults.total_headlines ?? adsResults.ad_groups?.reduce((s: number, g: any) => s + (g.headlines?.length || 0), 0) ?? 0}
+                    {adsResults.total_headlines ?? adsResults.ad_groups?.reduce((s: number, g: AdGroup) => s + (g.headlines?.length || 0), 0) ?? 0}
                   </span>
                   <span className="ads-stat-label">Başlık</span>
                 </div>
                 <div className="ads-stat glass-card">
                   <span className="ads-stat-value">
-                    {adsResults.total_descriptions ?? adsResults.ad_groups?.reduce((s: number, g: any) => s + (g.descriptions?.length || 0), 0) ?? 0}
+                    {adsResults.total_descriptions ?? adsResults.ad_groups?.reduce((s: number, g: AdGroup) => s + (g.descriptions?.length || 0), 0) ?? 0}
                   </span>
                   <span className="ads-stat-label">Açıklama</span>
                 </div>
                 <div className="ads-stat glass-card">
                   <span className="ads-stat-value">
-                    {adsResults.total_negative_keywords ?? adsResults.ad_groups?.reduce((s: number, g: any) => s + (g.negative_keywords?.length || 0), 0) ?? 0}
+                    {adsResults.total_negative_keywords ?? adsResults.ad_groups?.reduce((s: number, g: AdGroup) => s + (g.negative_keywords?.length || 0), 0) ?? 0}
                   </span>
                   <span className="ads-stat-label">Negatif Kelime</span>
                 </div>
@@ -427,7 +421,7 @@ export default function Generation() {
 
               {/* Ad Groups Detail */}
               <div className="seo-results-grid" style={{ marginTop: 'var(--space-md)' }}>
-                {adsResults.ad_groups?.map((group: any, idx: number) => (
+                {adsResults.ad_groups?.map((group: AdGroup, idx: number) => (
                   <div key={idx} className="seo-result-card glass-card">
                     <div className="seo-result-title">{group.name}</div>
                     <div className="seo-result-keyword">{group.theme}</div>

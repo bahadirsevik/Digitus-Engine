@@ -6,7 +6,7 @@ export interface ActiveWorkspace {
   name: string;
   company_url: string;
   status: string;
-  profile_data: any;
+  profile_data: Record<string, unknown> | null;
   suggested_keywords: string[] | null;
   default_geo_target_id?: string | null;
   default_language_id?: string | null;

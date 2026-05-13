@@ -3,15 +3,10 @@ import { ChevronRight, ChevronLeft, Sparkles, Check } from 'lucide-react'
 import { useSocialStore } from '../stores/socialStore'
 import { useBrandStore } from '../stores/brandStore'
 import { scoringApi, brandProfileApi, generationApi } from '../services/api'
+import type { ScoringRun } from '../types/models'
+import type { Idea } from '../stores/socialStore'
 import ErrorBanner from './ErrorBanner'
 import './SocialStepper.css'
-
-interface ScoringRun {
-  id: number
-  run_name?: string
-  status: string
-  created_at: string
-}
 
 export default function SocialStepper() {
   const store = useSocialStore()
@@ -105,11 +100,11 @@ export default function SocialStepper() {
         store.brandName,
         activeWorkspace.id,
       )
-      const data = res.data as any
+      const data = res.data as { ideas?: unknown[] } | Array<{ ideas?: unknown[] }>
       const allIdeas = Array.isArray(data)
-        ? data.flatMap((cat: any) => cat.ideas || [])
-        : data.ideas || []
-      store.setIdeas(allIdeas)
+        ? data.flatMap((cat) => cat.ideas || [])
+        : (data.ideas || [])
+      store.setIdeas(allIdeas as Idea[])
       store.setStep(3)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fikir üretimi başarısız')

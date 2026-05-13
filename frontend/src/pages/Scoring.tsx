@@ -13,27 +13,10 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { scoringApi, ScoringRunCreate } from "../services/api";
+import type { ScoringRun } from "../types/models";
 import { useBrandStore } from "../stores/brandStore";
 import "./Scoring.css";
 
-interface ScoringRun {
-  id: number;
-  run_name?: string;
-  status: string;
-  ads_capacity: number;
-  seo_capacity: number;
-  social_capacity: number;
-  default_relevance_coefficient?: number;
-  keyword_source_filter?: "csv" | "google_ads_api" | null;
-  brand_profile_id?: number;
-  enable_ads?: boolean;
-  enable_seo?: boolean;
-  enable_social?: boolean;
-  keyword_selection_mode?: string;
-  keyword_limit?: number;
-  skip_relevance?: boolean;
-  created_at: string;
-}
 
 interface KeywordScore {
   keyword_id: number;

@@ -12,7 +12,7 @@ interface Category {
   keyword_count: number
 }
 
-interface Idea {
+export interface Idea {
   id: number
   category_id: number
   idea_title: string

@@ -15,6 +15,7 @@ import {
   KeywordRelevanceResponse,
   RelevanceComputeResponse,
 } from "../services/api";
+import type { ScoringRun } from "../types/models";
 import "./Relevance.css";
 
 type SortField = "keyword" | "relevance_score" | "matched_anchor" | "method";
@@ -24,7 +25,7 @@ export default function Relevance() {
   const navigate = useNavigate();
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
 
-  const [scoringRuns, setScoringRuns] = useState<any[]>([]);
+  const [scoringRuns, setScoringRuns] = useState<ScoringRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [relevanceData, setRelevanceData] = useState<
     KeywordRelevanceResponse[]
@@ -52,8 +53,8 @@ export default function Relevance() {
     }
     scoringApi
       .listRuns({ limit: 100, brand_profile_id: activeWorkspace.id })
-      .then((res: any) => {
-        const runs = (res.data || []).filter((r: any) =>
+      .then((res) => {
+        const runs = ((res.data as ScoringRun[]) || []).filter((r) =>
           [
             "scored",
             "relevance_computing",
@@ -76,11 +77,11 @@ export default function Relevance() {
     }
     brandProfileApi
       .getRelevance(selectedRunId, 0, activeWorkspace.id)
-      .then((res: any) => {
-        const data = res.data || [];
+      .then((res) => {
+        const data = (res.data as KeywordRelevanceResponse[]) || [];
         setRelevanceData(data);
         if (data.length > 0) {
-          const scores = data.map((d: any) => d.relevance_score as number);
+          const scores = data.map((d) => d.relevance_score as number);
           setSummary({
             average:
               scores.reduce((a: number, b: number) => a + b, 0) / scores.length,
@@ -104,10 +105,10 @@ export default function Relevance() {
       const result = res.data as RelevanceComputeResponse;
       // Reload data
       const reloadRes = await brandProfileApi.getRelevance(selectedRunId, 0, activeWorkspace.id);
-      const data = reloadRes.data || [];
+      const data = (reloadRes.data as KeywordRelevanceResponse[]) || [];
       setRelevanceData(data);
       if (data.length > 0) {
-        const scores = data.map((d: any) => d.relevance_score as number);
+        const scores = data.map((d) => d.relevance_score as number);
         setSummary({
           average:
             scores.reduce((a: number, b: number) => a + b, 0) / scores.length,

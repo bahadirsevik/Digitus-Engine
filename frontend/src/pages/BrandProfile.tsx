@@ -138,7 +138,7 @@ function buildProfilePayload(
   return payload;
 }
 
-function hasGeneratedProfile(workspace: { profile_data: any; status: string }) {
+function hasGeneratedProfile(workspace: { profile_data: Record<string, unknown> | null; status: string }) {
   const profile = workspace.profile_data;
   if (!profile || typeof profile !== "object") return false;
   const anchors = Array.isArray(profile.anchor_texts)
@@ -152,7 +152,7 @@ interface WorkspaceListRow {
   name: string;
   company_url: string;
   status: string;
-  profile_data: any;
+  profile_data: Record<string, unknown> | null;
   suggested_keywords?: string[] | null;
   default_geo_target_id?: string | null;
   default_language_id?: string | null;
@@ -648,7 +648,7 @@ export default function BrandProfile() {
               <Globe size={12} /> {ws.company_url}
             </p>
             <p className="card-sector">
-              {ws.profile_data?.sector || "Sektör bilgisi yok"}
+              {(ws.profile_data?.sector as string) || "Sektör bilgisi yok"}
             </p>
             <div className="card-footer">
               <span>{ws.run_count} analiz</span>

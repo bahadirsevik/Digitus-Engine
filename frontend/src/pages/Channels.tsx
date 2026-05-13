@@ -4,6 +4,7 @@ import axios from "axios";
 import { Zap, RefreshCw, ArrowRight, AlertCircle } from "lucide-react";
 import { scoringApi, channelsApi } from "../services/api";
 import { useBrandStore } from "../stores/brandStore";
+import type { ScoringRun } from "../types/models";
 import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from "../hooks/useTaskPolling";
 import TaskProgress from "../components/TaskProgress";
 import "./Channels.css";
@@ -33,17 +34,6 @@ function extractErrorMessage(error: unknown): string {
   return "Beklenmeyen hata";
 }
 
-interface ScoringRun {
-  id: number;
-  run_name?: string;
-  status: string;
-  default_relevance_coefficient?: number;
-  brand_profile_id?: number;
-  enable_ads?: boolean;
-  enable_seo?: boolean;
-  enable_social?: boolean;
-  skip_relevance?: boolean;
-}
 
 export default function Channels() {
   const navigate = useNavigate();
