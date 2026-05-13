@@ -11,10 +11,7 @@ Endpoint kodu sadece tek satır `obj = verify_X(...)` çağırarak işini bitiri
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import HTTPException
-from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.database.models import BrandProfile, ExportJob, ScoringRun, TaskResult
@@ -42,34 +39,24 @@ def verify_workspace(db: Session, brand_profile_id: int) -> BrandProfile:
 def verify_scoring_run(
     db: Session,
     run_id: int,
-    brand_profile_id: Optional[int] = None,
-    *,
-    mutating: bool = False,
+    brand_profile_id: int,
 ) -> ScoringRun:
     """Scoring run var mı + verilen workspace'e ait mi?
 
-    Args:
-        db: Database session.
-        run_id: ScoringRun ID.
-        brand_profile_id: Optional workspace scope.
-            - `mutating=True` iken zorunlu (None ise 400).
-            - `mutating=False` iken opsiyonel; None geçilirse geçiş dönemi
-              warning'i loglanır ve sadece existence kontrolü yapılır.
-        mutating: Endpoint state değiştiriyor mu (POST/DELETE/EXECUTE).
-            Read-only endpoint'ler False bırakır.
-
-    Returns:
-        ScoringRun instance.
+    brand_profile_id her zaman zorunlu (read veya mutating fark etmez).
+    mutating parametresi artık yalnızca dökümantasyon amaçlı; davranışı değiştirmez.
 
     Raises:
-        HTTPException 400: mutating ama brand_profile_id None.
+        HTTPException 400: brand_profile_id None.
         HTTPException 404: run bulunamadı veya workspace ile eşleşmiyor.
     """
-    if mutating and brand_profile_id is None:
+    if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
             detail="brand_profile_id is required",
         )
+
+    verify_workspace(db, brand_profile_id)
 
     run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
     if not run:
@@ -78,19 +65,10 @@ def verify_scoring_run(
             detail="scoring run not found",
         )
 
-    if brand_profile_id is not None:
-        # Workspace must exist + match.
-        verify_workspace(db, brand_profile_id)
-        if run.brand_profile_id != brand_profile_id:
-            raise HTTPException(
-                status_code=404,
-                detail="scoring run not found in workspace",
-            )
-    else:
-        logger.warning(
-            "legacy scoring run access run_id={} — brand_profile_id omitted; "
-            "this code path will be removed in P4",
-            run_id,
+    if run.brand_profile_id != brand_profile_id:
+        raise HTTPException(
+            status_code=404,
+            detail="scoring run not found in workspace",
         )
 
     return run

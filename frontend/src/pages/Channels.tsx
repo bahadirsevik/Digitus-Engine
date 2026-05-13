@@ -19,13 +19,6 @@ interface PoolKeyword {
   adjusted_score?: number | null;
 }
 
-interface ScoringRun {
-  id: number;
-  run_name?: string;
-  status: string;
-  default_relevance_coefficient?: number;
-}
-
 function normalizeCoefficient(value: number): number {
   if (Number.isNaN(value)) return 1.0;
   return Math.min(3, Math.max(0.1, value));

@@ -58,7 +58,7 @@ def create_export(
     db: Session = Depends(get_db),
 ):
     """Export başlatır. Plan2 §P2: Celery task + DB-backed status."""
-    verify_scoring_run(db, request.scoring_run_id, brand_profile_id, mutating=True)
+    verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
 
     export_id = str(uuid.uuid4())
     job = ExportJob(
@@ -138,7 +138,7 @@ def list_exports_for_run(
     db: Session = Depends(get_db),
 ):
     """Bir scoring run için workspace içindeki export job'larını listeler."""
-    verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     jobs: List[ExportJob] = (
         db.query(ExportJob)
@@ -170,7 +170,7 @@ def create_simple_export(
     from app.exporters import CsvExporter, DocxExporter, ExcelExporter, PdfExporter
     from app.schemas.export import ExportSectionEnum
 
-    verify_scoring_run(db, scoring_run_id, brand_profile_id, mutating=True)
+    verify_scoring_run(db, scoring_run_id, brand_profile_id)
 
     try:
         format_enum = ExportFormatEnum(format.lower())

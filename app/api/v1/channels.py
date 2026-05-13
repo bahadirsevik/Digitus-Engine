@@ -35,7 +35,7 @@ def run_channel_assignment(
     from app.tasks.task_status import create_task_record
     from app.database.models import TaskResult
 
-    scoring_run = verify_scoring_run(db, run_id, brand_profile_id, mutating=True)
+    scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
 
     # Guard: prevent re-assignment while content generation tasks are active.
     active_generation_task = (
@@ -84,7 +84,7 @@ def get_channel_pools(
     ai: AIService = Depends(get_ai),
 ):
     """Get all channel pools for a scoring run. Read: opsiyonel workspace."""
-    verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    verify_scoring_run(db, run_id, brand_profile_id)
     engine = ChannelEngine(db, ai)
     return engine.get_channel_pools(run_id)
 
@@ -101,7 +101,7 @@ def get_single_channel_pool(
     if channel.upper() not in ["ADS", "SEO", "SOCIAL"]:
         raise HTTPException(status_code=400, detail="Invalid channel")
 
-    verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    verify_scoring_run(db, run_id, brand_profile_id)
     engine = ChannelEngine(db, ai)
     pools = engine.get_channel_pools(run_id)
 

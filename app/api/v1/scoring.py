@@ -82,7 +82,7 @@ def execute_scoring(
     from app.core.scoring.state_machine import transition_atomic
     from app.tasks.scoring_tasks import _run_relevance_computation
 
-    run = verify_scoring_run(db, run_id, brand_profile_id, mutating=True)
+    run = verify_scoring_run(db, run_id, brand_profile_id)
 
     engine = ScoreEngine(db)
     try:
@@ -127,7 +127,7 @@ def get_scoring_run(
     db: Session = Depends(get_db),
 ):
     """Get details of a specific scoring run."""
-    run = verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    run = verify_scoring_run(db, run_id, brand_profile_id)
     return ScoringRunStatus.model_validate(run)
 
 
@@ -140,7 +140,7 @@ def delete_scoring_run(
     """Delete a scoring run. Mutating: brand_profile_id zorunlu."""
     from app.database import crud
 
-    verify_scoring_run(db, run_id, brand_profile_id, mutating=True)
+    verify_scoring_run(db, run_id, brand_profile_id)
     success = crud.delete_scoring_run(db, run_id)
     if not success:
         # Çok rare race: verify sonrası başkası silmiş.
@@ -156,7 +156,7 @@ def get_scoring_results(
     db: Session = Depends(get_db),
 ):
     """Get scored keywords for a run."""
-    run = verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    run = verify_scoring_run(db, run_id, brand_profile_id)
 
     scores = (
         db.query(KeywordScore, Keyword)
@@ -198,7 +198,7 @@ def get_top_by_channel(
     if channel.upper() not in ["ADS", "SEO", "SOCIAL"]:
         raise HTTPException(status_code=400, detail="Invalid channel. Use ADS, SEO, or SOCIAL")
 
-    verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     engine = ScoreEngine(db)
     top_keywords = engine.get_top_keywords_by_channel(run_id, channel.upper(), limit)
@@ -219,7 +219,7 @@ def export_scoring_xlsx(
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
-    run = verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+    run = verify_scoring_run(db, run_id, brand_profile_id)
 
     scores = (
         db.query(KeywordScore, Keyword)

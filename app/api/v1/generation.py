@@ -36,16 +36,6 @@ from app.generators.ads import AdsGenerator
 router = APIRouter()
 
 
-def _verify_run_workspace_if_present(
-    db: Session,
-    scoring_run_id: int,
-    brand_profile_id: Optional[int],
-    *,
-    mutating: bool,
-) -> None:
-    if brand_profile_id is not None:
-        verify_scoring_run(db, scoring_run_id, brand_profile_id, mutating=mutating)
-
 
 # ==================== SEO+GEO ENDPOINTS (Roadmap2 Bölüm 6) ====================
 
@@ -82,23 +72,18 @@ def generate_seo_geo_bulk(
     scoring_run_id: int,
     limit: Optional[int] = Query(None, ge=1, le=100, description="Maximum contents to generate"),
     tone: str = Query("informative", description="Content tone"),
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """
     Generate SEO+GEO content in bulk as a background Celery task.
-    
+
     Returns task_id for polling progress via /api/v1/tasks/{task_id}.
-    
-    Args:
-        scoring_run_id: ID of the scoring run to use
-        limit: Maximum number of contents to generate (optional)
-        tone: Content tone (informative, professional, casual)
     """
     from app.database.models import ChannelPool, ScoringRun
     from app.tasks.generation_tasks import start_bulk_seo_generation
 
-    _verify_run_workspace_if_present(db, scoring_run_id, brand_profile_id, mutating=True)
+    verify_scoring_run(db, scoring_run_id, brand_profile_id)
 
     # Validate scoring run exists
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
@@ -264,13 +249,13 @@ def list_seo_geo_contents(
     scoring_run_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db)
 ):
     """
     List all SEO+GEO contents for a scoring run.
     """
-    _verify_run_workspace_if_present(db, scoring_run_id, brand_profile_id, mutating=False)
+    verify_scoring_run(db, scoring_run_id, brand_profile_id)
 
     # Get keywords from SEO pool for this scoring run
     pool_items = db.query(ChannelPool).filter(
@@ -330,23 +315,13 @@ def list_seo_geo_contents(
 @router.post("/ads/rsa", response_model=AdsGenerateResponse)
 def generate_ads_rsa(
     request: AdsGenerateRequest,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
     """
     Generate complete RSA (Responsive Search Ads) set for ADS pool keywords.
-    
-    This endpoint:
-    1. Gets all keywords from the ADS pool for the specified scoring run
-    2. Groups keywords by purchase intent (3-7 keywords per group)
-    3. Generates RSA components for each group:
-       - 3-15 Headlines (max 30 chars each)
-       - 2-4 Descriptions (max 90 chars each)
-       - 10+ Negative keywords
-    4. Validates all components (DKI format, character limits)
-    5. Saves to database with atomic transaction
-    
+
     Args:
         request: Generation settings including scoring_run_id, brand info, options
     
@@ -354,7 +329,7 @@ def generate_ads_rsa(
         Complete RSA set with validation summary
     """
     try:
-        _verify_run_workspace_if_present(db, request.scoring_run_id, brand_profile_id, mutating=True)
+        verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
 
         resolver = BrandDefaultsResolver(db)
         defaults = resolver.resolve(request.scoring_run_id)
@@ -381,17 +356,15 @@ def generate_ads_rsa(
 @router.get("/ads/rsa/{scoring_run_id}", response_model=AdGroupListResponse)
 def get_ads_groups(
     scoring_run_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
     """
     Get all ad groups for a scoring run.
-    
-    Returns list of ad groups with their headlines, descriptions, and negative keywords.
     """
     try:
-        _verify_run_workspace_if_present(db, scoring_run_id, brand_profile_id, mutating=False)
+        verify_scoring_run(db, scoring_run_id, brand_profile_id)
 
         generator = AdsGenerator(db, ai)
         result = generator.get_ad_groups(scoring_run_id)
@@ -505,18 +478,13 @@ from app.schemas.social import (
 @router.post("/social/categories", response_model=SocialCategoriesResponse)
 def generate_social_categories(
     request: SocialCategoriesRequest,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Phase 1: Generate content categories from SOCIAL pool keywords.
-    
-    Categories help organize content by type:
-    - educational, product_benefit, social_proof, brand_story, community, trending
-    """
+    """Phase 1: Generate content categories from SOCIAL pool keywords."""
     try:
-        _verify_run_workspace_if_present(db, request.scoring_run_id, brand_profile_id, mutating=True)
+        verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
 
         resolver = BrandDefaultsResolver(db)
         defaults = resolver.resolve(request.scoring_run_id)
@@ -541,18 +509,11 @@ def generate_social_categories(
 def generate_social_ideas(
     request: SocialIdeasRequest,
     brand_name: Optional[str] = Query(None, description="Brand name for personalization"),
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Phase 2: Generate content ideas for selected categories.
-
-    Each idea includes:
-    - Target platform (instagram, tiktok, twitter, linkedin, youtube)
-    - Content format (reels, carousel, story, post, thread, short)
-    - Trend alignment score (0-1) - NOT viral guarantee
-    """
+    """Phase 2: Generate content ideas for selected categories."""
     try:
         resolver = BrandDefaultsResolver(db)
         try:
@@ -561,7 +522,7 @@ def generate_social_ideas(
             status = 400 if e.code in ("mixed_run", "empty_list") else 404
             raise HTTPException(status_code=status, detail=str(e))
 
-        _verify_run_workspace_if_present(db, run_id, brand_profile_id, mutating=True)
+        verify_scoring_run(db, run_id, brand_profile_id)
 
         defaults = resolver.resolve(run_id)
         effective_brand_name = resolver.safe_str(brand_name) or defaults.get("brand_name", "") or "Marka"
@@ -580,21 +541,11 @@ def generate_social_ideas(
 @router.post("/social/contents", response_model=SocialContentsResponse)
 def generate_social_contents(
     request: SocialContentsRequest,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Phase 3: Generate full content packages for selected ideas.
-    
-    Each content includes:
-    - JSONB hooks (flexible, 3+ different styles)
-    - Caption with platform-specific limits
-    - Scenario/script for video/carousel
-    - Visual/video suggestions
-    - CTA and hashtags (10-15)
-    - Industry posting suggestion (NOT user-specific)
-    """
+    """Phase 3: Generate full content packages for selected ideas."""
     try:
         resolver = BrandDefaultsResolver(db)
         try:
@@ -603,7 +554,7 @@ def generate_social_contents(
             status = 400 if e.code in ("mixed_run", "empty_list") else 404
             raise HTTPException(status_code=status, detail=str(e))
 
-        _verify_run_workspace_if_present(db, run_id, brand_profile_id, mutating=True)
+        verify_scoring_run(db, run_id, brand_profile_id)
 
         defaults = resolver.resolve(run_id)
         effective_brand_name = resolver.safe_str(request.brand_name) or defaults.get("brand_name", "") or "Marka"
@@ -626,15 +577,13 @@ def generate_social_contents(
 @router.post("/social/bulk", response_model=SocialBulkResponse)
 def generate_social_bulk(
     request: SocialBulkRequest,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Full 3-phase pipeline with automatic idea selection.
-    
-    Automatically selects ideas based on trend_alignment threshold.
-    """
+    """Full 3-phase social pipeline with automatic idea selection."""
     try:
+        verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
         resolver = BrandDefaultsResolver(db)
         defaults = resolver.resolve(request.scoring_run_id)
         effective_brand_name = resolver.safe_str(request.brand_name) or defaults.get("brand_name", "") or "Marka"
@@ -657,15 +606,13 @@ def generate_social_bulk(
 @router.get("/social/{scoring_run_id}", response_model=SocialFullResponse)
 def get_social_content(
     scoring_run_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Get all social media content for a scoring run.
-    
-    Returns categories, ideas, and contents.
-    """
+    """Get all social media content for a scoring run."""
     try:
+        verify_scoring_run(db, scoring_run_id, brand_profile_id)
         generator = SocialGenerator(db, ai)
         return generator.get_all(scoring_run_id)
     except Exception as e:

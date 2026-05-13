@@ -11,7 +11,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from app.tasks.celery_app import celery_app
 from app.database.connection import SessionLocal
 from app.tasks.task_status import update_task_status, create_task_record
-from app.core.logging.config import get_task_logger
+from app.core.logging_config import get_task_logger
 
 logger = get_task_logger()
 

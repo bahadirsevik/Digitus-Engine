@@ -300,7 +300,7 @@ export default function Generation() {
                     <div className="seo-result-title">{item.title || item.keyword}</div>
                     <div className="seo-result-keyword">{item.keyword}</div>
                     {item.is_stale && (
-                      <div className="score-badge combined">GÃ¼ncel DeÄŸil</div>
+                      <div className="score-badge combined">Güncel Değil</div>
                     )}
                     <div className="seo-result-scores">
                       <span className="score-badge seo">SEO: {(item.seo_score * 100).toFixed(0)}%</span>

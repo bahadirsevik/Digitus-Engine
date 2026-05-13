@@ -112,7 +112,7 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
             >
-              <option value="">Hesap seÃ§in</option>
+              <option value="">Hesap seçin</option>
               {customers.map((id) => (
                 <option key={id} value={id}>
                   {id}

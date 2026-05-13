@@ -157,7 +157,7 @@ def get_profile(
 ):
     """Get the brand profile for a scoring run."""
     if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+        verify_scoring_run(db, run_id, brand_profile_id)
 
     profile = db.query(BrandProfile).filter(
         BrandProfile.scoring_run_id == run_id
@@ -193,7 +193,7 @@ def analyze_profile(
         )
 
     if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id, mutating=True)
+        verify_scoring_run(db, run_id, brand_profile_id)
 
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
     if not scoring_run:
@@ -306,7 +306,7 @@ def compute_relevance(
         )
 
     if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id, mutating=True)
+        verify_scoring_run(db, run_id, brand_profile_id)
 
     # Yeni mimari: ScoringRun.brand_profile_id üzerinden; eski 1:1 fallback
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
@@ -414,7 +414,7 @@ def get_relevance_scores(
 ):
     """Get keyword relevance scores for a run."""
     if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id, mutating=False)
+        verify_scoring_run(db, run_id, brand_profile_id)
 
     results = (
         db.query(KeywordRelevance, Keyword)

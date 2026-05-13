@@ -30,7 +30,7 @@ from app.core.constants import (
     PREFILTER_RETRIABLE_PATTERNS,
     ADS_HARD_NEGATIVE_TERMS,
 )
-from app.core.logging.config import get_task_logger
+from app.core.logging_config import get_task_logger
 
 logger = get_task_logger()
 

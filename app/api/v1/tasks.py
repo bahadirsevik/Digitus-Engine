@@ -74,7 +74,7 @@ def get_tasks_for_run(
     from app.core.workspace import verify_scoring_run
 
     workspace_id = _require_workspace(brand_profile_id)
-    verify_scoring_run(db, run_id, workspace_id, mutating=True)
+    verify_scoring_run(db, run_id, workspace_id)
 
     tasks = get_tasks_by_run(run_id)
     return TaskListResponse(
