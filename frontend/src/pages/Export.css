@@ -123,6 +123,74 @@
   animation: fadeIn 0.3s ease;
 }
 
+.export-error {
+  color: var(--error);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.export-progress {
+  margin-top: var(--space-lg);
+}
+
+.export-progress .btn {
+  margin-top: var(--space-sm);
+}
+
+.export-history {
+  margin-bottom: var(--space-xl);
+}
+
+.export-history h3 {
+  margin-bottom: var(--space-md);
+}
+
+.export-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.export-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.export-history-row:last-child {
+  border-bottom: none;
+}
+
+.export-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 86px;
+  margin-right: var(--space-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.export-status-completed { color: var(--success); }
+.export-status-failed { color: var(--error); }
+.export-status-processing { color: var(--accent-primary); }
+.export-status-pending { color: var(--warning); }
+
+.export-file {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.export-progress-value {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  text-align: right;
+}
+
 /* Export Info */
 .export-info {
   background: var(--bg-secondary);
@@ -151,5 +219,14 @@
   
   .channel-options {
     flex-direction: column;
+  }
+
+  .export-history-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .export-progress-value {
+    text-align: left;
   }
 }

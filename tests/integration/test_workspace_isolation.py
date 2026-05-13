@@ -505,6 +505,137 @@ def test_export_status_cross_workspace_returns_404(client, db_session, make_work
     assert resp.status_code == 404
 
 
+def test_create_export_enqueue_failure_marks_job_failed(
+    client, db_session, make_workspace, make_scoring_run, monkeypatch
+):
+    """If Celery enqueue fails after DB commit, the ExportJob must not stay pending forever."""
+    from app.database.models import ExportJob
+    from app.tasks.export_tasks import run_export_task
+
+    ws = make_workspace(name="A")
+    run = make_scoring_run(brand_profile_id=ws.id)
+
+    def _raise_delay(export_id):
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr(run_export_task, "delay", _raise_delay)
+
+    resp = client.post(
+        "/api/v1/export/",
+        params={"brand_profile_id": ws.id},
+        json={
+            "scoring_run_id": run.id,
+            "format": "excel",
+            "sections": ["summary"],
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "failed"
+    assert body["error_message"]
+
+    job = db_session.query(ExportJob).filter(ExportJob.id == body["export_id"]).one()
+    assert job.status == "failed"
+
+
+def test_export_task_updates_export_job_status_and_filepath(
+    db_session, make_workspace, make_scoring_run, monkeypatch
+):
+    """The Celery implementation writes progress and output metadata to ExportJob."""
+    from pathlib import Path
+    import uuid
+
+    from app.database.models import ExportJob
+    from app.tasks import export_tasks
+
+    ws = make_workspace(name="A")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    export_id = str(uuid.uuid4())
+    job = ExportJob(
+        id=export_id,
+        brand_profile_id=ws.id,
+        scoring_run_id=run.id,
+        status="pending",
+        progress=0,
+        format="excel",
+        sections=["summary"],
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    class FakeCollector:
+        include_stale_content = False
+
+    class FakeExporter:
+        def __init__(self):
+            self.data_collector = FakeCollector()
+
+        def export(self, scoring_run_id, sections, filepath):
+            Path(filepath).write_text(f"run={scoring_run_id};sections={len(sections)}")
+            return filepath
+
+    monkeypatch.setattr(export_tasks, "_get_exporter", lambda format_enum, db: FakeExporter())
+
+    export_tasks.execute_export_job(export_id)
+
+    db_session.expire_all()
+    updated = db_session.query(ExportJob).filter(ExportJob.id == export_id).one()
+    assert updated.status == "completed"
+    assert updated.progress == 100
+    assert updated.file_name
+    assert updated.filepath
+    assert Path(updated.filepath).exists()
+
+
+def test_export_task_two_jobs_do_not_overwrite_each_other(
+    db_session, make_workspace, make_scoring_run, monkeypatch
+):
+    """Two jobs processed by separate task executions keep independent DB status rows."""
+    from pathlib import Path
+    import uuid
+
+    from app.database.models import ExportJob
+    from app.tasks import export_tasks
+
+    ws = make_workspace(name="A")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    export_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+    for export_id in export_ids:
+        db_session.add(ExportJob(
+            id=export_id,
+            brand_profile_id=ws.id,
+            scoring_run_id=run.id,
+            status="pending",
+            progress=0,
+            format="excel",
+            sections=["summary"],
+        ))
+    db_session.commit()
+
+    class FakeCollector:
+        include_stale_content = False
+
+    class FakeExporter:
+        def __init__(self):
+            self.data_collector = FakeCollector()
+
+        def export(self, scoring_run_id, sections, filepath):
+            Path(filepath).write_text(filepath)
+            return filepath
+
+    monkeypatch.setattr(export_tasks, "_get_exporter", lambda format_enum, db: FakeExporter())
+
+    for export_id in export_ids:
+        export_tasks.execute_export_job(export_id)
+
+    db_session.expire_all()
+    jobs = db_session.query(ExportJob).filter(ExportJob.id.in_(export_ids)).all()
+    assert {job.status for job in jobs} == {"completed"}
+    assert {job.progress for job in jobs} == {100}
+    assert len({job.filepath for job in jobs}) == 2
+
+
 def test_list_exports_for_run_requires_brand_profile_id(
     client, make_workspace, make_scoring_run
 ):

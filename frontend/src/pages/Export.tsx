@@ -1,51 +1,133 @@
-import { useState, useEffect } from 'react'
-import { Download, FileText, Table, FileSpreadsheet, CheckCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Download, FileSpreadsheet, FileText, Table, CheckCircle } from 'lucide-react'
+import TaskProgress from '../components/TaskProgress'
 import { scoringApi, exportApi, ExportRequest } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import './Export.css'
+
+type ExportFormat = 'docx' | 'pdf' | 'excel'
+type ExportStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+interface ExportJobStatus {
+  export_id: string
+  status: ExportStatus
+  progress: number
+  file_name?: string | null
+  error_message?: string | null
+  created_at?: string | null
+}
 
 export default function Export() {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const [runs, setRuns] = useState<any[]>([])
   const [selectedRun, setSelectedRun] = useState<number | null>(null)
-  const [format, setFormat] = useState<'docx' | 'pdf' | 'excel'>('excel')
+  const [format, setFormat] = useState<ExportFormat>('excel')
   const [channels, setChannels] = useState<string[]>(['ADS', 'SEO', 'SOCIAL'])
   const [includeStaleContent, setIncludeStaleContent] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [activeExport, setActiveExport] = useState<ExportJobStatus | null>(null)
+  const [recentExports, setRecentExports] = useState<ExportJobStatus[]>([])
 
   useEffect(() => {
     fetchRuns()
   }, [activeWorkspace?.id])
 
+  useEffect(() => {
+    if (!selectedRun || !activeWorkspace?.id) {
+      setRecentExports([])
+      return
+    }
+
+    exportApi
+      .listForRun(selectedRun, activeWorkspace.id)
+      .then((res) => setRecentExports(res.data.exports || []))
+      .catch((err) => console.error('Export history failed:', err))
+  }, [selectedRun, activeWorkspace?.id])
+
+  useEffect(() => {
+    if (!activeExport || !activeWorkspace?.id) return
+    if (activeExport.status === 'completed' || activeExport.status === 'failed') return
+
+    const interval = window.setInterval(async () => {
+      try {
+        const statusRes = await exportApi.status(activeExport.export_id, activeWorkspace.id)
+        const nextStatus = statusRes.data as ExportJobStatus
+        setActiveExport(nextStatus)
+        setRecentExports((prev) => {
+          const others = prev.filter((job) => job.export_id !== nextStatus.export_id)
+          return [nextStatus, ...others]
+        })
+        if (nextStatus.status === 'completed' || nextStatus.status === 'failed') {
+          setExporting(false)
+        }
+      } catch (err: any) {
+        setError(err?.response?.data?.detail || err?.message || 'Export durumu alınamadı')
+        setExporting(false)
+      }
+    }, 2000)
+
+    return () => window.clearInterval(interval)
+  }, [activeExport?.export_id, activeExport?.status, activeWorkspace?.id])
+
   const fetchRuns = async () => {
     if (!activeWorkspace?.id) {
       setRuns([])
       setSelectedRun(null)
+      setRecentExports([])
       return
     }
+
     try {
       const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
       setRuns(res.data.filter((r: any) => r.status === 'completed') || [])
-    } catch (error) {
-      console.error('Dışa aktarım çalışmaları yüklenemedi:', error)
+    } catch (err) {
+      console.error('Export runs failed:', err)
     }
   }
 
   const toggleChannel = (channel: string) => {
-    if (channels.includes(channel)) {
-      setChannels(channels.filter(c => c !== channel))
-    } else {
-      setChannels([...channels, channel])
+    setChannels((prev) =>
+      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel],
+    )
+  }
+
+  const downloadExport = async (job: ExportJobStatus) => {
+    if (!activeWorkspace?.id || job.status !== 'completed') return
+
+    try {
+      const downloadRes = await exportApi.download(job.export_id, activeWorkspace.id)
+      const contentDisposition = downloadRes.headers['content-disposition']
+      let filename = job.file_name || `digitus_rapor.${format === 'excel' ? 'xlsx' : format}`
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";\n]+)"?/)
+        if (match) filename = match[1]
+      }
+
+      const url = window.URL.createObjectURL(new Blob([downloadRes.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Dosya indirilemedi')
     }
   }
 
   const handleExport = async () => {
-    if (!selectedRun) return
-    if (!activeWorkspace?.id) return
+    if (!selectedRun || !activeWorkspace?.id) return
 
     setExporting(true)
     setSuccess(false)
+    setError(null)
+    setActiveExport(null)
 
     try {
       const req: ExportRequest = {
@@ -53,62 +135,20 @@ export default function Export() {
         format,
         sections: ['all'],
         include_compliance_details: true,
-        include_stale_content: includeStaleContent
+        include_stale_content: includeStaleContent,
       }
 
       const res = await exportApi.create(req, activeWorkspace.id)
-      const exportId = res.data.export_id
-
-      let attempts = 0
-      const maxAttempts = 60
-
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        const statusRes = await exportApi.status(exportId, activeWorkspace.id)
-        const status = statusRes.data.status
-
-        if (status === 'completed') {
-          const downloadRes = await exportApi.download(exportId, activeWorkspace.id)
-
-          const contentDisposition = downloadRes.headers['content-disposition']
-          let filename = `digitus_rapor.${format === 'excel' ? 'xlsx' : format}`
-          if (contentDisposition) {
-            const match = contentDisposition.match(/filename="?([^";\n]+)"?/)
-            if (match) filename = match[1]
-          }
-
-          const url = window.URL.createObjectURL(new Blob([downloadRes.data]))
-          const link = document.createElement('a')
-          link.href = url
-          link.setAttribute('download', filename)
-          document.body.appendChild(link)
-          link.click()
-          link.remove()
-          window.URL.revokeObjectURL(url)
-
-          setSuccess(true)
-          setTimeout(() => setSuccess(false), 3000)
-          break
-        } else if (status === 'failed') {
-          const errMsg = statusRes.data.error_message || 'Dışa aktarım başarısız'
-          alert(`Dışa aktarım hatası: ${errMsg}`)
-          break
-        }
-
-        attempts++
-      }
-
-      if (attempts >= maxAttempts) {
-        alert('Dışa aktarım zaman aşımına uğradı.')
-      }
-
-    } catch (error: any) {
-      console.error('Dışa aktarım hatası:', error)
-      const msg = error?.response?.data?.detail || error?.message || 'Bilinmeyen hata'
-      alert(`Dışa aktarım sırasında hata oluştu: ${msg}`)
+      const job = res.data as ExportJobStatus
+      setActiveExport(job)
+      setRecentExports((prev) => [job, ...prev.filter((item) => item.export_id !== job.export_id)])
+      if (job.status === 'failed') setExporting(false)
+    } catch (err: any) {
+      console.error('Export failed:', err)
+      const msg = err?.response?.data?.detail || err?.message || 'Bilinmeyen hata'
+      setError(`Dışa aktarım sırasında hata oluştu: ${msg}`)
+      setExporting(false)
     }
-
-    setExporting(false)
   }
 
   const formatOptions = [
@@ -133,7 +173,7 @@ export default function Export() {
             {runs.length === 0 ? (
               <p className="empty-text">Tamamlanmış skorlama çalışması yok</p>
             ) : (
-              runs.map(run => (
+              runs.map((run) => (
                 <button
                   key={run.id}
                   className={`option-btn ${selectedRun === run.id ? 'active' : ''}`}
@@ -149,11 +189,11 @@ export default function Export() {
         <div className="form-section">
           <h3>2. Dosya Formatı</h3>
           <div className="format-options">
-            {formatOptions.map(opt => (
+            {formatOptions.map((opt) => (
               <button
                 key={opt.value}
                 className={`format-btn ${format === opt.value ? 'active' : ''}`}
-                onClick={() => setFormat(opt.value as typeof format)}
+                onClick={() => setFormat(opt.value as ExportFormat)}
               >
                 <opt.icon size={24} />
                 <span>{opt.label}</span>
@@ -165,7 +205,7 @@ export default function Export() {
         <div className="form-section">
           <h3>3. Kanallar</h3>
           <div className="channel-options">
-            {['ADS', 'SEO', 'SOCIAL'].map(channel => (
+            {['ADS', 'SEO', 'SOCIAL'].map((channel) => (
               <label key={channel} className="channel-checkbox">
                 <input
                   type="checkbox"
@@ -205,8 +245,52 @@ export default function Export() {
               Dışa aktarım başarıyla tamamlandı!
             </div>
           )}
+
+          {error && <div className="export-error">{error}</div>}
         </div>
+
+        {activeExport && (
+          <div className="export-progress">
+            <TaskProgress
+              taskId={activeExport.export_id}
+              status={activeExport.status === 'processing' ? 'running' : activeExport.status}
+              progress={activeExport.progress}
+              errorMessage={activeExport.error_message || undefined}
+            />
+            {activeExport.status === 'completed' && (
+              <button className="btn btn-secondary" onClick={() => downloadExport(activeExport)}>
+                <Download size={18} />
+                İndir
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {recentExports.length > 0 && (
+        <div className="export-history glass-card">
+          <h3>Export Geçmişi</h3>
+          <div className="export-history-list">
+            {recentExports.map((job) => (
+              <div key={job.export_id} className="export-history-row">
+                <div>
+                  <span className={`export-status export-status-${job.status}`}>{job.status}</span>
+                  <span className="export-file">{job.file_name || job.export_id.slice(0, 8)}</span>
+                </div>
+                <span className="export-progress-value">{job.progress}%</span>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => downloadExport(job)}
+                  disabled={job.status !== 'completed'}
+                >
+                  <Download size={14} />
+                  İndir
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="export-info glass-card">
         <h3>Dışa Aktarım Bilgisi</h3>

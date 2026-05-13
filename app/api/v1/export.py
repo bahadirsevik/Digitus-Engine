@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.core.error_responses import safe_500_detail
 from app.core.workspace import verify_export_in_workspace, verify_scoring_run
 from app.database.models import ExportJob
 from app.dependencies import get_db
@@ -75,7 +76,13 @@ def create_export(
     db.refresh(job)
 
     from app.tasks.export_tasks import run_export_task
-    run_export_task.delay(export_id)
+    try:
+        run_export_task.delay(export_id)
+    except Exception as exc:
+        job.status = "failed"
+        job.error_message = safe_500_detail(exc, "Export kuyruğa alınamadı")
+        db.commit()
+        db.refresh(job)
 
     return _to_status_response(job)
 

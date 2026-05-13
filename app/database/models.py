@@ -813,11 +813,9 @@ class ExportJob(Base):
     __tablename__ = "export_jobs"
 
     id = Column(String(36), primary_key=True)  # UUID
-    brand_profile_id = Column(
-        Integer, ForeignKey("brand_profiles.id"), nullable=False, index=True
-    )
+    brand_profile_id = Column(Integer, ForeignKey("brand_profiles.id"), nullable=False)
     scoring_run_id = Column(Integer, ForeignKey("scoring_runs.id"), nullable=True)
-    status = Column(String(20), nullable=False, default="pending", index=True)
+    status = Column(String(20), nullable=False, default="pending")
     progress = Column(Integer, nullable=False, default=0)
     format = Column(String(10), nullable=True)
     sections = Column(JSON, nullable=True)
@@ -840,6 +838,7 @@ class ExportJob(Base):
         ),
         Index("idx_export_jobs_workspace", "brand_profile_id"),
         Index("idx_export_jobs_run", "scoring_run_id"),
+        Index("idx_export_jobs_status", "status"),
     )
 
 

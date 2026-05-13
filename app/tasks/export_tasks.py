@@ -38,8 +38,7 @@ def _file_extension(format_enum: ExportFormatEnum) -> str:
     }.get(format_enum, ".bin")
 
 
-@celery_app.task(bind=True, name="app.tasks.export_tasks.run_export_task")
-def run_export_task(self, export_job_id: str):
+def execute_export_job(export_job_id: str) -> None:
     """Run an export job identified by export_job_id (UUID string).
 
     Reads ExportJob row for parameters, writes results back to same row.
@@ -110,3 +109,8 @@ def run_export_task(self, export_job_id: str):
             pass
     finally:
         db.close()
+
+
+@celery_app.task(bind=True, name="app.tasks.export_tasks.run_export_task")
+def run_export_task(self, export_job_id: str):
+    execute_export_job(export_job_id)

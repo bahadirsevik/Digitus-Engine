@@ -84,7 +84,6 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int]):
     finally:
         db.close()
 
-
 @celery_app.task(name="generation.seo_finalize")
 def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: int):
     """Tüm SEO chunk'ları bitince çağrılır."""
@@ -302,76 +301,6 @@ def generate_social_task(
     except Exception as e:
         update_task_status(task_id, status='failed', error_message=str(e))
         logger.error(f"Social generation failed: {e}")
-        raise
-        
-    finally:
-        db.close()
-
-
-# ==================== EXPORT TASKS ====================
-
-@celery_app.task(bind=True, name="generation.export", time_limit=600)
-def export_task(
-    self,
-    export_id: str,
-    scoring_run_id: int,
-    format: str,
-    sections: List[str],
-    filepath: str
-):
-    """
-    Export dosyası oluşturma.
-    Background'da çalışır, dosyayı diske yazar.
-    """
-    import os
-    from app.exporters import DocxExporter, PdfExporter, ExcelExporter, CsvExporter
-    from app.schemas.export import ExportFormatEnum, ExportSectionEnum
-    
-    db = SessionLocal()
-    
-    update_task_status(export_id, status='running', progress=0)
-    
-    logger.info(f"Export started: {format} for run {scoring_run_id}")
-    
-    try:
-        # Format'a göre exporter seç
-        exporters = {
-            'docx': DocxExporter,
-            'pdf': PdfExporter,
-            'excel': ExcelExporter,
-            'csv': CsvExporter,
-        }
-        
-        exporter_class = exporters.get(format.lower())
-        if not exporter_class:
-            raise ValueError(f"Unknown format: {format}")
-        
-        exporter = exporter_class(db)
-        
-        update_task_status(export_id, progress=30)
-        
-        # Section enum'larına çevir
-        section_enums = [
-            ExportSectionEnum(s) if s != 'all' else ExportSectionEnum.ALL 
-            for s in sections
-        ]
-        
-        # Export yap
-        exporter.export(scoring_run_id, section_enums, filepath)
-        
-        update_task_status(
-            export_id,
-            status='completed',
-            progress=100,
-            result_data={'filepath': filepath, 'format': format}
-        )
-        
-        logger.info(f"Export completed: {filepath}")
-        return {'status': 'completed', 'filepath': filepath}
-        
-    except Exception as e:
-        update_task_status(export_id, status='failed', error_message=str(e))
-        logger.error(f"Export failed: {e}")
         raise
         
     finally:
