@@ -30,10 +30,6 @@ from app.schemas.keyword import (
 router = APIRouter()
 
 
-def _require_workspace(brand_profile_id: Optional[int]) -> int:
-    if brand_profile_id is None:
-        raise HTTPException(status_code=400, detail="brand_profile_id is required")
-    return brand_profile_id
 
 
 def _verify_keyword_in_workspace(
@@ -60,7 +56,7 @@ def list_keywords(
     limit: int = Query(100, ge=1, le=2000),
     active_only: bool = Query(True),
     sector: Optional[str] = Query(None),
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """List keywords in a workspace.
@@ -68,13 +64,12 @@ def list_keywords(
     `brand_profile_id` zorunludur. Yalnızca bu workspace'in WorkspaceKeyword
     bağlantılı keyword'leri döner.
     """
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, brand_profile_id)
 
     base_query = (
         db.query(Keyword, WorkspaceKeyword)
         .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
-        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
+        .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
     )
     if active_only:
         base_query = base_query.filter(Keyword.is_active == True)  # noqa: E712
@@ -107,13 +102,12 @@ def list_keywords(
 @router.get("/{keyword_id}", response_model=KeywordResponse)
 def get_keyword(
     keyword_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Get a specific keyword by ID. The keyword must be linked to the workspace."""
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
-    keyword, _ = _verify_keyword_in_workspace(db, keyword_id, workspace_id)
+    verify_workspace(db, brand_profile_id)
+    keyword, _ = _verify_keyword_in_workspace(db, keyword_id, brand_profile_id)
     return KeywordResponse.model_validate(keyword)
 
 
@@ -126,13 +120,12 @@ def create_keyword(
 
     `brand_profile_id` zorunludur (request body içinden gelir).
     """
-    workspace_id = _require_workspace(keyword_data.brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, keyword_data.brand_profile_id)
 
     result = crud.create_keywords_bulk(
         db,
         [keyword_data.model_dump(exclude={"brand_profile_id"})],
-        brand_profile_id=workspace_id,
+        brand_profile_id=keyword_data.brand_profile_id,
         return_details=True,
     )
     if isinstance(result, dict) and (result["created"] + result["linked"]) > 0:
@@ -146,7 +139,7 @@ def create_keyword(
 def update_keyword(
     keyword_id: int,
     keyword_data: KeywordUpdate,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Update a keyword linked to a workspace.
@@ -155,9 +148,8 @@ def update_keyword(
     shared row would leak the change into other workspaces, so shared keywords
     are rejected until a clone/relink flow is implemented.
     """
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
-    _verify_keyword_in_workspace(db, keyword_id, workspace_id)
+    verify_workspace(db, brand_profile_id)
+    _verify_keyword_in_workspace(db, keyword_id, brand_profile_id)
 
     link_count = (
         db.query(WorkspaceKeyword)
@@ -182,7 +174,7 @@ def update_keyword(
 
 @router.delete("/all", status_code=204)
 def delete_all_keywords(
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Unlink all keywords from a workspace.
@@ -191,11 +183,10 @@ def delete_all_keywords(
     WorkspaceKeyword bağlantıları silinir. Global delete legacy yolu
     plan2 §P0/C3 ile kaldırıldı (veri kaybı riski).
     """
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, brand_profile_id)
     (
         db.query(WorkspaceKeyword)
-        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
+        .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
         .delete(synchronize_session=False)
     )
     db.commit()
@@ -205,7 +196,7 @@ def delete_all_keywords(
 @router.delete("/{keyword_id}", status_code=204)
 def delete_keyword(
     keyword_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Unlink a keyword from a workspace.
@@ -213,10 +204,9 @@ def delete_keyword(
     `brand_profile_id` zorunlu. Global Keyword satırı KORUNUR — yalnızca
     WorkspaceKeyword bağlantısı silinir. (plan2 §P0/C3)
     """
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, brand_profile_id)
 
-    success = crud.remove_keyword_from_workspace(db, keyword_id, workspace_id)
+    success = crud.remove_keyword_from_workspace(db, keyword_id, brand_profile_id)
     if not success:
         raise HTTPException(status_code=404, detail="keyword not found in workspace")
     return None
@@ -228,13 +218,12 @@ def import_keywords(
     db: Session = Depends(get_db),
 ):
     """Bulk import keywords into a workspace. `brand_profile_id` zorunlu."""
-    workspace_id = _require_workspace(import_data.brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, import_data.brand_profile_id)
 
     result = crud.create_keywords_bulk(
         db,
         [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
-        brand_profile_id=workspace_id,
+        brand_profile_id=import_data.brand_profile_id,
         return_details=True,
     )
 
@@ -254,7 +243,7 @@ def import_keywords(
 
 @router.post("/cleanup-duplicates")
 def cleanup_duplicate_keywords(
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Workspace içindeki fuzzy duplicate keyword'leri tespit edip deactivate eder.
@@ -266,14 +255,13 @@ def cleanup_duplicate_keywords(
 
     from app.core.keyword_dedup import deduplicate_keywords
 
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, brand_profile_id)
 
     # Workspace'e bağlı, aktif keyword'leri çek.
     rows = (
         db.query(Keyword, WorkspaceKeyword)
         .join(WorkspaceKeyword, WorkspaceKeyword.keyword_id == Keyword.id)
-        .filter(WorkspaceKeyword.brand_profile_id == workspace_id)
+        .filter(WorkspaceKeyword.brand_profile_id == brand_profile_id)
         .filter(Keyword.is_active == True)  # noqa: E712
         .all()
     )
@@ -309,7 +297,7 @@ def cleanup_duplicate_keywords(
         db.commit()
         logger.info(
             "Workspace {} cleanup: {} duplicate keyword(s) deactivated",
-            workspace_id,
+            brand_profile_id,
             len(deactivated),
         )
 

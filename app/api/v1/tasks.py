@@ -41,21 +41,16 @@ class TaskListResponse(BaseModel):
     total: int
 
 
-def _require_workspace(brand_profile_id: Optional[int]) -> int:
-    if brand_profile_id is None:
-        raise HTTPException(status_code=400, detail="brand_profile_id is required")
-    return brand_profile_id
 
 
 @router.get("/{task_id}", response_model=TaskStatusResponse)
 def get_task(
     task_id: str,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Tek bir task'ın durumunu getirir. Task'ın run'ı workspace'e ait olmalı."""
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_task_in_workspace(db, task_id, workspace_id)
+    verify_task_in_workspace(db, task_id, brand_profile_id)
 
     status = get_task_status(task_id)
     if not status:
@@ -67,14 +62,13 @@ def get_task(
 @router.get("/run/{run_id}", response_model=TaskListResponse)
 def get_tasks_for_run(
     run_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Bir scoring run'a ait tüm task'ları listeler. Run workspace'e ait olmalı."""
     from app.core.workspace import verify_scoring_run
 
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_scoring_run(db, run_id, workspace_id)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     tasks = get_tasks_by_run(run_id)
     return TaskListResponse(
@@ -86,14 +80,13 @@ def get_tasks_for_run(
 @router.post("/{task_id}/cancel")
 def cancel_task(
     task_id: str,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Çalışan bir task'ı iptal eder. Mutating: workspace zorunlu."""
     from app.tasks.celery_app import celery_app
 
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_task_in_workspace(db, task_id, workspace_id)
+    verify_task_in_workspace(db, task_id, brand_profile_id)
 
     status = get_task_status(task_id)
     if not status:
@@ -115,17 +108,16 @@ def cancel_task(
 def list_recent_tasks(
     limit: int = 20,
     status_filter: Optional[str] = None,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope (required)"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Son task'ları listeler. Workspace zorunlu — global task leak önlendi."""
-    workspace_id = _require_workspace(brand_profile_id)
-    verify_workspace(db, workspace_id)
+    verify_workspace(db, brand_profile_id)
 
     query = (
         db.query(TaskResult)
         .join(ScoringRun, TaskResult.scoring_run_id == ScoringRun.id)
-        .filter(ScoringRun.brand_profile_id == workspace_id)
+        .filter(ScoringRun.brand_profile_id == brand_profile_id)
         .order_by(TaskResult.created_at.desc())
     )
     if status_filter:
