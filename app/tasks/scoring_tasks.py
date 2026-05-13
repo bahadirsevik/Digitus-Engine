@@ -1,107 +1,16 @@
 """
 Celery tasks for scoring operations.
 """
-from celery import shared_task
-from sqlalchemy.orm import Session
-from typing import Optional
-
-from app.tasks.celery_app import celery_app
-from app.database.connection import SessionLocal
-from app.core.scoring.score_engine import ScoreEngine
 
 
 def _run_relevance_computation(scoring_run_id: int):
     """
     Compatibility entry point for FastAPI background relevance computation.
 
-    The implementation currently lives with the workspace/profile flow because
-    profile confirmation can also trigger it directly. Keep this import lazy to
-    avoid coupling task module import to the API router graph at startup.
+    The implementation lives in brand_profile.py because profile confirmation
+    can also trigger it directly. Lazy import avoids coupling this module to
+    the API router graph at Celery worker startup.
     """
     from app.api.v1.brand_profile import _run_relevance_computation as run_relevance
 
     return run_relevance(scoring_run_id)
-
-
-@celery_app.task(bind=True, name="scoring.run_scoring")
-def run_scoring_task(self, scoring_run_id: int):
-    """
-    Arkaplan görevi olarak skorlama yapar.
-    
-    Args:
-        scoring_run_id: Skorlama çalıştırma ID'si
-    
-    Returns:
-        Sonuç özeti
-    """
-    self.update_state(state='STARTED', meta={'step': 'initializing'})
-    
-    db = SessionLocal()
-    
-    try:
-        self.update_state(state='PROGRESS', meta={'step': 'scoring'})
-        
-        engine = ScoreEngine(db)
-        result = engine.run_scoring(scoring_run_id)
-        
-        return {
-            'status': 'completed',
-            'scoring_run_id': scoring_run_id,
-            'result': result
-        }
-    
-    except Exception as e:
-        return {
-            'status': 'failed',
-            'scoring_run_id': scoring_run_id,
-            'error': str(e)
-        }
-    
-    finally:
-        db.close()
-
-
-@celery_app.task(bind=True, name="scoring.create_and_run")
-def create_and_run_scoring(
-    self,
-    ads_capacity: int,
-    seo_capacity: int,
-    social_capacity: int,
-    default_relevance_coefficient: float = 1.0,
-    run_name: str = None,
-    keyword_source_filter: Optional[str] = None,
-):
-    """
-    Skorlama çalıştırması oluşturur ve çalıştırır.
-    """
-    db = SessionLocal()
-    
-    try:
-        engine = ScoreEngine(db)
-        
-        # Create run
-        self.update_state(state='PROGRESS', meta={'step': 'creating_run'})
-        scoring_run = engine.create_scoring_run(
-            ads_capacity=ads_capacity,
-            seo_capacity=seo_capacity,
-            social_capacity=social_capacity,
-            default_relevance_coefficient=default_relevance_coefficient,
-            run_name=run_name,
-            keyword_source_filter=keyword_source_filter,
-        )
-        
-        # Execute scoring
-        self.update_state(state='PROGRESS', meta={'step': 'scoring', 'run_id': scoring_run.id})
-        result = engine.run_scoring(scoring_run.id)
-        
-        return {
-            'status': 'completed',
-            'scoring_run_id': scoring_run.id,
-            'result': result
-        }
-    
-    except Exception as e:
-        return {'status': 'failed', 'error': str(e)}
-    
-    finally:
-        db.close()
