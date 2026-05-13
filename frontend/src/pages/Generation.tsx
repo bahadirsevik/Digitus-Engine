@@ -55,9 +55,14 @@ export default function Generation() {
   // Auto-fill Ads form context from brand profile when ADS run changes
   useEffect(() => {
     if (!adsRunId || !activeWorkspace?.id) return
-    brandProfileApi.getProfile(Number(adsRunId), activeWorkspace.id)
+    brandProfileApi
+      .getProfile(Number(adsRunId), activeWorkspace.id)
       .then((res) => {
-        const profile = res.data as { company_url?: string; status: string; profile_data?: Record<string, unknown> }
+        const profile = res.data as {
+          company_url?: string
+          status: string
+          profile_data?: Record<string, unknown>
+        }
         if (!websiteUrl && profile.company_url) setWebsiteUrl(profile.company_url)
         if (profile.status === 'confirmed' && profile.profile_data) {
           const pd = profile.profile_data
@@ -70,34 +75,45 @@ export default function Generation() {
           }
         }
       })
-      .catch(() => { /* profile not found — ok */ })
+      .catch(() => {
+        /* profile not found — ok */
+      })
   }, [adsRunId, activeWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchSeoResults = useCallback(async (runId: number) => {
-    if (!activeWorkspace?.id) return
+  const fetchSeoResults = useCallback(
+    async (runId: number) => {
+      if (!activeWorkspace?.id) return
 
-    try {
-      const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
-      setSeoResults(((res.data as { items?: SEOGeoItem[] }).items) || [])
-    } catch (e) {
-      console.error('Failed to fetch SEO results:', e)
-    }
-  }, [activeWorkspace?.id])
+      try {
+        const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
+        setSeoResults((res.data as { items?: SEOGeoItem[] }).items || [])
+      } catch (e) {
+        console.error('Failed to fetch SEO results:', e)
+      }
+    },
+    [activeWorkspace?.id]
+  )
 
-  const fetchAdsResults = useCallback(async (runId: number) => {
-    if (!activeWorkspace?.id) return
+  const fetchAdsResults = useCallback(
+    async (runId: number) => {
+      if (!activeWorkspace?.id) return
 
-    try {
-      const res = await generationApi.getAdsRsa(runId, activeWorkspace.id)
-      const data = res.data as AdsResult
-      setAdsResults(data.total_groups > 0 ? data : null)
-    } catch (e) {
-      console.error('Failed to fetch Ads results:', e)
-    }
-  }, [activeWorkspace?.id])
+      try {
+        const res = await generationApi.getAdsRsa(runId, activeWorkspace.id)
+        const data = res.data as AdsResult
+        setAdsResults(data.total_groups > 0 ? data : null)
+      } catch (e) {
+        console.error('Failed to fetch Ads results:', e)
+      }
+    },
+    [activeWorkspace?.id]
+  )
 
   const fetchRuns = useCallback(async () => {
-    if (!activeWorkspace?.id) { setRuns([]); return }
+    if (!activeWorkspace?.id) {
+      setRuns([])
+      return
+    }
     try {
       const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
       setRuns(Array.isArray(res.data) ? res.data : [])
@@ -165,10 +181,12 @@ export default function Generation() {
     setError(null)
     try {
       const res = await generationApi.bulkSeoGeo(Number(seoRunId), seoLimit, activeWorkspace.id)
-      setSeoTaskId((res.data as any).task_id)
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : (err instanceof Error ? err.message : 'Bir hata oluştu'))
+      setSeoTaskId((res.data as { task_id: string }).task_id)
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(
+        typeof detail === 'string' ? detail : err instanceof Error ? err.message : 'Bir hata oluştu'
+      )
     } finally {
       setLoading(false)
     }
@@ -183,16 +201,26 @@ export default function Generation() {
     setLoading(true)
     setError(null)
     try {
-      await generationApi.createAdsRsa({
-        scoring_run_id: Number(adsRunId),
-        brand_name: brandName,
-        website_url: websiteUrl ? websiteUrl.trim() : undefined,
-        brand_usp: usps ? usps.split(',').map(s => s.trim()).join(', ') : undefined,
-      }, activeWorkspace.id)
+      await generationApi.createAdsRsa(
+        {
+          scoring_run_id: Number(adsRunId),
+          brand_name: brandName,
+          website_url: websiteUrl ? websiteUrl.trim() : undefined,
+          brand_usp: usps
+            ? usps
+                .split(',')
+                .map((s) => s.trim())
+                .join(', ')
+            : undefined,
+        },
+        activeWorkspace.id
+      )
       await fetchAdsResults(Number(adsRunId))
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : (err instanceof Error ? err.message : 'Bir hata oluştu'))
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(
+        typeof detail === 'string' ? detail : err instanceof Error ? err.message : 'Bir hata oluştu'
+      )
     } finally {
       setLoading(false)
     }
@@ -215,7 +243,7 @@ export default function Generation() {
 
       {/* Tabs */}
       <div className="tabs">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             className={`tab ${activeTab === tab.id ? 'active' : ''}`}
@@ -227,13 +255,21 @@ export default function Generation() {
         ))}
       </div>
 
-      {error && <ErrorBanner error={error} onDismiss={() => setError(null)} onRetry={() => setError(null)} />}
+      {error && (
+        <ErrorBanner
+          error={error}
+          onDismiss={() => setError(null)}
+          onRetry={() => setError(null)}
+        />
+      )}
 
       {/* SEO+GEO Tab */}
       {activeTab === 'seo' && (
         <div className="tab-content glass-card">
           <h2>SEO+GEO İçerik Üretimi</h2>
-          <p className="tab-desc">Seçili skorlama çalışmasının SEO havuzundaki kelimeler için blog içerikleri üretir.</p>
+          <p className="tab-desc">
+            Seçili skorlama çalışmasının SEO havuzundaki kelimeler için blog içerikleri üretir.
+          </p>
 
           {seoTaskId && seoPolling.status && (
             <TaskProgress
@@ -247,14 +283,14 @@ export default function Generation() {
           <div className="form-section">
             <div className="form-group">
               <label>Skorlama Çalışması</label>
-              <select
-                value={seoRunId}
-                onChange={e => setSeoRunId(Number(e.target.value))}
-              >
+              <select value={seoRunId} onChange={(e) => setSeoRunId(Number(e.target.value))}>
                 <option value="">Seçin...</option>
-                {runs.map(run => (
+                {runs.map((run) => (
                   <option key={run.id} value={run.id}>
-                    {run.run_name || `Çalışma #${run.id}`}{run.created_at ? ` — ${new Date(run.created_at).toLocaleDateString('tr-TR')}` : ''}
+                    {run.run_name || `Çalışma #${run.id}`}
+                    {run.created_at
+                      ? ` — ${new Date(run.created_at).toLocaleDateString('tr-TR')}`
+                      : ''}
                   </option>
                 ))}
               </select>
@@ -265,7 +301,7 @@ export default function Generation() {
               <input
                 type="number"
                 value={seoLimit}
-                onChange={e => setSeoLimit(Number(e.target.value))}
+                onChange={(e) => setSeoLimit(Number(e.target.value))}
                 min={1}
                 max={100}
               />
@@ -284,7 +320,14 @@ export default function Generation() {
           {/* SEO Results */}
           {seoResults.length > 0 && (
             <div className="results-section" style={{ marginTop: 'var(--space-lg)' }}>
-              <h3 style={{ marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3
+                style={{
+                  marginBottom: 'var(--space-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
                 <CheckCircle size={18} color="var(--success)" />
                 Üretilen İçerikler ({seoResults.length})
               </h3>
@@ -293,17 +336,19 @@ export default function Generation() {
                   <div key={item.id} className="seo-result-card glass-card">
                     <div className="seo-result-title">{item.title || item.keyword}</div>
                     <div className="seo-result-keyword">{item.keyword}</div>
-                    {item.is_stale && (
-                      <div className="score-badge combined">Güncel Değil</div>
-                    )}
+                    {item.is_stale && <div className="score-badge combined">Güncel Değil</div>}
                     <div className="seo-result-scores">
-                      <span className="score-badge seo">SEO: {(item.seo_score * 100).toFixed(0)}%</span>
-                      <span className="score-badge geo">GEO: {(item.geo_score * 100).toFixed(0)}%</span>
-                      <span className="score-badge combined">Kombine: {(item.combined_score * 100).toFixed(0)}%</span>
+                      <span className="score-badge seo">
+                        SEO: {(item.seo_score * 100).toFixed(0)}%
+                      </span>
+                      <span className="score-badge geo">
+                        GEO: {(item.geo_score * 100).toFixed(0)}%
+                      </span>
+                      <span className="score-badge combined">
+                        Kombine: {(item.combined_score * 100).toFixed(0)}%
+                      </span>
                     </div>
-                    <div className="seo-result-meta">
-                      {item.word_count} kelime
-                    </div>
+                    <div className="seo-result-meta">{item.word_count} kelime</div>
                   </div>
                 ))}
               </div>
@@ -316,19 +361,21 @@ export default function Generation() {
       {activeTab === 'ads' && (
         <div className="tab-content glass-card">
           <h2>Google Ads RSA Üretimi</h2>
-          <p className="tab-desc">ADS havuzundaki kelimeler için reklam grupları ve başlıklar üretir.</p>
+          <p className="tab-desc">
+            ADS havuzundaki kelimeler için reklam grupları ve başlıklar üretir.
+          </p>
 
           <div className="form-section">
             <div className="form-group">
               <label>Skorlama Çalışması *</label>
-              <select
-                value={adsRunId}
-                onChange={e => setAdsRunId(Number(e.target.value))}
-              >
+              <select value={adsRunId} onChange={(e) => setAdsRunId(Number(e.target.value))}>
                 <option value="">Seçin...</option>
-                {runs.map(run => (
+                {runs.map((run) => (
                   <option key={run.id} value={run.id}>
-                    {run.run_name || `Çalışma #${run.id}`}{run.created_at ? ` — ${new Date(run.created_at).toLocaleDateString('tr-TR')}` : ''}
+                    {run.run_name || `Çalışma #${run.id}`}
+                    {run.created_at
+                      ? ` — ${new Date(run.created_at).toLocaleDateString('tr-TR')}`
+                      : ''}
                   </option>
                 ))}
               </select>
@@ -339,7 +386,7 @@ export default function Generation() {
               <input
                 type="text"
                 value={brandName}
-                onChange={e => setBrandName(e.target.value)}
+                onChange={(e) => setBrandName(e.target.value)}
                 placeholder="Profilden otomatik dolar veya manuel girin"
               />
             </div>
@@ -349,7 +396,7 @@ export default function Generation() {
               <input
                 type="url"
                 value={websiteUrl}
-                onChange={e => setWebsiteUrl(e.target.value)}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
                 placeholder="https://example.com"
               />
             </div>
@@ -359,7 +406,7 @@ export default function Generation() {
               <input
                 type="text"
                 value={usps}
-                onChange={e => setUsps(e.target.value)}
+                onChange={(e) => setUsps(e.target.value)}
                 placeholder="Ücretsiz kargo, 30 gün iade, 7/24 destek"
               />
             </div>
@@ -377,7 +424,14 @@ export default function Generation() {
           {/* Ads Results */}
           {adsResults && (
             <div className="results-section" style={{ marginTop: 'var(--space-lg)' }}>
-              <h3 style={{ marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3
+                style={{
+                  marginBottom: 'var(--space-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
                 <CheckCircle size={18} color="var(--success)" />
                 RSA Üretimi Tamamlandı
               </h3>
@@ -388,33 +442,55 @@ export default function Generation() {
                 </div>
                 <div className="ads-stat glass-card">
                   <span className="ads-stat-value">
-                    {adsResults.total_headlines ?? adsResults.ad_groups?.reduce((s: number, g: AdGroup) => s + (g.headlines?.length || 0), 0) ?? 0}
+                    {adsResults.total_headlines ??
+                      adsResults.ad_groups?.reduce(
+                        (s: number, g: AdGroup) => s + (g.headlines?.length || 0),
+                        0
+                      ) ??
+                      0}
                   </span>
                   <span className="ads-stat-label">Başlık</span>
                 </div>
                 <div className="ads-stat glass-card">
                   <span className="ads-stat-value">
-                    {adsResults.total_descriptions ?? adsResults.ad_groups?.reduce((s: number, g: AdGroup) => s + (g.descriptions?.length || 0), 0) ?? 0}
+                    {adsResults.total_descriptions ??
+                      adsResults.ad_groups?.reduce(
+                        (s: number, g: AdGroup) => s + (g.descriptions?.length || 0),
+                        0
+                      ) ??
+                      0}
                   </span>
                   <span className="ads-stat-label">Açıklama</span>
                 </div>
                 <div className="ads-stat glass-card">
                   <span className="ads-stat-value">
-                    {adsResults.total_negative_keywords ?? adsResults.ad_groups?.reduce((s: number, g: AdGroup) => s + (g.negative_keywords?.length || 0), 0) ?? 0}
+                    {adsResults.total_negative_keywords ??
+                      adsResults.ad_groups?.reduce(
+                        (s: number, g: AdGroup) => s + (g.negative_keywords?.length || 0),
+                        0
+                      ) ??
+                      0}
                   </span>
                   <span className="ads-stat-label">Negatif Kelime</span>
                 </div>
               </div>
 
               {adsResults.validation_summary && (
-                <div className="validation-summary glass-card" style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)' }}>
+                <div
+                  className="validation-summary glass-card"
+                  style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)' }}
+                >
                   <h4 style={{ marginBottom: 'var(--space-sm)' }}>Doğrulama Özeti</h4>
                   <div className="validation-stats">
                     <span>✅ Korunan: {adsResults.validation_summary.headlines_kept}</span>
                     <span>✂️ Kısaltılan: {adsResults.validation_summary.headlines_shortened}</span>
-                    <span>🔄 Yeniden üretilen: {adsResults.validation_summary.headlines_regenerated}</span>
+                    <span>
+                      🔄 Yeniden üretilen: {adsResults.validation_summary.headlines_regenerated}
+                    </span>
                     <span>❌ Elenen: {adsResults.validation_summary.headlines_eliminated}</span>
-                    <span>🔀 DKI dönüştürülen: {adsResults.validation_summary.dki_converted_to_plain}</span>
+                    <span>
+                      🔀 DKI dönüştürülen: {adsResults.validation_summary.dki_converted_to_plain}
+                    </span>
                   </div>
                 </div>
               )}
@@ -427,12 +503,14 @@ export default function Generation() {
                     <div className="seo-result-keyword">{group.theme}</div>
                     <div className="seo-result-scores">
                       <span className="score-badge seo">{group.headlines?.length || 0} Başlık</span>
-                      <span className="score-badge geo">{group.descriptions?.length || 0} Açıklama</span>
-                      <span className="score-badge combined">{group.negative_keywords?.length || 0} Negatif</span>
+                      <span className="score-badge geo">
+                        {group.descriptions?.length || 0} Açıklama
+                      </span>
+                      <span className="score-badge combined">
+                        {group.negative_keywords?.length || 0} Negatif
+                      </span>
                     </div>
-                    <div className="seo-result-meta">
-                      {group.keywords?.join(', ')}
-                    </div>
+                    <div className="seo-result-meta">{group.keywords?.join(', ')}</div>
                   </div>
                 ))}
               </div>

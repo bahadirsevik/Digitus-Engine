@@ -119,28 +119,28 @@
   .sidebar {
     width: 80px;
   }
-  
+
   .sidebar-header {
     justify-content: center;
   }
-  
+
   .logo-text {
     display: none;
   }
-  
+
   .nav-item span {
     display: none;
   }
-  
+
   .nav-item {
     justify-content: center;
     padding: var(--space-md);
   }
-  
+
   .api-status span {
     display: none;
   }
-  
+
   .main-content {
     margin-left: 80px;
   }

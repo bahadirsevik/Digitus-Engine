@@ -1,5 +1,5 @@
-﻿import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+﻿import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Play,
   Eye,
@@ -8,61 +8,46 @@ import {
   Trash2,
   Download,
   ArrowRight,
-  ChevronUp,
-  ChevronDown,
   AlertCircle,
-} from "lucide-react";
-import { scoringApi, ScoringRunCreate } from "../services/api";
-import type { ScoringRun } from "../types/models";
-import { useBrandStore } from "../stores/brandStore";
-import "./Scoring.css";
-
+} from 'lucide-react'
+import { scoringApi, ScoringRunCreate } from '../services/api'
+import type { ScoringRun } from '../types/models'
+import { useBrandStore } from '../stores/brandStore'
+import './Scoring.css'
 
 interface KeywordScore {
-  keyword_id: number;
-  keyword: string;
-  ads_score: number | null;
-  seo_score: number | null;
-  social_score: number | null;
-  ads_rank?: number | null;
-  seo_rank?: number | null;
-  social_rank?: number | null;
+  keyword_id: number
+  keyword: string
+  ads_score: number | null
+  seo_score: number | null
+  social_score: number | null
+  ads_rank?: number | null
+  seo_rank?: number | null
+  social_rank?: number | null
 }
 
-type SortField =
-  | "keyword"
-  | "ads_score"
-  | "seo_score"
-  | "social_score"
-  | "ads_rank"
-  | "seo_rank"
-  | "social_rank";
-type SortDirection = "asc" | "desc";
-
 export default function Scoring() {
-  const navigate = useNavigate();
-  const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
+  const navigate = useNavigate()
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
 
-  const [runs, setRuns] = useState<ScoringRun[]>([]);
-  const [selectedRun, setSelectedRun] = useState<number | null>(null);
-  const [scores, setScores] = useState<KeywordScore[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("ads_score");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [runs, setRuns] = useState<ScoringRun[]>([])
+  const [selectedRun, setSelectedRun] = useState<number | null>(null)
+  const [scores, setScores] = useState<KeywordScore[]>([])
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
 
   const [newRun, setNewRun] = useState<
     ScoringRunCreate & {
-      enable_ads: boolean;
-      enable_seo: boolean;
-      enable_social: boolean;
-      keyword_selection_mode: "all" | "top_n" | "specific";
-      keyword_limit: number;
-      skip_relevance: boolean;
+      enable_ads: boolean
+      enable_seo: boolean
+      enable_social: boolean
+      keyword_selection_mode: 'all' | 'top_n' | 'specific'
+      keyword_limit: number
+      skip_relevance: boolean
     }
   >({
-    run_name: "",
+    run_name: '',
     brand_profile_id: undefined,
     ads_capacity: 20,
     seo_capacity: 30,
@@ -72,55 +57,56 @@ export default function Scoring() {
     enable_ads: true,
     enable_seo: true,
     enable_social: true,
-    keyword_selection_mode: "top_n",
+    keyword_selection_mode: 'top_n',
     keyword_limit: 200,
     selected_keyword_ids: undefined,
     skip_relevance: false,
-  });
+  })
 
   useEffect(() => {
-    fetchRuns();
-  }, [activeWorkspace?.id]);
+    fetchRuns()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id])
 
   useEffect(() => {
     if (activeWorkspace?.id) {
-      setNewRun((prev) => ({ ...prev, brand_profile_id: activeWorkspace.id }));
+      setNewRun((prev) => ({ ...prev, brand_profile_id: activeWorkspace.id }))
     }
-  }, [activeWorkspace?.id]);
+  }, [activeWorkspace?.id])
 
   const fetchRuns = async () => {
     if (!activeWorkspace?.id) {
-      setRuns([]);
-      return;
+      setRuns([])
+      return
     }
     try {
-      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id });
-      const data = res.data || [];
-      setRuns(data);
+      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      const data = res.data || []
+      setRuns(data)
     } catch (error) {
-      console.error("Error fetching runs:", error);
+      console.error('Error fetching runs:', error)
     }
-  };
+  }
 
   const createRun = async () => {
     if (!activeWorkspace?.id) {
-      setErrorMsg("Önce Marka Çalışması seçin");
-      return;
+      setErrorMsg('Önce Marka Çalışması seçin')
+      return
     }
     if (!newRun.enable_ads && !newRun.enable_seo && !newRun.enable_social) {
-      setErrorMsg("En az bir kanal seçilmelidir");
-      return;
+      setErrorMsg('En az bir kanal seçilmelidir')
+      return
     }
-    setErrorMsg(null);
+    setErrorMsg(null)
     try {
       const res = await scoringApi.createRun({
         ...newRun,
         brand_profile_id: activeWorkspace.id,
-      });
-      setShowModal(false);
+      })
+      setShowModal(false)
       setNewRun((prev) => ({
         ...prev,
-        run_name: "",
+        run_name: '',
         brand_profile_id: activeWorkspace?.id,
         ads_capacity: 20,
         seo_capacity: 30,
@@ -130,46 +116,46 @@ export default function Scoring() {
         enable_ads: true,
         enable_seo: true,
         enable_social: true,
-        keyword_selection_mode: "top_n",
+        keyword_selection_mode: 'top_n',
         keyword_limit: 200,
         selected_keyword_ids: undefined,
         skip_relevance: false,
-      }));
-      fetchRuns();
-      setSelectedRun(res.data.id);
+      }))
+      fetchRuns()
+      setSelectedRun(res.data.id)
     } catch (error) {
-      console.error("Error creating run:", error);
+      console.error('Error creating run:', error)
     }
-  };
+  }
 
   const executeRun = async (runId: number) => {
-    if (!activeWorkspace?.id) return;
-    setLoading(true);
+    if (!activeWorkspace?.id) return
+    setLoading(true)
     try {
-      await scoringApi.executeRun(runId, activeWorkspace.id);
-      fetchRuns();
-      viewScores(runId);
+      await scoringApi.executeRun(runId, activeWorkspace.id)
+      fetchRuns()
+      viewScores(runId)
     } catch (error) {
-      console.error("Error executing run:", error);
+      console.error('Error executing run:', error)
     }
-    setLoading(false);
-  };
+    setLoading(false)
+  }
 
   const viewScores = async (runId: number) => {
-    if (!activeWorkspace?.id) return;
-    setSelectedRun(runId);
+    if (!activeWorkspace?.id) return
+    setSelectedRun(runId)
     try {
-      const res = await scoringApi.getScores(runId, 50, activeWorkspace.id);
-      setScores(res.data.scores || []);
+      const res = await scoringApi.getScores(runId, 50, activeWorkspace.id)
+      setScores(res.data.scores || [])
     } catch (error) {
-      console.error("Error fetching scores:", error);
+      console.error('Error fetching scores:', error)
     }
-  };
+  }
 
   const formatScore = (value: number | string | null | undefined) => {
-    if (value === null || value === undefined || value === "") return "-";
-    return Number(value).toFixed(4);
-  };
+    if (value === null || value === undefined || value === '') return '-'
+    return Number(value).toFixed(4)
+  }
 
   return (
     <div className="scoring-page animate-fade-in">
@@ -207,68 +193,65 @@ export default function Scoring() {
             runs.map((run) => (
               <div
                 key={run.id}
-                className={`run-card glass-card ${selectedRun === run.id ? "active" : ""}`}
+                className={`run-card glass-card ${selectedRun === run.id ? 'active' : ''}`}
               >
                 <div className="run-header">
                   <span className="run-name">
                     {run.run_name || `Çalışma #${run.id}`}
                     {run.keyword_source_filter && (
                       <span
-                        className={`source-badge source-badge--${run.keyword_source_filter === "google_ads_api" ? "ads" : "csv"}`}
+                        className={`source-badge source-badge--${run.keyword_source_filter === 'google_ads_api' ? 'ads' : 'csv'}`}
                       >
-                        {run.keyword_source_filter === "google_ads_api"
-                          ? "Google Ads"
-                          : "CSV"}
+                        {run.keyword_source_filter === 'google_ads_api' ? 'Google Ads' : 'CSV'}
                       </span>
                     )}
                   </span>
-                  <span className={`status status-${run.status}`}>
-                    {run.status}
-                  </span>
+                  <span className={`status status-${run.status}`}>{run.status}</span>
                 </div>
                 <div className="run-capacities">
-                  <span className={`badge badge-ads ${run.enable_ads === false ? "badge-muted" : ""}`}>
+                  <span
+                    className={`badge badge-ads ${run.enable_ads === false ? 'badge-muted' : ''}`}
+                  >
                     ADS: {run.ads_capacity}
                   </span>
-                  <span className={`badge badge-seo ${run.enable_seo === false ? "badge-muted" : ""}`}>
+                  <span
+                    className={`badge badge-seo ${run.enable_seo === false ? 'badge-muted' : ''}`}
+                  >
                     SEO: {run.seo_capacity}
                   </span>
-                  <span className={`badge badge-social ${run.enable_social === false ? "badge-muted" : ""}`}>
+                  <span
+                    className={`badge badge-social ${run.enable_social === false ? 'badge-muted' : ''}`}
+                  >
                     SOCIAL: {run.social_capacity}
                   </span>
                   <span className="badge badge-social">
-                    Katsayı:{" "}
-                    {typeof run.default_relevance_coefficient === "number"
+                    Katsayı:{' '}
+                    {typeof run.default_relevance_coefficient === 'number'
                       ? run.default_relevance_coefficient.toFixed(2)
-                      : Number(run.default_relevance_coefficient || 1).toFixed(
-                          2,
-                        )}
+                      : Number(run.default_relevance_coefficient || 1).toFixed(2)}
                   </span>
                 </div>
                 <div className="run-actions">
-                  {run.status === "pending" && (
+                  {run.status === 'pending' && (
                     <button
                       className="btn btn-success"
                       onClick={() => executeRun(run.id)}
                       disabled={loading}
                     >
                       <Play size={16} />
-                      {loading ? "Çalışıyor..." : "Çalıştır"}
+                      {loading ? 'Çalışıyor...' : 'Çalıştır'}
                     </button>
                   )}
 
                   {[
-                    "scored",
-                    "relevance_computing",
-                    "relevance_computed",
-                    "channel_assigned",
-                    "completed",
+                    'scored',
+                    'relevance_computing',
+                    'relevance_computed',
+                    'channel_assigned',
+                    'completed',
                   ].includes(run.status) && (
                     <>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => viewScores(run.id)}
-                      >
+                      <button className="btn btn-secondary" onClick={() => viewScores(run.id)}>
                         <Eye size={16} />
                         Görüntüle
                       </button>
@@ -276,21 +259,16 @@ export default function Scoring() {
                         className="btn btn-success"
                         onClick={async () => {
                           try {
-                            const res = await scoringApi.exportXlsx(run.id, activeWorkspace?.id);
-                            const url = window.URL.createObjectURL(
-                              new Blob([res.data]),
-                            );
-                            const link = document.createElement("a");
-                            link.href = url;
-                            link.setAttribute(
-                              "download",
-                              `scoring_run_${run.id}.xlsx`,
-                            );
-                            document.body.appendChild(link);
-                            link.click();
-                            link.remove();
+                            const res = await scoringApi.exportXlsx(run.id, activeWorkspace?.id)
+                            const url = window.URL.createObjectURL(new Blob([res.data]))
+                            const link = document.createElement('a')
+                            link.href = url
+                            link.setAttribute('download', `scoring_run_${run.id}.xlsx`)
+                            document.body.appendChild(link)
+                            link.click()
+                            link.remove()
                           } catch (err) {
-                            console.error("Export error:", err);
+                            console.error('Export error:', err)
                           }
                         }}
                       >
@@ -299,9 +277,7 @@ export default function Scoring() {
                       </button>
                       <button
                         className="btn btn-primary"
-                        onClick={() =>
-                          navigate(`/brand-profile?run_id=${run.id}`)
-                        }
+                        onClick={() => navigate(`/brand-profile?run_id=${run.id}`)}
                       >
                         Sonraki
                         <ArrowRight size={16} />
@@ -312,21 +288,17 @@ export default function Scoring() {
                   <button
                     className="btn btn-danger"
                     onClick={async () => {
-                      if (
-                        !confirm(
-                          "Bu skorlama çalışmasını silmek istediğinize emin misiniz?",
-                        )
-                      )
-                        return;
+                      if (!confirm('Bu skorlama çalışmasını silmek istediğinize emin misiniz?'))
+                        return
                       try {
-                        await scoringApi.deleteRun(run.id, activeWorkspace?.id);
-                        fetchRuns();
+                        await scoringApi.deleteRun(run.id, activeWorkspace?.id)
+                        fetchRuns()
                         if (selectedRun === run.id) {
-                          setSelectedRun(null);
-                          setScores([]);
+                          setSelectedRun(null)
+                          setScores([])
                         }
                       } catch (err) {
-                        console.error("Delete error:", err);
+                        console.error('Delete error:', err)
                       }
                     }}
                   >
@@ -366,27 +338,22 @@ export default function Scoring() {
                     <td>{formatScore(score.social_score)}</td>
                     <td>
                       {score.ads_rank && (
-                        <span className={score.ads_rank <= 3 ? "top-rank" : ""}>
-                          {score.ads_rank <= 3 && <Award size={14} />}#
-                          {score.ads_rank}
+                        <span className={score.ads_rank <= 3 ? 'top-rank' : ''}>
+                          {score.ads_rank <= 3 && <Award size={14} />}#{score.ads_rank}
                         </span>
                       )}
                     </td>
                     <td>
                       {score.seo_rank && (
-                        <span className={score.seo_rank <= 3 ? "top-rank" : ""}>
-                          {score.seo_rank <= 3 && <Award size={14} />}#
-                          {score.seo_rank}
+                        <span className={score.seo_rank <= 3 ? 'top-rank' : ''}>
+                          {score.seo_rank <= 3 && <Award size={14} />}#{score.seo_rank}
                         </span>
                       )}
                     </td>
                     <td>
                       {score.social_rank && (
-                        <span
-                          className={score.social_rank <= 3 ? "top-rank" : ""}
-                        >
-                          {score.social_rank <= 3 && <Award size={14} />}#
-                          {score.social_rank}
+                        <span className={score.social_rank <= 3 ? 'top-rank' : ''}>
+                          {score.social_rank <= 3 && <Award size={14} />}#{score.social_rank}
                         </span>
                       )}
                     </td>
@@ -400,31 +367,24 @@ export default function Scoring() {
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div
-            className="modal glass-card"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="modal glass-card" onClick={(e) => e.stopPropagation()}>
             <h2>Yeni Skorlama Çalışması</h2>
 
             <div className="form-group">
               <label>Skorlanacak Kanallar</label>
               <div className="channel-toggle-grid">
                 {[
-                  ["enable_ads", "ADS"],
-                  ["enable_seo", "SEO"],
-                  ["enable_social", "SOCIAL"],
+                  ['enable_ads', 'ADS'],
+                  ['enable_seo', 'SEO'],
+                  ['enable_social', 'SOCIAL'],
                 ].map(([key, label]) => (
                   <label
                     key={key}
-                    className={`channel-toggle ${newRun[key as "enable_ads" | "enable_seo" | "enable_social"] ? "active" : ""}`}
+                    className={`channel-toggle ${newRun[key as 'enable_ads' | 'enable_seo' | 'enable_social'] ? 'active' : ''}`}
                   >
                     <input
                       type="checkbox"
-                      checked={
-                        newRun[
-                          key as "enable_ads" | "enable_seo" | "enable_social"
-                        ]
-                      }
+                      checked={newRun[key as 'enable_ads' | 'enable_seo' | 'enable_social']}
                       onChange={(e) =>
                         setNewRun({
                           ...newRun,
@@ -443,9 +403,7 @@ export default function Scoring() {
               <input
                 className="input"
                 value={newRun.run_name}
-                onChange={(e) =>
-                  setNewRun({ ...newRun, run_name: e.target.value })
-                }
+                onChange={(e) => setNewRun({ ...newRun, run_name: e.target.value })}
                 placeholder="Mart 2026 Skorlama"
               />
             </div>
@@ -526,14 +484,12 @@ export default function Scoring() {
               <select
                 className="input"
                 title="Keyword Kaynağı"
-                value={newRun.keyword_source_filter ?? ""}
+                value={newRun.keyword_source_filter ?? ''}
                 onChange={(e) =>
                   setNewRun({
                     ...newRun,
                     keyword_source_filter:
-                      e.target.value === ""
-                        ? null
-                        : (e.target.value as "csv" | "google_ads_api"),
+                      e.target.value === '' ? null : (e.target.value as 'csv' | 'google_ads_api'),
                   })
                 }
               >
@@ -545,10 +501,7 @@ export default function Scoring() {
 
             {errorMsg && <div className="modal-error">{errorMsg}</div>}
             <div className="modal-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowModal(false)}
-              >
+              <button className="btn btn-secondary" onClick={() => setShowModal(false)}>
                 İptal
               </button>
               <button className="btn btn-primary" onClick={createRun}>
@@ -559,5 +512,5 @@ export default function Scoring() {
         </div>
       )}
     </div>
-  );
+  )
 }

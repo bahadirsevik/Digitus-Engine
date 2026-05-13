@@ -14,19 +14,18 @@ interface ErrorBannerProps {
   onDismiss?: () => void
 }
 
-export default function ErrorBanner({ 
-  error, 
-  details, 
-  requestId, 
-  onRetry, 
-  onDismiss 
+export default function ErrorBanner({
+  error,
+  details,
+  requestId,
+  onRetry,
+  onDismiss,
 }: ErrorBannerProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const detailsText = typeof details === 'string' 
-    ? details 
-    : details ? JSON.stringify(details, null, 2) : null
+  const detailsText =
+    typeof details === 'string' ? details : details ? JSON.stringify(details, null, 2) : null
 
   const copyError = () => {
     const text = `Hata: ${error}\n${requestId ? `Istek ID: ${requestId}\n` : ''}${detailsText ? `Detaylar: ${detailsText}` : ''}`
@@ -43,14 +42,12 @@ export default function ErrorBanner({
         </div>
         <div className="error-content">
           <span className="error-message">{error}</span>
-          {requestId && (
-            <span className="error-request-id">Istek ID: {requestId}</span>
-          )}
+          {requestId && <span className="error-request-id">Istek ID: {requestId}</span>}
         </div>
         <div className="error-actions">
           {detailsText && (
-            <button 
-              className="btn-icon" 
+            <button
+              className="btn-icon"
               onClick={() => setShowDetails(!showDetails)}
               title="Detayları göster"
             >
@@ -73,7 +70,7 @@ export default function ErrorBanner({
           )}
         </div>
       </div>
-      
+
       {showDetails && detailsText && (
         <div className="error-details">
           <pre>{detailsText}</pre>

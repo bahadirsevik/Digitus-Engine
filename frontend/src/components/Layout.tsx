@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Key,
@@ -11,27 +11,27 @@ import {
   Zap,
   Globe2,
   TrendingUp,
-} from "lucide-react";
-import "./Layout.css";
+} from 'lucide-react'
+import './Layout.css'
 
 interface LayoutProps {
-  children: ReactNode;
+  children: ReactNode
 }
 
 const navItems = [
-  { path: "/", icon: LayoutDashboard, label: "Ana Panel" },
-  { path: "/brand-profile", icon: Globe2, label: "Marka Profili" },
-  { path: "/keywords", icon: Key, label: "Anahtar Kelimeler" },
-  { path: "/scoring", icon: BarChart3, label: "Skorlama" },
-  { path: "/relevance", icon: TrendingUp, label: "İlgi Skoru" },
-  { path: "/channels", icon: Layers, label: "Kanallar" },
-  { path: "/generation", icon: Sparkles, label: "İçerik Üretimi" },
-  { path: "/tasks", icon: ListTodo, label: "Görevler" },
-  { path: "/export", icon: Download, label: "Dışa Aktarım" },
-];
+  { path: '/', icon: LayoutDashboard, label: 'Ana Panel' },
+  { path: '/brand-profile', icon: Globe2, label: 'Marka Profili' },
+  { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
+  { path: '/scoring', icon: BarChart3, label: 'Skorlama' },
+  { path: '/relevance', icon: TrendingUp, label: 'İlgi Skoru' },
+  { path: '/channels', icon: Layers, label: 'Kanallar' },
+  { path: '/generation', icon: Sparkles, label: 'İçerik Üretimi' },
+  { path: '/tasks', icon: ListTodo, label: 'Görevler' },
+  { path: '/export', icon: Download, label: 'Dışa Aktarım' },
+]
 
 export default function Layout({ children }: LayoutProps) {
-  const location = useLocation();
+  const location = useLocation()
 
   return (
     <div className="layout">
@@ -49,7 +49,7 @@ export default function Layout({ children }: LayoutProps) {
             <Link
               key={path}
               to={path}
-              className={`nav-item ${location.pathname === path ? "active" : ""}`}
+              className={`nav-item ${location.pathname === path ? 'active' : ''}`}
             >
               <Icon size={20} />
               <span>{label}</span>
@@ -67,5 +67,5 @@ export default function Layout({ children }: LayoutProps) {
 
       <main className="main-content">{children}</main>
     </div>
-  );
+  )
 }

@@ -1,12 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  Key,
-  BarChart3,
-  Layers,
-  Star,
-  TrendingUp,
-  RefreshCw
-} from 'lucide-react'
+import { Key, BarChart3, Layers, Star, TrendingUp, RefreshCw } from 'lucide-react'
 import { keywordsApi, scoringApi, healthApi } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import './Dashboard.css'
@@ -19,11 +12,16 @@ interface Stats {
 
 export default function Dashboard() {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const [stats, setStats] = useState<Stats>({ keywords: 0, scoringRuns: 0, apiStatus: 'kontrol ediliyor...' })
+  const [stats, setStats] = useState<Stats>({
+    keywords: 0,
+    scoringRuns: 0,
+    apiStatus: 'kontrol ediliyor...',
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchStats()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id])
 
   const fetchStats = async () => {
@@ -34,7 +32,7 @@ export default function Dashboard() {
         setStats({
           keywords: 0,
           scoringRuns: 0,
-          apiStatus: healthRes.data.status || 'online'
+          apiStatus: healthRes.data.status || 'online',
         })
         setLoading(false)
         return
@@ -43,16 +41,16 @@ export default function Dashboard() {
       const [keywordsRes, runsRes, healthRes] = await Promise.all([
         keywordsApi.list({ limit: 1, brand_profile_id: activeWorkspace.id }),
         scoringApi.listRuns({ limit: 1, brand_profile_id: activeWorkspace.id }),
-        healthApi.check()
+        healthApi.check(),
       ])
 
       setStats({
         keywords: keywordsRes.data.total || 0,
         scoringRuns: runsRes.data.length || 0,
-        apiStatus: healthRes.data.status || 'online'
+        apiStatus: healthRes.data.status || 'online',
       })
     } catch {
-      setStats(prev => ({ ...prev, apiStatus: 'offline' }))
+      setStats((prev) => ({ ...prev, apiStatus: 'offline' }))
     }
     setLoading(false)
   }
@@ -62,25 +60,25 @@ export default function Dashboard() {
       icon: Key,
       label: 'Toplam Anahtar Kelime',
       value: stats.keywords,
-      color: 'var(--accent-primary)'
+      color: 'var(--accent-primary)',
     },
     {
       icon: BarChart3,
       label: 'Skorlama Çalışmaları',
       value: stats.scoringRuns,
-      color: 'var(--success)'
+      color: 'var(--success)',
     },
     {
       icon: Layers,
       label: 'Kanal Sayısı',
       value: 3,
-      color: 'var(--warning)'
+      color: 'var(--warning)',
     },
     {
       icon: Star,
       label: 'API Durumu',
       value: stats.apiStatus,
-      color: stats.apiStatus === 'offline' ? 'var(--error)' : 'var(--success)'
+      color: stats.apiStatus === 'offline' ? 'var(--error)' : 'var(--success)',
     },
   ]
 

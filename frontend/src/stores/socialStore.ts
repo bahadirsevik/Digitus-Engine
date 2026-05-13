@@ -43,7 +43,7 @@ interface SocialStore {
   workspaceId: number | null
   step: number
   setStep: (step: number) => void
-  
+
   // Form data
   scoringRunId: number | null
   brandName: string
@@ -51,17 +51,17 @@ interface SocialStore {
   maxCategories: number
   ideasPerCategory: number
   maxContents: number
-  
+
   // Results
   categories: Category[]
   selectedCategoryIds: number[]
   ideas: Idea[]
   selectedIdeaIds: number[]
   contents: SocialContent[]
-  
+
   // Task
   taskId: string | null
-  
+
   // Actions
   setFormData: (data: Partial<SocialStore>) => void
   setCategories: (categories: Category[]) => void
@@ -94,31 +94,33 @@ export const useSocialStore = create<SocialStore>()(
   persist(
     (set) => ({
       ...initialState,
-      
+
       setStep: (step) => set({ step }),
-      
+
       setFormData: (data) => set((state) => ({ ...state, ...data })),
-      
+
       setCategories: (categories) => set({ categories, selectedCategoryIds: [] }),
-      
-      toggleCategory: (id) => set((state) => ({
-        selectedCategoryIds: state.selectedCategoryIds.includes(id)
-          ? state.selectedCategoryIds.filter(cid => cid !== id)
-          : [...state.selectedCategoryIds, id]
-      })),
-      
+
+      toggleCategory: (id) =>
+        set((state) => ({
+          selectedCategoryIds: state.selectedCategoryIds.includes(id)
+            ? state.selectedCategoryIds.filter((cid) => cid !== id)
+            : [...state.selectedCategoryIds, id],
+        })),
+
       setIdeas: (ideas) => set({ ideas, selectedIdeaIds: [] }),
-      
-      toggleIdea: (id) => set((state) => ({
-        selectedIdeaIds: state.selectedIdeaIds.includes(id)
-          ? state.selectedIdeaIds.filter(iid => iid !== id)
-          : [...state.selectedIdeaIds, id]
-      })),
-      
+
+      toggleIdea: (id) =>
+        set((state) => ({
+          selectedIdeaIds: state.selectedIdeaIds.includes(id)
+            ? state.selectedIdeaIds.filter((iid) => iid !== id)
+            : [...state.selectedIdeaIds, id],
+        })),
+
       setContents: (contents) => set({ contents }),
-      
+
       setTaskId: (taskId) => set({ taskId }),
-      
+
       reset: () => set(initialState),
     }),
     {

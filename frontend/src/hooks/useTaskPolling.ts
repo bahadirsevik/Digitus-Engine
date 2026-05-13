@@ -44,35 +44,38 @@ export function useTaskPolling(
   taskId: string | null,
   storageKey: string,
   intervalMs: number = 3000,
-  brand_profile_id?: number,
+  brand_profile_id?: number
 ) {
   const [status, setStatus] = useState<TaskStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchStatus = useCallback(async (id: string) => {
-    if (!brand_profile_id) {
-      setStatus(null)
-      setLoading(false)
-      return null
-    }
-
-    try {
-      const response = await tasksApi.getStatus(id, brand_profile_id)
-      const data = response.data as TaskStatus
-      setStatus(data)
-      
-      // Task bittiyse storage'dan sil
-      if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-        removeStoredTask(storageKey)
+  const fetchStatus = useCallback(
+    async (id: string) => {
+      if (!brand_profile_id) {
+        setStatus(null)
+        setLoading(false)
+        return null
       }
-      
-      return data
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Polling error')
-      return null
-    }
-  }, [storageKey, brand_profile_id])
+
+      try {
+        const response = await tasksApi.getStatus(id, brand_profile_id)
+        const data = response.data as TaskStatus
+        setStatus(data)
+
+        // Task bittiyse storage'dan sil
+        if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+          removeStoredTask(storageKey)
+        }
+
+        return data
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Polling error')
+        return null
+      }
+    },
+    [storageKey, brand_profile_id]
+  )
 
   // taskId değiştiğinde storage'a kaydet
   useEffect(() => {

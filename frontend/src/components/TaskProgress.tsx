@@ -13,12 +13,12 @@ interface TaskProgressProps {
   errorMessage?: string
 }
 
-export default function TaskProgress({ 
-  taskId, 
-  status, 
-  progress, 
+export default function TaskProgress({
+  taskId,
+  status,
+  progress,
   message,
-  errorMessage 
+  errorMessage,
 }: TaskProgressProps) {
   const getStatusIcon = () => {
     switch (status) {
@@ -36,11 +36,16 @@ export default function TaskProgress({
 
   const getStatusText = () => {
     switch (status) {
-      case 'pending': return 'Bekliyor...'
-      case 'running': return 'Çalışıyor...'
-      case 'completed': return 'Tamamlandı'
-      case 'failed': return 'Hata'
-      case 'cancelled': return 'İptal Edildi'
+      case 'pending':
+        return 'Bekliyor...'
+      case 'running':
+        return 'Çalışıyor...'
+      case 'completed':
+        return 'Tamamlandı'
+      case 'failed':
+        return 'Hata'
+      case 'cancelled':
+        return 'İptal Edildi'
     }
   }
 
@@ -57,18 +62,13 @@ export default function TaskProgress({
       {status === 'running' && (
         <div className="progress-container">
           <div className="progress-bar">
-            <div 
-              className="progress-fill" 
-              style={{ width: `${progress}%` }}
-            />
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
           <span className="progress-text">{progress}%</span>
         </div>
       )}
 
-      {message && (
-        <p className="task-message">{message}</p>
-      )}
+      {message && <p className="task-message">{message}</p>}
 
       {status === 'failed' && errorMessage && (
         <div className="task-error">

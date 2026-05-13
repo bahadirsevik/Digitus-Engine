@@ -1,116 +1,109 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import {
-  Brain,
   CheckCircle2,
   Globe,
-  RefreshCw,
   ArrowRight,
   Plus,
   Archive,
   RotateCcw,
   Settings2,
   AlertCircle,
-} from "lucide-react";
-import { useBrandStore } from "../stores/brandStore";
+} from 'lucide-react'
+import { useBrandStore } from '../stores/brandStore'
 import {
   workspaceApi,
-  brandProfileApi,
-  WorkspaceResponse,
   ProfileConfirmRequest,
-} from "../services/api";
-import "./BrandProfile.css";
+} from '../services/api'
+import './BrandProfile.css'
 
 interface ProfileFormState {
-  company_name: string;
-  sector: string;
-  target_audience: string;
-  products: string;
-  services: string;
-  use_cases: string;
-  problems_solved: string;
-  brand_terms: string;
-  exclude_themes: string;
-  anchor_texts: string;
+  company_name: string
+  sector: string
+  target_audience: string
+  products: string
+  services: string
+  use_cases: string
+  problems_solved: string
+  brand_terms: string
+  exclude_themes: string
+  anchor_texts: string
 }
 
-const ADVANCED_ANCHOR_MODE_KEY = "brand_profile_anchor_advanced";
+const ADVANCED_ANCHOR_MODE_KEY = 'brand_profile_anchor_advanced'
 
 const LIST_FIELD_CONFIG = [
-  { key: "products", label: "Ürünler" },
-  { key: "services", label: "Hizmetler" },
-  { key: "use_cases", label: "Kullanım Alanları" },
-  { key: "problems_solved", label: "Çözülen Problemler" },
-  { key: "brand_terms", label: "Marka Terimleri" },
-  { key: "exclude_themes", label: "Dışlanacak Temalar" },
-] as const;
+  { key: 'products', label: 'Ürünler' },
+  { key: 'services', label: 'Hizmetler' },
+  { key: 'use_cases', label: 'Kullanım Alanları' },
+  { key: 'problems_solved', label: 'Çözülen Problemler' },
+  { key: 'brand_terms', label: 'Marka Terimleri' },
+  { key: 'exclude_themes', label: 'Dışlanacak Temalar' },
+] as const
 
 function emptyProfileForm(): ProfileFormState {
   return {
-    company_name: "",
-    sector: "",
-    target_audience: "",
-    products: "",
-    services: "",
-    use_cases: "",
-    problems_solved: "",
-    brand_terms: "",
-    exclude_themes: "",
-    anchor_texts: "",
-  };
+    company_name: '',
+    sector: '',
+    target_audience: '',
+    products: '',
+    services: '',
+    use_cases: '',
+    problems_solved: '',
+    brand_terms: '',
+    exclude_themes: '',
+    anchor_texts: '',
+  }
 }
 
 function extractErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.detail;
-    if (typeof detail === "string") return detail;
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string') return detail
     if (Array.isArray(detail)) {
       return detail
         .map((item) => {
-          if (typeof item === "string") return item;
-          if (item && typeof item === "object" && "msg" in item)
-            return String((item as any).msg);
-          return JSON.stringify(item);
+          if (typeof item === 'string') return item
+          if (item && typeof item === 'object' && 'msg' in item) return String((item as { msg: unknown }).msg)
+          return JSON.stringify(item)
         })
-        .join(" | ");
+        .join(' | ')
     }
-    return error.message;
+    return error.message
   }
-  return "Beklenmeyen hata";
+  return 'Beklenmeyen hata'
 }
 
 function listToTextarea(value: unknown): string {
-  if (!Array.isArray(value)) return "";
+  if (!Array.isArray(value)) return ''
   return value
-    .filter((item): item is string => typeof item === "string")
+    .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean)
-    .join("\n");
+    .join('\n')
 }
 
 function splitNewlineItems(raw: string): string[] {
   return raw
-    .split("\n")
+    .split('\n')
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter(Boolean)
 }
 
-function profileToForm(
-  profileData?: Record<string, unknown>,
-): ProfileFormState {
-  const form = emptyProfileForm();
-  if (!profileData) return form;
+function profileToForm(profileData?: Record<string, unknown>): ProfileFormState {
+  const form = emptyProfileForm()
+  if (!profileData) return form
 
   const readString = (key: string): string => {
-    const value = profileData[key];
-    return typeof value === "string" ? value : "";
-  };
+    const value = profileData[key]
+    return typeof value === 'string' ? value : ''
+  }
 
   return {
-    company_name: readString("company_name"),
-    sector: readString("sector"),
-    target_audience: readString("target_audience"),
+    company_name: readString('company_name'),
+    sector: readString('sector'),
+    target_audience: readString('target_audience'),
     products: listToTextarea(profileData.products),
     services: listToTextarea(profileData.services),
     use_cases: listToTextarea(profileData.use_cases),
@@ -118,47 +111,50 @@ function profileToForm(
     brand_terms: listToTextarea(profileData.brand_terms),
     exclude_themes: listToTextarea(profileData.exclude_themes),
     anchor_texts: listToTextarea(profileData.anchor_texts),
-  };
+  }
 }
 
 function buildProfilePayload(
   form: ProfileFormState,
-  includeAnchorOverride: boolean,
+  includeAnchorOverride: boolean
 ): Record<string, unknown> {
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, unknown> = {}
 
   LIST_FIELD_CONFIG.forEach(({ key }) => {
-    payload[key] = splitNewlineItems(form[key]);
-  });
+    payload[key] = splitNewlineItems(form[key])
+  })
 
   if (includeAnchorOverride) {
-    payload.anchor_texts = splitNewlineItems(form.anchor_texts);
+    payload.anchor_texts = splitNewlineItems(form.anchor_texts)
   }
 
-  return payload;
+  return payload
 }
 
-function hasGeneratedProfile(workspace: { profile_data: Record<string, unknown> | null; status: string }) {
-  const profile = workspace.profile_data;
-  if (!profile || typeof profile !== "object") return false;
+function hasGeneratedProfile(workspace: {
+  profile_data: Record<string, unknown> | null
+  status: string
+}) {
+  const profile = workspace.profile_data
+  if (!profile || typeof profile !== 'object') return false
   const anchors = Array.isArray(profile.anchor_texts)
-    ? profile.anchor_texts.filter((item: unknown) => String(item || "").trim())
-    : [];
-  return workspace.status === "confirmed" && anchors.length > 0;
+    ? profile.anchor_texts.filter((item: unknown) => String(item || '').trim())
+    : []
+  return workspace.status === 'confirmed' && anchors.length > 0
 }
 
 interface WorkspaceListRow {
-  id: number;
-  name: string;
-  company_url: string;
-  status: string;
-  profile_data: Record<string, unknown> | null;
-  suggested_keywords?: string[] | null;
-  default_geo_target_id?: string | null;
-  default_language_id?: string | null;
-  deleted_at: string | null;
-  created_at: string;
-  run_count: number;
+  id: number
+  name: string
+  company_url: string
+  status: string
+  profile_data: Record<string, unknown> | null
+  suggested_keywords?: string[] | null
+  default_geo_target_id?: string | null
+  default_language_id?: string | null
+  deleted_at: string | null
+  created_at: string
+  run_count: number
 }
 
 // ─── New Workspace Modal ──────────────────────────────
@@ -168,29 +164,29 @@ function CreateWorkspaceModal({
   onClose,
   onCreate,
 }: {
-  open: boolean;
-  onClose: () => void;
-  onCreate: () => void;
+  open: boolean
+  onClose: () => void
+  onCreate: () => void
 }) {
-  const [name, setName] = useState("");
-  const [companyUrl, setCompanyUrl] = useState("");
-  const [competitor1, setCompetitor1] = useState("");
-  const [competitor2, setCompetitor2] = useState("");
-  const [competitor3, setCompetitor3] = useState("");
-  const [preliminaryInfo, setPreliminaryInfo] = useState("");
-  const [geoId, setGeoId] = useState("2792");
-  const [languageId, setLanguageId] = useState("1037");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [name, setName] = useState('')
+  const [companyUrl, setCompanyUrl] = useState('')
+  const [competitor1, setCompetitor1] = useState('')
+  const [competitor2, setCompetitor2] = useState('')
+  const [competitor3, setCompetitor3] = useState('')
+  const [preliminaryInfo, setPreliminaryInfo] = useState('')
+  const [geoId, setGeoId] = useState('2792')
+  const [languageId, setLanguageId] = useState('1037')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = async () => {
-    if (!name.trim() || !companyUrl.trim()) return;
-    setLoading(true);
-    setError("");
+    if (!name.trim() || !companyUrl.trim()) return
+    setLoading(true)
+    setError('')
     try {
       const competitorUrls = [competitor1, competitor2, competitor3]
         .map((c) => c.trim())
-        .filter(Boolean);
+        .filter(Boolean)
       await workspaceApi.create({
         name: name.trim(),
         company_url: companyUrl.trim(),
@@ -198,17 +194,17 @@ function CreateWorkspaceModal({
         preliminary_info: preliminaryInfo.trim() || undefined,
         default_geo_target_id: geoId,
         default_language_id: languageId,
-      });
-      onCreate();
-      onClose();
+      })
+      onCreate()
+      onClose()
     } catch (err: unknown) {
-      setError(extractErrorMessage(err));
+      setError(extractErrorMessage(err))
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
-  if (!open) return null;
+  if (!open) return null
 
   return (
     <div className="modal-overlay">
@@ -277,10 +273,7 @@ function CreateWorkspaceModal({
           </div>
           <div className="form-group">
             <label>Dil</label>
-            <select
-              value={languageId}
-              onChange={(e) => setLanguageId(e.target.value)}
-            >
+            <select value={languageId} onChange={(e) => setLanguageId(e.target.value)}>
               <option value="1037">Türkçe (1037)</option>
               <option value="1001">Almanca (1001)</option>
               <option value="1000">İngilizce (1000)</option>
@@ -299,12 +292,12 @@ function CreateWorkspaceModal({
             onClick={handleSubmit}
             disabled={loading || !name.trim() || !companyUrl.trim()}
           >
-            {loading ? "Oluşturuluyor..." : "Oluştur"}
+            {loading ? 'Oluşturuluyor...' : 'Oluştur'}
           </button>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 // ─── Workspace Detail Panel ──────────────────────────
@@ -314,57 +307,56 @@ function WorkspaceDetail({
   onArchive,
   onRestore,
   onConfirm,
-  onRefresh,
+  onRefresh: _onRefresh,
 }: {
   workspace: WorkspaceListRow & {
-    suggested_keywords?: string[] | null;
-    preliminary_info?: string;
-  };
-  onArchive: () => void;
-  onRestore: () => void;
-  onConfirm: () => void;
-  onRefresh: () => void;
+    suggested_keywords?: string[] | null
+    preliminary_info?: string
+  }
+  onArchive: () => void
+  onRestore: () => void
+  onConfirm: () => void
+  onRefresh: () => void
 }) {
-  const navigate = useNavigate();
-  const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace);
+  const navigate = useNavigate()
+  const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
 
-  const [profileForm, setProfileForm] =
-    useState<ProfileFormState>(emptyProfileForm());
+  const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
   const [advancedAnchorMode, setAdvancedAnchorMode] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(ADVANCED_ANCHOR_MODE_KEY) === "true";
-  });
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState("");
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(ADVANCED_ANCHOR_MODE_KEY) === 'true'
+  })
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (workspace.profile_data) {
-      setProfileForm(profileToForm(workspace.profile_data));
+      setProfileForm(profileToForm(workspace.profile_data))
     }
-  }, [workspace.profile_data]);
+  }, [workspace.profile_data])
 
   const handleConfirm = async () => {
-    setConfirming(true);
-    setError("");
+    setConfirming(true)
+    setError('')
     try {
-      const payload = buildProfilePayload(profileForm, advancedAnchorMode);
+      const payload = buildProfilePayload(profileForm, advancedAnchorMode)
       await workspaceApi.confirm(workspace.id, {
         profile_data: payload,
-      } as ProfileConfirmRequest);
-      onConfirm();
+      } as ProfileConfirmRequest)
+      onConfirm()
     } catch (err: unknown) {
-      setError(extractErrorMessage(err));
+      setError(extractErrorMessage(err))
     } finally {
-      setConfirming(false);
+      setConfirming(false)
     }
-  };
+  }
 
   const handleGoKeywords = () => {
     if (!hasGeneratedProfile(workspace)) {
       setError(
-        "Anahtar kelimelere gecmeden once sirket ozellikleri cikarilmali ve profil onaylanmali.",
-      );
-      return;
+        'Anahtar kelimelere gecmeden once sirket ozellikleri cikarilmali ve profil onaylanmali.'
+      )
+      return
     }
     setActiveWorkspace({
       id: workspace.id,
@@ -375,14 +367,14 @@ function WorkspaceDetail({
       suggested_keywords: workspace.suggested_keywords || null,
       default_geo_target_id: workspace.default_geo_target_id || null,
       default_language_id: workspace.default_language_id || null,
-    });
-    navigate("/keywords?tab=google-ads");
-  };
+    })
+    navigate('/keywords?tab=google-ads')
+  }
 
-  const isArchived = !!workspace.deleted_at;
-  const isDraft = workspace.status === "draft";
-  const isConfirmed = workspace.status === "confirmed";
-  const canContinueToKeywords = hasGeneratedProfile(workspace);
+  const isArchived = !!workspace.deleted_at
+  const isDraft = workspace.status === 'draft'
+  const isConfirmed = workspace.status === 'confirmed'
+  const canContinueToKeywords = hasGeneratedProfile(workspace)
 
   return (
     <div className="workspace-detail">
@@ -392,9 +384,7 @@ function WorkspaceDetail({
           <p className="detail-url">{workspace.company_url}</p>
         </div>
         <div className="detail-actions">
-          <span className={`status-badge status-${workspace.status}`}>
-            {workspace.status}
-          </span>
+          <span className={`status-badge status-${workspace.status}`}>{workspace.status}</span>
           {!isArchived && (
             <>
               <button
@@ -403,17 +393,13 @@ function WorkspaceDetail({
                 disabled={!canContinueToKeywords}
                 title={
                   canContinueToKeywords
-                    ? ""
-                    : "Devam etmek icin once sirket ozellikleri cikarilip profil onaylanmali"
+                    ? ''
+                    : 'Devam etmek icin once sirket ozellikleri cikarilip profil onaylanmali'
                 }
               >
                 Anahtar Kelimelere Geç <ArrowRight size={14} />
               </button>
-              <button
-                className="btn btn-secondary"
-                onClick={onArchive}
-                title="Arşivle"
-              >
+              <button className="btn btn-secondary" onClick={onArchive} title="Arşivle">
                 <Archive size={14} />
               </button>
             </>
@@ -426,27 +412,25 @@ function WorkspaceDetail({
         </div>
       </div>
 
-      {workspace.suggested_keywords &&
-        workspace.suggested_keywords.length > 0 && (
-          <div className="suggested-keywords">
-            <h4>AI Önerdiği 10 Keyword</h4>
-            <div className="chip-list">
-              {workspace.suggested_keywords.map((kw, idx) => (
-                <span key={idx} className="chip">
-                  {kw}
-                </span>
-              ))}
-            </div>
+      {workspace.suggested_keywords && workspace.suggested_keywords.length > 0 && (
+        <div className="suggested-keywords">
+          <h4>AI Önerdiği 10 Keyword</h4>
+          <div className="chip-list">
+            {workspace.suggested_keywords.map((kw, idx) => (
+              <span key={idx} className="chip">
+                {kw}
+              </span>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 
       {!isArchived && !canContinueToKeywords && (
         <div className="disabled-hint">
           <AlertCircle size={14} />
-          Anahtar kelimelere gecmeden once sirket ozellikleri cikarilmali ve
-          profil onaylanmali.
+          Anahtar kelimelere gecmeden once sirket ozellikleri cikarilmali ve profil onaylanmali.
         </div>
       )}
 
@@ -485,18 +469,13 @@ function WorkspaceDetail({
             <button
               className="btn btn-text"
               onClick={() => {
-                const next = !advancedAnchorMode;
-                setAdvancedAnchorMode(next);
-                window.localStorage.setItem(
-                  ADVANCED_ANCHOR_MODE_KEY,
-                  String(next),
-                );
+                const next = !advancedAnchorMode
+                setAdvancedAnchorMode(next)
+                window.localStorage.setItem(ADVANCED_ANCHOR_MODE_KEY, String(next))
               }}
             >
               <Settings2 size={14} />
-              {advancedAnchorMode
-                ? "Anchor metinleri (manuel)"
-                : "Anchor metinleri (otomatik)"}
+              {advancedAnchorMode ? 'Anchor metinleri (manuel)' : 'Anchor metinleri (otomatik)'}
             </button>
           </div>
 
@@ -517,97 +496,88 @@ function WorkspaceDetail({
           )}
 
           {isDraft && (
-            <button
-              className="btn btn-primary"
-              onClick={handleConfirm}
-              disabled={confirming}
-            >
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={confirming}>
               <CheckCircle2 size={14} />
-              {confirming ? "Onaylanıyor..." : "Profili Onayla"}
+              {confirming ? 'Onaylanıyor...' : 'Profili Onayla'}
             </button>
           )}
         </div>
       )}
     </div>
-  );
+  )
 }
 
 // ─── Main Page ───────────────────────────────────────
 
 export default function BrandProfile() {
-  const [workspaces, setWorkspaces] = useState<WorkspaceListRow[]>([]);
-  const [includeArchived, setIncludeArchived] = useState(false);
-  const [archivedCount, setArchivedCount] = useState(0);
-  const [selectedWs, setSelectedWs] = useState<WorkspaceListRow | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [workspaces, setWorkspaces] = useState<WorkspaceListRow[]>([])
+  const [includeArchived, setIncludeArchived] = useState(false)
+  const [archivedCount, setArchivedCount] = useState(0)
+  const [selectedWs, setSelectedWs] = useState<WorkspaceListRow | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const fetchWorkspaces = useCallback(async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      const res = await workspaceApi.list(true);
-      const allWorkspaces = res.data || [];
-      setArchivedCount(
-        allWorkspaces.filter((ws: WorkspaceListRow) => !!ws.deleted_at).length,
-      );
+      const res = await workspaceApi.list(true)
+      const allWorkspaces = res.data || []
+      setArchivedCount(allWorkspaces.filter((ws: WorkspaceListRow) => !!ws.deleted_at).length)
       setWorkspaces(
         includeArchived
           ? allWorkspaces
-          : allWorkspaces.filter((ws: WorkspaceListRow) => !ws.deleted_at),
-      );
+          : allWorkspaces.filter((ws: WorkspaceListRow) => !ws.deleted_at)
+      )
     } catch (err: unknown) {
-      setError(extractErrorMessage(err));
+      setError(extractErrorMessage(err))
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [includeArchived]);
+  }, [includeArchived])
 
   useEffect(() => {
-    fetchWorkspaces();
-  }, [fetchWorkspaces]);
+    fetchWorkspaces()
+  }, [fetchWorkspaces])
 
   const handleArchive = async (id: number) => {
     try {
-      await workspaceApi.archive(id);
-      fetchWorkspaces();
+      await workspaceApi.archive(id)
+      fetchWorkspaces()
     } catch (err: unknown) {
-      setError(extractErrorMessage(err));
+      setError(extractErrorMessage(err))
     }
-  };
+  }
 
   const handleRestore = async (id: number) => {
     try {
-      await workspaceApi.restore(id);
-      fetchWorkspaces();
+      await workspaceApi.restore(id)
+      fetchWorkspaces()
     } catch (err: unknown) {
-      setError(extractErrorMessage(err));
+      setError(extractErrorMessage(err))
     }
-  };
+  }
 
   const handleSelect = async (id: number) => {
     try {
-      const res = await workspaceApi.get(id);
-      setSelectedWs({ ...res.data, run_count: 0 });
+      const res = await workspaceApi.get(id)
+      setSelectedWs({ ...res.data, run_count: 0 })
     } catch (err: unknown) {
-      setError(extractErrorMessage(err));
+      setError(extractErrorMessage(err))
     }
-  };
+  }
 
   return (
     <div className="brand-profile-page">
       <div className="page-header">
         <h1>Marka Çalışmaları</h1>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowCreateModal(true)}
-        >
+        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
           <Plus size={16} /> Yeni Çalışma Oluştur
         </button>
       </div>
 
       <div className="filter-bar">
-        <label className={`archive-toggle ${includeArchived ? "active" : ""}`}>
+        <label className={`archive-toggle ${includeArchived ? 'active' : ''}`}>
           <input
             type="checkbox"
             checked={includeArchived}
@@ -635,24 +605,22 @@ export default function BrandProfile() {
         {workspaces.map((ws) => (
           <div
             key={ws.id}
-            className={`workspace-card ${ws.deleted_at ? "archived" : ""}`}
+            className={`workspace-card ${ws.deleted_at ? 'archived' : ''}`}
             onClick={() => handleSelect(ws.id)}
           >
             <div className="card-header">
               <h3>{ws.name}</h3>
-              <span className={`status-badge status-${ws.status}`}>
-                {ws.status}
-              </span>
+              <span className={`status-badge status-${ws.status}`}>{ws.status}</span>
             </div>
             <p className="card-url">
               <Globe size={12} /> {ws.company_url}
             </p>
             <p className="card-sector">
-              {(ws.profile_data?.sector as string) || "Sektör bilgisi yok"}
+              {(ws.profile_data?.sector as string) || 'Sektör bilgisi yok'}
             </p>
             <div className="card-footer">
               <span>{ws.run_count} analiz</span>
-              <span>{new Date(ws.created_at).toLocaleDateString("tr")}</span>
+              <span>{new Date(ws.created_at).toLocaleDateString('tr')}</span>
             </div>
           </div>
         ))}
@@ -662,21 +630,18 @@ export default function BrandProfile() {
         <>
           <div className="detail-overlay" onClick={() => setSelectedWs(null)} />
           <div className="detail-panel">
-            <button
-              className="detail-close"
-              onClick={() => setSelectedWs(null)}
-            >
+            <button className="detail-close" onClick={() => setSelectedWs(null)}>
               ✕
             </button>
             <WorkspaceDetail
               workspace={selectedWs}
               onArchive={() => {
-                handleArchive(selectedWs.id);
-                setSelectedWs(null);
+                handleArchive(selectedWs.id)
+                setSelectedWs(null)
               }}
               onRestore={() => {
-                handleRestore(selectedWs.id);
-                setSelectedWs(null);
+                handleRestore(selectedWs.id)
+                setSelectedWs(null)
               }}
               onConfirm={fetchWorkspaces}
               onRefresh={fetchWorkspaces}
@@ -691,5 +656,5 @@ export default function BrandProfile() {
         onCreate={fetchWorkspaces}
       />
     </div>
-  );
+  )
 }

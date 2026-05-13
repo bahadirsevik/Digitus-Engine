@@ -174,10 +174,18 @@
   text-transform: uppercase;
 }
 
-.export-status-completed { color: var(--success); }
-.export-status-failed { color: var(--error); }
-.export-status-processing { color: var(--accent-primary); }
-.export-status-pending { color: var(--warning); }
+.export-status-completed {
+  color: var(--success);
+}
+.export-status-failed {
+  color: var(--error);
+}
+.export-status-processing {
+  color: var(--accent-primary);
+}
+.export-status-pending {
+  color: var(--warning);
+}
 
 .export-file {
   color: var(--text-secondary);
@@ -216,7 +224,7 @@
   .format-options {
     grid-template-columns: 1fr;
   }
-  
+
   .channel-options {
     flex-direction: column;
   }

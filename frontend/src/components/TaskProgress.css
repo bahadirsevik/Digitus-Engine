@@ -17,10 +17,18 @@
   flex-shrink: 0;
 }
 
-.status-icon.pending { color: var(--warning); }
-.status-icon.running { color: var(--accent-primary); }
-.status-icon.completed { color: var(--success); }
-.status-icon.failed { color: var(--error); }
+.status-icon.pending {
+  color: var(--warning);
+}
+.status-icon.running {
+  color: var(--accent-primary);
+}
+.status-icon.completed {
+  color: var(--success);
+}
+.status-icon.failed {
+  color: var(--error);
+}
 
 .task-info {
   display: flex;
@@ -84,8 +92,12 @@
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {

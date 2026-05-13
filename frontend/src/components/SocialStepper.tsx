@@ -27,8 +27,12 @@ export default function SocialStepper() {
   }, [currentWorkspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!activeWorkspace?.id) { setRuns([]); return }
-    scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+    if (!activeWorkspace?.id) {
+      setRuns([])
+      return
+    }
+    scoringApi
+      .listRuns({ brand_profile_id: activeWorkspace.id })
       .then((res) => setRuns(Array.isArray(res.data) ? res.data : []))
       .catch((e) => console.error('Failed to fetch runs:', e))
   }, [activeWorkspace?.id])
@@ -36,12 +40,13 @@ export default function SocialStepper() {
   // Auto-fill brand info from confirmed profile when scoring run changes
   useEffect(() => {
     if (!store.scoringRunId || !activeWorkspace?.id) return
-    brandProfileApi.getProfile(store.scoringRunId, activeWorkspace.id)
+    brandProfileApi
+      .getProfile(store.scoringRunId, activeWorkspace.id)
       .then((res) => {
-        const profile = res.data as any
+        const profile = res.data as { status?: string; profile_data?: Record<string, unknown> }
         if (profile.status === 'confirmed' && profile.profile_data) {
           const pd = profile.profile_data
-          const updates: Record<string, any> = {}
+          const updates: Record<string, unknown> = {}
           if (!store.brandName && pd.company_name) updates.brandName = pd.company_name
           if (!store.brandContext) {
             const parts: string[] = []
@@ -53,7 +58,9 @@ export default function SocialStepper() {
           if (Object.keys(updates).length) store.setFormData(updates)
         }
       })
-      .catch(() => { /* profile not found — ok */ })
+      .catch(() => {
+        /* profile not found — ok */
+      })
   }, [store.scoringRunId, activeWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const steps = [
@@ -71,13 +78,16 @@ export default function SocialStepper() {
     setLoading(true)
     setError(null)
     try {
-      const res = await generationApi.createSocialCategories({
-        scoring_run_id: store.scoringRunId!,
-        brand_name: store.brandName,
-        brand_context: store.brandContext,
-        max_categories: store.maxCategories,
-      }, activeWorkspace.id)
-      store.setCategories((res.data as any).categories || [])
+      const res = await generationApi.createSocialCategories(
+        {
+          scoring_run_id: store.scoringRunId!,
+          brand_name: store.brandName,
+          brand_context: store.brandContext,
+          max_categories: store.maxCategories,
+        },
+        activeWorkspace.id
+      )
+      store.setCategories((res.data as { categories?: unknown[] }).categories || [])
       store.setStep(2)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kategori üretimi başarısız')
@@ -98,12 +108,12 @@ export default function SocialStepper() {
       const res = await generationApi.createSocialIdeas(
         { category_ids: store.selectedCategoryIds, ideas_per_category: store.ideasPerCategory },
         store.brandName,
-        activeWorkspace.id,
+        activeWorkspace.id
       )
       const data = res.data as { ideas?: unknown[] } | Array<{ ideas?: unknown[] }>
       const allIdeas = Array.isArray(data)
         ? data.flatMap((cat) => cat.ideas || [])
-        : (data.ideas || [])
+        : data.ideas || []
       store.setIdeas(allIdeas as Idea[])
       store.setStep(3)
     } catch (err) {
@@ -122,11 +132,14 @@ export default function SocialStepper() {
     setLoading(true)
     setError(null)
     try {
-      const res = await generationApi.createSocialContents({
-        idea_ids: store.selectedIdeaIds,
-        brand_name: store.brandName,
-      }, activeWorkspace.id)
-      store.setContents((res.data as any).contents || [])
+      const res = await generationApi.createSocialContents(
+        {
+          idea_ids: store.selectedIdeaIds,
+          brand_name: store.brandName,
+        },
+        activeWorkspace.id
+      )
+      store.setContents((res.data as { contents?: unknown[] }).contents || [])
       store.setStep(4)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'İçerik üretimi başarısız')
@@ -147,7 +160,9 @@ export default function SocialStepper() {
       <div className="stepper-header">
         {steps.map((s, i) => (
           <div key={s.num} className="step-container">
-            <div className={`step-circle ${store.step >= s.num ? 'active' : ''} ${store.step > s.num ? 'completed' : ''}`}>
+            <div
+              className={`step-circle ${store.step >= s.num ? 'active' : ''} ${store.step > s.num ? 'completed' : ''}`}
+            >
               {store.step > s.num ? <Check size={16} /> : s.num}
             </div>
             <div className="step-text">
@@ -169,12 +184,15 @@ export default function SocialStepper() {
               <label>Skorlama Çalışması *</label>
               <select
                 value={store.scoringRunId || ''}
-                onChange={e => store.setFormData({ scoringRunId: Number(e.target.value) })}
+                onChange={(e) => store.setFormData({ scoringRunId: Number(e.target.value) })}
               >
                 <option value="">Seçin...</option>
-                {runs.map(run => (
+                {runs.map((run) => (
                   <option key={run.id} value={run.id}>
-                    {run.run_name || `Çalışma #${run.id}`}{run.created_at ? ` — ${new Date(run.created_at).toLocaleDateString('tr-TR')}` : ''}
+                    {run.run_name || `Çalışma #${run.id}`}
+                    {run.created_at
+                      ? ` — ${new Date(run.created_at).toLocaleDateString('tr-TR')}`
+                      : ''}
                   </option>
                 ))}
               </select>
@@ -184,7 +202,7 @@ export default function SocialStepper() {
               <input
                 type="text"
                 value={store.brandName}
-                onChange={e => store.setFormData({ brandName: e.target.value })}
+                onChange={(e) => store.setFormData({ brandName: e.target.value })}
                 placeholder="Profilden otomatik dolar veya manuel girin"
               />
             </div>
@@ -192,7 +210,7 @@ export default function SocialStepper() {
               <label>Marka Bağlamı</label>
               <textarea
                 value={store.brandContext}
-                onChange={e => store.setFormData({ brandContext: e.target.value })}
+                onChange={(e) => store.setFormData({ brandContext: e.target.value })}
                 placeholder="Markanın sektörü, tonu, hedef kitlesi..."
                 rows={3}
               />
@@ -203,7 +221,7 @@ export default function SocialStepper() {
                 <input
                   type="number"
                   value={store.maxCategories}
-                  onChange={e => store.setFormData({ maxCategories: Number(e.target.value) })}
+                  onChange={(e) => store.setFormData({ maxCategories: Number(e.target.value) })}
                 />
               </div>
               <div className="form-group">
@@ -211,7 +229,7 @@ export default function SocialStepper() {
                 <input
                   type="number"
                   value={store.ideasPerCategory}
-                  onChange={e => store.setFormData({ ideasPerCategory: Number(e.target.value) })}
+                  onChange={(e) => store.setFormData({ ideasPerCategory: Number(e.target.value) })}
                 />
               </div>
             </div>
@@ -224,7 +242,7 @@ export default function SocialStepper() {
             {store.categories.length === 0 ? (
               <p className="empty-state">Henüz kategori üretilmedi</p>
             ) : (
-              store.categories.map(cat => (
+              store.categories.map((cat) => (
                 <label
                   key={cat.id}
                   className={`category-item ${store.selectedCategoryIds.includes(cat.id) ? 'selected' : ''}`}
@@ -251,7 +269,7 @@ export default function SocialStepper() {
             {store.ideas.length === 0 ? (
               <p className="empty-state">Henüz fikir üretilmedi</p>
             ) : (
-              store.ideas.map(idea => (
+              store.ideas.map((idea) => (
                 <label
                   key={idea.id}
                   className={`idea-item ${store.selectedIdeaIds.includes(idea.id) ? 'selected' : ''}`}
@@ -266,8 +284,12 @@ export default function SocialStepper() {
                     <span className="idea-hook">{idea.idea_description}</span>
                   </div>
                   <div className="idea-meta">
-                    <span className="viral-score">📊 {(idea.trend_alignment * 100).toFixed(0)}%</span>
-                    <span className="platform">{idea.target_platform} • {idea.content_format}</span>
+                    <span className="viral-score">
+                      📊 {(idea.trend_alignment * 100).toFixed(0)}%
+                    </span>
+                    <span className="platform">
+                      {idea.target_platform} • {idea.content_format}
+                    </span>
                   </div>
                 </label>
               ))
@@ -286,19 +308,60 @@ export default function SocialStepper() {
               <p className="empty-state">İçerik üretilemedi</p>
             ) : (
               store.contents.map((content, idx) => (
-                <div key={content.id || idx} className="content-card glass-card" style={{ marginBottom: '16px', padding: '16px' }}>
-                  <div className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--accent-primary)' }}>İçerik #{idx + 1}</span>
+                <div
+                  key={content.id || idx}
+                  className="content-card glass-card"
+                  style={{ marginBottom: '16px', padding: '16px' }}
+                >
+                  <div
+                    className="content-header"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <span
+                      style={{ fontWeight: 600, fontSize: '14px', color: 'var(--accent-primary)' }}
+                    >
+                      İçerik #{idx + 1}
+                    </span>
                   </div>
-                  
+
                   {/* Hooks */}
                   {content.hooks && content.hooks.length > 0 && (
                     <div style={{ marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>🎣 Hook'lar</span>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        🎣 Hook'lar
+                      </span>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                          marginTop: '4px',
+                        }}
+                      >
                         {content.hooks.map((hook, hi) => (
-                          <div key={hi} style={{ fontSize: '13px', padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>[{hook.style}]</span>{' '}
+                          <div
+                            key={hi}
+                            style={{
+                              fontSize: '13px',
+                              padding: '6px 10px',
+                              background: 'rgba(255,255,255,0.03)',
+                              borderRadius: '6px',
+                            }}
+                          >
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
+                              [{hook.style}]
+                            </span>{' '}
                             {hook.text}
                           </div>
                         ))}
@@ -308,29 +371,74 @@ export default function SocialStepper() {
 
                   {/* Caption */}
                   <div style={{ marginBottom: '12px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>📝 Caption</span>
-                    <p style={{ fontSize: '13px', marginTop: '4px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{content.caption}</p>
+                    <span
+                      style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}
+                    >
+                      📝 Caption
+                    </span>
+                    <p
+                      style={{
+                        fontSize: '13px',
+                        marginTop: '4px',
+                        lineHeight: '1.5',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {content.caption}
+                    </p>
                   </div>
 
                   {/* Scenario */}
                   {content.scenario && (
                     <div style={{ marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>🎬 Senaryo</span>
-                      <p style={{ fontSize: '13px', marginTop: '4px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{content.scenario}</p>
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        🎬 Senaryo
+                      </span>
+                      <p
+                        style={{
+                          fontSize: '13px',
+                          marginTop: '4px',
+                          lineHeight: '1.5',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {content.scenario}
+                      </p>
                     </div>
                   )}
 
                   {/* CTA */}
                   <div style={{ marginBottom: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>🎯 CTA</span>
+                    <span
+                      style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}
+                    >
+                      🎯 CTA
+                    </span>
                     <p style={{ fontSize: '13px', marginTop: '4px' }}>{content.cta_text}</p>
                   </div>
 
                   {/* Hashtags */}
                   {content.hashtags && content.hashtags.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                    <div
+                      style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}
+                    >
                       {content.hashtags.map((tag, ti) => (
-                        <span key={ti} style={{ fontSize: '12px', padding: '2px 8px', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', borderRadius: '4px' }}>
+                        <span
+                          key={ti}
+                          style={{
+                            fontSize: '12px',
+                            padding: '2px 8px',
+                            background: 'rgba(99, 102, 241, 0.15)',
+                            color: '#818cf8',
+                            borderRadius: '4px',
+                          }}
+                        >
                           {tag.startsWith('#') ? tag : `#${tag}`}
                         </span>
                       ))}
@@ -342,7 +450,8 @@ export default function SocialStepper() {
 
             <div className="completion-banner" style={{ marginTop: '16px' }}>
               <Check size={20} />
-              İçerik üretimi tamamlandı! <a href="/export">Dışa Aktarım</a> sayfasından indirebilirsiniz.
+              İçerik üretimi tamamlandı! <a href="/export">Dışa Aktarım</a> sayfasından
+              indirebilirsiniz.
             </div>
           </div>
         )}
@@ -356,9 +465,9 @@ export default function SocialStepper() {
             Geri
           </button>
         )}
-        
+
         <div className="action-spacer" />
-        
+
         {store.step === 1 && (
           <button
             className="btn btn-primary"
@@ -369,7 +478,7 @@ export default function SocialStepper() {
             <Sparkles size={18} />
           </button>
         )}
-        
+
         {store.step === 2 && (
           <button
             className="btn btn-primary"
@@ -380,7 +489,7 @@ export default function SocialStepper() {
             <ChevronRight size={18} />
           </button>
         )}
-        
+
         {store.step === 3 && (
           <button
             className="btn btn-primary"

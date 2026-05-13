@@ -82,7 +82,9 @@
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.9rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .search-form textarea {
@@ -119,7 +121,7 @@
   font-weight: 500;
 }
 
-.checkbox-group input[type="checkbox"] {
+.checkbox-group input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent-primary);

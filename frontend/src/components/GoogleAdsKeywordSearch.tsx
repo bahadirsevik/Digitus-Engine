@@ -1,76 +1,75 @@
-import { useEffect, useState } from "react";
-import { CheckCircle, Search } from "lucide-react";
-import { useBrandStore } from "../stores/brandStore";
-import { googleAdsApi, EnrichedKeywordOut } from "../services/api";
-import "./GoogleAdsKeywordSearch.css";
+import { useEffect, useState } from 'react'
+import { CheckCircle, Search } from 'lucide-react'
+import { useBrandStore } from '../stores/brandStore'
+import { googleAdsApi, EnrichedKeywordOut } from '../services/api'
+import './GoogleAdsKeywordSearch.css'
 
 interface Props {
-  onImport: (keywords: EnrichedKeywordOut[]) => void;
+  onImport: (keywords: EnrichedKeywordOut[]) => void
 }
 
 const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
-  languageId === "1055" ? "1037" : languageId || "1037";
+  languageId === '1055' ? '1037' : languageId || '1037'
 
 export default function GoogleAdsKeywordSearch({ onImport }: Props) {
-  const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
 
-  const [customerId, setCustomerId] = useState("");
-  const [customers, setCustomers] = useState<string[]>([]);
-  const [seeds, setSeeds] = useState("");
-  const [maxResults, setMaxResults] = useState(100);
-  const [minVolume, setMinVolume] = useState(0);
+  const [customerId, setCustomerId] = useState('')
+  const [customers, setCustomers] = useState<string[]>([])
+  const [seeds, setSeeds] = useState('')
+  const [maxResults, setMaxResults] = useState(100)
+  const [minVolume, setMinVolume] = useState(0)
   const [languageId, setLanguageId] = useState(
-    normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id),
-  );
-  const [geoId, setGeoId] = useState(
-    activeWorkspace?.default_geo_target_id || "2792",
-  );
-  const [ideas, setIdeas] = useState<EnrichedKeywordOut[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+    normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id)
+  )
+  const [geoId, setGeoId] = useState(activeWorkspace?.default_geo_target_id || '2792')
+  const [ideas, setIdeas] = useState<EnrichedKeywordOut[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const suggestedSeeds =
     activeWorkspace?.suggested_keywords
       ?.map((kw) => kw.trim())
       .filter(Boolean)
-      .slice(0, 10) || [];
-  const suggestedSeedText = suggestedSeeds.join("\n");
+      .slice(0, 10) || []
+  const suggestedSeedText = suggestedSeeds.join('\n')
 
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        const res = await googleAdsApi.listCustomers();
-        const ids = (res.data || []).map((item) => item.customer_id);
-        setCustomers(ids);
-        if (!customerId && ids.length === 1) setCustomerId(ids[0]);
+        const res = await googleAdsApi.listCustomers()
+        const ids = (res.data || []).map((item) => item.customer_id)
+        setCustomers(ids)
+        if (!customerId && ids.length === 1) setCustomerId(ids[0])
       } catch {
-        setCustomers([]);
+        setCustomers([])
       }
-    };
-    loadCustomers();
-  }, []);
+    }
+    loadCustomers()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
-    setLanguageId(normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id));
-    setGeoId(activeWorkspace?.default_geo_target_id || "2792");
-    setSeeds(suggestedSeedText);
-    setIdeas([]);
-    setError(null);
+    setLanguageId(normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id))
+    setGeoId(activeWorkspace?.default_geo_target_id || '2792')
+    setSeeds(suggestedSeedText)
+    setIdeas([])
+    setError(null)
   }, [
     activeWorkspace?.id,
     activeWorkspace?.default_language_id,
     activeWorkspace?.default_geo_target_id,
     suggestedSeedText,
-  ]);
+  ])
 
   const handleSearch = async () => {
-    if (!customerId || !seeds.trim()) return;
-    setLoading(true);
-    setError(null);
+    if (!customerId || !seeds.trim()) return
+    setLoading(true)
+    setError(null)
     try {
       const seedList = seeds
-        .split("\n")
+        .split('\n')
         .map((s) => s.trim())
-        .filter(Boolean);
+        .filter(Boolean)
       const res = await googleAdsApi.enrich({
         customer_id: customerId,
         seeds: seedList,
@@ -78,29 +77,26 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
         min_volume: minVolume,
         language_id: languageId,
         geo_target_id: geoId,
-      });
-      setIdeas(res.data.keywords || []);
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.detail || "Google Ads araması başarısız oldu",
-      );
+      })
+      setIdeas(res.data.keywords || [])
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } }
+      setError(e?.response?.data?.detail || 'Google Ads araması başarısız oldu')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleImport = () => {
-    onImport(ideas);
-  };
+    onImport(ideas)
+  }
 
   return (
     <div className="google-ads-component">
       {activeWorkspace && suggestedSeeds.length > 0 && (
         <div className="autofill-info">
           <CheckCircle size={15} />
-          <span>
-            Marka profilinden {suggestedSeeds.length} seed kelime yüklendi
-          </span>
+          <span>Marka profilinden {suggestedSeeds.length} seed kelime yüklendi</span>
         </div>
       )}
 
@@ -108,10 +104,7 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
         <div className="form-group">
           <label>Müşteri Google Ads Hesabı</label>
           {customers.length > 0 ? (
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-            >
+            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
               <option value="">Hesap seçin</option>
               {customers.map((id) => (
                 <option key={id} value={id}>
@@ -142,19 +135,11 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
         <div className="form-row">
           <div className="form-group">
             <label>Dil</label>
-            <input
-              type="text"
-              value={languageId}
-              onChange={(e) => setLanguageId(e.target.value)}
-            />
+            <input type="text" value={languageId} onChange={(e) => setLanguageId(e.target.value)} />
           </div>
           <div className="form-group">
             <label>Geo Target</label>
-            <input
-              type="text"
-              value={geoId}
-              onChange={(e) => setGeoId(e.target.value)}
-            />
+            <input type="text" value={geoId} onChange={(e) => setGeoId(e.target.value)} />
           </div>
           <div className="form-group">
             <label>Min Volume</label>
@@ -180,7 +165,7 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
           disabled={loading || !customerId || !seeds.trim()}
         >
           <Search size={16} />
-          {loading ? "Aranıyor..." : "Ara"}
+          {loading ? 'Aranıyor...' : 'Ara'}
         </button>
       </div>
 
@@ -225,5 +210,5 @@ export default function GoogleAdsKeywordSearch({ onImport }: Props) {
         </>
       )}
     </div>
-  );
+  )
 }

@@ -90,9 +90,7 @@ export default function Tasks() {
     return labels[type] || type
   }
 
-  const filteredTasks = filter === 'all'
-    ? tasks
-    : tasks.filter(t => t.status === filter)
+  const filteredTasks = filter === 'all' ? tasks : tasks.filter((t) => t.status === filter)
 
   return (
     <div className="tasks-page animate-fade-in">
@@ -111,16 +109,21 @@ export default function Tasks() {
 
       {/* Filters */}
       <div className="task-filters">
-        {['all', 'running', 'pending', 'completed', 'failed'].map(f => (
+        {['all', 'running', 'pending', 'completed', 'failed'].map((f) => (
           <button
             key={f}
             className={`filter-btn ${filter === f ? 'active' : ''}`}
             onClick={() => setFilter(f)}
           >
-            {f === 'all' ? 'Tümü' : 
-             f === 'running' ? 'Çalışıyor' :
-             f === 'pending' ? 'Bekliyor' :
-             f === 'completed' ? 'Tamamlandı' : 'Hatalı'}
+            {f === 'all'
+              ? 'Tümü'
+              : f === 'running'
+                ? 'Çalışıyor'
+                : f === 'pending'
+                  ? 'Bekliyor'
+                  : f === 'completed'
+                    ? 'Tamamlandı'
+                    : 'Hatalı'}
           </button>
         ))}
       </div>
@@ -132,7 +135,7 @@ export default function Tasks() {
         ) : filteredTasks.length === 0 ? (
           <div className="empty-state">Görev bulunamadı</div>
         ) : (
-          filteredTasks.map(task => (
+          filteredTasks.map((task) => (
             <div key={task.task_id} className={`task-card glass-card task-${task.status}`}>
               <div className="task-header">
                 {getStatusIcon(task.status)}

@@ -33,6 +33,7 @@ export default function Export() {
 
   useEffect(() => {
     fetchRuns()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id])
 
   useEffect(() => {
@@ -63,13 +64,15 @@ export default function Export() {
         if (nextStatus.status === 'completed' || nextStatus.status === 'failed') {
           setExporting(false)
         }
-      } catch (err: any) {
-        setError(err?.response?.data?.detail || err?.message || 'Export durumu alınamadı')
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { detail?: string } }; message?: string }
+        setError(e?.response?.data?.detail || e?.message || 'Export durumu alınamadı')
         setExporting(false)
       }
     }, 2000)
 
     return () => window.clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExport?.export_id, activeExport?.status, activeWorkspace?.id])
 
   const fetchRuns = async () => {
@@ -90,7 +93,7 @@ export default function Export() {
 
   const toggleChannel = (channel: string) => {
     setChannels((prev) =>
-      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel],
+      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel]
     )
   }
 
@@ -117,8 +120,9 @@ export default function Export() {
 
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Dosya indirilemedi')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string }
+      setError(e?.response?.data?.detail || e?.message || 'Dosya indirilemedi')
     }
   }
 
@@ -144,9 +148,10 @@ export default function Export() {
       setActiveExport(job)
       setRecentExports((prev) => [job, ...prev.filter((item) => item.export_id !== job.export_id)])
       if (job.status === 'failed') setExporting(false)
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string }
       console.error('Export failed:', err)
-      const msg = err?.response?.data?.detail || err?.message || 'Bilinmeyen hata'
+      const msg = e?.response?.data?.detail || e?.message || 'Bilinmeyen hata'
       setError(`Dışa aktarım sırasında hata oluştu: ${msg}`)
       setExporting(false)
     }
@@ -296,9 +301,15 @@ export default function Export() {
       <div className="export-info glass-card">
         <h3>Dışa Aktarım Bilgisi</h3>
         <ul>
-          <li><strong>Excel:</strong> Kanal bazlı tam veri tablosu</li>
-          <li><strong>Word:</strong> Özet rapor ve tablolar</li>
-          <li><strong>PDF:</strong> Yazdırılabilir rapor çıkışı</li>
+          <li>
+            <strong>Excel:</strong> Kanal bazlı tam veri tablosu
+          </li>
+          <li>
+            <strong>Word:</strong> Özet rapor ve tablolar
+          </li>
+          <li>
+            <strong>PDF:</strong> Yazdırılabilir rapor çıkışı
+          </li>
         </ul>
       </div>
     </div>

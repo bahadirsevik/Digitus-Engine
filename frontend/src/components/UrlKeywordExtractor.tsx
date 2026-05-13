@@ -1,44 +1,43 @@
-import { useEffect, useState } from "react";
-import { Globe, Info } from "lucide-react";
-import { useBrandStore } from "../stores/brandStore";
-import { googleAdsUrlSeedApi, UrlSeedIdea } from "../services/api";
-import "./GoogleAdsKeywordSearch.css";
+import { useEffect, useState } from 'react'
+import { Globe, Info } from 'lucide-react'
+import { useBrandStore } from '../stores/brandStore'
+import { googleAdsUrlSeedApi, UrlSeedIdea } from '../services/api'
+import './GoogleAdsKeywordSearch.css'
 
 interface Props {
-  onImport: (keywords: UrlSeedIdea[]) => void;
+  onImport: (keywords: UrlSeedIdea[]) => void
 }
 
 const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
-  languageId === "1055" ? "1037" : languageId || "1037";
+  languageId === '1055' ? '1037' : languageId || '1037'
 
 export default function UrlKeywordExtractor({ onImport }: Props) {
-  const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
+  const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
 
-  const [url, setUrl] = useState(activeWorkspace?.company_url || "");
-  const [maxResults, setMaxResults] = useState(300);
-  const [minVolume, setMinVolume] = useState(0);
-  const [includeSeed, setIncludeSeed] = useState(false);
-  const [ideas, setIdeas] = useState<UrlSeedIdea[]>([]);
-  const [total, setTotal] = useState(0);
-  const [cached, setCached] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl] = useState(activeWorkspace?.company_url || '')
+  const [maxResults, setMaxResults] = useState(300)
+  const [minVolume, setMinVolume] = useState(0)
+  const [includeSeed, setIncludeSeed] = useState(false)
+  const [ideas, setIdeas] = useState<UrlSeedIdea[]>([])
+  const [total, setTotal] = useState(0)
+  const [cached, setCached] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setUrl(activeWorkspace?.company_url || "");
-    setIdeas([]);
-    setTotal(0);
-    setCached(false);
-    setError(null);
-  }, [activeWorkspace?.id]);
+    setUrl(activeWorkspace?.company_url || '')
+    setIdeas([])
+    setTotal(0)
+    setCached(false)
+    setError(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id])
 
   const handleExtract = async (forceRefresh = false) => {
-    if (!url.trim() || !activeWorkspace?.id) return;
-    const normalizedUrl = /^https?:\/\//i.test(url.trim())
-      ? url.trim()
-      : `https://${url.trim()}`;
-    setLoading(true);
-    setError(null);
+    if (!url.trim() || !activeWorkspace?.id) return
+    const normalizedUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`
+    setLoading(true)
+    setError(null)
     try {
       const res = await googleAdsUrlSeedApi.keywordIdeasByUrl({
         url: normalizedUrl,
@@ -47,25 +46,24 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
         min_volume: minVolume,
         include_keyword_seed: includeSeed,
         language_id: normalizeGoogleAdsLanguageId(activeWorkspace.default_language_id),
-        geo_target_id: activeWorkspace.default_geo_target_id || "2792",
+        geo_target_id: activeWorkspace.default_geo_target_id || '2792',
         refresh: forceRefresh,
-      });
-      const data = res.data;
-      setIdeas(data.ideas || []);
-      setTotal(data.total);
-      setCached(data.cached);
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.detail || "URL'den keyword çıkarma başarısız oldu",
-      );
+      })
+      const data = res.data
+      setIdeas(data.ideas || [])
+      setTotal(data.total)
+      setCached(data.cached)
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } }
+      setError(e?.response?.data?.detail || "URL'den keyword çıkarma başarısız oldu")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleImport = () => {
-    onImport(ideas);
-  };
+    onImport(ideas)
+  }
 
   return (
     <div className="url-extractor">
@@ -76,7 +74,7 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder={activeWorkspace?.company_url || "https://..."}
+            placeholder={activeWorkspace?.company_url || 'https://...'}
           />
         </div>
 
@@ -115,7 +113,7 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
           disabled={loading || !url.trim() || !activeWorkspace?.id}
         >
           <Globe size={16} />
-          {loading ? "Çıkarılıyor..." : "URL'den Çıkar"}
+          {loading ? 'Çıkarılıyor...' : "URL'den Çıkar"}
         </button>
       </div>
 
@@ -124,7 +122,8 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
           <div className="cache-copy">
             <Info size={14} />
             <span>
-              Önceki sonuç kullanıldı. Parametreleri değiştirerek veya yeniden çek seçeneğiyle güncel sorgu yapabilirsiniz.
+              Önceki sonuç kullanıldı. Parametreleri değiştirerek veya yeniden çek seçeneğiyle
+              güncel sorgu yapabilirsiniz.
             </span>
           </div>
           <button
@@ -144,7 +143,7 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
           <div className="preview-header">
             <span>
               {ideas.length} / {total} keyword bulundu
-              {cached && " (önceki sonuç)"}
+              {cached && ' (önceki sonuç)'}
             </span>
             <button className="btn btn-primary" onClick={handleImport}>
               Sisteme Aktar
@@ -177,5 +176,5 @@ export default function UrlKeywordExtractor({ onImport }: Props) {
         </>
       )}
     </div>
-  );
+  )
 }

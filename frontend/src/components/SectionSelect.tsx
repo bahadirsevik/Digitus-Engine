@@ -29,18 +29,18 @@ const defaultSections: Section[] = [
 export default function SectionSelect({
   sections = defaultSections,
   selected,
-  onChange
+  onChange,
 }: SectionSelectProps) {
   const toggleSection = (id: string) => {
     if (selected.includes(id)) {
-      onChange(selected.filter(s => s !== id))
+      onChange(selected.filter((s) => s !== id))
     } else {
       onChange([...selected, id])
     }
   }
 
   const selectAll = () => {
-    onChange(sections.map(s => s.id))
+    onChange(sections.map((s) => s.id))
   }
 
   const selectNone = () => {
@@ -58,14 +58,12 @@ export default function SectionSelect({
       </div>
 
       <div className="section-list">
-        {sections.map(section => (
+        {sections.map((section) => (
           <label
             key={section.id}
             className={`section-item ${selected.includes(section.id) ? 'selected' : ''}`}
           >
-            <div className="checkbox">
-              {selected.includes(section.id) && <Check size={14} />}
-            </div>
+            <div className="checkbox">{selected.includes(section.id) && <Check size={14} />}</div>
             <input
               type="checkbox"
               checked={selected.includes(section.id)}
@@ -73,9 +71,7 @@ export default function SectionSelect({
             />
             <div className="section-info">
               <span className="section-label">{section.label}</span>
-              {section.description && (
-                <span className="section-desc">{section.description}</span>
-              )}
+              {section.description && <span className="section-desc">{section.description}</span>}
             </div>
           </label>
         ))}
@@ -83,4 +79,3 @@ export default function SectionSelect({
     </div>
   )
 }
-
