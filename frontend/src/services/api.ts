@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 
 const API_BASE = "/api/v1";
 
@@ -8,6 +8,36 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+export interface ApiError {
+  status: number;
+  message: string;
+  detail?: unknown;
+}
+
+api.interceptors.response.use(
+  (res) => res,
+  (err: AxiosError<{ detail?: unknown }>) => {
+    const status = err.response?.status ?? 0;
+    const raw = err.response?.data?.detail;
+    let message: string;
+    if (status === 401) {
+      message = "Kimlik doğrulama gerekli. Lütfen oturum açın.";
+    } else if (status === 403) {
+      message = "Bu işlem için yetkiniz yok.";
+    } else if (status === 404) {
+      message = typeof raw === "string" ? raw : "İstenen kaynak bulunamadı.";
+    } else if (status === 400) {
+      message = typeof raw === "string" ? raw : "Geçersiz istek parametreleri.";
+    } else if (status >= 500) {
+      message = "Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.";
+    } else {
+      message = typeof raw === "string" ? raw : err.message;
+    }
+    const apiError: ApiError = { status, message, detail: raw };
+    return Promise.reject(apiError);
+  }
+);
 
 // Keywords API
 export const keywordsApi = {

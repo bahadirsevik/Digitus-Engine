@@ -407,6 +407,7 @@ tests/
 |-- integration/
 |   |-- test_migration_chain.py              # Bos DB'den alembic upgrade head smoke
 |   |-- test_workspace_isolation.py          # Cross-workspace 404/400 izolasyon testleri
+|   |-- test_auth.py                         # API key enable/disable + missing/invalid header senaryolari
 ```
 
 Not: `tests/test_api.py`, `test_channel.py`, `test_database.py`, `test_schemas.py`, `test_structure.py`,
