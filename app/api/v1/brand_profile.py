@@ -4,7 +4,7 @@ Site analysis, profile management, and relevance scoring.
 """
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
@@ -152,12 +152,11 @@ def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
 )
 def get_profile(
     run_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Get the brand profile for a scoring run."""
-    if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     profile = db.query(BrandProfile).filter(
         BrandProfile.scoring_run_id == run_id
@@ -177,7 +176,7 @@ def analyze_profile(
     run_id: int,
     request: ProfileAnalyzeRequest,
     background_tasks: BackgroundTasks,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai),
 ):
@@ -192,8 +191,7 @@ def analyze_profile(
             detail="Site profil analizi devre dışı (ENABLE_SITE_PROFILE_ANALYSIS=false)"
         )
 
-    if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
     if not scoring_run:
@@ -292,7 +290,7 @@ def confirm_profile(
 )
 def compute_relevance(
     run_id: int,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """
@@ -305,8 +303,7 @@ def compute_relevance(
             detail="Relevance rerank devre dışı (ENABLE_RELEVANCE_RERANK=false)"
         )
 
-    if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     # Yeni mimari: ScoringRun.brand_profile_id üzerinden; eski 1:1 fallback
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
@@ -409,12 +406,11 @@ def compute_relevance(
 def get_relevance_scores(
     run_id: int,
     min_score: float = 0.0,
-    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """Get keyword relevance scores for a run."""
-    if brand_profile_id is not None:
-        verify_scoring_run(db, run_id, brand_profile_id)
+    verify_scoring_run(db, run_id, brand_profile_id)
 
     results = (
         db.query(KeywordRelevance, Keyword)

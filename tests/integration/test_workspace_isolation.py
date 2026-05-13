@@ -18,13 +18,13 @@ from app.core.workspace import verify_scoring_run, verify_workspace
 # ===========================================================================
 
 
-def test_verify_scoring_run_mutating_requires_brand_profile_id(db_session, make_workspace, make_scoring_run):
-    """Mutating call without brand_profile_id must 400 with the standard message."""
+def test_verify_scoring_run_requires_brand_profile_id(db_session, make_workspace, make_scoring_run):
+    """brand_profile_id is always required — None raises 400."""
     ws = make_workspace(name="A", status="confirmed")
     run = make_scoring_run(brand_profile_id=ws.id)
 
     with pytest.raises(HTTPException) as exc:
-        verify_scoring_run(db_session, run.id, brand_profile_id=None, mutating=True)
+        verify_scoring_run(db_session, run.id, brand_profile_id=None)
     assert exc.value.status_code == 400
     assert exc.value.detail == "brand_profile_id is required"
 
@@ -35,7 +35,7 @@ def test_verify_scoring_run_returns_run_when_workspace_matches(
     ws = make_workspace(name="A", status="confirmed")
     run = make_scoring_run(brand_profile_id=ws.id)
 
-    got = verify_scoring_run(db_session, run.id, brand_profile_id=ws.id, mutating=True)
+    got = verify_scoring_run(db_session, run.id, brand_profile_id=ws.id)
     assert got.id == run.id
 
 
@@ -48,7 +48,7 @@ def test_verify_scoring_run_404_when_workspace_mismatch(
     run_in_a = make_scoring_run(brand_profile_id=ws_a.id)
 
     with pytest.raises(HTTPException) as exc:
-        verify_scoring_run(db_session, run_in_a.id, brand_profile_id=ws_b.id, mutating=True)
+        verify_scoring_run(db_session, run_in_a.id, brand_profile_id=ws_b.id)
     assert exc.value.status_code == 404
     assert "not found" in exc.value.detail
 
@@ -57,19 +57,20 @@ def test_verify_scoring_run_404_when_run_missing(db_session, make_workspace):
     ws = make_workspace(name="A", status="confirmed")
 
     with pytest.raises(HTTPException) as exc:
-        verify_scoring_run(db_session, run_id=99999, brand_profile_id=ws.id, mutating=True)
+        verify_scoring_run(db_session, run_id=99999, brand_profile_id=ws.id)
     assert exc.value.status_code == 404
 
 
-def test_verify_scoring_run_legacy_read_path_warns_but_succeeds(
+def test_verify_scoring_run_always_requires_workspace(
     db_session, make_workspace, make_scoring_run
 ):
-    """Read-only access without workspace logs a warning but still returns the run."""
+    """brand_profile_id=None always raises 400 (no legacy read path)."""
     ws = make_workspace(name="A", status="confirmed")
     run = make_scoring_run(brand_profile_id=ws.id)
 
-    got = verify_scoring_run(db_session, run.id, brand_profile_id=None, mutating=False)
-    assert got.id == run.id
+    with pytest.raises(HTTPException) as exc:
+        verify_scoring_run(db_session, run.id, brand_profile_id=None)
+    assert exc.value.status_code == 400
 
 
 # ===========================================================================

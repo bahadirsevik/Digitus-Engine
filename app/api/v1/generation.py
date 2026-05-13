@@ -42,18 +42,12 @@ router = APIRouter()
 @router.post("/seo-geo", response_model=None)
 def generate_seo_geo_content(
     request: SEOGEOGenerateRequest,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Generate SEO+GEO optimized content for a single keyword.
-    
-    Creates blog content that is optimized for both:
-    - SEO (11 programmatic criteria)
-    - GEO (7 AI-evaluated criteria for AI snippet optimization)
-    
-    Returns content with detailed compliance scores.
-    """
+    """Generate SEO+GEO optimized content for a single keyword."""
+    verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
     try:
         generator = SEOGEOGenerator(db, ai)
         result = generator.generate_content(request)
@@ -735,19 +729,19 @@ def regenerate_social_content(
         )
 
 
-# ==================== LEGACY ENDPOINTS ====================
+# ==================== LEGACY ENDPOINTS (deprecated — will be removed) ====================
 
 @router.post("/ads")
-
 def generate_ads_content(
     request: AdGroupRequest,
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Generate Google Ads content for keywords.
-    Creates headlines, descriptions, and extensions.
-    """
+    """Deprecated. Use POST /ads/rsa with brand_profile_id."""
+    raise HTTPException(
+        status_code=410,
+        detail="Deprecated. Use POST /generation/ads/rsa?brand_profile_id=<id> instead.",
+    )
     keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
     
     if not keywords:
@@ -809,10 +803,11 @@ def generate_social_content(
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
-    """
-    Generate social media content.
-    Creates platform-specific posts with hashtags.
-    """
+    """Deprecated. Use POST /social/categories with brand_profile_id."""
+    raise HTTPException(
+        status_code=410,
+        detail="Deprecated. Use POST /generation/social/categories?brand_profile_id=<id> instead.",
+    )
     keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
     
     if not keywords:
