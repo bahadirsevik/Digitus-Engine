@@ -15,7 +15,8 @@ celery_app = Celery(
     include=[
         "app.tasks.scoring_tasks",
         "app.tasks.intent_tasks",
-        "app.tasks.generation_tasks"
+        "app.tasks.generation_tasks",
+        "app.tasks.export_tasks",
     ]
 )
 

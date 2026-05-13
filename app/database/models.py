@@ -807,6 +807,42 @@ class WorkspaceKeyword(Base):
     )
 
 
+class ExportJob(Base):
+    """DB-backed export job — replaces in-memory _export_status dict (plan2 §P2)."""
+
+    __tablename__ = "export_jobs"
+
+    id = Column(String(36), primary_key=True)  # UUID
+    brand_profile_id = Column(
+        Integer, ForeignKey("brand_profiles.id"), nullable=False, index=True
+    )
+    scoring_run_id = Column(Integer, ForeignKey("scoring_runs.id"), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    format = Column(String(10), nullable=True)
+    sections = Column(JSON, nullable=True)
+    include_stale_content = Column(Boolean, nullable=False, default=False)
+    file_name = Column(String(500), nullable=True)
+    filepath = Column(String(1000), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    brand_profile = relationship("BrandProfile")
+    scoring_run = relationship("ScoringRun", foreign_keys=[scoring_run_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="ck_export_jobs_status",
+        ),
+        Index("idx_export_jobs_workspace", "brand_profile_id"),
+        Index("idx_export_jobs_run", "scoring_run_id"),
+    )
+
+
 @event.listens_for(WorkspaceKeyword, "before_update")
 def _prevent_workspace_keyword_snapshot_update(mapper, connection, target):
     """WorkspaceKeyword import-time snapshot fields are immutable; notes remains mutable."""

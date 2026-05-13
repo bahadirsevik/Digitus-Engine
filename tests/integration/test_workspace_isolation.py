@@ -478,35 +478,31 @@ def test_create_export_cross_workspace_returns_404(
     assert resp.status_code == 404
 
 
-def test_export_status_cross_workspace_returns_404(client, make_workspace):
+def test_export_status_cross_workspace_returns_404(client, db_session, make_workspace):
     """An export id from workspace A must not be readable via workspace B."""
-    from app.api.v1.export import _export_status
-    from app.schemas.export import ExportStatusEnum
+    import uuid
+    from app.database.models import ExportJob
 
     ws_a = make_workspace(name="A")
     ws_b = make_workspace(name="B")
 
-    # Plant a fake completed export under ws_a.
-    export_id = "fake-export-1"
-    _export_status[(ws_a.id, export_id)] = {
-        'export_id': export_id,
-        'brand_profile_id': ws_a.id,
-        'status': ExportStatusEnum.COMPLETED,
-        'progress': 100,
-        'file_name': 'fake.xlsx',
-        'filepath': '/tmp/fake.xlsx',
-        'error_message': None,
-        'created_at': None,
-        'scoring_run_id': 1,
-    }
-    try:
-        resp = client.get(
-            f"/api/v1/export/{export_id}/status",
-            params={"brand_profile_id": ws_b.id},
-        )
-        assert resp.status_code == 404
-    finally:
-        _export_status.pop((ws_a.id, export_id), None)
+    export_id = str(uuid.uuid4())
+    job = ExportJob(
+        id=export_id,
+        brand_profile_id=ws_a.id,
+        scoring_run_id=None,
+        status="completed",
+        progress=100,
+        format="excel",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    resp = client.get(
+        f"/api/v1/export/{export_id}/status",
+        params={"brand_profile_id": ws_b.id},
+    )
+    assert resp.status_code == 404
 
 
 def test_list_exports_for_run_requires_brand_profile_id(

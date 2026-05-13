@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.database.models import BrandProfile, ScoringRun, TaskResult
+from app.database.models import BrandProfile, ExportJob, ScoringRun, TaskResult
 
 
 def verify_workspace(db: Session, brand_profile_id: int) -> BrandProfile:
@@ -128,3 +128,37 @@ def verify_task_in_workspace(
     if not row:
         raise HTTPException(status_code=404, detail="task not found in workspace")
     return row[0]
+
+
+def verify_export_in_workspace(
+    db: Session,
+    export_job_id: str,
+    brand_profile_id: int,
+) -> ExportJob:
+    """ExportJob var mı + verilen workspace'e ait mi?
+
+    Plan2 §P2: in-memory dict yerini DB-backed ExportJob aldı.
+
+    Raises:
+        HTTPException 400: brand_profile_id None.
+        HTTPException 404: job yoksa veya workspace ile eşleşmiyorsa.
+    """
+    if brand_profile_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="brand_profile_id is required",
+        )
+
+    verify_workspace(db, brand_profile_id)
+
+    job = (
+        db.query(ExportJob)
+        .filter(
+            ExportJob.id == export_job_id,
+            ExportJob.brand_profile_id == brand_profile_id,
+        )
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="export not found in workspace")
+    return job
