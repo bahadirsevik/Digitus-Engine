@@ -64,6 +64,7 @@ export default function Scoring() {
   const [selectedRun, setSelectedRun] = useState<number | null>(null);
   const [scores, setScores] = useState<KeywordScore[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [sortField, setSortField] = useState<SortField>("ads_score");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -120,13 +121,14 @@ export default function Scoring() {
 
   const createRun = async () => {
     if (!activeWorkspace?.id) {
-      alert("Önce Marka Çalışması seçin");
+      setErrorMsg("Önce Marka Çalışması seçin");
       return;
     }
     if (!newRun.enable_ads && !newRun.enable_seo && !newRun.enable_social) {
-      alert("En az bir kanal seçilmelidir");
+      setErrorMsg("En az bir kanal seçilmelidir");
       return;
     }
+    setErrorMsg(null);
     try {
       const res = await scoringApi.createRun({
         ...newRun,
@@ -558,6 +560,7 @@ export default function Scoring() {
               </select>
             </div>
 
+            {errorMsg && <div className="modal-error">{errorMsg}</div>}
             <div className="modal-actions">
               <button
                 className="btn btn-secondary"

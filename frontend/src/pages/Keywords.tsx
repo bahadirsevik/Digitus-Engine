@@ -153,7 +153,7 @@ export default function Keywords() {
   const handleCreate = async () => {
     if (!newKeyword.keyword.trim()) return;
     if (!activeWorkspace) {
-      alert("Önce bir marka çalışması seçin");
+      setError("Önce bir marka çalışması seçin");
       return;
     }
     try {
@@ -191,7 +191,7 @@ export default function Keywords() {
 
   const handleDeleteAll = async () => {
     if (!activeWorkspace) {
-      alert("Önce bir marka çalışması seçin");
+      setError("Önce bir marka çalışması seçin");
       return;
     }
     if (
@@ -204,7 +204,7 @@ export default function Keywords() {
       await keywordsApi.deleteAll(activeWorkspace.id);
       fetchKeywords();
     } catch (err) {
-      alert("Silme başarısız oldu");
+      setError("Silme başarısız oldu");
     }
   };
 
@@ -295,7 +295,7 @@ export default function Keywords() {
 
   const handleGoogleAdsImport = async (keywords: EnrichedKeywordOut[]) => {
     if (!activeWorkspace) {
-      alert("Önce bir marka çalışması seçin");
+      setError("Önce bir marka çalışması seçin");
       return;
     }
     const mapped: KeywordCreate[] = keywords.map((kw) => ({
@@ -310,16 +310,16 @@ export default function Keywords() {
     }));
     try {
       await keywordsApi.import(mapped, activeWorkspace.id);
-      alert(`${mapped.length} keyword içe aktarıldı`);
+      setUploadStatus(`✓ ${mapped.length} keyword içe aktarıldı`);
       fetchKeywords();
     } catch (err: any) {
-      alert(`Hata: ${err?.response?.data?.detail || err.message}`);
+      setError(`Hata: ${err?.response?.data?.detail || err.message}`);
     }
   };
 
   const handleUrlSeedImport = async (keywords: UrlSeedIdea[]) => {
     if (!activeWorkspace) {
-      alert("Önce bir marka çalışması seçin");
+      setError("Önce bir marka çalışması seçin");
       return;
     }
     const mapped: KeywordCreate[] = keywords.map((idea) => ({
@@ -334,10 +334,10 @@ export default function Keywords() {
     }));
     try {
       await keywordsApi.import(mapped, activeWorkspace.id);
-      alert(`${mapped.length} keyword içe aktarıldı`);
+      setUploadStatus(`✓ ${mapped.length} keyword içe aktarıldı`);
       fetchKeywords();
     } catch (err: any) {
-      alert(`Hata: ${err?.response?.data?.detail || err.message}`);
+      setError(`Hata: ${err?.response?.data?.detail || err.message}`);
     }
   };
 
