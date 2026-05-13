@@ -120,6 +120,8 @@ def create_keyword(
 
     `brand_profile_id` zorunludur (request body içinden gelir).
     """
+    if keyword_data.brand_profile_id is None:
+        raise HTTPException(status_code=400, detail="brand_profile_id is required")
     verify_workspace(db, keyword_data.brand_profile_id)
 
     result = crud.create_keywords_bulk(
@@ -218,6 +220,8 @@ def import_keywords(
     db: Session = Depends(get_db),
 ):
     """Bulk import keywords into a workspace. `brand_profile_id` zorunlu."""
+    if import_data.brand_profile_id is None:
+        raise HTTPException(status_code=400, detail="brand_profile_id is required")
     verify_workspace(db, import_data.brand_profile_id)
 
     result = crud.create_keywords_bulk(

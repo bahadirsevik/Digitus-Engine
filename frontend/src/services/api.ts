@@ -152,9 +152,6 @@ export const exportApi = {
 
 // Generation API
 export const generationApi = {
-  generateAds: (keywordIds: number[]) =>
-    api.post("/generation/ads", { keyword_ids: keywordIds }),
-
   generateSeoGeo: (
     keywordIds: number[],
     contentType?: string,
@@ -164,12 +161,6 @@ export const generationApi = {
       keyword_ids: keywordIds,
       content_type: contentType || "blog_post",
       target_word_count: wordCount || 1500,
-    }),
-
-  generateSocial: (keywordIds: number[], platforms?: string[]) =>
-    api.post("/generation/social", {
-      keyword_ids: keywordIds,
-      platforms: platforms || ["instagram", "twitter", "linkedin"],
     }),
 
   listSeoGeo: (runId: number, limit = 100, brand_profile_id?: number) =>
