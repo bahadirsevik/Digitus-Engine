@@ -40,6 +40,7 @@ interface SocialContent {
 
 interface SocialStore {
   // Step
+  workspaceId: number | null
   step: number
   setStep: (step: number) => void
   
@@ -73,6 +74,7 @@ interface SocialStore {
 }
 
 const initialState = {
+  workspaceId: null,
   step: 1,
   scoringRunId: null,
   brandName: '',

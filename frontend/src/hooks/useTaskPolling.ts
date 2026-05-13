@@ -36,6 +36,10 @@ export const getStoredTaskId = (key: string): string | null => {
   return getStoredTasks()[key] || null
 }
 
+export const getWorkspaceTaskKey = (key: string, brand_profile_id?: number | null): string => {
+  return brand_profile_id ? `${key}:${brand_profile_id}` : key
+}
+
 export function useTaskPolling(
   taskId: string | null,
   storageKey: string,
@@ -47,6 +51,12 @@ export function useTaskPolling(
   const [error, setError] = useState<string | null>(null)
 
   const fetchStatus = useCallback(async (id: string) => {
+    if (!brand_profile_id) {
+      setStatus(null)
+      setLoading(false)
+      return null
+    }
+
     try {
       const response = await tasksApi.getStatus(id, brand_profile_id)
       const data = response.data as TaskStatus
@@ -66,16 +76,20 @@ export function useTaskPolling(
 
   // taskId değiştiğinde storage'a kaydet
   useEffect(() => {
-    if (taskId) {
+    if (taskId && brand_profile_id) {
       storeTask(storageKey, taskId)
       setLoading(true)
       fetchStatus(taskId).finally(() => setLoading(false))
+    } else if (!brand_profile_id) {
+      setStatus(null)
+      setLoading(false)
     }
-  }, [taskId, storageKey, fetchStatus])
+  }, [taskId, storageKey, brand_profile_id, fetchStatus])
 
   // Polling
   useEffect(() => {
     if (!taskId) return
+    if (!brand_profile_id) return
     if (status && ['completed', 'failed', 'cancelled'].includes(status.status)) return
 
     const interval = setInterval(() => {
@@ -83,7 +97,7 @@ export function useTaskPolling(
     }, intervalMs)
 
     return () => clearInterval(interval)
-  }, [taskId, status, intervalMs, fetchStatus])
+  }, [taskId, status, intervalMs, brand_profile_id, fetchStatus])
 
   const isActive = status?.status === 'pending' || status?.status === 'running'
   const isCompleted = status?.status === 'completed'

@@ -94,21 +94,21 @@ export const workspaceApi = {
 
 // Brand Profile API
 export const brandProfileApi = {
-  getProfile: (runId: number) =>
-    api.get(`/brand-profile/runs/${runId}/profile`),
+  getProfile: (runId: number, brand_profile_id?: number) =>
+    api.get(`/brand-profile/runs/${runId}/profile`, { params: { brand_profile_id } }),
 
-  analyzeProfile: (runId: number, data: ProfileAnalyzeRequest) =>
-    api.post(`/brand-profile/runs/${runId}/profile/analyze`, data),
+  analyzeProfile: (runId: number, data: ProfileAnalyzeRequest, brand_profile_id?: number) =>
+    api.post(`/brand-profile/runs/${runId}/profile/analyze`, data, { params: { brand_profile_id } }),
 
-  confirmProfile: (runId: number, data?: ProfileConfirmRequest) =>
-    api.put(`/brand-profile/runs/${runId}/profile/confirm`, data || {}),
+  confirmProfile: (runId: number, data?: ProfileConfirmRequest, brand_profile_id?: number) =>
+    api.put(`/brand-profile/runs/${runId}/profile/confirm`, data || {}, { params: { brand_profile_id } }),
 
-  computeRelevance: (runId: number) =>
-    api.post(`/brand-profile/runs/${runId}/relevance/compute`),
+  computeRelevance: (runId: number, brand_profile_id?: number) =>
+    api.post(`/brand-profile/runs/${runId}/relevance/compute`, undefined, { params: { brand_profile_id } }),
 
-  getRelevance: (runId: number, minScore = 0) =>
+  getRelevance: (runId: number, minScore = 0, brand_profile_id?: number) =>
     api.get(`/brand-profile/runs/${runId}/relevance`, {
-      params: { min_score: minScore },
+      params: { min_score: minScore, brand_profile_id },
     }),
 };
 
@@ -172,26 +172,26 @@ export const generationApi = {
       platforms: platforms || ["instagram", "twitter", "linkedin"],
     }),
 
-  listSeoGeo: (runId: number, limit = 100) =>
-    api.get(`/generation/seo-geo/list/${runId}`, { params: { limit } }),
+  listSeoGeo: (runId: number, limit = 100, brand_profile_id?: number) =>
+    api.get(`/generation/seo-geo/list/${runId}`, { params: { limit, brand_profile_id } }),
 
-  bulkSeoGeo: (runId: number, limit = 10) =>
-    api.post(`/generation/seo-geo/bulk/${runId}`, undefined, { params: { limit } }),
+  bulkSeoGeo: (runId: number, limit = 10, brand_profile_id?: number) =>
+    api.post(`/generation/seo-geo/bulk/${runId}`, undefined, { params: { limit, brand_profile_id } }),
 
-  getAdsRsa: (runId: number) =>
-    api.get(`/generation/ads/rsa/${runId}`),
+  getAdsRsa: (runId: number, brand_profile_id?: number) =>
+    api.get(`/generation/ads/rsa/${runId}`, { params: { brand_profile_id } }),
 
-  createAdsRsa: (data: AdsRsaRequest) =>
-    api.post("/generation/ads/rsa", data),
+  createAdsRsa: (data: AdsRsaRequest, brand_profile_id?: number) =>
+    api.post("/generation/ads/rsa", data, { params: { brand_profile_id } }),
 
-  createSocialCategories: (data: SocialCategoriesRequest) =>
-    api.post("/generation/social/categories", data),
+  createSocialCategories: (data: SocialCategoriesRequest, brand_profile_id?: number) =>
+    api.post("/generation/social/categories", data, { params: { brand_profile_id } }),
 
-  createSocialIdeas: (data: SocialIdeasRequest, brandName: string) =>
-    api.post(`/generation/social/ideas`, data, { params: { brand_name: brandName } }),
+  createSocialIdeas: (data: SocialIdeasRequest, brandName: string, brand_profile_id?: number) =>
+    api.post(`/generation/social/ideas`, data, { params: { brand_name: brandName, brand_profile_id } }),
 
-  createSocialContents: (data: SocialContentsRequest) =>
-    api.post("/generation/social/contents", data),
+  createSocialContents: (data: SocialContentsRequest, brand_profile_id?: number) =>
+    api.post("/generation/social/contents", data, { params: { brand_profile_id } }),
 };
 
 // Health API (uses base URL without /api/v1 prefix)

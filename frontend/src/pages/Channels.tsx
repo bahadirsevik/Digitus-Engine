@@ -4,7 +4,7 @@ import axios from "axios";
 import { Zap, RefreshCw, ArrowRight, AlertCircle } from "lucide-react";
 import { scoringApi, channelsApi } from "../services/api";
 import { useBrandStore } from "../stores/brandStore";
-import { useTaskPolling, getStoredTaskId } from "../hooks/useTaskPolling";
+import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from "../hooks/useTaskPolling";
 import TaskProgress from "../components/TaskProgress";
 import "./Channels.css";
 
@@ -56,6 +56,7 @@ export default function Channels() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace);
+  const assignTaskStorageKey = getWorkspaceTaskKey("channel_assign", activeWorkspace?.id);
 
   const [runs, setRuns] = useState<ScoringRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<number | null>(null);
@@ -63,7 +64,7 @@ export default function Channels() {
   const [loading, setLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [assignTaskId, setAssignTaskId] = useState<string | null>(
-    getStoredTaskId("channel_assign"),
+    getStoredTaskId(assignTaskStorageKey),
   );
   const [error, setError] = useState<string>("");
   const [info, setInfo] = useState<string>("");
@@ -89,7 +90,11 @@ export default function Channels() {
   const hasExistingPools = totalPoolKeywords > 0;
 
   // Task polling for channel assignment
-  const assignPolling = useTaskPolling(assignTaskId, "channel_assign", 3000, activeWorkspace?.id);
+  const assignPolling = useTaskPolling(assignTaskId, assignTaskStorageKey, 3000, activeWorkspace?.id);
+
+  useEffect(() => {
+    setAssignTaskId(getStoredTaskId(assignTaskStorageKey));
+  }, [assignTaskStorageKey]);
 
   const fetchRuns = useCallback(async () => {
     if (!activeWorkspace?.id) {

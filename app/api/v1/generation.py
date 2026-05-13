@@ -10,6 +10,7 @@ from app.dependencies import get_db, get_ai
 from app.generators.ai_service import AIService
 from app.database.models import Keyword, ContentOutput, SEOGeoContent, ChannelPool, AdGroup
 from app.core.error_responses import safe_500_detail
+from app.core.workspace import verify_scoring_run
 from app.core.site_analyzer.brand_defaults import BrandDefaultsResolver, BrandResolveError
 from app.schemas.content import (
     AdGroupRequest, AdGroupResponse,
@@ -33,6 +34,17 @@ from app.generators.ads import AdsGenerator
 
 
 router = APIRouter()
+
+
+def _verify_run_workspace_if_present(
+    db: Session,
+    scoring_run_id: int,
+    brand_profile_id: Optional[int],
+    *,
+    mutating: bool,
+) -> None:
+    if brand_profile_id is not None:
+        verify_scoring_run(db, scoring_run_id, brand_profile_id, mutating=mutating)
 
 
 # ==================== SEO+GEO ENDPOINTS (Roadmap2 Bölüm 6) ====================
@@ -70,6 +82,7 @@ def generate_seo_geo_bulk(
     scoring_run_id: int,
     limit: Optional[int] = Query(None, ge=1, le=100, description="Maximum contents to generate"),
     tone: str = Query("informative", description="Content tone"),
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db),
 ):
     """
@@ -84,6 +97,8 @@ def generate_seo_geo_bulk(
     """
     from app.database.models import ChannelPool, ScoringRun
     from app.tasks.generation_tasks import start_bulk_seo_generation
+
+    _verify_run_workspace_if_present(db, scoring_run_id, brand_profile_id, mutating=True)
 
     # Validate scoring run exists
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
@@ -249,11 +264,14 @@ def list_seo_geo_contents(
     scoring_run_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db)
 ):
     """
     List all SEO+GEO contents for a scoring run.
     """
+    _verify_run_workspace_if_present(db, scoring_run_id, brand_profile_id, mutating=False)
+
     # Get keywords from SEO pool for this scoring run
     pool_items = db.query(ChannelPool).filter(
         ChannelPool.scoring_run_id == scoring_run_id,
@@ -312,6 +330,7 @@ def list_seo_geo_contents(
 @router.post("/ads/rsa", response_model=AdsGenerateResponse)
 def generate_ads_rsa(
     request: AdsGenerateRequest,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
@@ -335,6 +354,8 @@ def generate_ads_rsa(
         Complete RSA set with validation summary
     """
     try:
+        _verify_run_workspace_if_present(db, request.scoring_run_id, brand_profile_id, mutating=True)
+
         resolver = BrandDefaultsResolver(db)
         defaults = resolver.resolve(request.scoring_run_id)
         effective_brand_name = resolver.safe_str(request.brand_name) or defaults.get("brand_name", "") or "Marka"
@@ -360,6 +381,7 @@ def generate_ads_rsa(
 @router.get("/ads/rsa/{scoring_run_id}", response_model=AdGroupListResponse)
 def get_ads_groups(
     scoring_run_id: int,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
@@ -369,6 +391,8 @@ def get_ads_groups(
     Returns list of ad groups with their headlines, descriptions, and negative keywords.
     """
     try:
+        _verify_run_workspace_if_present(db, scoring_run_id, brand_profile_id, mutating=False)
+
         generator = AdsGenerator(db, ai)
         result = generator.get_ad_groups(scoring_run_id)
         return result
@@ -481,6 +505,7 @@ from app.schemas.social import (
 @router.post("/social/categories", response_model=SocialCategoriesResponse)
 def generate_social_categories(
     request: SocialCategoriesRequest,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
@@ -491,6 +516,8 @@ def generate_social_categories(
     - educational, product_benefit, social_proof, brand_story, community, trending
     """
     try:
+        _verify_run_workspace_if_present(db, request.scoring_run_id, brand_profile_id, mutating=True)
+
         resolver = BrandDefaultsResolver(db)
         defaults = resolver.resolve(request.scoring_run_id)
         effective_brand_name = resolver.safe_str(request.brand_name) or defaults.get("brand_name", "") or "Marka"
@@ -514,6 +541,7 @@ def generate_social_categories(
 def generate_social_ideas(
     request: SocialIdeasRequest,
     brand_name: Optional[str] = Query(None, description="Brand name for personalization"),
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
@@ -533,6 +561,8 @@ def generate_social_ideas(
             status = 400 if e.code in ("mixed_run", "empty_list") else 404
             raise HTTPException(status_code=status, detail=str(e))
 
+        _verify_run_workspace_if_present(db, run_id, brand_profile_id, mutating=True)
+
         defaults = resolver.resolve(run_id)
         effective_brand_name = resolver.safe_str(brand_name) or defaults.get("brand_name", "") or "Marka"
 
@@ -550,6 +580,7 @@ def generate_social_ideas(
 @router.post("/social/contents", response_model=SocialContentsResponse)
 def generate_social_contents(
     request: SocialContentsRequest,
+    brand_profile_id: Optional[int] = Query(None, description="Workspace scope"),
     db: Session = Depends(get_db),
     ai: AIService = Depends(get_ai)
 ):
@@ -571,6 +602,8 @@ def generate_social_contents(
         except BrandResolveError as e:
             status = 400 if e.code in ("mixed_run", "empty_list") else 404
             raise HTTPException(status_code=status, detail=str(e))
+
+        _verify_run_workspace_if_present(db, run_id, brand_profile_id, mutating=True)
 
         defaults = resolver.resolve(run_id)
         effective_brand_name = resolver.safe_str(request.brand_name) or defaults.get("brand_name", "") or "Marka"

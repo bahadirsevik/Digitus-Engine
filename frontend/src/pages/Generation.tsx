@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Sparkles, FileText, Megaphone, Users, CheckCircle } from 'lucide-react'
-import { useTaskPolling, getStoredTaskId } from '../hooks/useTaskPolling'
+import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from '../hooks/useTaskPolling'
 import TaskProgress from '../components/TaskProgress'
 import ErrorBanner from '../components/ErrorBanner'
 import SocialStepper from '../components/SocialStepper'
@@ -33,11 +33,12 @@ export default function Generation() {
   const [runs, setRuns] = useState<ScoringRun[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const seoTaskStorageKey = getWorkspaceTaskKey('seo_task', activeWorkspace?.id)
 
   // SEO Form State
   const [seoRunId, setSeoRunId] = useState<number | ''>('')
   const [seoLimit, setSeoLimit] = useState(10)
-  const [seoTaskId, setSeoTaskId] = useState<string | null>(getStoredTaskId('seo_task'))
+  const [seoTaskId, setSeoTaskId] = useState<string | null>(getStoredTaskId(seoTaskStorageKey))
   const [seoResults, setSeoResults] = useState<any[]>([])
 
   // Ads Form State
@@ -48,7 +49,7 @@ export default function Generation() {
   const [adsResults, setAdsResults] = useState<any | null>(null)
 
   // Task polling
-  const seoPolling = useTaskPolling(seoTaskId, 'seo_task', 3000, activeWorkspace?.id)
+  const seoPolling = useTaskPolling(seoTaskId, seoTaskStorageKey, 3000, activeWorkspace?.id)
 
   const requestedRunId = useMemo(() => {
     const raw = searchParams.get('run_id')
@@ -59,8 +60,8 @@ export default function Generation() {
 
   // Auto-fill Ads form context from brand profile when ADS run changes
   useEffect(() => {
-    if (!adsRunId) return
-    brandProfileApi.getProfile(Number(adsRunId))
+    if (!adsRunId || !activeWorkspace?.id) return
+    brandProfileApi.getProfile(Number(adsRunId), activeWorkspace.id)
       .then((res) => {
         const profile = res.data as any
         if (!websiteUrl && profile.company_url) setWebsiteUrl(profile.company_url)
@@ -76,26 +77,30 @@ export default function Generation() {
         }
       })
       .catch(() => { /* profile not found — ok */ })
-  }, [adsRunId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [adsRunId, activeWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchSeoResults = useCallback(async (runId: number) => {
+    if (!activeWorkspace?.id) return
+
     try {
-      const res = await generationApi.listSeoGeo(runId, 100)
+      const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
       setSeoResults((res.data as any).items || [])
     } catch (e) {
       console.error('Failed to fetch SEO results:', e)
     }
-  }, [])
+  }, [activeWorkspace?.id])
 
   const fetchAdsResults = useCallback(async (runId: number) => {
+    if (!activeWorkspace?.id) return
+
     try {
-      const res = await generationApi.getAdsRsa(runId)
+      const res = await generationApi.getAdsRsa(runId, activeWorkspace.id)
       const data = res.data as any
       setAdsResults(data.total_groups > 0 ? data : null)
     } catch (e) {
       console.error('Failed to fetch Ads results:', e)
     }
-  }, [])
+  }, [activeWorkspace?.id])
 
   const fetchRuns = useCallback(async () => {
     if (!activeWorkspace?.id) { setRuns([]); return }
@@ -110,6 +115,14 @@ export default function Generation() {
   useEffect(() => {
     void fetchRuns()
   }, [fetchRuns])
+
+  useEffect(() => {
+    setSeoTaskId(getStoredTaskId(seoTaskStorageKey))
+    setSeoRunId('')
+    setAdsRunId('')
+    setSeoResults([])
+    setAdsResults(null)
+  }, [seoTaskStorageKey])
 
   useEffect(() => {
     if (!requestedRunId || runs.length === 0) return
@@ -149,10 +162,15 @@ export default function Generation() {
   }, [adsRunId, fetchAdsResults])
 
   const startSeoGeneration = async () => {
+    if (!activeWorkspace?.id) {
+      setError('Marka çalışması seçin')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const res = await generationApi.bulkSeoGeo(Number(seoRunId), seoLimit)
+      const res = await generationApi.bulkSeoGeo(Number(seoRunId), seoLimit, activeWorkspace.id)
       setSeoTaskId((res.data as any).task_id)
     } catch (err: any) {
       const detail = err?.response?.data?.detail
@@ -163,6 +181,11 @@ export default function Generation() {
   }
 
   const startAdsGeneration = async () => {
+    if (!activeWorkspace?.id) {
+      setError('Marka çalışması seçin')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
@@ -171,7 +194,7 @@ export default function Generation() {
         brand_name: brandName,
         website_url: websiteUrl ? websiteUrl.trim() : undefined,
         brand_usp: usps ? usps.split(',').map(s => s.trim()).join(', ') : undefined,
-      })
+      }, activeWorkspace.id)
       await fetchAdsResults(Number(adsRunId))
     } catch (err: any) {
       const detail = err?.response?.data?.detail

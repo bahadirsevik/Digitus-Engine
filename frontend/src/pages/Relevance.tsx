@@ -43,20 +43,24 @@ export default function Relevance() {
 
   // Load workspace-scoped scoring runs
   useEffect(() => {
-    if (!activeWorkspace?.id) return;
+    if (!activeWorkspace?.id) {
+      setScoringRuns([]);
+      setSelectedRunId(null);
+      setRelevanceData([]);
+      setSummary(null);
+      return;
+    }
     scoringApi
-      .listRuns({ limit: 100 })
+      .listRuns({ limit: 100, brand_profile_id: activeWorkspace.id })
       .then((res: any) => {
-        const runs = (res.data || []).filter(
-          (r: any) =>
-            r.brand_profile_id === activeWorkspace.id &&
-            [
-              "scored",
-              "relevance_computing",
-              "relevance_computed",
-              "channel_assigned",
-              "completed",
-            ].includes(r.status),
+        const runs = (res.data || []).filter((r: any) =>
+          [
+            "scored",
+            "relevance_computing",
+            "relevance_computed",
+            "channel_assigned",
+            "completed",
+          ].includes(r.status),
         );
         setScoringRuns(runs);
       })
@@ -65,13 +69,13 @@ export default function Relevance() {
 
   // Load relevance when run selected
   useEffect(() => {
-    if (!selectedRunId) {
+    if (!selectedRunId || !activeWorkspace?.id) {
       setRelevanceData([]);
       setSummary(null);
       return;
     }
     brandProfileApi
-      .getRelevance(selectedRunId, 0)
+      .getRelevance(selectedRunId, 0, activeWorkspace.id)
       .then((res: any) => {
         const data = res.data || [];
         setRelevanceData(data);
@@ -89,17 +93,17 @@ export default function Relevance() {
         }
       })
       .catch(() => setRelevanceData([]));
-  }, [selectedRunId]);
+  }, [selectedRunId, activeWorkspace?.id]);
 
   const handleCompute = async () => {
-    if (!selectedRunId) return;
+    if (!selectedRunId || !activeWorkspace?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await brandProfileApi.computeRelevance(selectedRunId);
+      const res = await brandProfileApi.computeRelevance(selectedRunId, activeWorkspace.id);
       const result = res.data as RelevanceComputeResponse;
       // Reload data
-      const reloadRes = await brandProfileApi.getRelevance(selectedRunId, 0);
+      const reloadRes = await brandProfileApi.getRelevance(selectedRunId, 0, activeWorkspace.id);
       const data = reloadRes.data || [];
       setRelevanceData(data);
       if (data.length > 0) {

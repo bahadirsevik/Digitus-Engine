@@ -25,14 +25,28 @@ export default function Tasks() {
   const [filter, setFilter] = useState<string>('all')
 
   useEffect(() => {
+    if (!activeWorkspace?.id) {
+      setTasks([])
+      setLoading(false)
+      setError(null)
+      return
+    }
+
+    setLoading(true)
     fetchTasks()
     const interval = setInterval(fetchTasks, 5000)
     return () => clearInterval(interval)
   }, [activeWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTasks = async () => {
+    if (!activeWorkspace?.id) {
+      setTasks([])
+      setLoading(false)
+      return
+    }
+
     try {
-      const res = await tasksApi.list({ brand_profile_id: activeWorkspace?.id })
+      const res = await tasksApi.list({ brand_profile_id: activeWorkspace.id })
       setTasks((res.data as { tasks?: Task[] }).tasks || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Hata')
@@ -42,8 +56,10 @@ export default function Tasks() {
   }
 
   const cancelTask = async (taskId: string) => {
+    if (!activeWorkspace?.id) return
+
     try {
-      await tasksApi.cancel(taskId, activeWorkspace?.id)
+      await tasksApi.cancel(taskId, activeWorkspace.id)
       fetchTasks()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'İptal hatası')

@@ -19,6 +19,17 @@ export default function SocialStepper() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [runs, setRuns] = useState<ScoringRun[]>([])
+  const currentWorkspaceId = activeWorkspace?.id ?? null
+
+  useEffect(() => {
+    if (store.workspaceId !== currentWorkspaceId) {
+      store.reset()
+      if (currentWorkspaceId) {
+        store.setFormData({ workspaceId: currentWorkspaceId })
+      }
+      setError(null)
+    }
+  }, [currentWorkspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeWorkspace?.id) { setRuns([]); return }
@@ -29,8 +40,8 @@ export default function SocialStepper() {
 
   // Auto-fill brand info from confirmed profile when scoring run changes
   useEffect(() => {
-    if (!store.scoringRunId) return
-    brandProfileApi.getProfile(store.scoringRunId)
+    if (!store.scoringRunId || !activeWorkspace?.id) return
+    brandProfileApi.getProfile(store.scoringRunId, activeWorkspace.id)
       .then((res) => {
         const profile = res.data as any
         if (profile.status === 'confirmed' && profile.profile_data) {
@@ -48,7 +59,7 @@ export default function SocialStepper() {
         }
       })
       .catch(() => { /* profile not found — ok */ })
-  }, [store.scoringRunId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store.scoringRunId, activeWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const steps = [
     { num: 1, title: 'Marka Bilgisi', desc: 'Marka ve bağlam girin' },
@@ -57,6 +68,11 @@ export default function SocialStepper() {
   ]
 
   const generateCategories = async () => {
+    if (!activeWorkspace?.id) {
+      setError('Marka çalışması seçin')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
@@ -65,7 +81,7 @@ export default function SocialStepper() {
         brand_name: store.brandName,
         brand_context: store.brandContext,
         max_categories: store.maxCategories,
-      })
+      }, activeWorkspace.id)
       store.setCategories((res.data as any).categories || [])
       store.setStep(2)
     } catch (err) {
@@ -76,12 +92,18 @@ export default function SocialStepper() {
   }
 
   const generateIdeas = async () => {
+    if (!activeWorkspace?.id) {
+      setError('Marka çalışması seçin')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
       const res = await generationApi.createSocialIdeas(
         { category_ids: store.selectedCategoryIds, ideas_per_category: store.ideasPerCategory },
         store.brandName,
+        activeWorkspace.id,
       )
       const data = res.data as any
       const allIdeas = Array.isArray(data)
@@ -97,13 +119,18 @@ export default function SocialStepper() {
   }
 
   const generateContents = async () => {
+    if (!activeWorkspace?.id) {
+      setError('Marka çalışması seçin')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
       const res = await generationApi.createSocialContents({
         idea_ids: store.selectedIdeaIds,
         brand_name: store.brandName,
-      })
+      }, activeWorkspace.id)
       store.setContents((res.data as any).contents || [])
       store.setStep(4)
     } catch (err) {
