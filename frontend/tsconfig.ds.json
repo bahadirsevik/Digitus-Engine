@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "allowImportingTsExtensions": false,
+    "outDir": "dist-ds",
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "strict": false
+  },
+  "include": ["src/ds-entry.ts", "src/vite-env.d.ts"],
+  "references": []
+}

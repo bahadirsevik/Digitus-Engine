@@ -1,0 +1,289 @@
+.scoring-page {
+  max-width: 1200px;
+}
+
+/* Runs Section */
+.runs-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.runs-section h2 {
+  margin-bottom: var(--space-lg);
+}
+
+.runs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-lg);
+}
+
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.run-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.run-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.run-name {
+  font-weight: 600;
+}
+
+.run-capacities {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.run-actions {
+  margin-top: var(--space-sm);
+}
+
+.badge-muted {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.channel-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.channel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  min-height: 44px;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.channel-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+}
+
+.channel-toggle.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+/* Scores Section */
+.scores-section {
+  margin-top: var(--space-xl);
+}
+
+.scores-section h2 {
+  margin-bottom: var(--space-lg);
+}
+
+.scores-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.scores-heading h2 {
+  margin-bottom: var(--space-xs);
+}
+
+.scores-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.score-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.score-sort-button svg {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.score-sort-button.active svg {
+  color: var(--accent-primary);
+}
+
+.scores-empty-cell {
+  padding: var(--space-xl);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.table-container.table-sorting {
+  position: relative;
+}
+
+.table-container.table-sorting tbody {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.table-container.table-sorting thead th {
+  position: relative;
+}
+
+.table-container.table-sorting::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  animation: sort-progress 1.2s ease-in-out infinite;
+  z-index: 2;
+}
+
+@keyframes sort-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.scores-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-lg);
+}
+
+.v3-family,
+.v3-channel-result {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+}
+
+.v3-family span,
+.v3-channel-result span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.v3-channel-result .v3-delivered {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.v3-channel-result .v3-excluded {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.v3-channel-result .v3-meta {
+  text-transform: uppercase;
+}
+
+.top-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.empty-text {
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.source-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.source-badge--ads {
+  background: var(--info-soft);
+  color: var(--info-text);
+}
+.source-badge--csv {
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+}
+
+.modal-error {
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  border-radius: 6px;
+  color: var(--error-text);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Plan A: kanal dışlama rozeti — kelime skorlanır ama havuza giremez */
+.scx-excluded-badge {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+
+.scx-excluded-badge.is-competitor {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.scx-excluded-badge.is-topic {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.scx-excluded-badge.is-price {
+  color: #6b7280;
+  background: rgba(107, 114, 128, 0.1);
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+/* v2.1 deneysel algoritma seçici ipucu (plan Faz E) */
+.modal .form-hint {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #b45309;
+}

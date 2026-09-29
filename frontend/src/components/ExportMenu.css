@@ -1,0 +1,174 @@
+/* Plan v4 (export dağıtımı): kanal sayfası "İndir" menüsü */
+.exm-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.exm-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exm-chev {
+  transition: transform 0.15s ease;
+}
+
+.exm-chev.is-open {
+  transform: rotate(180deg);
+}
+
+.exm-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 320px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--surface-2, #101625);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.exm-row-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.exm-row-btn:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.exm-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.exm-format-group {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.exm-format-chip {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.1);
+  color: inherit;
+  white-space: nowrap;
+}
+
+.exm-format-btn {
+  cursor: pointer;
+}
+
+.exm-format-btn:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.exm-format-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.exm-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 0.76rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.exm-error {
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.exm-history {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.exm-history-title {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #94a3b8);
+  padding: 0 8px;
+}
+
+.exm-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.exm-history-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.exm-history-label {
+  font-size: 0.78rem;
+}
+
+.exm-status {
+  font-size: 0.68rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted, #94a3b8);
+}
+
+.exm-status-completed {
+  background: rgba(74, 222, 128, 0.15);
+  color: #86efac;
+}
+
+.exm-status-failed {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+}
+
+.exm-outdated {
+  font-size: 0.66rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fcd34d;
+}

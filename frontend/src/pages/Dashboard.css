@@ -1,0 +1,612 @@
+.dashboard-page {
+  max-width: 1440px;
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.dashboard-loading,
+.dashboard-warning {
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+}
+
+.dashboard-loading {
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.dashboard-warning {
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  color: var(--warning-text);
+  background: var(--warning-soft);
+}
+
+.cockpit-topbar,
+.cockpit-main-action,
+.cockpit-panel,
+.timeline-step {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.cockpit-topbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(320px, 520px) auto;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+}
+
+.cockpit-workspace span,
+.cockpit-run-picker label,
+.action-eyebrow {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cockpit-workspace h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.cockpit-workspace p {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-secondary);
+}
+
+.cockpit-run-select {
+  width: 100%;
+}
+
+.cockpit-run-empty {
+  color: var(--text-muted);
+}
+
+.cockpit-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 30px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.status-chip strong {
+  color: var(--text-primary);
+}
+
+.status-chip-ok {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  color: var(--success-text);
+}
+
+.status-chip-warn,
+.status-chip-busy {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--warning-text);
+}
+
+.status-chip-muted {
+  color: var(--text-muted);
+}
+
+.cockpit-main-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.cockpit-main-action::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+.cockpit-main-action > * {
+  position: relative;
+}
+
+.cta-primary {
+  border-left: 4px solid var(--accent-primary);
+}
+
+.cta-primary::before {
+  background: var(--accent-gradient);
+}
+
+.cta-warning {
+  border-left: 4px solid var(--warning);
+}
+
+.cta-warning::before {
+  background: var(--warning-soft);
+}
+
+.cta-danger {
+  border-left: 4px solid var(--error);
+}
+
+.cta-danger::before {
+  background: var(--error-soft);
+}
+
+.cta-neutral {
+  border-left: 4px solid var(--text-muted);
+}
+
+.cockpit-main-action h2 {
+  margin: 0 0 var(--space-xs);
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.cockpit-main-action p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.cockpit-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-sm);
+  align-items: stretch;
+}
+
+.timeline-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-sm);
+  min-height: 104px;
+  padding: var(--space-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.timeline-step:hover {
+  border-color: var(--accent-primary);
+}
+
+.step-icon {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+.state-complete .step-icon {
+  color: var(--success-text);
+  background: var(--success-soft);
+}
+
+.state-in_progress .step-icon {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.state-blocked .step-icon {
+  color: var(--error-text);
+  background: var(--error-soft);
+}
+
+.state-skipped {
+  opacity: 0.75;
+}
+
+.step-body {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.step-body small {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.step-body strong {
+  overflow-wrap: anywhere;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.step-body span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cockpit-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.cockpit-main-column,
+.cockpit-side-column {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.cockpit-side-column {
+  grid-template-columns: 1fr;
+}
+
+.cockpit-panel {
+  padding: var(--space-lg);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  color: var(--text-secondary);
+}
+
+.panel-heading h3 {
+  margin: 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.channel-rows {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.channel-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(110px, auto) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.channel-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.channel-copy strong {
+  font-size: 0.98rem;
+}
+
+.channel-copy span,
+.channel-progress span,
+.channel-progress small,
+.kv-list span,
+.panel-empty {
+  color: var(--text-secondary);
+}
+
+.channel-progress {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 110px;
+}
+
+.channel-progress strong {
+  font-size: 1rem;
+}
+
+.channel-ready {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.channel-partial {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+.channel-complete {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+.kv-list {
+  display: grid;
+  gap: var(--space-sm);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.kv-list li,
+.export-meta {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 1.5fr);
+  gap: var(--space-md);
+  font-size: 0.88rem;
+}
+
+.kv-list strong,
+.export-meta strong {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.panel-empty,
+.panel-error-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.panel-error-text {
+  margin-top: var(--space-sm);
+  color: var(--error-text);
+}
+
+.cockpit-panel-warning {
+  border-color: color-mix(in srgb, var(--error) 35%, transparent);
+}
+
+.task-list,
+.export-summary {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.task-list span {
+  color: var(--text-secondary);
+}
+
+.export-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-weight: 600;
+}
+
+.export-completed {
+  color: var(--success-text);
+}
+
+.export-failed {
+  color: var(--error-text);
+}
+
+.export-pending,
+.export-processing {
+  color: var(--accent-text);
+}
+
+.btn-lg {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  text-decoration: none;
+}
+
+.btn-sm {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.empty-start {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+
+.empty-start-copy,
+.empty-start-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.empty-start-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-2xl);
+}
+
+.empty-start-copy > span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.empty-start-copy h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.empty-start-copy p,
+.empty-start-card span {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.empty-start-grid {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.empty-start-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+  padding: var(--space-lg);
+  color: inherit;
+  text-decoration: none;
+}
+
+.empty-start-card:hover {
+  border-color: var(--accent-primary);
+}
+
+.empty-start-card span {
+  grid-column: 2 / 3;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1180px) {
+  .cockpit-topbar,
+  .cockpit-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .cockpit-header-actions {
+    justify-content: flex-start;
+  }
+
+  .cockpit-side-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .cockpit-main-action,
+  .channel-row,
+  .cockpit-side-column,
+  .empty-start,
+  .empty-start-card {
+    grid-template-columns: 1fr;
+  }
+
+  .channel-progress {
+    justify-items: start;
+  }
+
+  .kv-list li,
+  .export-meta {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .kv-list strong,
+  .export-meta strong {
+    text-align: left;
+  }
+
+  .empty-start-card span {
+    grid-column: auto;
+  }
+}
+
+.cockpit-workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.cockpit-workspace-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cockpit-workspace-switch label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-text);
+}
+
+.cockpit-workspace-select {
+  padding: 12px 16px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  min-width: 280px;
+  max-width: 380px;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.cockpit-workspace-select:hover {
+  border-color: var(--accent);
+}
+
+.cockpit-workspace-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Açılır liste öğeleri: color-scheme'e ek emniyet — bazı tarayıcılar
+   option arka planını yine de miras almaz. */
+.cockpit-workspace-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Plan v4 (export dağıtımı): eski-politika rozeti — dashboard export kartı */
+.export-outdated-badge {
+  font-size: 0.66rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #b45309;
+  white-space: nowrap;
+}

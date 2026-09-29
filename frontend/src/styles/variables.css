@@ -1,0 +1,166 @@
+/*
+ * variables.css — TEK token kaynağı (single source of truth)
+ *
+ * main.tsx bu dosyayı globals.css'ten ÖNCE import eder.
+ * globals.css artık kendi :root bloğunu taşımaz; tüm token'lar burada.
+ *
+ * Yapı:
+ *   1) Kanonik (yeni) token'lar — "Utiliter Editorial + Enerjik Analitik" paleti
+ *   2) Geriye dönük alias'lar — eski token isimleri yeni değerlere bağlanır,
+ *      böylece mevcut tüm sayfa/bileşen CSS'i kırılmadan yeni palete akar.
+ */
+
+:root {
+  /* Native form kontrolleri (select dropdown paneli, scrollbar, date picker)
+     tarayıcı tarafından çizilir ve tema CSS'ini görmez. Uygulama koyu temalı
+     olduğundan bunu tarayıcıya bildiriyoruz — yoksa select açılır listesi
+     BEYAZ panel + açık renk yazı = okunmaz çıkıyor. */
+  color-scheme: dark;
+
+  /* ════════════════════════════════════════════════════
+     1) KANONİK TOKEN'LAR
+     ════════════════════════════════════════════════════ */
+
+  /* ---- Yüzeyler (nötr kömür, blur yok) ---- */
+  --bg-app: #0d0e12;
+  --bg-surface: #16171c;
+  --bg-surface-2: #1d1e25;
+  --bg-surface-hover: #22232b;
+
+  /* ---- Metin (kontrast yükseltildi) ---- */
+  --text-strong: #f4f5f7;
+  --text-primary: #dfe1e6;
+  --text-secondary: #9da3af;
+  --text-muted: #6b7280;
+
+  /* ---- Marka vurgusu: TEAL / signal cyan (degrade yok) ---- */
+  --accent: #14b8a6;
+  --accent-hover: #2dd4bf;
+  --accent-soft: rgba(20, 184, 166, 0.14);
+  --accent-text: #99f6e4;
+
+  /* ---- Semantik ---- */
+  --success: #2ea66f;
+  --success-soft: rgba(46, 166, 111, 0.14);
+  --success-text: #7ee0ab;
+
+  --warning: #d99a2b;
+  --warning-soft: rgba(217, 154, 43, 0.14);
+  --warning-text: #f3c969;
+
+  --error: #e5484d;
+  --error-soft: rgba(229, 72, 77, 0.14);
+  --error-text: #ff9ea1;
+
+  --info: #3e7bfa;
+  --info-soft: rgba(62, 123, 250, 0.14);
+  --info-text: #9dc0ff;
+
+  /* ---- Kanal kimlik renkleri (ADS turuncu, error ile karışmaz) ---- */
+  --ch-ads: #f97316;
+  --ch-ads-soft: rgba(249, 115, 22, 0.14);
+  --ch-ads-text: #fdba74;
+
+  --ch-seo: #22c55e;
+  --ch-seo-soft: rgba(34, 197, 94, 0.14);
+  --ch-seo-text: #86efac;
+
+  --ch-social: #38bdf8;
+  --ch-social-soft: rgba(56, 189, 248, 0.14);
+  --ch-social-text: #bae6fd;
+
+  /* ---- Border & gölge ---- */
+  --border-color: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+  /* ---- Overlay ---- */
+  --overlay: rgba(4, 5, 8, 0.72);
+
+  /* ---- Spacing (4px ızgara — değişmedi) ---- */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* ---- Radius ---- */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* ---- Motion ---- */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Layout ---- */
+  --sidebar-width: 260px;
+  --sidebar-width-sm: 80px;
+  --content-max: 1280px;
+  --content-wide: 1440px;
+
+  /* ---- Tipografi ---- */
+  --font-display: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Consolas', 'Courier New', monospace;
+
+  /* ════════════════════════════════════════════════════
+     2) GERİYE DÖNÜK ALIAS'LAR
+     (eski isimler → yeni değerler; mevcut CSS kırılmaz)
+     ════════════════════════════════════════════════════ */
+
+  /* Backgrounds */
+  --bg-primary: var(--bg-app);
+  --bg-secondary: var(--bg-surface-2);
+  --bg-card: var(--bg-surface);
+  --bg-card-hover: var(--bg-surface-hover);
+  --bg-modal: var(--bg-surface);
+  --bg-dropdown: var(--bg-surface-2);
+
+  /* Text */
+  --text-lightest: var(--text-strong);
+
+  /* Accent (mor → teal) */
+  --accent-primary: var(--accent);
+  --accent-secondary: var(--accent-hover);
+  --accent-gradient: var(--accent); /* degrade kaldırıldı: düz teal */
+
+  /* Semantic ekstra alias'lar */
+  --error-hover: #c93a3f;
+  --error-text-light: #ffc4c6;
+  --error-light: #ff7a7e;
+
+  /* Mavi/diğer tonlar → semantik/kanal token'larına bağlandı */
+  --blue-400: var(--info);
+  --social-blue: var(--ch-social);
+  --purple: var(--accent); /* mor kaldırıldı → teal */
+  --cyan: var(--accent-text);
+
+  /* Glassmorphism alias'ları (artık düz yüzey) */
+  --glass-bg: var(--bg-surface);
+  --glass-border: var(--border-color);
+  --surface: var(--bg-surface-2);
+
+  /* Overlay alias'ları */
+  --overlay-dark: var(--overlay);
+  --overlay-modal: var(--overlay);
+  --overlay-panel: rgba(4, 5, 8, 0.62);
+
+  /* Transition alias'ları (yeni eğrilerle) */
+  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 320ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* External / brand (değişmedi) */
+  --color-google-green: #34a853;
+  --color-google-blue: #8ab4f8;
+  --channel-hint-bg: #fef3c7;
+  --channel-hint-text: #92400e;
+}

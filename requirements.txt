@@ -1,0 +1,53 @@
+# Web Framework
+# fastapi >=0.109.1: CVE-2024-24762 (python-multipart ReDoS) duzeltmesi
+# fastapi==0.115.6: google-genai -> httpx>=0.28.1 icin starlette TestClient uyumu sart
+# (starlette 0.35.1'in TestClient'i httpx.Client'a kaldirilmis 'app=' kwarg'i geciriyordu)
+fastapi==0.115.6
+uvicorn[standard]==0.27.0
+# python-multipart >=0.0.18: CVE-2024-24762 + CVE-2024-53981 duzeltmeleri
+python-multipart==0.0.18
+
+# Database
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Validation
+pydantic==2.12.5
+pydantic-settings==2.12.0
+
+# Task Queue
+celery==5.3.6
+redis==5.0.1
+
+# AI APIs
+google-genai==2.11.0
+google-ads==30.0.0
+
+# Export
+python-docx==1.1.0
+reportlab==4.0.8
+openpyxl==3.1.2
+
+# Utilities
+python-dotenv==1.0.0
+httpx==0.28.1
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+
+# Logging
+loguru==0.7.2
+
+# Text Similarity
+thefuzz[speedup]==0.22.1
+tldextract==5.1.2  # Rakip domain -> registrable domain (paketlenmis PSL, runtime network yok)
+
+# HTML Parsing (Site Analyzer)
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Numerical (Embedding cosine similarity)
+numpy==1.26.4

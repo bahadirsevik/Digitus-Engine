@@ -1,0 +1,10 @@
+/*
+ * ds-fonts.css — design-sync bundle'i icin font katmani.
+ *
+ * Uygulamada Inter / Inter Tight aileleri index.html'deki <link> ile
+ * yukleniyor. design-sync ile disari cikan bundle'in kendi index.html'i
+ * olmadigindan ayni aileleri buradan @import ile getiriyoruz; boylece
+ * claude.ai/design icinde uretilen tasarimlar da dogru tipografiyle render
+ * olur. Uygulama bu dosyayi kullanmaz (yalnizca src/ds-entry.ts import eder).
+ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap');

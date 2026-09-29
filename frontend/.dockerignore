@@ -1,0 +1,8 @@
+# Windows node_modules/dist, npm ci ile kurulan Linux bagimliliklarini ezmesin
+node_modules
+dist
+dist-ds
+# Gizli degerler imaja girmez
+.env
+.env.*
+!.env.example

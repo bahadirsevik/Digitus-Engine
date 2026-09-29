@@ -1,0 +1,267 @@
+.export-page {
+  max-width: 800px;
+}
+
+.export-form {
+  margin-bottom: var(--space-xl);
+}
+
+.form-section {
+  margin-bottom: var(--space-xl);
+  padding-bottom: var(--space-xl);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.form-section h3 {
+  margin-bottom: var(--space-md);
+  font-size: 1rem;
+}
+
+/* Run Options */
+.run-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.option-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.option-btn:hover {
+  border-color: var(--accent-primary);
+}
+
+.option-btn.active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #04201d;
+}
+
+.run-status-chip {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+/* Format Options */
+.format-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+}
+
+.format-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.format-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.format-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* Channel Options */
+.channel-options {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.channel-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+}
+
+.channel-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-primary);
+}
+
+/* Export Action */
+.export-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+.btn-large {
+  padding: var(--space-md) var(--space-2xl);
+  font-size: 1rem;
+}
+
+.success-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--success);
+  font-weight: 500;
+  animation: fadeIn 0.3s ease;
+}
+
+.export-error {
+  color: var(--error);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.export-progress {
+  margin-top: var(--space-lg);
+}
+
+.export-progress .btn {
+  margin-top: var(--space-sm);
+}
+
+.export-history {
+  margin-bottom: var(--space-xl);
+}
+
+.export-history h3 {
+  margin-bottom: var(--space-md);
+}
+
+.export-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.export-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.export-history-row:last-child {
+  border-bottom: none;
+}
+
+.export-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 86px;
+  margin-right: var(--space-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.export-status-completed {
+  color: var(--success);
+}
+.export-status-failed {
+  color: var(--error);
+}
+.export-status-processing {
+  color: var(--accent-primary);
+}
+.export-status-pending {
+  color: var(--warning);
+}
+
+.export-file {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.export-progress-value {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  text-align: right;
+}
+
+/* Export Info */
+.export-info {
+  background: var(--bg-secondary);
+}
+
+.export-info h3 {
+  margin-bottom: var(--space-md);
+}
+
+.export-info ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.export-info li {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 640px) {
+  .format-options {
+    grid-template-columns: 1fr;
+  }
+
+  .channel-options {
+    flex-direction: column;
+  }
+
+  .export-history-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .export-progress-value {
+    text-align: left;
+  }
+}
+
+/* Plan v13: eski-politika rozeti — dosya indirilebilir, güncel rapor sanılmasın */
+.export-outdated-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 6px;
+  padding: 2px 7px;
+  vertical-align: middle;
+}

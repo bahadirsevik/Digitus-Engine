@@ -1,0 +1,213 @@
+/* Workspace politika kartı (plan A+B) */
+.polx-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.polx-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.polx-head h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.polx-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.polx-info {
+  font-size: 12px;
+  color: #b45309;
+}
+
+.polx-toggle {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.polx-stale {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.polx-prov {
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+.polx-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.polx-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.polx-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.polx-suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.polx-hint {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.polx-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.polx-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.polx-term {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+}
+
+.polx-term.is-approved {
+  color: #15803d;
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.polx-term.is-suggested {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.polx-term button {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 1px;
+}
+
+.polx-add {
+  display: flex;
+  gap: 8px;
+}
+
+.polx-add input {
+  flex: 1;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.polx-add button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent, #6366f1);
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.polx-add button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.polx-channels {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.polx-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.polx-channel select {
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}

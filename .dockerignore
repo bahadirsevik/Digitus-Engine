@@ -1,0 +1,59 @@
+.git
+.venv
+.pytest_cache
+pytest-cache-files-*
+.playwright-mcp
+_repo_check
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+artifacts
+exports
+google
+*.md
+*.docx
+celerybeat-schedule
+
+# --- Gizli degerler: .env ASLA imaja girmez (compose env_file ile calisma
+# aninda verilir). Ornek dosyalar serbest.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+benchmark/private/
+
+# --- Dagitim disi gelistirme/deney icerigi (dev/test compose bind-mount
+# kullandigi icin bu dislama onlari etkilemez)
+.claude
+.agents
+.dev-team
+dev-team
+.design-sync
+.ds-sync
+ds-bundle
+.github
+.vscode
+benchmark
+algoritma
+manuelVeri
+old_working
+datas
+tests
+scripts
+uploads
+backups
+veri
+labs
+*.xlsx
+*.csv
+~$*
+
+# --- Frontend ayri build context'inde (./frontend); backend imajina gerekmez
+frontend
+node_modules

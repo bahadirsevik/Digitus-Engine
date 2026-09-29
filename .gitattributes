@@ -1,0 +1,49 @@
+# SHA ile PINLENEN dosyalar LF olmak ZORUNDA.
+#
+# Neden: mühürlü deney artifact'ları (mikro deney plan v6, holdout v5)
+# bu dosyaların SHA-256'sını taşır ve koşucular çağrıdan önce doğrular.
+# Depoda core.autocrlf=true olduğu için taze bir checkout Windows'ta CRLF
+# yazar; bayt dizisi değişir ve pin — içerik aynı olduğu hâlde — kırılır.
+# Bu kural pin'i taze checkout'larda da geçerli tutar.
+app/core/channel/brand_filter.py text eol=lf
+app/core/channel/ai_json.py text eol=lf
+scripts/run_gr7_holdout_experiment.py text eol=lf
+scripts/replay_policy_specificity.py text eol=lf
+benchmark/faz_e_profile/v1_historical_brand_filter.py.txt text eol=lf
+
+# Muhurlu deneme-workspace artifactlari (seal parse edilmis JSON uzerinden
+# hesaplanir; yine de bayt kararliligi icin LF pinlenir).
+benchmark/trial_workspaces/*.json text eol=lf
+
+# Algoritma kilidi nihai_niche_v1 (benchmark/ads_nihai_niche_algorithm_LOCKED.json)
+# kaynak dosyalarin HAM SHA-256'sini tasir — ayni neden: CRLF checkout pin'i kirar.
+plan_nihai_ads_production.md text eol=lf
+scripts/ads_v3_formula.py text eol=lf
+scripts/ads_v3_ai.py text eol=lf
+scripts/ads_v3_run.py text eol=lf
+scripts/ads_v3_bench.py text eol=lf
+scripts/nihai_akis_intent.py text eol=lf
+scripts/nihai_akis_intent_v3.py text eol=lf
+scripts/nihai_akis_intent_v4.py text eol=lf
+scripts/nihai_akis_e1_intent_run.py text eol=lf
+scripts/nihai_akis_family_v2_prompt.py text eol=lf
+scripts/nihai_akis_family_v2_run.py text eol=lf
+scripts/nihai2_a2b_kural_uygulamasi.py text eol=lf
+scripts/nihai_akis_e2_e6.py text eol=lf
+benchmark/ads_nihai_niche_algorithm_LOCKED.json text eol=lf
+benchmark/ads_nihai_niche_golden_v1.json text eol=lf
+# Sartname belgeleri zip tabanli; satir sonu donusumu ASLA uygulanmaz.
+algoritma/*.docx binary
+
+# Algoritma kilidi seo_v31_kati2_v1 (benchmark/seo_v31_kati2_algorithm_LOCKED.json)
+# HAM bayt SHA-256 tasir ve satir sonu normalize etmez. Her dosya kilit anindaki
+# satir sonuyla sabitlenir; checkout her platformda ayni baytlari yazar.
+scripts/seo_v3_engine.py text eol=lf
+scripts/seo_v3_prompts.py text eol=lf
+scripts/seo_v31_engine.py text eol=lf
+scripts/seo_v31_prompts.py text eol=lf
+scripts/seo_v31_ai_run.py text eol=crlf
+benchmark/seo_v31_asama3_kati2_ozet.json text eol=crlf
+benchmark/seo_v31_sonuc.json text eol=crlf
+benchmark/seo_v31_kati2_algorithm_LOCKED.json text eol=lf
+SEO_V31_Kati2_Primary_Secondary_Listeleri.xlsx binary

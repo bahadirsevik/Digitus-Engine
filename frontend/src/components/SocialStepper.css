@@ -1,0 +1,741 @@
+.social-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Stepper Header */
+.stepper-header {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  padding: 20px;
+  background: var(--glass-bg);
+  border-radius: 12px;
+}
+
+.step-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  background: var(--surface);
+  border: 2px solid var(--glass-border);
+  color: var(--text-secondary);
+  transition: all 0.3s;
+}
+
+.step-circle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #04201d;
+}
+
+.step-circle.completed {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.step-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.step-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.step-line {
+  width: 60px;
+  height: 2px;
+  background: var(--glass-border);
+  margin: 0 16px;
+}
+
+/* Step Content */
+.step-content {
+  padding: 24px;
+}
+
+.step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 500px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+/* Lists */
+.list-hint {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 40px;
+}
+
+.category-list,
+.idea-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-item,
+.idea-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.category-item:hover,
+.idea-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.category-item.selected,
+.idea-item.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.category-item input,
+.idea-item input {
+  display: none;
+}
+
+.category-info,
+.idea-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.category-name,
+.idea-title {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.category-desc,
+.idea-hook {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.category-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.idea-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.viral-score {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.platform {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+/* Actions */
+.stepper-actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.action-spacer {
+  flex: 1;
+}
+
+/* Completion */
+.completion-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--success-soft);
+  border: 1px solid var(--success);
+  border-radius: 8px;
+  color: var(--success-text);
+}
+
+.completion-banner a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* ============ Claude Design "Social" — socx- (stepper + adımlar + sonuç) ============ */
+
+.socx-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Stepper kartı */
+.socx-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 26px;
+  overflow: visible;
+}
+
+.socx-step-wrap {
+  display: contents;
+}
+
+.socx-step {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.socx-step-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  border: 1.6px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.socx-step.is-active .socx-step-circle {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #04110e;
+}
+
+.socx-step.is-done .socx-step-circle {
+  background: #4ade80;
+  border-color: #4ade80;
+  color: #04110e;
+}
+
+.socx-step-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.socx-step.is-todo .socx-step-title {
+  color: var(--text-muted);
+}
+
+.socx-step-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.socx-step-line {
+  flex: 1;
+  height: 1.5px;
+  min-width: 30px;
+  background: var(--border);
+  margin: 0 6px;
+}
+
+.socx-step-line.is-done {
+  background: rgba(45, 212, 191, 0.3);
+}
+
+/* Adım gövdesi */
+.socx-body {
+  padding: 24px 26px;
+  overflow: visible;
+}
+
+.socx-brand-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 820px;
+}
+
+.socx-ctx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.socx-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 700px) {
+  .socx-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.socx-body-title {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Seçim satırları (kategori + fikir) */
+.socx-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.socx-select-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  color: var(--text-primary);
+}
+
+.socx-select-row.is-idea {
+  align-items: flex-start;
+}
+
+.socx-select-row.is-on {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+.socx-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.6px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: #04110e;
+}
+
+.socx-select-row.is-idea .socx-checkbox {
+  margin-top: 2px;
+}
+
+.socx-select-row.is-on .socx-checkbox {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.socx-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.socx-row-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.socx-row-title.lg {
+  font-size: 15px;
+}
+
+.socx-row-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.socx-count-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.socx-idea-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+
+.socx-idea-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.socx-platform-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.socx-idea-platform {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Sonuç */
+.socx-result-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4ade80;
+  margin-bottom: 16px;
+}
+
+.socx-result-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.socx-content-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+}
+
+.socx-content-no {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-hover);
+}
+
+.socx-block {
+  margin-top: 22px;
+}
+
+.socx-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 11px;
+}
+
+.socx-block-title svg {
+  color: var(--accent-hover);
+}
+
+.socx-hook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.socx-hook {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 13px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.socx-hook-tag {
+  font-size: 11px;
+  color: var(--accent-hover);
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: 6px;
+  padding: 2px 7px;
+  flex: 0 0 auto;
+}
+
+.socx-text-box {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.socx-text-box p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.socx-scene {
+  display: flex;
+  gap: 12px;
+}
+
+.socx-scene-time {
+  font-size: 12px;
+  color: var(--accent-hover);
+  font-weight: 600;
+  flex: 0 0 54px;
+}
+
+.socx-scene-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.socx-cta {
+  font-size: 13.5px;
+  color: var(--text-primary);
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.socx-hashtags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.socx-hashtag {
+  font-size: 12px;
+  color: var(--accent-hover);
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: 7px;
+  padding: 5px 9px;
+}
+
+.socx-done-banner {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(74, 222, 128, 0.13);
+  border: 1px solid rgba(74, 222, 128, 0.27);
+  border-radius: 12px;
+  padding: 15px 18px;
+  color: #4ade80;
+}
+
+.socx-done-banner span {
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+.socx-done-banner a {
+  font-weight: 600;
+  color: var(--accent-hover);
+}
+
+/* Üretim banner'ı */
+.socx-gen-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: 14px;
+  padding: 20px 22px;
+}
+
+.socx-gen-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-hover);
+  color: #04110e;
+}
+
+.socx-gen-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.socx-gen-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* Alt aksiyonlar */
+.socx-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.socx-actions.is-end {
+  justify-content: flex-end;
+}
+
+.socx-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 9px;
+  padding: 11px 20px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.socx-ghost-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* Faz F: grounding reddi uyarıları */
+.socx-claim-warnings {
+  font-size: 12.5px;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  padding: 10px 13px;
+  margin-bottom: 12px;
+}
+
+.socx-claim-warnings ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.socx-claim-warnings li {
+  margin-top: 2px;
+}
