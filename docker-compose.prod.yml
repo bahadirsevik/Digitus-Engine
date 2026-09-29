@@ -7,6 +7,10 @@ services:
         # Deploy: APP_GIT_SHA=$(git rev-parse --short=12 HEAD) docker-compose ... build
         APP_GIT_SHA: ${APP_GIT_SHA:?APP_GIT_SHA must be set for production builds}
     container_name: digitus_app_prod
+    # Export dosyalarini worker yazar, app indirir: ortak volume sart
+    # (dev'de `.:/app` bind mount bunu sagliyordu).
+    volumes:
+      - exports_data:/app/exports
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips='*'"
     expose:
@@ -58,6 +62,10 @@ services:
       args:
         APP_GIT_SHA: ${APP_GIT_SHA:?APP_GIT_SHA must be set for production builds}
     container_name: digitus_celery_worker_prod
+    # Export dosyalarini worker yazar, app indirir: ortak volume sart
+    # (dev'de `.:/app` bind mount bunu sagliyordu).
+    volumes:
+      - exports_data:/app/exports
     command: celery -A app.tasks.celery_app worker --loglevel=info
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -120,8 +128,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
     container_name: digitus_frontend_prod
+    # Yalniz sunucunun icinden erisilir; disariya sunucudaki giris korumali
+    # reverse proxy acar. Proxy baska bir makinede/konteynerde ise
+    # FRONTEND_BIND_ADDR ile degistirin (0.0.0.0 girisi atlatmaya acar).
     ports:
-      - "9005:80"
+      - "${FRONTEND_BIND_ADDR:-127.0.0.1}:${FRONTEND_PORT:-9005}:80"
     # nginx yalnız API_KEY'i kullanır (envsubst '$API_KEY'); diğer sırlar
     # bu konteynere verilmez. Değer compose değişken ikamesiyle .env'den okunur.
     environment:
@@ -135,6 +146,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  exports_data:
 
 networks:
   digitus_network:

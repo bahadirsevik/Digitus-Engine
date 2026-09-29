@@ -15,7 +15,7 @@ kullanılır.
 | `celery_beat` | Zamanlayıcı |
 | `db` | PostgreSQL 15 (kalıcı volume `postgres_data`) |
 | `redis` | Redis 7 (kalıcı volume `redis_data`) |
-| `frontend` | nginx; statik arayüz + `/api` proxy'si. Host portu **9005**. |
+| `frontend` | nginx; statik arayüz + `/api` proxy'si. Yalnız `127.0.0.1:9005`'te dinler. |
 
 ## 1. `.env` dosyası
 
@@ -50,8 +50,26 @@ Ayrıca gerekenler:
 | `GEMINI_MODEL` | `gemini-3.8-flash` |
 | `ENABLE_SOCIAL_BRIEF_FLOW` | `true` — bu dağıtımdaki arayüz yeni sosyal brief akışını kullanır; kapalıyken eski sihirbaza dönmez |
 | `GOOGLE_ADS_*` | Google Ads entegrasyonu kullanılacaksa |
+| `CORS_ORIGINS` | Subdomain'in tam adresi, ör. `https://digitus.ornek.com` |
+| `FRONTEND_BIND_ADDR` / `FRONTEND_PORT` | İsteğe bağlı; varsayılan `127.0.0.1` / `9005` |
 
 Gizli değerleri loglara, issue'lara veya sohbetlere yapıştırmayın.
+
+## Subdomain ve erişim koruması
+
+Uygulamanın kendi kullanıcı girişi yoktur ve frontend nginx'i her `/api`
+isteğine `API_KEY`'i kendisi ekler. Bu yüzden siteye erişen herkes API'yi
+tam yetkiyle kullanabilir; **erişim koruması (kullanıcı adı/şifre) sunucudaki
+reverse proxy'de zorunludur.**
+
+- Frontend yalnız `127.0.0.1:9005`'te dinler; dışarıdan doğrudan erişilemez.
+  Subdomain'i (HTTPS + giriş) sunucudaki reverse proxy bu adrese yönlendirir.
+- Reverse proxy aynı makinede değilse veya konteyner içinde çalışıyorsa
+  `FRONTEND_BIND_ADDR`'ı ona göre ayarlayın; `0.0.0.0` yapılırsa port 9005
+  girişi atlayarak dışarıdan açılır (güvenlik duvarıyla kapatılmalı).
+- Reverse proxy'de de aynı sınırlar olmalı: istek gövdesi ≥ 12 MB
+  (CSV importu), okuma zaman aşımı ≥ 300 sn (senkron AI uçları).
+- Export dosyaları `exports_data` volume'unda tutulur (worker yazar, app sunar).
 
 ## 2. Build ve başlatma
 
