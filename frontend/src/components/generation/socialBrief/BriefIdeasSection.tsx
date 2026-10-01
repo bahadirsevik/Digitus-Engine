@@ -29,7 +29,7 @@ interface Props {
   selectedIdeaIds: number[]
   onToggleIdea: (id: number) => void
   onIdeasChange: (ideas: SocialGeneratedIdeaResponse[]) => void
-  onOpenContents: () => void
+  onOpenContents: (ideaId: number) => void
 }
 
 // K4: her seçilen kategori en az bir fikir almalı. Boş kategori, ilk üretimin uyarılarından
@@ -167,6 +167,9 @@ export default function BriefIdeasSection({
   }, [ideasRes, ideas])
 
   const ideasStatus = ideasRes?.attempt_status ?? ideasAttempt?.status ?? null
+  const activeAttemptStatus = ideasActive
+    ? ideasStatus
+    : (retryRes?.attempt_status ?? latestRetry?.status)
   const terminalIdeas = ideasStatus != null && !isActiveStatus(ideasStatus)
   // Kapsama/retry kararı yalnız sunucudaki fikir sonucu okunduktan sonra verilir;
   // aksi halde yükleme anında tüm hedefler "eksik" görünür (yenileme sonrası).
@@ -290,32 +293,48 @@ export default function BriefIdeasSection({
       )}
 
       {(ideasActive || retryActive) && (
-        <div className="socx-gen-banner" role="status" aria-live="polite">
-          <span className="socx-gen-icon">
-            <RefreshCw size={19} className="chx-spin" />
-          </span>
-          <div>
-            <div className="socx-gen-title">
-              {ideasActive ? 'Fikirler üretiliyor' : 'Eksik hedefler yeniden deneniyor'}
+        <div className="sb-ideas-loading" role="status" aria-live="polite">
+          <div className="sb-ideas-loading-top">
+            <span className="sb-ideas-loading-icon" aria-hidden="true">
+              <RefreshCw size={19} className="chx-spin" />
+            </span>
+            <div>
+              <div className="sb-ideas-loading-title">
+                {ideasActive ? 'Fikirler üretiliyor' : 'Eksik hedefler yeniden deneniyor'}
+              </div>
+              <p className="sb-ideas-loading-sub">
+                {activeAttemptStatus === 'pending'
+                  ? 'İstek sırada bekliyor. Başladığında durum burada güncellenecek.'
+                  : 'Yapay zekâ fikirleri hazırlıyor. Bu sayfadan ayrılabilirsiniz; sonuç kaydedilir.'}
+              </p>
             </div>
-            <div className="socx-gen-sub">
-              {ideasActive
-                ? `${ideasStatus === 'pending' ? 'Sırada bekliyor' : 'Yapay zekâ çalışıyor'}. Bu sayfadan ayrılabilirsiniz; sonuç kaydedilir.`
-                : 'Sonuç hazır olunca otomatik gösterilecek.'}
-            </div>
+          </div>
+          <div
+            className="sb-ideas-loading-bar"
+            role="progressbar"
+            aria-label="Fikir üretimi sürüyor"
+          />
+          <div className="sb-ideas-loading-steps" aria-hidden="true">
+            <span className={activeAttemptStatus === 'pending' ? 'is-active' : 'is-done'}>
+              {activeAttemptStatus === 'pending' ? (
+                <RefreshCw size={13} className="chx-spin" />
+              ) : (
+                <CheckCircle2 size={13} />
+              )}
+              Sıraya alındı
+            </span>
+            <span className={activeAttemptStatus === 'pending' ? 'is-waiting' : 'is-active'}>
+              {activeAttemptStatus !== 'pending' && <RefreshCw size={13} className="chx-spin" />}
+              Fikirler hazırlanıyor
+            </span>
           </div>
         </div>
       )}
 
-      {ideasAttempt && !ideasLoaded && !readError && (
-        <div className="socx-gen-banner" role="status">
-          <span className="socx-gen-icon">
-            <RefreshCw size={19} className="chx-spin" />
-          </span>
-          <div>
-            <div className="socx-gen-title">Fikirler yükleniyor...</div>
-            <div className="socx-gen-sub">Kaydedilmiş sonuçlar sunucudan getiriliyor.</div>
-          </div>
+      {ideasAttempt && !ideasLoaded && !readError && !ideasActive && !retryActive && (
+        <div className="sb-progress-note" role="status">
+          <RefreshCw size={14} className="chx-spin" />
+          Fikirler yükleniyor...
         </div>
       )}
 
@@ -546,7 +565,7 @@ export default function BriefIdeasSection({
                           <button
                             type="button"
                             className="sb-badge sb-badge-active sb-content-jump"
-                            onClick={onOpenContents}
+                            onClick={() => onOpenContents(idea.id)}
                           >
                             <CheckCircle2 size={11} /> İçerik var · Gör
                           </button>

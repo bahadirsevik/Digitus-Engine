@@ -62,6 +62,7 @@ export default function SocialBriefDetail({
   const [loading, setLoading] = useState(true)
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([])
   const [selectedIdeaIds, setSelectedIdeaIds] = useState<number[]>([])
+  const [viewContentIdeaId, setViewContentIdeaId] = useState<number | null>(null)
   const [ideas, setIdeas] = useState<SocialGeneratedIdeaResponse[]>([])
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | null>(null)
 
@@ -167,7 +168,8 @@ export default function SocialBriefDetail({
     setSelectedCategoryIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 6)
     )
-  const toggleIdea = (id: number) =>
+  const toggleIdea = (id: number) => {
+    setViewContentIdeaId(null)
     setSelectedIdeaIds((prev) =>
       prev.includes(id)
         ? prev.filter((x) => x !== id)
@@ -175,6 +177,7 @@ export default function SocialBriefDetail({
           ? prev
           : [...prev, id]
     )
+  }
   const handleIdeasChange = useCallback((list: SocialGeneratedIdeaResponse[]) => setIdeas(list), [])
   const step = activeStep ?? 1
   const canOpenIdeas = (state?.categories.length ?? 0) > 0
@@ -293,7 +296,10 @@ export default function SocialBriefDetail({
                       className={`sb-flow-step ${stage.number === step ? 'is-active' : ''} ${completed ? 'is-done' : ''}`}
                       aria-current={stage.number === step ? 'step' : undefined}
                       disabled={!available}
-                      onClick={() => setActiveStep(stage.number)}
+                      onClick={() => {
+                        setViewContentIdeaId(null)
+                        setActiveStep(stage.number)
+                      }}
                     >
                       <span className="sb-flow-step-circle">
                         {completed ? <Check size={16} /> : stage.number}
@@ -331,7 +337,10 @@ export default function SocialBriefDetail({
                   selectedIdeaIds={selectedIdeaIds}
                   onToggleIdea={toggleIdea}
                   onIdeasChange={handleIdeasChange}
-                  onOpenContents={() => setActiveStep(3)}
+                  onOpenContents={(ideaId) => {
+                    setViewContentIdeaId(ideaId)
+                    setActiveStep(3)
+                  }}
                 />
               </div>
               <div hidden={step !== 3}>
@@ -339,7 +348,11 @@ export default function SocialBriefDetail({
                   ctx={ctx}
                   ideas={ideas}
                   selectedIdeaIds={selectedIdeaIds}
-                  onClearSelection={() => setSelectedIdeaIds([])}
+                  viewIdeaId={viewContentIdeaId}
+                  onClearSelection={() => {
+                    setSelectedIdeaIds([])
+                    setViewContentIdeaId(null)
+                  }}
                 />
               </div>
             </div>
@@ -358,7 +371,10 @@ export default function SocialBriefDetail({
                   type="button"
                   className="sb-btn sb-btn-primary"
                   disabled={step === 1 ? !canOpenIdeas : !canOpenContents}
-                  onClick={() => setActiveStep(step === 1 ? 2 : 3)}
+                  onClick={() => {
+                    setViewContentIdeaId(null)
+                    setActiveStep(step === 1 ? 2 : 3)
+                  }}
                 >
                   {step === 1 ? 'Fikirlere Geç' : 'İçeriklere Geç'} <ArrowRight size={15} />
                 </button>

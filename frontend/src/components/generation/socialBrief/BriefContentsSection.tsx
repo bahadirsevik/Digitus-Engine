@@ -32,6 +32,7 @@ interface Props {
   ctx: BriefSectionContext
   ideas: SocialGeneratedIdeaResponse[]
   selectedIdeaIds: number[]
+  viewIdeaId: number | null
   onClearSelection: () => void
 }
 
@@ -39,6 +40,7 @@ export default function BriefContentsSection({
   ctx,
   ideas,
   selectedIdeaIds,
+  viewIdeaId,
   onClearSelection,
 }: Props) {
   const { brief, workspaceId, state } = ctx
@@ -102,6 +104,7 @@ export default function BriefContentsSection({
 
   const status = attemptRes?.attempt_status ?? latest?.status ?? null
   const active = isActiveStatus(status)
+  const choosingNewIdeas = selectedIdeaIds.length > 0 && !active
   usePolling(active && latestId != null, loadAttempt, ctx.pollIntervalMs)
 
   const trimmedUsp = usp.trim()
@@ -111,6 +114,24 @@ export default function BriefContentsSection({
       (id) => !contentIdeaIds.has(id) && ideaById.has(id)
     )
   }, [attemptRes, status, contentIdeaIds, ideaById])
+
+  // Seçim değiştiğinde eski içerik yeni isteğin sonucu gibi görünmemeli.
+  const focusedIdeaIds =
+    viewIdeaId != null
+      ? [viewIdeaId]
+      : selectedIdeaIds.length
+        ? selectedIdeaIds
+        : (attemptRes?.requested_idea_ids ?? latest?.requested_idea_ids ?? [])
+  const focusedSet = new Set(focusedIdeaIds)
+  const currentContents = focusedSet.size
+    ? contents.filter((c) => focusedSet.has(c.idea_id))
+    : contents
+  const previousContents = focusedSet.size ? contents.filter((c) => !focusedSet.has(c.idea_id)) : []
+
+  useEffect(() => {
+    if (viewIdeaId == null || !contentsLoaded) return
+    document.getElementById(`sb-content-idea-${viewIdeaId}`)?.scrollIntoView?.({ block: 'start' })
+  }, [viewIdeaId, contentsLoaded, contents])
 
   const dispatch = async (ideaIds: number[]) => {
     if (busy || ctx.disabled || brief.is_stale || active) return
@@ -161,6 +182,42 @@ export default function BriefContentsSection({
 
   const targetById = new Map(brief.targets.map((t) => [t.id, t]))
   const ideaTitle = (id: number) => ideaById.get(id)?.idea_title ?? `Fikir #${id}`
+
+  const renderContent = (c: SocialContentHistoryItemResponse) => {
+    const idea = ideaById.get(c.idea_id)
+    const target = idea ? targetById.get(idea.brief_target_id) : undefined
+    return (
+      <div key={c.id} id={`sb-content-idea-${c.idea_id}`}>
+        <SocialContentCard
+          view={{
+            id: c.id,
+            ideaTitle: c.idea_title,
+            platformLabel: c.platform ? ctx.platformLabel(c.platform) : '—',
+            formatLabel:
+              c.platform && c.content_format ? ctx.formatLabel(c.platform, c.content_format) : '—',
+            keyword: c.keyword,
+            categoryName: c.category_name,
+            hooks: c.hooks,
+            caption: c.caption,
+            ctaText: c.cta_text,
+            hashtags: c.hashtags,
+            visualSuggestion: c.visual_suggestion,
+            videoConcept: c.video_concept,
+            platformNotes: c.platform_notes,
+            postingSuggestion: c.industry_posting_suggestion,
+            scenario: c.scenario,
+            formatPayload: c.format_payload,
+            durationStatus: c.duration_status,
+            actualDurationSec: c.actual_duration_sec,
+            durationMinSec: c.duration_min_sec ?? target?.duration_min_sec,
+            durationMaxSec: c.duration_max_sec ?? target?.duration_max_sec,
+            validationWarnings: c.validation_warnings,
+            isStale: c.is_stale,
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <section className="sb-stage" aria-labelledby={`sb-contents-title-${brief.id}`}>
@@ -246,6 +303,7 @@ export default function BriefContentsSection({
 
       {attemptRes && !active && (
         <div className="sb-attempt-summary" role="status">
+          {choosingNewIdeas && <strong>Önceki üretimin özeti</strong>}
           <span>
             İstenen <b>{attemptRes.requested_idea_ids.length}</b> · Üretilen{' '}
             <b>{attemptRes.successful_idea_ids.length}</b> · Üretilemeyen{' '}
@@ -286,52 +344,23 @@ export default function BriefContentsSection({
         </div>
       )}
 
-      {contentsLoaded && contents.length === 0 && !active && hasIdeas && (
+      {contentsLoaded && currentContents.length === 0 && !active && hasIdeas && (
         <div className="sb-empty-inline">
-          <FileText size={16} /> Bu brief için henüz içerik üretilmedi.
+          <FileText size={16} />
+          {selectedIdeaIds.length > 0
+            ? 'Seçilen fikirler için henüz içerik üretilmedi.'
+            : 'Bu üretimde henüz içerik bulunmuyor.'}
         </div>
       )}
 
-      {contents.length > 0 && (
-        <div className="sb-content-list">
-          {contents.map((c) => {
-            const idea = ideaById.get(c.idea_id)
-            const target = idea ? targetById.get(idea.brief_target_id) : undefined
-            return (
-              <div key={c.id} id={`sb-content-idea-${c.idea_id}`}>
-                <SocialContentCard
-                  view={{
-                    id: c.id,
-                    ideaTitle: c.idea_title,
-                    platformLabel: c.platform ? ctx.platformLabel(c.platform) : '—',
-                    formatLabel:
-                      c.platform && c.content_format
-                        ? ctx.formatLabel(c.platform, c.content_format)
-                        : '—',
-                    keyword: c.keyword,
-                    categoryName: c.category_name,
-                    hooks: c.hooks,
-                    caption: c.caption,
-                    ctaText: c.cta_text,
-                    hashtags: c.hashtags,
-                    visualSuggestion: c.visual_suggestion,
-                    videoConcept: c.video_concept,
-                    platformNotes: c.platform_notes,
-                    postingSuggestion: c.industry_posting_suggestion,
-                    scenario: c.scenario,
-                    formatPayload: c.format_payload,
-                    durationStatus: c.duration_status,
-                    actualDurationSec: c.actual_duration_sec,
-                    durationMinSec: c.duration_min_sec ?? target?.duration_min_sec,
-                    durationMaxSec: c.duration_max_sec ?? target?.duration_max_sec,
-                    validationWarnings: c.validation_warnings,
-                    isStale: c.is_stale,
-                  }}
-                />
-              </div>
-            )
-          })}
-        </div>
+      {currentContents.length > 0 && (
+        <div className="sb-content-list">{currentContents.map(renderContent)}</div>
+      )}
+      {previousContents.length > 0 && (
+        <details key={focusedIdeaIds.join(',')} className="sb-history-details sb-content-history">
+          <summary>Önceki içerikler ({previousContents.length})</summary>
+          <div className="sb-content-list">{previousContents.map(renderContent)}</div>
+        </details>
       )}
     </section>
   )
