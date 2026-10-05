@@ -6,10 +6,12 @@ import {
   Key,
   LayoutDashboard,
   ListTodo,
+  LogOut,
   Search,
   Share2,
   Zap,
 } from 'lucide-react'
+import { useAuthStore } from '../stores/authStore'
 import './Layout.css'
 
 interface LayoutProps {
@@ -28,6 +30,9 @@ const navItems = [
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
+  const user = useAuthStore((s) => s.user)
+  const loginRequired = useAuthStore((s) => s.loginRequired)
+  const logout = useAuthStore((s) => s.logout)
 
   return (
     <div className="layout">
@@ -58,6 +63,25 @@ export default function Layout({ children }: LayoutProps) {
             <div className="status-dot"></div>
             <span>API Bagli</span>
           </div>
+
+          {/* Giris kapali ise (LOGIN_ENABLED=false) kullanici satiri hic
+              gosterilmez — o modda oturum kavrami yok. */}
+          {loginRequired && user && (
+            <div className="sidebar-user">
+              <span className="sidebar-user-name" title={user.email}>
+                {user.full_name || user.email}
+              </span>
+              <button
+                type="button"
+                className="sidebar-logout"
+                onClick={() => void logout()}
+                title="Cikis yap"
+                aria-label="Cikis yap"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 

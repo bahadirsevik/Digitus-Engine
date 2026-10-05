@@ -22,6 +22,21 @@ class Settings(BaseSettings):
     # Production'da zorunlu: bos birakilamaz (bkz. check_production_security).
     API_KEY: Optional[str] = None
 
+    # ── Giris (login) feature flag ──
+    # LOGIN_ENABLED=false: sistem giris oncesi haliyle calisir. IPTAL YOLU
+    # budur — .env'de bu degeri false yapip app konteynerini yeniden
+    # baslatmak giris zorunlulugunu tamamen kaldirir (kod/veri degismez).
+    # Frontend de /api/v1/auth/status ucundan bu degeri okur, boylece flag
+    # uctan uca calisir.
+    LOGIN_ENABLED: bool = False
+    SESSION_COOKIE_NAME: str = "digitus_session"
+    # Oturum TTL'i KAYAN penceredir: her istekte tazelenir, hareketsizlikte doler.
+    SESSION_TTL_DAYS: int = 30
+    # Kaba kuvvet yavaslatma: pencere icinde bu kadar basarisiz denemeden
+    # sonra giris 429 doner.
+    LOGIN_MAX_ATTEMPTS: int = 10
+    LOGIN_ATTEMPT_WINDOW_MINUTES: int = 15
+
     # CORS allow-list. Virgul ile ayrilmis liste veya "*".
     # Production'da "*" kullanimi yasaklidir.
     CORS_ORIGINS: str = "*"

@@ -1911,3 +1911,46 @@ def _prevent_workspace_keyword_snapshot_update(mapper, connection, target):
             "WorkspaceKeyword snapshot fields are immutable: "
             + ", ".join(sorted(changed))
         )
+
+
+class User(Base):
+    """
+    Uygulama kullanicisi (e-posta + parola ile giris).
+
+    KAPSAM: yalniz KIMLIK. Rol, kiraci ve yetki alani BILEREK yok — giris
+    yapan her kullanici tum workspace'leri gorur. Veri izolasyonu ayri bir
+    istir (bkz. optimice/kullanici-yapisi-plan.md).
+
+    Oturumlar bu tabloda DEGIL, Redis'te tutulur (app/core/sessions.py);
+    bu yuzden token/oturum kolonu yoktur.
+
+    email: DAIMA kucuk harfe normalize edilmis halde yazilir. Okuma
+      tarafindaki sorgular da normalize edilmis deger ile arar; aksi halde
+      UNIQUE kisiti buyuk/kucuk harf farkiyla atlatilabilir.
+    deleted_at: soft delete (repo genelindeki desen). Dolu olan kullanici
+      giris yapamaz ve acik oturumlari gecersizdir.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(320), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)  # argon2id
+    full_name = Column(String(200), nullable=True)
+    is_active = Column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:  # pragma: no cover - tani amacli
+        return f"<User id={self.id} email={self.email!r} active={self.is_active}>"

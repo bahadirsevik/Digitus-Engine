@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.config import settings
 from app.api.v1.router import api_router
+from app.api.v1.auth import router as auth_router
 from app.core.logging_config import setup_logging
 
 
@@ -90,6 +91,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+# Auth uclari api_router'in ALTINA baglanmaz: giris ucunun kendisi giris
+# istemez (yoksa hic giris yapilamazdi). Ayrica /auth/status kimlik
+# dogrulamasiz okunur — frontend giris gerekip gerekmedigini oradan ogrenir.
+app.include_router(auth_router, prefix="/api/v1/auth")
 
 
 @app.get("/", tags=["Health"])

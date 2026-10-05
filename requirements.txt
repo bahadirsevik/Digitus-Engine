@@ -41,6 +41,10 @@ pytest-cov==4.1.0
 # Logging
 loguru==0.7.2
 
+# Parola hash'leme (giris). argon2id — bcrypt'in 72 bayt sessiz kirpmasi ve
+# daha zayif bellek-sertligi yok.
+argon2-cffi==23.1.0
+
 # Text Similarity
 thefuzz[speedup]==0.22.1
 tldextract==5.1.2  # Rakip domain -> registrable domain (paketlenmis PSL, runtime network yok)

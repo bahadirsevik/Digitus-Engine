@@ -8,11 +8,23 @@ const API_KEY: string | undefined = import.meta.env.VITE_API_KEY
 
 const api = axios.create({
   baseURL: API_BASE,
+  // withCredentials: oturum cookie'si (HttpOnly) her istekte gönderilsin.
+  // Giriş kapısı buna bağlı — kapatılırsa her istek 401 döner.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
   },
 })
+
+/**
+ * Oturum düştüğünde (401) tetiklenen olay.
+ *
+ * authStore bunu dinler ve kullanıcıyı giriş ekranına düşürür. Doğrudan
+ * store'u import etmek yerine olay kullanılıyor: authStore bu dosyayı import
+ * ettiği için ters yönde import DAİRESEL bağımlılık yaratırdı.
+ */
+export const UNAUTHENTICATED_EVENT = 'digitus:unauthenticated'
 
 export interface ApiError {
   status: number
@@ -201,6 +213,17 @@ api.interceptors.response.use(
         formatValidationDetail(raw) || detailMessage || 'Gönderilen değerler doğrulamadan geçemedi.'
     } else if (status === 401) {
       message = 'Kimlik doğrulama gerekli. Lütfen oturum açın.'
+      // Oturum düşmüş: arayüzü giriş ekranına al. Auth uçlarının kendi
+      // 401'leri hariç — giriş denemesinin başarısız olması oturum
+      // düşmesi değildir ve ekranı sıfırlamamalı.
+      const url = err.config?.url ?? ''
+      if (!url.startsWith('/auth') && !url.includes('/auth/')) {
+        try {
+          window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
+        } catch {
+          // ignore
+        }
+      }
     } else if (status === 403) {
       message = 'Bu işlem için yetkiniz yok.'
     } else if (status === 404) {
@@ -1801,3 +1824,29 @@ export const socialBriefApi = {
 }
 
 export default api
+
+
+// ── Auth ──
+// Bu uçlar /api/v1/auth altındadır ve api_router'a bağlı DEĞİLDİR; bu yüzden
+// baseURL ('/api/v1') + '/auth/...' doğru adresi verir.
+
+export interface AuthUser {
+  id: number
+  email: string
+  full_name?: string | null
+}
+
+export interface AuthStatusResponse {
+  login_required: boolean
+}
+
+export const authApi = {
+  /** Giriş zorunlu mu? Kimlik doğrulaması istemez. */
+  status: () => api.get<AuthStatusResponse>('/auth/status'),
+  login: (email: string, password: string) =>
+    api.post<AuthUser>('/auth/login', { email, password }),
+  logout: () => api.post<void>('/auth/logout'),
+  me: () => api.get<AuthUser>('/auth/me'),
+  changePassword: (current_password: string, new_password: string) =>
+    api.post<void>('/auth/change-password', { current_password, new_password }),
+}
