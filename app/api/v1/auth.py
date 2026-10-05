@@ -64,6 +64,8 @@ class UserOut(BaseModel):
     id: int
     email: str
     full_name: Optional[str] = None
+    # True ise frontend zorunlu parola degistirme ekranini gosterir.
+    must_change_password: bool = False
 
 
 class AuthStatusOut(BaseModel):
@@ -203,8 +205,18 @@ def login(
         )
 
     _set_session_cookie(response, token)
-    logger.bind(user_id=user.id, email=user.email, ip=ip).info("Giris yapildi")
-    return UserOut(id=user.id, email=user.email, full_name=user.full_name)
+    logger.bind(
+        user_id=user.id,
+        email=user.email,
+        ip=ip,
+        must_change_password=bool(user.must_change_password),
+    ).info("Giris yapildi")
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        must_change_password=bool(user.must_change_password),
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, tags=["Auth"])
@@ -229,7 +241,12 @@ def logout(request: Request, response: Response):
 @router.get("/me", response_model=UserOut, tags=["Auth"])
 def me(current: CurrentUser = Depends(get_current_user)):
     """Giris yapmis kullanicinin kimligi. Giris yoksa 401."""
-    return UserOut(id=current.id, email=current.email, full_name=current.full_name)
+    return UserOut(
+        id=current.id,
+        email=current.email,
+        full_name=current.full_name,
+        must_change_password=current.must_change_password,
+    )
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT, tags=["Auth"])
@@ -264,7 +281,20 @@ def change_password(
             detail={"code": "WEAK_PASSWORD", "message": problem},
         )
 
+    # Yeni parola eskisiyle ayni olmasin — gecici parolayi "degistirmis"
+    # sayip ayni degeri tekrar koymak zorunlulugu anlamsiz kilardi.
+    if verify_password(payload.new_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "PASSWORD_UNCHANGED",
+                "message": "Yeni parola mevcut parolayla ayni olamaz.",
+            },
+        )
+
     user.password_hash = hash_password(payload.new_password)
+    # Zorunluluk kalkar: artik kullanicinin kendi belirledigi parola var.
+    user.must_change_password = False
     db.commit()
 
     try:

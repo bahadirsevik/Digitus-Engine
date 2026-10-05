@@ -143,3 +143,26 @@
     animation: none;
   }
 }
+
+
+/* Karti ikincil eylemi (zorunlu parola ekranindaki "Cikis yap"). */
+.login-secondary {
+  padding: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-secondary:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.login-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

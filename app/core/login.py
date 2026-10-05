@@ -37,6 +37,9 @@ class CurrentUser:
     id: int
     email: str
     full_name: Optional[str]
+    # True ise kullanici gecici parola kullaniyor ve parolasini
+    # degistirmeden veri uclarina erisemez.
+    must_change_password: bool = False
 
 
 # Giris gerektigini istemciye bildiren standart yanit. Frontend 401'i
@@ -44,6 +47,16 @@ class CurrentUser:
 _UNAUTHENTICATED = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail={"code": "NOT_AUTHENTICATED", "message": "Giris yapilmasi gerekiyor."},
+)
+
+# 403, 401 DEGIL: kimlik dogrulanmistir, eksik olan yetkidir. 401 donmek
+# frontend'i giris ekranina atar ve kullanici sonsuz donguye girer.
+_PASSWORD_CHANGE_REQUIRED = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail={
+        "code": "PASSWORD_CHANGE_REQUIRED",
+        "message": "Devam etmek icin parolanizi degistirmeniz gerekiyor.",
+    },
 )
 
 
@@ -91,7 +104,12 @@ def resolve_current_user(
     if user is None or not user.is_active or user.deleted_at is not None:
         return None
 
-    return CurrentUser(id=user.id, email=user.email, full_name=user.full_name)
+    return CurrentUser(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        must_change_password=bool(user.must_change_password),
+    )
 
 
 def require_login(
@@ -106,6 +124,12 @@ def require_login(
         return None
     if current is None:
         raise _UNAUTHENTICATED
+    if current.must_change_password:
+        # Gecici parola: kimlik DOGRU ama erisim yok. Frontend'deki zorunlu
+        # parola ekrani atlatilsa bile veri uclari kapali kalir.
+        # /api/v1/auth/* bu kapiya BAGLI DEGILDIR, dolayisiyla kullanici
+        # parolasini degistirebilir.
+        raise _PASSWORD_CHANGE_REQUIRED
     return current
 
 

@@ -1834,6 +1834,8 @@ export interface AuthUser {
   id: number
   email: string
   full_name?: string | null
+  /** Geçici parola kullanılıyor — değiştirilmeden uygulamaya girilemez. */
+  must_change_password?: boolean
 }
 
 export interface AuthStatusResponse {

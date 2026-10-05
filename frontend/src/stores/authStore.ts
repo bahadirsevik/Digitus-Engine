@@ -27,6 +27,8 @@ interface AuthState {
   bootstrap: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  /** Zorunlu parola değişimi tamamlandı — bayrağı düşür. */
+  markPasswordChanged: () => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -73,6 +75,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Sunucu hata verse bile istemci tarafında çıkış yapılmış sayılır.
       set({ status: 'anonymous', user: null })
     }
+  },
+
+  markPasswordChanged: () => {
+    const { user } = useAuthStore.getState()
+    if (!user) return
+    set({ user: { ...user, must_change_password: false } })
   },
 }))
 

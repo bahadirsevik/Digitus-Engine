@@ -1940,6 +1940,11 @@ class User(Base):
     is_active = Column(
         Boolean, nullable=False, default=True, server_default="true"
     )
+    # Gecici parola ile acilan kullanici, parolasini degistirmeden hicbir
+    # veri ucuna erisemez (bkz. app/core/login.py require_login).
+    must_change_password = Column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

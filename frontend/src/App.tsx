@@ -13,6 +13,7 @@ import ChannelSeoGeo from './pages/ChannelSeoGeo'
 import ChannelSocial from './pages/ChannelSocial'
 import RedirectWithParams from './components/RedirectWithParams'
 import Login from './pages/Login'
+import ChangePassword from './pages/ChangePassword'
 import { useAuthStore } from './stores/authStore'
 
 /**
@@ -27,6 +28,7 @@ import { useAuthStore } from './stores/authStore'
  */
 function AuthGate({ children }: { children: ReactNode }) {
   const status = useAuthStore((s) => s.status)
+  const user = useAuthStore((s) => s.user)
   const bootstrap = useAuthStore((s) => s.bootstrap)
 
   useEffect(() => {
@@ -41,6 +43,12 @@ function AuthGate({ children }: { children: ReactNode }) {
 
   if (status === 'anonymous') {
     return <Login />
+  }
+
+  // Geçici parola: uygulamaya hiç girilmez, parola ekranı gösterilir.
+  // Atlatılsa bile backend veri uçlarında 403 döner.
+  if (user?.must_change_password) {
+    return <ChangePassword />
   }
 
   return <>{children}</>
