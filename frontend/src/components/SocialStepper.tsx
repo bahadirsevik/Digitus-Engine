@@ -104,7 +104,7 @@ export default function SocialStepper({
     setPolicyWarnings((contentsPolling.resultData?.policy_warnings as PolicyWarning[]) || [])
     if (!runId || !currentWorkspaceId) return
     if (!contentIds.length) {
-      setError('Uretilen icerik kimlikleri alinamadi; Gorevler sayfasini kontrol edin.')
+      setError('Üretilen içerik kimlikleri alınamadı; Görevler sayfasını kontrol edin.')
       store.setTaskId(null)
       return
     }

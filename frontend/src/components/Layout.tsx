@@ -9,9 +9,10 @@ import {
   LogOut,
   Search,
   Share2,
-  Zap,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import logoFull from '../assets/optimice-logo.png'
+import logoIcon from '../assets/optimice-icon.png'
 import './Layout.css'
 
 interface LayoutProps {
@@ -20,12 +21,12 @@ interface LayoutProps {
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Ana Panel' },
-  { path: '/brand-profile', icon: Globe2, label: 'Marka Calismalari' },
+  { path: '/brand-profile', icon: Globe2, label: 'Marka Çalışmaları' },
   { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
   { path: '/ads', icon: BadgeDollarSign, label: 'ADS' },
   { path: '/seo-geo', icon: Search, label: 'SEO+GEO' },
   { path: '/social', icon: Share2, label: 'Social' },
-  { path: '/tasks', icon: ListTodo, label: 'Gorevler' },
+  { path: '/tasks', icon: ListTodo, label: 'Görevler' },
 ]
 
 export default function Layout({ children }: LayoutProps) {
@@ -38,11 +39,8 @@ export default function Layout({ children }: LayoutProps) {
     <div className="layout">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Zap className="logo-icon" />
-          <div className="logo-text">
-            <span className="logo-title">DIGITUS</span>
-            <span className="logo-subtitle">ENGINE V2</span>
-          </div>
+          <img className="logo-full" src={logoFull} alt="Optimice" />
+          <img className="logo-icon" src={logoIcon} alt="Optimice" />
         </div>
 
         <nav className="sidebar-nav">
