@@ -8,8 +8,9 @@ import {
   ListTodo,
   Search,
   Share2,
-  Zap,
 } from 'lucide-react'
+import logoFull from '../assets/optimice-logo.png'
+import logoIcon from '../assets/optimice-icon.png'
 import './Layout.css'
 
 interface LayoutProps {
@@ -33,11 +34,8 @@ export default function Layout({ children }: LayoutProps) {
     <div className="layout">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Zap className="logo-icon" />
-          <div className="logo-text">
-            <span className="logo-title">DIGITUS</span>
-            <span className="logo-subtitle">ENGINE V2</span>
-          </div>
+          <img className="logo-full" src={logoFull} alt="Optimice" />
+          <img className="logo-icon" src={logoIcon} alt="Optimice" />
         </div>
 
         <nav className="sidebar-nav">

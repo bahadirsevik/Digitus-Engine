@@ -23,29 +23,18 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+.logo-full {
+  display: block;
+  width: 100%;
+  max-width: 210px;
+  height: auto;
+}
+
+/* Dar kenar çubuğunda yalnız simge görünür */
 .logo-icon {
-  width: 36px;
-  height: 36px;
-  color: var(--accent-primary);
-}
-
-.logo-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.logo-title {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--text-strong);
-}
-
-.logo-subtitle {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  letter-spacing: 0.1em;
+  display: none;
+  width: 44px;
+  height: 44px;
 }
 
 /* Navigation */
@@ -138,8 +127,12 @@
     justify-content: center;
   }
 
-  .logo-text {
+  .logo-full {
     display: none;
+  }
+
+  .logo-icon {
+    display: block;
   }
 
   .nav-item span {
