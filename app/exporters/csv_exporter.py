@@ -187,11 +187,27 @@ class CsvExporter(BaseExporter):
         # Gruplar
         filepath = os.path.join(temp_dir, 'reklam_gruplari.csv')
         headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı', 'Negatif Sayısı']
-        rows = [[g.group_name, ', '.join(g.target_keywords[:3]),
+        rows = [[g.group_name, ', '.join(g.target_keywords),
                  len(g.headlines), len(g.descriptions), len(g.negative_keywords)]
                 for g in ads.ad_groups]
         files.append(self._write_csv(filepath, headers, rows))
-        
+
+        # Kelime bazlı reklamlar: (grup, kelime) başına bir satır. Açıklamalar
+        # gruba aittir, grubun her kelimesi için tekrarlanır; yeni reklam üretmez.
+        filepath = os.path.join(temp_dir, 'kelime_bazli_reklamlar.csv')
+        desc_count = max((len(g.descriptions) for g in ads.ad_groups), default=0)
+        headers = (['Kelime', 'Reklam Grubu']
+                   + [f'Açıklama {i}' for i in range(1, desc_count + 1)]
+                   + ['Başlıklar'])
+        rows = []
+        for g in ads.ad_groups:
+            descs = [d.description_text for d in g.descriptions]
+            descs += [''] * (desc_count - len(descs))
+            headline_cell = ' | '.join(h.headline_text for h in g.headlines)
+            for kw in g.target_keywords:
+                rows.append([kw, g.group_name, *descs, headline_cell])
+        files.append(self._write_csv(filepath, headers, rows))
+
         # Başlıklar
         filepath = os.path.join(temp_dir, 'basliklar.csv')
         headers = ['Grup', 'Başlık', 'Tip', 'DKI']
