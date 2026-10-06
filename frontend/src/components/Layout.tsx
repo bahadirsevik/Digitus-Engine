@@ -18,12 +18,12 @@ interface LayoutProps {
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Ana Panel' },
-  { path: '/brand-profile', icon: Globe2, label: 'Marka Calismalari' },
+  { path: '/brand-profile', icon: Globe2, label: 'Marka Çalışmaları' },
   { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
   { path: '/ads', icon: BadgeDollarSign, label: 'ADS' },
   { path: '/seo-geo', icon: Search, label: 'SEO+GEO' },
   { path: '/social', icon: Share2, label: 'Social' },
-  { path: '/tasks', icon: ListTodo, label: 'Gorevler' },
+  { path: '/tasks', icon: ListTodo, label: 'Görevler' },
 ]
 
 export default function Layout({ children }: LayoutProps) {

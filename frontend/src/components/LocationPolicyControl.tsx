@@ -23,7 +23,7 @@ import {
 } from '../services/locationPolicy'
 
 const PREVIEW_DEBOUNCE_MS = 500
-const CITY_DATALIST_ID = 'location-policy-provinces'
+const CITY_SUGGESTION_LIMIT = 8
 
 export interface LocationPolicyControlProps {
   workspaceId: number
@@ -53,6 +53,7 @@ export default function LocationPolicyControl({
   const [addingCity, setAddingCity] = useState(false)
   const [newCity, setNewCity] = useState('')
   const [cityError, setCityError] = useState('')
+  const [highlightedCity, setHighlightedCity] = useState(0)
 
   const [addingExempt, setAddingExempt] = useState(false)
   const [newExempt, setNewExempt] = useState('')
@@ -122,6 +123,34 @@ export default function LocationPolicyControl({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, mode, focusCities.join('|'), exemptTerms.join('|')])
 
+  // Tarayıcının yerleşik <datalist>'i Türkçe büyük/küçük harfi eşleştiremiyor
+  // ("istanbul" yazınca "İstanbul" önerilmiyordu) — öneriler bu yüzden
+  // normalizeLocationText ile burada süzülür; önce baştan eşleşenler gelir.
+  const citySuggestions = (() => {
+    const query = normalizeLocationText(newCity)
+    if (!query) return []
+    const available = TURKISH_PROVINCES.filter((p) => !focusCities.includes(p))
+    const prefix = available.filter((p) => normalizeLocationText(p).startsWith(query))
+    const contains = available.filter(
+      (p) => !prefix.includes(p) && normalizeLocationText(p).includes(query)
+    )
+    return [...prefix, ...contains].slice(0, CITY_SUGGESTION_LIMIT)
+  })()
+
+  const closeCityInput = () => {
+    setNewCity('')
+    setCityError('')
+    setHighlightedCity(0)
+    setAddingCity(false)
+  }
+
+  const addCity = (canonical: string) => {
+    if (!focusCities.includes(canonical)) {
+      onFocusCitiesChange([...focusCities, canonical])
+    }
+    closeCityInput()
+  }
+
   const commitCity = () => {
     const raw = newCity.trim()
     if (!raw) {
@@ -138,12 +167,7 @@ export default function LocationPolicyControl({
       )
       return
     }
-    if (!focusCities.includes(canonical)) {
-      onFocusCitiesChange([...focusCities, canonical])
-    }
-    setNewCity('')
-    setCityError('')
-    setAddingCity(false)
+    addCity(canonical)
   }
 
   const commitExempt = () => {
@@ -210,11 +234,6 @@ export default function LocationPolicyControl({
             <> Yalnız "Yalnız seçtiğim şehirler kalsın" modunda etkilidir.</>
           )}
         </p>
-        <datalist id={CITY_DATALIST_ID}>
-          {TURKISH_PROVINCES.filter((p) => !focusCities.includes(p)).map((p) => (
-            <option key={p} value={p} />
-          ))}
-        </datalist>
         <div className="bpx-chiprow">
           {focusCities.map((city) => (
             <span key={city} className={`bpx-chip has-x${focusOnly ? '' : ' is-inactive'}`}>
@@ -246,26 +265,64 @@ export default function LocationPolicyControl({
               <Plus size={14} /> Şehir ekle
             </button>
           ) : (
-            <span className="bpx-chip-add">
+            <span className="bpx-chip-add bpx-city-combobox">
               <input
                 autoFocus
-                list={CITY_DATALIST_ID}
+                role="combobox"
+                aria-expanded={citySuggestions.length > 0}
+                aria-controls="location-policy-city-suggestions"
+                aria-autocomplete="list"
                 value={newCity}
                 placeholder="İl adı…"
                 onChange={(e) => {
                   setNewCity(e.target.value)
                   setCityError('')
+                  setHighlightedCity(0)
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitCity()
-                  if (e.key === 'Escape') {
-                    setNewCity('')
-                    setCityError('')
-                    setAddingCity(false)
+                  if (e.key === 'ArrowDown' && citySuggestions.length > 0) {
+                    e.preventDefault()
+                    setHighlightedCity((i) => (i + 1) % citySuggestions.length)
+                  } else if (e.key === 'ArrowUp' && citySuggestions.length > 0) {
+                    e.preventDefault()
+                    setHighlightedCity(
+                      (i) => (i - 1 + citySuggestions.length) % citySuggestions.length
+                    )
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const picked = citySuggestions[highlightedCity]
+                    if (picked) addCity(picked)
+                    else commitCity()
+                  } else if (e.key === 'Escape') {
+                    closeCityInput()
                   }
                 }}
                 onBlur={commitCity}
               />
+              {citySuggestions.length > 0 && (
+                <ul
+                  id="location-policy-city-suggestions"
+                  role="listbox"
+                  className="bpx-city-suggestions"
+                >
+                  {citySuggestions.map((city, idx) => (
+                    <li
+                      key={city}
+                      role="option"
+                      aria-selected={idx === highlightedCity}
+                      className={idx === highlightedCity ? 'is-highlighted' : undefined}
+                      // mousedown: input'un blur'u (commitCity) tıklamadan önce çalışmasın
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        addCity(city)
+                      }}
+                      onMouseEnter={() => setHighlightedCity(idx)}
+                    >
+                      {city}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </span>
           )}
         </div>

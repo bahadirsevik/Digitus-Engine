@@ -11,7 +11,7 @@
  *  - Legacy (keyword-önce) çalışmalar eski editör/formlarıyla aynı modal
  *    içinde çalışmaya devam eder.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Check,
@@ -828,6 +828,35 @@ function BrandCard({
 const POLLING_STATUSES = new Set(['pending', 'running'])
 const POLL_INTERVAL_MS = 3000
 
+// Türkçe duyarsız arama: "İstanbul" / "istanbul" / "ISTANBUL" ve "akıllı" / "akilli" eşleşir
+function normalizeSearchText(value: string): string {
+  return value
+    .toLocaleLowerCase('tr')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ı/g, 'i')
+    .trim()
+}
+
+function workspaceMatchesSearch(ws: WorkspaceListRow, tokens: string[]): boolean {
+  if (tokens.length === 0) return true
+  const haystack = normalizeSearchText(
+    [
+      ws.name,
+      ws.company_url,
+      ws.profile_data?.company_name as string | undefined,
+      ws.profile_data?.sector as string | undefined,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  )
+  return tokens.every((token) => haystack.includes(token))
+}
+
+function searchTokens(query: string): string[] {
+  return normalizeSearchText(query).split(/\s+/).filter(Boolean)
+}
+
 // ─── Ana sayfa ────────────────────────────────────────────────────────
 
 export default function BrandProfile() {
@@ -835,7 +864,8 @@ export default function BrandProfile() {
   const workspaceIdParam = searchParams.get('workspace_id')
   const [workspaces, setWorkspaces] = useState<WorkspaceListRow[]>([])
   const [includeArchived, setIncludeArchived] = useState(false)
-  const [archivedCount, setArchivedCount] = useState(0)
+  const [archivedRows, setArchivedRows] = useState<WorkspaceListRow[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedWs, setSelectedWs] = useState<WorkspaceListRow | null>(null)
   const [modalOpen, setModalOpen] = useState(false) // selectedWs=null + modalOpen → yeni çalışma
   const [loading, setLoading] = useState(false)
@@ -850,7 +880,7 @@ export default function BrandProfile() {
     try {
       const res = await workspaceApi.list(true)
       const allWorkspaces = res.data || []
-      setArchivedCount(allWorkspaces.filter((ws: WorkspaceListRow) => !!ws.deleted_at).length)
+      setArchivedRows(allWorkspaces.filter((ws: WorkspaceListRow) => !!ws.deleted_at))
       setWorkspaces(
         includeArchived
           ? allWorkspaces
@@ -1055,6 +1085,21 @@ export default function BrandProfile() {
     fetchWorkspaces()
   }
 
+  const archivedCount = archivedRows.length
+  const tokens = useMemo(() => searchTokens(searchQuery), [searchQuery])
+  const visibleWorkspaces = useMemo(
+    () => workspaces.filter((ws) => workspaceMatchesSearch(ws, tokens)),
+    [workspaces, tokens]
+  )
+  // Arşiv gizliyken aramaya uyan arşivlenmiş çalışmalar — kullanıcıya ipucu olarak gösterilir
+  const hiddenArchivedMatches = useMemo(
+    () =>
+      !includeArchived && tokens.length > 0
+        ? archivedRows.filter((ws) => workspaceMatchesSearch(ws, tokens)).length
+        : 0,
+    [includeArchived, tokens, archivedRows]
+  )
+
   return (
     <div className="brand-profile-page">
       <h1 className="bpx-page-title">Marka Çalışmaları</h1>
@@ -1081,7 +1126,46 @@ export default function BrandProfile() {
           <span>Arşivlenmiş Çalışmaları Göster</span>
           <strong>{archivedCount}</strong>
         </label>
+        <div className="bpx-search">
+          <Search size={15} className="bpx-search-icon" aria-hidden="true" />
+          <input
+            type="search"
+            className="bpx-search-input"
+            placeholder="Marka, site veya sektör ara..."
+            aria-label="Marka çalışması ara"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setSearchQuery('')
+            }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="bpx-search-clear"
+              title="Aramayı temizle"
+              aria-label="Aramayı temizle"
+              onClick={() => setSearchQuery('')}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {tokens.length > 0 && (
+          <span className="bpx-search-count">
+            {visibleWorkspaces.length} / {workspaces.length} çalışma
+          </span>
+        )}
       </div>
+
+      {hiddenArchivedMatches > 0 && (
+        <div className="bpx-search-hint">
+          Arşivde aramaya uyan {hiddenArchivedMatches} çalışma daha var.{' '}
+          <button type="button" onClick={() => setIncludeArchived(true)}>
+            Arşivlenmişleri de göster
+          </button>
+        </div>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 
@@ -1094,8 +1178,15 @@ export default function BrandProfile() {
         </div>
       )}
 
+      {workspaces.length > 0 && visibleWorkspaces.length === 0 && (
+        <div className="empty-state">
+          <Search size={24} />
+          <span>“{searchQuery.trim()}” ile eşleşen marka çalışması bulunamadı.</span>
+        </div>
+      )}
+
       <div className="bpx-grid">
-        {workspaces.map((ws) => (
+        {visibleWorkspaces.map((ws) => (
           <BrandCard
             key={ws.id}
             ws={ws}

@@ -1792,6 +1792,37 @@
   border-color: rgba(45, 212, 191, 0.3);
 }
 
+/* Şehir ekle: Türkçe duyarlı öneri listesi (yerleşik datalist yerine) */
+.bpx-city-combobox {
+  position: relative;
+}
+.bpx-city-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.bpx-city-suggestions li {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.bpx-city-suggestions li.is-highlighted {
+  background: rgba(45, 212, 191, 0.15);
+}
+
 .bpx-focus-title {
   margin: 28px 0 4px;
 }
@@ -2018,6 +2049,78 @@
   flex: 0 0 auto;
   padding: 10px 16px;
   font-size: 13.5px;
+}
+
+/* Marka arama kutusu (yüzlerce çalışmada hızlı bulma) */
+.bpx-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 320px;
+  min-width: 220px;
+}
+.bpx-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.bpx-search-input {
+  width: 100%;
+  padding: var(--space-sm) 34px var(--space-sm) 36px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.bpx-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+.bpx-search-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+}
+.bpx-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.bpx-search-clear:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+.bpx-search-count {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.bpx-search-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.bpx-search-hint button {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bpx-search-hint button:hover {
+  text-decoration: underline;
 }
 
 /* Kartlar: satırda 4, daha kompakt */
