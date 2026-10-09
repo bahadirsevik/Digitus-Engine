@@ -5,6 +5,11 @@ hattına ait maddeler (intent/prefilter parse, embedding relevance formatı ve
 fallback'i, v2 skor formülleri, hot_sale/GT tanımı, kanal stratejisi, eski run
 korumasının artıkları, run-15 doğrulamaları) 09.10'da listeden çıkarıldı.
 
+**Ayrıntılı çözüm planı: `plan_yapilacaklar.md`** (faz, kanıt, adım, efor, kararlar).
+09.10 incelemesinde ayrıca bulunanlar: V3 run'larında boşa embedding harcaması
+(§3.2), Türkçe run adında Excel indirmesinde olası 500 (§1.2), görev takibinin
+run'lar arasında karışması (§1.3).
+
 ## Kodda doğrulanmış açıklar
 
 - **Yabancı pazar (UK) desteği**: arayüzde ülke yalnız Türkiye/Almanya
