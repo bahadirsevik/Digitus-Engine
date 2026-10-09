@@ -102,4 +102,28 @@ describe('SeoGeoPanel görev kapsamı (run bazlı)', () => {
     await waitFor(() => expect(storedTasks()['seo_task:10:1']).toBe('task-A'))
     expect(storedTasks()['seo_task:10:2']).toBeUndefined()
   })
+
+  it('başlatma sürerken panel unmount olursa görev kimliği kaybolmaz', async () => {
+    let resolveStart: (value: unknown) => void = () => {}
+    mocks.bulkSeoGeo.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve
+        })
+    )
+    const first = render(<SeoGeoPanel runId={1} />)
+    fireEvent.click(await screen.findByText('SEO İçerik Üret'))
+    expect(await screen.findByText('Üretiliyor…')).toBeTruthy()
+
+    first.unmount()
+    await act(async () => {
+      resolveStart({ data: { task_id: 'task-A' } })
+    })
+    expect(storedTasks()['seo_task:10:1']).toBe('task-A')
+    expect(mocks.getStatus).not.toHaveBeenCalled()
+
+    render(<SeoGeoPanel runId={1} />)
+    expect(await screen.findByText('Üretiliyor…')).toBeTruthy()
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-A', 10))
+  })
 })

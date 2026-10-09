@@ -347,6 +347,14 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
   const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
   const scopeRef = useRef(scopeKey)
   scopeRef.current = scopeKey
+  // Unmount sonrası dönen başlatma yanıtı UI state'ine dokunmaz
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const [limit, setLimit] = useState(10)
   const [tone, setTone] = useState('informative')
@@ -400,11 +408,10 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
     try {
       const res = await generationApi.bulkSeoGeo(runId, limit, activeWorkspace.id, tone)
       const startedTaskId = (res.data as { task_id: string }).task_id
-      if (scopeRef.current !== requestScope) {
-        // Run değişti: görev başlatıldığı run'ın anahtarına yazılır, bu paneli etkilemez
-        setStoredTaskId(taskStorageKey, startedTaskId)
-        return
-      }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, startedTaskId)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setTaskId(startedTaskId)
     } catch (err: unknown) {
       if (scopeRef.current !== requestScope) return

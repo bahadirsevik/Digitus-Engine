@@ -23,6 +23,7 @@ import type { ScoringRun } from '../types/models'
 import {
   useTaskPolling,
   getStoredTaskId,
+  setStoredTaskId,
   getWorkspaceTaskKey,
   useScopedTaskId,
 } from '../hooks/useTaskPolling'
@@ -361,6 +362,9 @@ export default function Channels() {
       const coefficient = normalizeCoefficient(relevanceCoefficient)
       const res = await channelsApi.assign(runId, coefficient, activeWorkspace.id)
       const taskId = res.data.task_id
+      // Kimlik her zaman başlatıldığı run'ın anahtarına yazılır; UI state kapsam
+      // değiştiyse (useScopedTaskId anahtara bağlı) zaten başka anahtarı etkilemez.
+      setStoredTaskId(getWorkspaceTaskKey('channel_assign', activeWorkspace.id, runId), taskId)
       setAssignTaskId(taskId)
       setInfo(
         `Atama başlatıldı. Kullanılan etkili ilgi katsayısı: ${Number(res.data.effective_relevance_coefficient ?? coefficient).toFixed(2)}`

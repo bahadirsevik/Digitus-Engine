@@ -289,6 +289,14 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
   const scopeRef = useRef(scopeKey)
   scopeRef.current = scopeKey
+  // Unmount sonrası dönen başlatma yanıtı UI state'ine/yan etkiye dokunmaz
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const [brandName, setBrandName] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
@@ -455,11 +463,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
     try {
       const res = await generationApi.regenerateAdGroup(groupId, activeWorkspace.id)
       const data = res.data as { task_id: string; generation_set_id?: number }
-      if (scopeRef.current !== requestScope) {
-        // Run değişti: görev başlatıldığı run'ın anahtarına yazılır, bu paneli etkilemez
-        setStoredTaskId(taskStorageKey, data.task_id)
-        return
-      }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, data.task_id)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
     } catch (err: unknown) {
@@ -495,11 +502,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
         activeWorkspace.id
       )
       const data = res.data as { task_id: string; generation_set_id?: number }
-      if (scopeRef.current !== requestScope) {
-        // Run değişti: görev başlatıldığı run'ın anahtarına yazılır, bu paneli etkilemez
-        setStoredTaskId(taskStorageKey, data.task_id)
-        return
-      }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, data.task_id)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
       void fetchSets()

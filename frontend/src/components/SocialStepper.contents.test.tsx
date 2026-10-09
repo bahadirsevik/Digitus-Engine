@@ -49,6 +49,7 @@ vi.mock('../hooks/useTaskPolling', () => ({
     }
   },
   getStoredTaskId: () => null,
+  setStoredTaskId: () => undefined,
 }))
 
 describe('SocialStepper async contents', () => {

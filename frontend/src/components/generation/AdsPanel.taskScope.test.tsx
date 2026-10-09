@@ -206,6 +206,73 @@ describe('AdsPanel görev kapsamı (run bazlı)', () => {
     expect(mocks.getStatus).not.toHaveBeenCalledWith('task-A', 10)
   })
 
+  it('başlatma sürerken panel unmount olursa görev kimliği kaybolmaz (generate)', async () => {
+    let resolveStart: (value: unknown) => void = () => {}
+    mocks.createAdsRsa.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve
+        })
+    )
+
+    const first = render(<AdsPanel runId={1} />)
+    fireEvent.click(await screen.findByText('Reklam Üret'))
+    expect(await screen.findByText('Üretiliyor…')).toBeTruthy()
+
+    first.unmount()
+    await act(async () => {
+      resolveStart({ data: { task_id: 'task-late', generation_set_id: 9 } })
+    })
+    expect(storedTasks()['ads_task:10:1']).toBe('task-late')
+    expect(mocks.getStatus).not.toHaveBeenCalled()
+
+    render(<AdsPanel runId={1} />)
+    expect(await screen.findByText('Üretiliyor…')).toBeTruthy()
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-late', 10))
+  })
+
+  it('grup yeniden üretimi başlatılırken unmount olursa görev kimliği kaybolmaz', async () => {
+    mocks.getAdsRsa.mockResolvedValue({
+      data: {
+        total_groups: 1,
+        ad_groups: [{ id: 5, group_name: 'Grup 1', headlines: [], descriptions: [] }],
+        generation_set: {
+          id: 3,
+          scoring_run_id: 1,
+          version_number: 1,
+          status: 'active',
+          is_stale: false,
+          groups_count: 1,
+        },
+      },
+    })
+    const regenerate = vi.fn()
+    let resolveStart: (value: unknown) => void = () => {}
+    regenerate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve
+        })
+    )
+    const api = await import('../../services/api')
+    const spy = vi.spyOn(api.generationApi, 'regenerateAdGroup').mockImplementation(regenerate)
+
+    const first = render(<AdsPanel runId={1} />)
+    fireEvent.click(await screen.findByText('Yeniden Üret'))
+    await waitFor(() => expect(regenerate).toHaveBeenCalled())
+
+    first.unmount()
+    await act(async () => {
+      resolveStart({ data: { task_id: 'task-regen', generation_set_id: 11 } })
+    })
+    expect(storedTasks()['ads_task:10:1']).toBe('task-regen')
+
+    render(<AdsPanel runId={1} />)
+    expect(await screen.findByText('Üretiliyor…')).toBeTruthy()
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-regen', 10))
+    spy.mockRestore()
+  })
+
   it('B’de başlatılan görev A’nın kaydını ezmez', async () => {
     localStorage.setItem(STORAGE, JSON.stringify({ 'ads_task:10:1': 'task-A' }))
     mocks.createAdsRsa.mockResolvedValue({ data: { task_id: 'task-B', generation_set_id: 7 } })
