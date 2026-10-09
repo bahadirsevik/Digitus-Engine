@@ -278,6 +278,13 @@ Genel kurallar (CLAUDE.md'den):
 
 ---
 
+> **Paket 3 durumu (10.10): TAMAM.**
+> - Commit'ler: 61906df (3.1), b1f9542 (3.2), 1b4d9a3 (3.3).
+> - Backend 4525 passed / 0 kırmızı; frontend 249 passed.
+> - Ayrıntı ve açık nitler: `.dev-team/STATE.md`.
+
+---
+
 ## Paket 4 — Altyapı (≈1 gün)
 1. **Basit CI (GitHub Actions)**, mevcut testlerle:
    - Backend: `docker compose -f docker-compose.test.yml run test_app sh -c "alembic

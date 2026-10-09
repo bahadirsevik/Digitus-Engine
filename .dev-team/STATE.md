@@ -423,6 +423,31 @@ made in this workstream.
     etmez (Codex notu).
   - Codex Paket 2 incelemesi: engelleyici bulgu yok. Codex 163 ilgili testi bağımsız koştu,
     hepsi geçti. Mutasyon testi yokluğunu engelleyici saymadı. Paket 2 KAPANDI.
+- 10.10 Paket 3 TAMAM. Kapı KAPALI (bilinen kalıplar, şema yok).
+  - 61906df (3.1): etiketler "Kaçınılacak temalar" / "Kesin dışlama" (kullanıcı onaylı).
+    - B terimleri A'da salt-okunur çip, düzenlenebilir listeden ayrı.
+    - Sunucu `_preserve_hard_exclusions`: confirm, profile/approve ve anchors/preview'da
+      exclude_themes = sert terimler + A.
+    - Değişmeyen kayıt sürüm artırmaz. Kirli form yeniden yüklemede korunur.
+  - b1f9542 (3.2): AnalysisProgress V3 adımları (orchestrator 15/40/65/85/92/100, kapalı
+    kanal adımı yok); `current_message` gösteriliyor. Screening yoklaması ve
+    `getScreeningStatus` istemci fonksiyonu kaldırıldı (backend ucu duruyor).
+  - 1b4d9a3 (3.3): `app/core/keyword_junk.py` (empty / symbol_only / numeric_only; `+` ve `/`
+    sayısal sayılır).
+    - Uygulandığı yollar: crud.create_keywords_bulk (workspace + legacy), POST /keywords/
+      400, build_import_plan, workspace refresh added_rows, CSV parser.
+    - Barkodlu metin ve model numaraları kalır. İki Google Ads import ucuna ilk testler
+      eklendi.
+  - Kontroller:
+    - Tam paket: backend 4525 passed / 112 skip / 0 kırmızı; frontend 249 passed; lint,
+      format, build temiz.
+    - QA: 3 commit PASS, yalnız nit.
+    - Frontend konteyneri yeniden başlatıldı; yeni metinler sunuluyor.
+    - Tarayıcıda görsel kontrol YAPILMADI.
+  - Açık nitler (düzeltilmedi):
+    - Keywords `selectScoreRun` `chainRunStatus`'u sıfırlamıyor (≤3 sn eski durum).
+    - Dirty A + B'den terim ekle-çıkar zinciri soft terimi geri ekleyebilir.
+    - Refresh'te atılan çöp sayısı raporlanmıyor.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
     görev kontrolü).
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.
