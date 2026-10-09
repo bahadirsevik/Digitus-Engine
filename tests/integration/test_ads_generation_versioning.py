@@ -463,6 +463,63 @@ def test_worker_aborts_before_ai_when_set_stale(
     assert task.status == "failed"
 
 
+def test_worker_passes_dropped_negatives_to_set_warnings(
+    db_session, make_workspace, make_scoring_run, monkeypatch
+):
+    """Plan 2.1: hedefle çakışıp atılan negatifler finalize_ads_success'e
+    warnings= olarak geçer ve AdGenerationSet.warnings'e yazılır."""
+    from types import SimpleNamespace
+
+    from app.schemas.ads import AdGroupFullSchema
+    from app.tasks import generation_tasks
+
+    ws = make_workspace("NegWarn WS")
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+    gen_set = _make_set(
+        db_session, run.id, 1, SET_GENERATING, task_id="negwarn-1",
+    )
+    db_session.add(TaskResult(task_id="negwarn-1", task_type="ads",
+                              scoring_run_id=run.id, status="pending"))
+    db_session.commit()
+
+    drop = {
+        "type": "negative_dropped", "group": "Laptop", "negative": "ucuz",
+        "match_type": "broad", "target": "ucuz laptop", "rule": "broad",
+    }
+    group = AdGroupFullSchema(
+        name="Laptop", theme="t", keyword_ids=[1], keywords=["ucuz laptop"],
+        headlines=[], descriptions=[], negative_keywords=[],
+        dropped_negatives=[drop],
+    )
+    fake_result = SimpleNamespace(
+        total_groups=1, failed_groups=0, ad_groups=[group],
+        total_headlines=0, total_keywords=1,
+    )
+    monkeypatch.setattr(
+        "app.generators.ads.ads_generator.AdsGenerator.generate_ads",
+        lambda self, *a, **k: fake_result,
+    )
+    monkeypatch.setattr(
+        "app.generators.ai_service.get_ai_service",
+        lambda *a, **k: SimpleNamespace(),
+    )
+
+    result = generation_tasks.generate_ads_task.apply(
+        kwargs={
+            "scoring_run_id": run.id,
+            "brand_name": "Marka",
+            "generation_set_id": gen_set.id,
+        },
+        task_id="negwarn-1",
+    )
+    assert result.result.get("status") == "completed", result.result
+
+    db_session.expire_all()
+    saved = db_session.get(AdGenerationSet, gen_set.id)
+    assert saved.status == SET_ACTIVE
+    assert saved.warnings == [drop]
+
+
 def test_ads_dispatch_endpoints_return_202(
     client, db_session, make_workspace, make_scoring_run, monkeypatch
 ):

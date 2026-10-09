@@ -372,6 +372,7 @@ def generate_ads_task(
     task_id = self.request.id
     collector = None  # exception yolunda da finalize edilir (Codex v8-2)
     ai = None  # finally'de kapatılır (plan G)
+    set_warnings: list = []  # AdGenerationSet.warnings (atılan negatifler, plan 2.1)
 
     # İdempotent: kayıt endpoint dispatch kilidi altında zaten yaratıldı
     create_task_record(task_id, "ads", scoring_run_id)
@@ -462,11 +463,12 @@ def generate_ads_task(
                 source_set_id, gen_set.id, exclude_group_id=source_group_id
             )
             update_task_status(task_id, progress=40)
-            generator.regenerate_group_into_set(
+            regenerated = generator.regenerate_group_into_set(
                 source_group, gen_set.id,
                 brand_name=brand_name or "", brand_usp=brand_usp or "",
                 trusted_brand_usp=trusted_brand_usp or "",
             )
+            set_warnings = list(regenerated.dropped_negatives or [])
             groups_count = cloned + 1
             failed_groups = 0
             extra = {"operation": "group_regenerate",
@@ -490,6 +492,9 @@ def generate_ads_task(
             )
             groups_count = result.total_groups
             failed_groups = result.failed_groups
+            set_warnings = [
+                w for g in result.ad_groups for w in (g.dropped_negatives or [])
+            ]
             extra = {
                 "operation": "full",
                 "headline_count": result.total_headlines,
@@ -528,6 +533,7 @@ def generate_ads_task(
             db, gen_set,
             groups_count=groups_count,
             failed_groups=failed_groups,
+            warnings=set_warnings,
             extra_result_data=extra,
         )
         if new_status == "aborted":

@@ -22,6 +22,9 @@ from app.generators.ads.validators import (
     DescriptionValidator,
     DKIValidator,
     find_ungrounded_claims,
+    negative_conflict,
+    partition_negatives,
+    _negative_tokens,
 )
 from app.schemas.ads import (
     KeywordGroupSchema,
@@ -200,10 +203,31 @@ class RSAGenerator:
                 f"(headlines={len(headlines)}, descriptions={len(descriptions)})."
             )
 
+        # Negatif ↔ hedef çakışması (plan 2.1): grubun KENDİ hedef kelimelerini
+        # engelleyen negatifler atılır (birincil/retry/fallback hepsi buradan
+        # geçer). Eksik kalan sayı için yalnız güvenli varsayılanlar eklenir;
+        # güvenli aday yoksa DAHA AZ negatif döner (sayı doldurulmaz).
+        negatives, dropped_negatives = partition_negatives(
+            negatives, group.keywords, group.name
+        )
         if len(negatives) < self.MIN_NEGATIVE_KEYWORDS:
             logger.warning(f"Only {len(negatives)} negative keywords, adding defaults")
-            negatives = self._add_default_negatives(negatives)
-        
+            negatives = self._add_default_negatives(
+                negatives, targets=group.keywords,
+                excluded=[d["negative"] for d in dropped_negatives],
+            )
+        # Son emniyet: top-up dahil çıkan listede çakışan kalmasın
+        negatives, late_drops = partition_negatives(
+            negatives, group.keywords, group.name
+        )
+        dropped_negatives.extend(late_drops)
+        for d in dropped_negatives:
+            logger.warning(
+                f"Negative dropped (blocks group target) | group={d['group']} "
+                f"negative='{d['negative']}' match_type={d['match_type']} "
+                f"target='{d['target']}' rule={d['rule']}"
+            )
+
         return AdGroupFullSchema(
             name=group.name,
             theme=group.theme,
@@ -217,6 +241,7 @@ class RSAGenerator:
             headlines_shortened=headline_stats["shortened"],
             headlines_regenerated=headline_stats["regenerated"],
             dki_converted_count=headline_stats["dki_converted"],
+            dropped_negatives=dropped_negatives,
         )
 
     def _below_minimum(
@@ -413,7 +438,8 @@ class RSAGenerator:
             "Zorunlu platform limitleri:\n"
             "- Headlines: 3-15 adet, her biri <=30 karakter\n"
             "- Descriptions: 2-4 adet, her biri <=90 karakter\n"
-            "- Negative keywords: en az 10 adet\n\n"
+            "- Negative keywords: en az 10 adet\n"
+            "- Hedef anahtar kelimeleri veya bunların parçalarını negatif anahtar kelime yapma.\n\n"
             "JSON ŞEMASI:\n"
             "{\n"
             '  "headlines": [{"text":"", "type":"keyword|cta|benefit|trust|dynamic", "position":"any|position_1|position_2|position_3"}],\n'
@@ -647,7 +673,7 @@ class RSAGenerator:
 
         headlines, headline_stats = self._validate_headlines(headline_candidates, first_keyword)
         descriptions, _ = self._validate_descriptions(description_candidates)
-        negatives = self._add_default_negatives([])
+        negatives = self._add_default_negatives([], targets=keywords)
 
         # Hard guarantees for minimum outputs.
         headline_fill_iterations = 0
@@ -711,9 +737,17 @@ class RSAGenerator:
     
     def _add_default_negatives(
         self, 
-        existing: List[NegativeKeywordSchema]
+        existing: List[NegativeKeywordSchema],
+        targets: Optional[List[str]] = None,
+        excluded: Optional[List[str]] = None,
     ) -> List[NegativeKeywordSchema]:
-        """Add default negative keywords if below minimum."""
+        """Add default negative keywords if below minimum.
+
+        Yalnız grubun hedef kelimeleriyle çakışmayan varsayılanlar eklenir
+        (güvenli aday yoksa hiçbiri eklenmez). Tekilleştirme normalize
+        biçim üzerinden; `excluded` (daha önce atılan negatifler) geri
+        eklenmez.
+        """
         defaults = [
             ("nedir", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
             ("nasıl", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
@@ -727,16 +761,22 @@ class RSAGenerator:
             ("tamir", "phrase", "diy", "Hizmet değil bilgi arıyor"),
         ]
         
-        existing_keywords = {n.keyword.lower() for n in existing}
-        
+        seen = {tuple(_negative_tokens(n.keyword)) for n in existing}
+        seen.update(tuple(_negative_tokens(x)) for x in (excluded or []))
+
         result = list(existing)
         for keyword, match_type, category, reason in defaults:
-            if keyword.lower() not in existing_keywords:
-                result.append(NegativeKeywordSchema(
-                    keyword=keyword,
-                    match_type=match_type,
-                    category=category,
-                    reason=reason
-                ))
-        
+            key = tuple(_negative_tokens(keyword))
+            if key in seen:
+                continue
+            if negative_conflict(keyword, match_type, targets):
+                continue
+            seen.add(key)
+            result.append(NegativeKeywordSchema(
+                keyword=keyword,
+                match_type=match_type,
+                category=category,
+                reason=reason
+            ))
+
         return result

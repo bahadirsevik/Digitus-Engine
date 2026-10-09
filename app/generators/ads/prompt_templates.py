@@ -135,6 +135,8 @@ Dynamic başlık yazarken TAM OLARAK bu formatı kullan:
 
 ## Zorunlu
 - Minimum 10 adet negatif kelime üret
+- Hedef anahtar kelimeleri veya bunların parçalarını negatif anahtar kelime yapma
+  (ör. hedef "ucuz laptop" ise "ucuz" veya "laptop" negatif olamaz)
 
 ## Kategoriler
 | Kategori | Örnekler | Neden |

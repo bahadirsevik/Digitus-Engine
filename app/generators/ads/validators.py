@@ -520,3 +520,87 @@ def find_ungrounded_claims(
             seen.add(v)
             unique.append(v)
     return unique
+
+
+# ==================== NEGATİF ↔ HEDEF ÇAKIŞMASI (plan 2.1) ====================
+# Bu kontrol Google'ın eşleştirmesini TAKLİT ETMEZ; yalnız açık metinsel
+# çakışmaları broad / phrase / exact kelime kurallarıyla yakalar. Çoğul/ek
+# (önek) eşitleme, fuzzy ve yazım hatası eşleştirmesi YOKTUR (masa != masaj).
+
+_NEG_EDGE_CHARS = "[]()\"'“”‘’`-+.,;:!?"
+_NEG_MATCH_TYPES = ("exact", "phrase", "broad")
+
+
+def _negative_tokens(text: str) -> list:
+    """Türkçe-duyarlı küçük harf + boşluk bölme + token kenar işareti temizliği.
+
+    Google eşleşme türü sözdiziminin bıraktığı kenar işaretleri ([x], "x",
+    baştaki '-') token kenarlarından atılır; token içi işaretler (2.el,
+    türkiye'nin) korunur.
+    """
+    tokens = []
+    for raw in _tr_lower(text or "").split():
+        tok = raw.strip(_NEG_EDGE_CHARS)
+        if tok:
+            tokens.append(tok)
+    return tokens
+
+
+def _normalize_match_type(match_type) -> str:
+    mt = _tr_lower(str(match_type or "")).strip()
+    return mt if mt in _NEG_MATCH_TYPES else "broad"  # bilinmeyen → broad
+
+
+def negative_blocks_target(negative: str, match_type: str, target: str) -> bool:
+    """Negatif kelime hedef anahtar kelimeyi AÇIK metinsel olarak engelliyor mu?
+
+    - broad: negatifin tüm kelimeleri hedefte (sıra önemsiz)
+    - phrase: negatif kelimeleri hedefte aynı sırada ve bitişik
+    - exact: kelime dizileri birebir aynı
+    Bilinmeyen/eksik match_type → broad (düşürmeye en yatkın). Boş negatif
+    veya boş hedef hiçbir şeyi engellemez.
+    """
+    neg = _negative_tokens(negative)
+    tgt = _negative_tokens(target)
+    if not neg or not tgt:
+        return False
+    rule = _normalize_match_type(match_type)
+    if rule == "exact":
+        return neg == tgt
+    if rule == "phrase":
+        n = len(neg)
+        return any(tgt[i:i + n] == neg for i in range(len(tgt) - n + 1))
+    return set(neg).issubset(set(tgt))
+
+
+def negative_conflict(negative: str, match_type: str, targets) -> Optional[Tuple[str, str]]:
+    """İlk çakışan (hedef, kural) çifti veya None."""
+    for target in targets or []:
+        if negative_blocks_target(negative, match_type, target):
+            return str(target), _normalize_match_type(match_type)
+    return None
+
+
+def partition_negatives(negatives, targets, group_name: str = ""):
+    """Negatifleri grubun KENDİ hedefleriyle çakışmaya göre ayırır.
+
+    negatives: .keyword / .match_type taşıyan nesneler. Dönüş:
+    (kept, dropped) — dropped, görünürlük için uyarı sözlükleri listesidir
+    (type, group, negative, match_type, target, rule).
+    """
+    kept, dropped = [], []
+    for n in negatives:
+        hit = negative_conflict(n.keyword, n.match_type, targets)
+        if hit is None:
+            kept.append(n)
+            continue
+        target, rule = hit
+        dropped.append({
+            "type": "negative_dropped",
+            "group": group_name,
+            "negative": n.keyword,
+            "match_type": n.match_type,
+            "target": target,
+            "rule": rule,
+        })
+    return kept, dropped
