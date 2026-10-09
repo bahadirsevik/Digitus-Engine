@@ -92,12 +92,13 @@ describe('BrandProfile dışlama kutuları (plan 3.1)', () => {
 
   it('A düzenle → B kaydet → A kaydet: düzenleme kaybolmaz, B çipi salt-okunur, payload yalnız A terimlerini taşır', async () => {
     renderPage()
+    // Alan DOM'a girdiğinde form henüz sunucu verisiyle dolmamış olabilir (effect bir
+    // sonraki render'da doldurur): değerin oturmasını bekle, yalnız varlığını değil.
     const themes = (await waitFor(() => {
-      const el = screen.getByLabelText('Kaçınılacak temalar')
-      expect(el).toBeTruthy()
+      const el = screen.getByLabelText('Kaçınılacak temalar') as HTMLTextAreaElement
+      expect(el.value).toBe('ai teması')
       return el
     })) as HTMLTextAreaElement
-    expect(themes.value).toBe('ai teması')
 
     // 1) A'da kaydedilmemiş düzenleme
     fireEvent.change(themes, { target: { value: 'ai teması\nucuz taklit' } })
@@ -134,13 +135,21 @@ describe('BrandProfile dışlama kutuları (plan 3.1)', () => {
 
   it('kaydedilmemiş düzenleme yokken B kaydı sonrası A listesi sunucudan yenilenir (B terimi hariç)', async () => {
     renderPage()
-    await waitFor(() => expect(screen.getByLabelText('Kaçınılacak temalar')).toBeTruthy())
+    await waitFor(() =>
+      expect((screen.getByLabelText('Kaçınılacak temalar') as HTMLTextAreaElement).value).toBe(
+        'ai teması'
+      )
+    )
 
     fireEvent.change(screen.getByLabelText('Kesin dışlama'), { target: { value: 'kripto para' } })
     fireEvent.click(screen.getByText(/Politikayı kaydet/))
     await screen.findByTestId('hard-exclude-chips')
 
-    const themes = screen.getByLabelText('Kaçınılacak temalar') as HTMLTextAreaElement
-    expect(themes.value).toBe('ai teması')
+    // Form sıfırlama effect'i çipler göründükten sonraki render'da çalışabilir: bekle
+    await waitFor(() =>
+      expect((screen.getByLabelText('Kaçınılacak temalar') as HTMLTextAreaElement).value).toBe(
+        'ai teması'
+      )
+    )
   })
 })
