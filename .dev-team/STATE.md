@@ -418,6 +418,11 @@ made in this workstream.
   - **DAĞITIM NOTU:** sunucudaki feat/auth-login dalında lean'de olmayan migration'lar var
     (20261006_001/002). Merge sonrası alembic iki head görür; açılıştaki
     `alembic upgrade head` hata verir. Merge'de `alembic merge` revizyonu gerekir.
+    Merge'den sonra birleşmiş dalın migration zinciri ayrıca doğrulanmalı: boş DB'den
+    `upgrade head` + test_migration_chain. Lean'de geçen testler birleşmiş dalı garanti
+    etmez (Codex notu).
+  - Codex Paket 2 incelemesi: engelleyici bulgu yok. Codex 163 ilgili testi bağımsız koştu,
+    hepsi geçti. Mutasyon testi yokluğunu engelleyici saymadı. Paket 2 KAPANDI.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
     görev kontrolü).
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.
