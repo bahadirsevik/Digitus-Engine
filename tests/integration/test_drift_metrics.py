@@ -289,17 +289,17 @@ class TestDuplicateTextRelevance:
             f"/api/v1/brand-profile/runs/{run.id}/relevance/compute",
             params={"brand_profile_id": ws.id},
         )
-        assert resp.status_code == 200, resp.text
+        # V3 embedding relevance'ı kullanmaz (plan 1.4): sync uç artık
+        # hesaplamaz. Pozisyonel eşleme servis katmanında kalır ve
+        # yukarıdaki background ikizi (test_duplicate_text_keywords_each_get_
+        # own_relevance) tarafından doğrulanır.
+        assert resp.status_code == 409, resp.text
+        assert resp.json()["detail"]["code"] == "RELEVANCE_NOT_USED_BY_V3"
 
         db_session.expire_all()
-        by_kid = {
-            r.keyword_id: float(r.relevance_score)
-            for r in db_session.query(KeywordRelevance).filter(
-                KeywordRelevance.scoring_run_id == run.id
-            ).all()
-        }
-        assert set(by_kid) == {kw1.id, kw2.id}
-        assert by_kid[kw1.id] != by_kid[kw2.id]
+        assert db_session.query(KeywordRelevance).filter(
+            KeywordRelevance.scoring_run_id == run.id
+        ).count() == 0
 
 
 class TestShortResultContract:
@@ -360,7 +360,10 @@ class TestShortResultContract:
             f"/api/v1/brand-profile/runs/{run.id}/relevance/compute",
             params={"brand_profile_id": ws.id},
         )
-        assert resp.status_code == 502
+        # V3 embedding relevance'ı kullanmaz (plan 1.4): sync uç artık
+        # hesaplamaz (eskiden 502 abort); eski kayıt yine dokunulmaz.
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "RELEVANCE_NOT_USED_BY_V3"
 
         db_session.expire_all()
         old = db_session.query(KeywordRelevance).filter(

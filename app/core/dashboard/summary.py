@@ -505,6 +505,7 @@ def build_summary(
                 enable_ads=bool(run.enable_ads),
                 enable_seo=bool(run.enable_seo),
                 enable_social=bool(run.enable_social),
+                algorithm_version=run.algorithm_version or "v2",
             )
             if run
             else None

@@ -60,6 +60,29 @@ def is_legacy_run(run: Any) -> bool:
     return run_algorithm_version(run) != ACTIVE_ALGORITHM_VERSION
 
 
+RELEVANCE_NOT_USED_BY_V3 = "RELEVANCE_NOT_USED_BY_V3"
+
+
+def is_v3_run(run: Any) -> bool:
+    """Run aktif (v3) motorla mı üretiliyor? (`is_legacy_run`'ın tersi)."""
+    return not is_legacy_run(run)
+
+
+def require_relevance_not_v3(run: Any) -> None:
+    """Embedding relevance'ı v3 motorunda KULLANILMAZ (kendi seo_rel/social_rel
+    AI aşamaları vardır): v3 run'ında hesaplama tipli 409 ile reddedilir.
+    Embedding çağrısından ve herhangi bir DB yazımından ÖNCE çağrılır."""
+    if run is not None and is_v3_run(run):
+        raise HTTPException(status_code=409, detail={
+            "code": RELEVANCE_NOT_USED_BY_V3,
+            "message": (
+                "V3 motoru embedding ilgi skorunu kullanmaz; bu analiz için "
+                "ilgi skoru hesaplanmaz."
+            ),
+            "algorithm_version": run_algorithm_version(run),
+        })
+
+
 def legacy_run_message(algorithm_version: Optional[str]) -> str:
     return (
         f"Bu analiz eski motorla ({algorithm_version or 'v2'}) üretilmiştir ve "

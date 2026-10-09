@@ -90,6 +90,14 @@ def test_scored_without_relevance_returns_compute_relevance():
     assert action.path == "/keywords?view=scores&run_id=5"
 
 
+def test_scored_v3_run_never_suggests_compute_relevance():
+    """V3 embedding relevance'ı kullanmaz: öneri doğrudan kanal ataması."""
+    run = RunContext(id=9, status="scored", skip_relevance=False,
+                     algorithm_version="v3")
+    action = build_next_action(_ctx(active_run=run, relevance_exists=False))
+    assert action.key == "start_channels"
+
+
 def test_scored_with_skip_relevance_returns_channels():
     run = RunContext(id=6, status="scored", skip_relevance=True)
     action = build_next_action(_ctx(active_run=run))

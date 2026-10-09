@@ -38,6 +38,7 @@ from app.core.engine_version_gate import (
     LEGACY_RUN_READ_ONLY,
     is_legacy_run,
     require_non_legacy_run,
+    require_relevance_not_v3,
     run_algorithm_version,
 )
 from app.core.workspace import verify_scoring_run, verify_workspace
@@ -370,36 +371,16 @@ def _trigger_latest_run_relevance(
     background_tasks: BackgroundTasks,
     workspace: BrandProfile,
 ) -> None:
-    """Path A: workspace'in en son scored run'ı için relevance hesaplamasını tetikler."""
-    if not settings.ENABLE_RELEVANCE_RERANK:
-        return
-    anchor_texts = (workspace.profile_data or {}).get("anchor_texts", [])
-    if not anchor_texts:
-        return
-    latest_scored_run = (
-        db.query(ScoringRun)
-            .filter(
-                ScoringRun.brand_profile_id == workspace.id,
-                ScoringRun.status == "scored",
-                ScoringRun.skip_relevance == False,
-                # Eski motor run'ları salt-okunur: otomatik relevance
-                # (embedding) yalnız v3 run'larında tetiklenir
-                ScoringRun.algorithm_version == "v3",
-            )
-            .order_by(ScoringRun.created_at.desc())
-            .first()
-    )
-    if latest_scored_run and transition_atomic(
-        db, latest_scored_run, "relevance_computing", "scored"
-    ):
-        background_tasks.add_task(
-            _run_relevance_computation,
-            scoring_run_id=latest_scored_run.id,
-        )
-        logger.info(
-            f"Path A: Auto-triggered relevance for run {latest_scored_run.id} "
-            f"(workspace {workspace.id})"
-        )
+    """Path A: otomatik relevance (embedding) tetikleyicisi — KAPALI (no-op).
+
+    Eski motor (v2/v2_1) run'ları salt-okunurdur (embedding çağrısı yok);
+    v3 motoru embedding relevance'ı hiç okumaz (kendi seo_rel/social_rel AI
+    aşamaları vardır) ve v3 execute zaten `scored` -> kanal ataması zincirine
+    relevance'sız geçer. Dolayısıyla hiçbir run için otomatik relevance
+    seçilmez/dispatch edilmez; çağıranlar (profil onayı, keyword onayı,
+    refresh) değişmeden bu fonksiyonu çağırmaya devam eder.
+    """
+    return
 
 
 def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
@@ -466,7 +447,10 @@ def compute_relevance(
         )
 
     # Eski motor run'ı salt-okunur: embedding çağrısından ÖNCE tipli 409
-    require_non_legacy_run(verify_scoring_run(db, run_id, brand_profile_id))
+    _gated_run = verify_scoring_run(db, run_id, brand_profile_id)
+    require_non_legacy_run(_gated_run)
+    # V3 motoru embedding relevance'ı okumaz: ücretli çağrı + DB yazımı YOK
+    require_relevance_not_v3(_gated_run)
 
     # Yeni mimari: ScoringRun.brand_profile_id üzerinden; eski 1:1 fallback
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
