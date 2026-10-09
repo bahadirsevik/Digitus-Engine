@@ -106,7 +106,8 @@ Genel kurallar (CLAUDE.md'den):
 > - Commit'ler:
 >   - 60f4d40, 6215c6a, f69e041, 11cd062 (planın dört işi),
 >   - QA düzeltmeleri: d5932e5, 5ab6874.
-> - Tam paket: backend 4402 passed / 0 kırmızı; frontend 224 passed.
+> - Codex sonrası: 6c13a42 (sayfadan çıkışta görev kimliği kaybı).
+> - Tam paket: backend 4402 passed / 0 kırmızı; frontend 227 passed.
 > - Ayrıntı: `.dev-team/STATE.md`.
 
 ---

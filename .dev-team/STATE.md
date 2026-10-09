@@ -387,4 +387,9 @@ made in this workstream.
   - Paket 5.3'e not: `_run_relevance_computation` + `scoring_tasks` uyumluluk sarmalayıcısı +
     `scoring.py` v2 execute dalı erişilemez durumda; v2 relevance zinciri birlikte emekliye
     ayrılabilir.
+  - 10.10 Codex incelemesi sonrası 6c13a42: başlatma isteği sürerken sayfadan çıkılırsa görev
+    kimliği kayboluyordu. Kimlik artık başlatıldığı run'ın anahtarına her zaman yazılıyor.
+    Kapsam: ADS generate ve grup regenerate, SEO bulk, SocialStepper içerik; ayrıca Channels.tsx'e
+    tek satır. Unmount testleri eski kodda kırmızı; frontend 227 passed. Backend
+    değişmedi, en son tam paket 4402.
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.
