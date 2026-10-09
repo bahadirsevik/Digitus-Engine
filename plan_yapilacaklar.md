@@ -18,6 +18,13 @@ Revizyonlar:
   - Dışlama kutularında önce veri kaybı düzeltilecek, tek "Kaydet" ertelendi.
   - Screening, "servisleri kapat" ve "kodu sil" diye iki ayrı işe bölündü.
   - ESLint 9 kabul şartı değil.
+- **rev. 3:** Codex'in ikinci turundaki notlar işlendi ve kodda / kaynakta doğrulandı:
+  - Janitor yazımları da koşullu (2.2).
+  - Form kaydı, B'nin kesin dışlamalarını eski veriyle ezmemeli (3.1).
+  - Negatif kontrolü Google'ı taklit ettiğini iddia etmiyor (2.1). Google belgesine
+    göre negatifler büyük/küçük harf farkını ve yazım hatasını hesaba katar, çoğul ve
+    yakın varyantları katmaz.
+  - Görev alanı hem tek görev yanıtına hem run'ın görev listesine eklenir (1.3).
 
 Kod incelemesi lean `f463feb` üzerinde yapıldı; satır numaraları o ana aittir.
 
@@ -72,7 +79,8 @@ Genel kurallar (CLAUDE.md'den):
   `SocialStepper.tsx:75-78`. Backend: `TaskStatusResponse` (`app/api/v1/tasks.py:22`)
   `scoring_run_id` döndürmüyor (model alanı var: `task_status.py:84`).
 - **Çözüm:**
-  1. Backend: `TaskStatusResponse`'a ve görev durumu sözlüğüne `scoring_run_id`.
+  1. Backend: `scoring_run_id` hem tek görev yanıtına (`TaskStatusResponse` + görev
+     durumu sözlüğü) hem run'ın görev listesine (`GET /tasks/run/{run_id}`) eklenir.
   2. Frontend: anahtar `${key}:${ws}:${runId}`; run değişiminde `taskId` ve görev
      durumu sıfırlanır.
   3. Hook, `task.scoring_run_id !== runId` olan görevi kendisinin saymaz.
@@ -108,8 +116,13 @@ Genel kurallar (CLAUDE.md'den):
   :712-742; tamamlama :203-205.
 - **Çözüm:**
   1. `validators.py`'ye saf fonksiyon `negative_blocks_target(negative, match_type,
-     target) -> bool`. **Google Ads negatif eşleşme kuralları** uygulanır: negatifler
-     yakın varyantlara (çoğul, ek, yazım hatası) GENİŞLEMEZ.
+     target) -> bool`. Google Ads negatif eşleşme türlerinin kelime kuralları
+     uygulanır. Negatifler yakın varyantlara (çoğul, ek) genişlemez; Google ayrıca
+     büyük/küçük harf farkını ve yazım hatasını hesaba katar
+     (support.google.com/google-ads/answer/2453972). **Bu fonksiyon Google'ın
+     eşleştirmesini taklit ettiğini iddia etmez. Amacı açık metinsel çakışmaları
+     broad / phrase / exact kurallarıyla yakalamaktır;** fuzzy ya da yazım hatası
+     eşleştirmesi bu kapsamda yapılmaz.
      - broad: negatifin tüm kelimeleri hedefte, sıra önemsiz.
      - phrase: kelimeler aynı sırada ve bitişik.
      - exact: birebir aynı.
@@ -156,8 +169,12 @@ Genel kurallar (CLAUDE.md'den):
      hata yazımı. Token kontrolü ile yazım **aynı transaction'da** yapılır: koşullu
      `UPDATE … WHERE analysis_attempt_id = :tok`, ya da `with_for_update` ile yeniden
      okuma + eşitlik kontrolü + yazım. Eşleşmezse hiçbir şey yazılmaz.
-  4. `fail_if_stuck` `failed`'a çevirirken token'ı döndürür; geç biten koşu no-op
-     olur.
+  4. **Janitor da koşullu yazar.** `fail_if_stuck` (okuma anında) ve açılıştaki
+     `fail_stuck_profiles` bugün profili okuyup koşulsuz `failed` yazıyor
+     (`stuck_janitor.py`). Durum, süre ve attempt kontrolü **yazım anında** doğrulanır:
+     ya koşullu `UPDATE … WHERE status IN (...) AND updated_at < :esik AND
+     analysis_attempt_id = :okunan_tok`, ya da kilit altında yeniden kontrol.
+     `failed`'a çevirirken token döndürülür; geç biten eski koşu no-op olur.
   5. Başlatmada 409 "Profil analizi sürüyor" ek bir kolaylıktır; tek başına yeterli
      değildir.
   6. Celery'ye taşıma veya genel iş yönetimi YOK. Ölü `_run_workspace_profile_analysis`
@@ -166,6 +183,7 @@ Genel kurallar (CLAUDE.md'den):
   - Eski token'lı başarı yazımı yeni onaylı profili ezmez.
   - Eski token'lı hata yazımı yeni koşuyu `failed` yapmaz.
   - Janitor'ın `failed` yaptığı koşu geç bittiğinde no-op olur.
+  - **Janitor eski koşuyu incelerken yeni koşu başlarsa yeni koşu etkilenmez.**
 - **Belge:** ADR-002'ye ek: risk kabulü, eski-yazım koruması ile kapatıldı.
 
 ---
@@ -183,7 +201,12 @@ Genel kurallar (CLAUDE.md'den):
   sessizce siliniyor (`BrandProfile.tsx:227-229`).
 - **Çözüm (ilk aşama):**
   1. **Veri kaybı:** form kirliyse yeniden yüklemede `profileForm` sıfırlanmaz
-     (dirty bayrağı). Gerekirse yalnız kirli olmayan alanlar güncellenir.
+     (dirty bayrağı). Yalnız dondurmak yetmez: A sonradan kaydedilirse profil kaydı
+     gelen liste alanlarını kullandığı için (`confirm_workspace`,
+     `EDITABLE_LIST_FIELDS`), B'nin sunucuya yeni eklediği terimler eski form
+     verisiyle ezilir. Çözüm: kullanıcının düzenlediği A değerleri ile B'den gelen
+     salt-okunur değerler ayrı tutulur; kayıtta A yalnız kullanıcı terimlerini
+     gönderir, sunucu B kaynaklı terimleri korur. Yeni genel form altyapısı gerekmez.
   2. **Etiketler:**
      - A → "Kaçınılacak temalar (eleme yapmaz, yapay zekâyı yönlendirir)".
      - B → "Kesin dışlama (bu konuları içeren kelimeler elenir)", yardım metniyle.
@@ -191,8 +214,12 @@ Genel kurallar (CLAUDE.md'den):
      gösterilir; A'dan silinip "kaldırıldı" sanılmaz.
   4. İki ayrı "Kaydet" akışı korunur. Tek kaydet ertelendi: iki isteğin kısmi başarısı
      ayrıca çözülmeli.
-- **Test (Vitest):** B kaydı A'daki kirli düzenlemeyi silmez; B'den gelen terim A'da
-  silinemez.
+- **Test:**
+  - Vitest: B kaydı A'daki kirli düzenlemeyi silmez; B'den gelen terim A'da
+    silinemez.
+  - Uçtan uca zincir (backend entegrasyon + frontend testi): **A'yı düzenle → B'ye
+    kesin dışlama ekleyip kaydet → A'yı kaydet → hem A düzenlemesi hem B'nin
+    dışlaması korunur.**
 
 ### 3.2 İlerleme göstergesini V3'e uyarlama (sade)
 - **Sorun:** `AnalysisProgress` v2 zincirini gösteriyor:
@@ -309,7 +336,7 @@ V3'te hiçbir screening işi oluşmuyor; dispatcher V3'te modu sabit `off` yapı
 
 | # | Karar | Öneri |
 |---|---|---|
-| 1.1 | Kullanılmayan run-düzeyi profil uçları silinsin mi? | Evet |
+| 1.1 | Kullanılmayan run-düzeyi profil uçları silinsin mi? | Evet (Codex de onayladı; analiz ucu, kalan çağrıları kontrol edilerek aynı commit'te) |
 | 2.2 | ADR-002 riski eski-yazım koruması ile kapatılsın mı? | Evet |
 | 3.1 | Yeni etiket metinleri uygun mu? | — |
 | 3.3 | GTIN'li aramalar dışlansın mı? (ayrı ürün kararı) | Şimdilik hayır |
