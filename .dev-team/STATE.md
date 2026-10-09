@@ -457,6 +457,27 @@ made in this workstream.
       pakette 6 koşunun 2'sinde kırmızıydı, düzeltme sonrası 6/6 yeşil (252 passed). Ürün
       hatası değil, test yarışı.
   - Paket 3 KAPANDI.
+- 10.10 Paket 4 (Codex'in daralttığı kapsam).
+  - Kapı: yeni araç, ama kapsam kayıtlı ve onaylı → Architect/Council koşulmadı.
+  - 734311d: ruff==0.6.9, `ruff.toml` select E9/F63/F7/F82 (yalnız hata sınıfları,
+    formatlama yok), `requirements-dev.txt`. 7 F821 düzeltildi:
+    - typing importları,
+    - ölü + kırık `order_rows_volume_only` silindi (`volume_order_key` tanımsızdı),
+    - iki test importu.
+    Motor kaynaklarını hash'leyen mühür testi yok (kontrol edildi).
+  - 6e9a3bc: `.github/workflows/ci.yml`.
+    - Tetik: push (deploy/lean-taslak) + pull_request.
+    - İşler: ruff, docker-compose.test.yml ile izole backend paketi, frontend lint +
+      format + build + test.
+    - Secret/AI anahtarı ve dağıtım adımı YOK.
+  - Yerel tam paket 4525 passed / 0 kırmızı. Push edildi.
+  - GitHub ilk CI koşusu YEŞİL (Actions run 38005849005, Codex teyidi): backend 4525 passed /
+    112 skip, migration adımı başarılı; frontend 252 passed + lint + format + build; ruff 0.
+    Paket 4 KAPANDI.
+  - CI yalnızca lean dalını doğrular; henüz birleşmemiş auth dalının migration zincirini
+    doğrulamaz.
+  - Sıradaki (Codex önerisi): birleşmiş migration zincirinin doğrulanması + kısa görsel
+    kontrol → dağıtım. Paket 5 dağıtımın ön koşulu DEĞİL.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
     görev kontrolü).
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.
