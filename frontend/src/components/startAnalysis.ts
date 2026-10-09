@@ -36,6 +36,15 @@ export const DEFAULT_CAPACITIES = { ads: 30, seo: 50, social: 20 }
 export const SOCIAL_BASELINE_LABEL = 'Mevcut SOCIAL — henüz optimize edilmedi'
 
 export function buildStartAnalysisPayload(opts: StartAnalysisOptions): ScoringRunCreate {
+  const invalid = (capacity: number) => !Number.isSafeInteger(capacity) || capacity < 1
+  if (
+    (opts.ads && invalid(opts.adsCapacity)) ||
+    (opts.seo && invalid(opts.seoCapacity)) ||
+    (opts.social && invalid(opts.socialCapacity))
+  ) {
+    throw new RangeError('Seçili kanalların kelime sayısı pozitif tam sayı olmalı.')
+  }
+
   return {
     run_name: opts.runName?.trim() || undefined,
     brand_profile_id: opts.brandProfileId,
