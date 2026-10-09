@@ -479,6 +479,32 @@ def test_get_tasks_for_run_cross_workspace_returns_404(
     assert resp.status_code == 404
 
 
+def test_task_responses_carry_scoring_run_id(
+    client, db_session, make_workspace, make_scoring_run
+):
+    """Plan 1.3: tek görev, run listesi ve genel liste scoring_run_id döndürür."""
+    ws = make_workspace(name="A")
+    run_1 = make_scoring_run(brand_profile_id=ws.id)
+    run_2 = make_scoring_run(brand_profile_id=ws.id)
+    _make_task_for_run(db_session, run_1.id, task_id="task-r1")
+    _make_task_for_run(db_session, run_2.id, task_id="task-r2")
+    params = {"brand_profile_id": ws.id}
+
+    single = client.get("/api/v1/tasks/task-r1", params=params)
+    assert single.status_code == 200
+    assert single.json()["scoring_run_id"] == run_1.id
+
+    per_run = client.get(f"/api/v1/tasks/run/{run_2.id}", params=params)
+    assert per_run.status_code == 200
+    assert [(t["task_id"], t["scoring_run_id"]) for t in per_run.json()["tasks"]] == [
+        ("task-r2", run_2.id)
+    ]
+
+    listing = client.get("/api/v1/tasks/", params=params)
+    by_id = {t["task_id"]: t["scoring_run_id"] for t in listing.json()["tasks"]}
+    assert by_id == {"task-r1": run_1.id, "task-r2": run_2.id}
+
+
 def test_cancel_task_requires_brand_profile_id(client):
     resp = client.post("/api/v1/tasks/some-id/cancel")
     assert resp.status_code in (400, 422)

@@ -10,7 +10,7 @@ import SeoGeoPanel from './generation/SeoGeoPanel'
 import AdsPanel from './generation/AdsPanel'
 import SocialPanel from './generation/SocialPanel'
 import { useBriefKeywordSelection } from './generation/socialBrief/useBriefKeywordSelection'
-import { getStoredTaskId, getWorkspaceTaskKey, useTaskPolling } from '../hooks/useTaskPolling'
+import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
 import '../pages/Channels.css'
 
 type ChannelName = 'ADS' | 'SEO' | 'SOCIAL'
@@ -31,6 +31,7 @@ export interface PoolKeyword {
 interface RunTask {
   task_id: string
   task_type?: string | null
+  scoring_run_id?: number | null
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress?: number
   error_message?: string | null
@@ -57,19 +58,21 @@ function formatNumber(value?: number | null) {
 export default function ChannelWorkspaceView({ channel }: { channel: ChannelName }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const assignTaskStorageKey = getWorkspaceTaskKey('channel_assign', activeWorkspace?.id)
 
   const [runs, setRuns] = useState<ScoringRun[]>([])
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
+  const assignTaskStorageKey = getWorkspaceTaskKey(
+    'channel_assign',
+    activeWorkspace?.id,
+    selectedRunId
+  )
   const [pool, setPool] = useState<PoolKeyword[]>([])
   const [loading, setLoading] = useState(false)
   const [poolError, setPoolError] = useState<string | null>(null)
   const poolRequestRef = useRef(0)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
-  const [assignTaskId, setAssignTaskId] = useState<string | null>(
-    getStoredTaskId(assignTaskStorageKey)
-  )
+  const [assignTaskId, setAssignTaskId] = useScopedTaskId(assignTaskStorageKey)
   const [staleNotice, setStaleNotice] = useState(false)
   const [poolExpanded, setPoolExpanded] = useState(false)
 
@@ -77,7 +80,8 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
     assignTaskId,
     assignTaskStorageKey,
     3000,
-    activeWorkspace?.id
+    activeWorkspace?.id,
+    selectedRunId
   )
 
   const selectedRun = useMemo(
@@ -149,25 +153,26 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
   )
 
   const discoverAssignmentTask = useCallback(
-    async (runId: number) => {
+    async (runId: number, isCancelled: () => boolean) => {
       if (!activeWorkspace?.id) return
       const res = await tasksApi.listByRun(runId, activeWorkspace.id)
+      // Run değiştiyse A'nın görevi B'nin paneline yazılmaz
+      if (isCancelled()) return
       const tasks = (Array.isArray(res.data) ? res.data : []) as RunTask[]
       const task = tasks.find(
-        (item) => item.task_type === 'channel_assignment' && isActiveTask(item)
+        (item) =>
+          item.task_type === 'channel_assignment' &&
+          isActiveTask(item) &&
+          (item.scoring_run_id == null || item.scoring_run_id === runId)
       )
       if (task) setAssignTaskId(task.task_id)
     },
-    [activeWorkspace?.id]
+    [activeWorkspace?.id, setAssignTaskId]
   )
 
   useEffect(() => {
     void fetchRuns()
   }, [fetchRuns])
-
-  useEffect(() => {
-    setAssignTaskId(getStoredTaskId(assignTaskStorageKey))
-  }, [assignTaskStorageKey])
 
   // Workspace değişince önceki workspace'in havuzu ekranda kalmaz
   useEffect(() => {
@@ -178,11 +183,18 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
   }, [activeWorkspace?.id])
 
   useEffect(() => {
-    if (!selectedRunId) return
+    if (!selectedRunId) {
+      poolRequestRef.current += 1 // run kalmadı: uçuştaki havuz yanıtı yok sayılır
+      return
+    }
+    let cancelled = false
     setSearchParams({ run_id: String(selectedRunId) })
     setPoolExpanded(false)
     void fetchPool(selectedRunId)
-    void discoverAssignmentTask(selectedRunId)
+    void discoverAssignmentTask(selectedRunId, () => cancelled)
+    return () => {
+      cancelled = true
+    }
   }, [selectedRunId, fetchPool, discoverAssignmentTask, setSearchParams])
 
   useEffect(() => {

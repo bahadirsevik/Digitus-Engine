@@ -44,7 +44,8 @@ vi.mock('../../services/api', () => ({
 // Faz E set senaryosu: yalnız stale-olmayan draft var, aktif non-stale yok
 let mockSets: Array<Record<string, unknown>> = []
 
-vi.mock('../../hooks/useTaskPolling', () => ({
+vi.mock('../../hooks/useTaskPolling', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../hooks/useTaskPolling')>()),
   useTaskPolling: () => ({
     status: null,
     progress: 0,
@@ -52,8 +53,6 @@ vi.mock('../../hooks/useTaskPolling', () => ({
     isCompleted: false,
     errorMessage: null,
   }),
-  getStoredTaskId: () => null,
-  getWorkspaceTaskKey: (name: string) => name,
 }))
 
 describe('AdsPanel autofill', () => {

@@ -141,6 +141,7 @@ def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
         return {
             'task_id': task.task_id,
             'task_type': task.task_type,
+            'scoring_run_id': task.scoring_run_id,
             'status': task.status,
             'progress': task.progress,
             'result_data': task.result_data,
@@ -170,6 +171,7 @@ def get_tasks_by_run(scoring_run_id: int) -> list:
             {
                 'task_id': t.task_id,
                 'task_type': t.task_type,
+                'scoring_run_id': t.scoring_run_id,
                 'status': t.status,
                 'progress': t.progress,
                 'result_data': t.result_data,

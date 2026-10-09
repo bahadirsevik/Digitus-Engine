@@ -45,7 +45,7 @@ import { UrlSeedIdea } from '../services/api'
 import { WORKSPACE_KEYWORD_LIMIT } from '../constants'
 import { Users, X } from 'lucide-react'
 import type { ScoringRun } from '../types/models'
-import { getStoredTaskId, getWorkspaceTaskKey, useTaskPolling } from '../hooks/useTaskPolling'
+import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
 import './Keywords.css'
 
 type TabId = 'csv' | 'manual' | 'google-ads' | 'url' | 'competitor'
@@ -118,6 +118,7 @@ interface Keyword {
 interface RunTask {
   task_id: string
   task_type?: string | null
+  scoring_run_id?: number | null
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress?: number
   result_data?: Record<string, unknown> | null
@@ -241,19 +242,24 @@ export default function Keywords() {
   // Sunucu kontrollü aday sıralaması kullanıcıdan mod/onay istemez.
   // Bu salt-okunur durum yalnız mevcut analiz ilerleme panelini besler.
   const [screeningStatus, setScreeningStatus] = useState<ScreeningRunStatus | null>(null)
-  const [assignTaskId, setAssignTaskId] = useState<string | null>(null)
   const [taskDiscoveryActive, setTaskDiscoveryActive] = useState(false)
   // Analiz zinciri banner/toast durumu.
   const [chainActive, setChainActive] = useState(false)
   const [chainDismissed, setChainDismissed] = useState(false)
   const [toastOpen, setToastOpen] = useState(false)
   const [chainRunStatus, setChainRunStatus] = useState<string | null>(null)
-  const assignTaskStorageKey = getWorkspaceTaskKey('channel_assign', activeWorkspace?.id)
+  const assignTaskStorageKey = getWorkspaceTaskKey(
+    'channel_assign',
+    activeWorkspace?.id,
+    selectedScoreRunId
+  )
+  const [assignTaskId, setAssignTaskId] = useScopedTaskId(assignTaskStorageKey)
   const assignPolling = useTaskPolling(
     assignTaskId,
     assignTaskStorageKey,
     3000,
-    activeWorkspace?.id
+    activeWorkspace?.id,
+    selectedScoreRunId
   )
 
   const refreshScreeningStatus = async () => {
@@ -322,10 +328,6 @@ export default function Keywords() {
   }, [searchParams])
 
   useEffect(() => {
-    setAssignTaskId(getStoredTaskId(assignTaskStorageKey))
-  }, [assignTaskStorageKey])
-
-  useEffect(() => {
     if (!selectedScoreRunId || view !== 'scores' || !activeWorkspace?.id) {
       setTaskDiscoveryActive(false)
       return
@@ -346,12 +348,12 @@ export default function Keywords() {
     }
 
     void findTask()
-    if (!taskDiscoveryActive || assignTaskId) return
-
-    const interval = window.setInterval(findTask, 3000)
+    // Cleanup HER durumda döner: run değişince uçuştaki keşif yanıtı yok sayılır
+    const interval =
+      taskDiscoveryActive && !assignTaskId ? window.setInterval(findTask, 3000) : null
     return () => {
       cancelled = true
-      window.clearInterval(interval)
+      if (interval !== null) window.clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScoreRunId, view, activeWorkspace?.id, taskDiscoveryActive, assignTaskId])

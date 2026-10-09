@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
@@ -20,7 +20,12 @@ import {
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import type { ScoringRun } from '../types/models'
-import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from '../hooks/useTaskPolling'
+import {
+  useTaskPolling,
+  getStoredTaskId,
+  getWorkspaceTaskKey,
+  useScopedTaskId,
+} from '../hooks/useTaskPolling'
 import TaskProgress from '../components/TaskProgress'
 import { locationModeLabel, locationReasonLabel } from '../services/locationPolicy'
 import './Channels.css'
@@ -72,19 +77,22 @@ export default function Channels() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const assignTaskStorageKey = getWorkspaceTaskKey('channel_assign', activeWorkspace?.id)
 
   const [runs, setRuns] = useState<ScoringRun[]>([])
   const [selectedRun, setSelectedRun] = useState<number | null>(null)
+  const assignTaskStorageKey = getWorkspaceTaskKey(
+    'channel_assign',
+    activeWorkspace?.id,
+    selectedRun
+  )
   const [pools, setPools] = useState<{ [key: string]: PoolKeyword[] }>({})
   const [capacities, setCapacities] = useState<ChannelCapacities>({})
   const [unfilledCounts, setUnfilledCounts] = useState<{ [key: string]: number }>({})
   const [poolFreshness, setPoolFreshness] = useState<PoolFreshness | null>(null)
   const [loading, setLoading] = useState(false)
+  const poolRequestRef = useRef(0)
   const [assigning, setAssigning] = useState(false)
-  const [assignTaskId, setAssignTaskId] = useState<string | null>(
-    getStoredTaskId(assignTaskStorageKey)
-  )
+  const [assignTaskId, setAssignTaskId] = useScopedTaskId(assignTaskStorageKey)
   const [error, setError] = useState<string>('')
   const [info, setInfo] = useState<string>('')
   const [relevanceCoefficient, setRelevanceCoefficient] = useState<number>(1.0)
@@ -124,7 +132,8 @@ export default function Channels() {
     assignTaskId,
     assignTaskStorageKey,
     3000,
-    activeWorkspace?.id
+    activeWorkspace?.id,
+    selectedRun
   )
 
   const expansionSummaries = useMemo(() => {
@@ -146,7 +155,7 @@ export default function Channels() {
     } else {
       setAssignTaskId(getStoredTaskId(assignTaskStorageKey))
     }
-  }, [searchParams, assignTaskStorageKey])
+  }, [searchParams, assignTaskStorageKey, setAssignTaskId])
 
   const fetchRuns = useCallback(async () => {
     if (!activeWorkspace?.id) {
@@ -176,9 +185,12 @@ export default function Channels() {
   const fetchPools = useCallback(
     async (runId: number) => {
       if (!activeWorkspace?.id) return
+      // Hızlı run değişiminde eski yanıt yeni havuzun üzerine yazılmaz
+      const requestId = ++poolRequestRef.current
       setLoading(true)
       try {
         const poolsRes = await channelsApi.getPools(runId, activeWorkspace.id)
+        if (poolRequestRef.current !== requestId) return
         const responseData = poolsRes.data as {
           channels?: Record<string, PoolKeyword[]>
           capacities?: Record<string, number>
@@ -202,13 +214,14 @@ export default function Channels() {
         )
         setError('')
       } catch (fetchError) {
+        if (poolRequestRef.current !== requestId) return
         setPools({})
         setCapacities({})
         setUnfilledCounts({})
         setPoolFreshness(null)
         setError(`Havuzlar alınamadı: ${extractErrorMessage(fetchError)}`)
       } finally {
-        setLoading(false)
+        if (poolRequestRef.current === requestId) setLoading(false)
       }
     },
     [activeWorkspace?.id]

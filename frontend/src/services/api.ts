@@ -671,9 +671,21 @@ export const googleAdsApi = {
 }
 
 // Tasks API
+/** `GET /tasks/{id}` ve `GET /tasks/run/{run_id}` görev durumu. */
+export interface TaskStatusInfo {
+  task_id: string
+  task_type?: string | null
+  /** Görevin bağlı olduğu scoring run (eski kayıtlarda null olabilir) */
+  scoring_run_id?: number | null
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  result_data?: Record<string, unknown>
+  error_message?: string
+}
+
 export const tasksApi = {
   getStatus: (taskId: string, brand_profile_id?: number) =>
-    api.get(`/tasks/${taskId}`, { params: { brand_profile_id } }),
+    api.get<TaskStatusInfo>(`/tasks/${taskId}`, { params: { brand_profile_id } }),
 
   listByRun: (runId: number, brand_profile_id?: number) =>
     api.get(`/tasks/run/${runId}`, { params: { brand_profile_id } }),
