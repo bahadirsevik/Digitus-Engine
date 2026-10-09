@@ -468,24 +468,6 @@ export interface AssignmentPreflight {
   capacities?: Record<string, number>
 }
 
-export interface ScreeningRunStatus {
-  exists: boolean
-  screening_job_id?: number
-  status?: string
-  error_code?: string | null
-  screening_mode?: ScreeningMode | null
-  cost_usd?: number | null
-  provider_calls?: number | null
-  planned_requests?: number | null
-  ceiling_charges?: number | null
-  coverage_resolved?: number | null
-  universe_size?: number
-  unresolved?: number | null
-  contract_violations?: number | null
-  applied_to_live_pool?: boolean
-  counterfactual?: Record<string, unknown> | null
-}
-
 export interface ScreeningApproval {
   screening_mode: ScreeningMode
   preflight_sha256: string
@@ -508,12 +490,6 @@ export const channelsApi = {
       },
       { params: { brand_profile_id } }
     ),
-
-  // Son tarama işinin durumu/sonucu (salt okunur)
-  getScreeningStatus: (runId: number, brand_profile_id: number) =>
-    api.get<ScreeningRunStatus>(`/channels/runs/${runId}/screening`, {
-      params: { brand_profile_id },
-    }),
 
   // Hiçbir şey başlatmaz; ücretli çağrı YAPMAZ
   getAssignmentPreflight: (
