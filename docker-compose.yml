@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Manifest SHA sözleşmesi (Codex v8-5): build sırasında
+        # APP_GIT_SHA=$(git rev-parse --short=12 HEAD) geçirilmeli.
+        # Dev'de bind-mount + runtime .git okuması (app/core/gitinfo.py)
+        # bunu zaten düzeltir; arg prod/CI sözleşmesidir.
+        APP_GIT_SHA: ${APP_GIT_SHA:-dev}
+    container_name: digitus_app
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --reload-dir /app/migrations"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: digitus_db
+    environment:
+      POSTGRES_USER: digitus
+      POSTGRES_PASSWORD: digitus_secret_123
+      POSTGRES_DB: digitus_engine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Yalnizca localhost'a bagla — DB ag uzerinden erisilebilir olmasin
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digitus -d digitus_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: digitus_redis
+    ports:
+      # Yalnizca localhost'a bagla — Redis sifresiz, ag uzerinden acik olmamali
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  celery_worker:
+    build:
+      context: .
+      args:
+        APP_GIT_SHA: ${APP_GIT_SHA:-dev}
+    container_name: digitus_celery_worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  # Corpus screening AYRI kuyruk (plan §7.5): varsayilan worker
+  # `corpus_screening` kuyrugunu DINLEMEZ; bu servis olmadan task
+  # beklemede kalir. Uzun tarama isleri export/generation kuyrugunu
+  # ac birakmaz.
+  celery_screening_worker:
+    build:
+      context: .
+      args:
+        APP_GIT_SHA: ${APP_GIT_SHA:-dev}
+    container_name: digitus_celery_screening_worker
+    command: >
+      celery -A app.tasks.celery_app worker
+      --loglevel=info -Q corpus_screening
+      --concurrency=1 --prefetch-multiplier=1
+      -n screening@%h
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  celery_beat:
+    build:
+      context: .
+      args:
+        APP_GIT_SHA: ${APP_GIT_SHA:-dev}
+    container_name: digitus_celery_beat
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://digitus:digitus_secret_123@db:5432/digitus_engine
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: digitus_frontend
+    command: npm run dev -- --host 0.0.0.0 --mode docker
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - app
+    networks:
+      - digitus_network
+    restart: unless-stopped
+
+# Dev verisi eski geliştirme klasöründen (Digitus-Engine-main) kalan
+# volume'lerde durur; isimler sabitlenmezse compose klasör adına göre
+# BOŞ yeni volume açar.
+volumes:
+  postgres_data:
+    name: digitus-engine-main_postgres_data
+  redis_data:
+    name: digitus-engine-main_redis_data
+
+networks:
+  digitus_network:
+    driver: bridge
