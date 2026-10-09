@@ -422,16 +422,6 @@ export const brandProfileApi = {
       { decisions }
     ),
 
-  analyzeProfile: (runId: number, data: ProfileAnalyzeRequest, brand_profile_id?: number) =>
-    api.post(`/brand-profile/runs/${runId}/profile/analyze`, data, {
-      params: { brand_profile_id },
-    }),
-
-  confirmProfile: (runId: number, data?: ProfileConfirmRequest, brand_profile_id?: number) =>
-    api.put(`/brand-profile/runs/${runId}/profile/confirm`, data || {}, {
-      params: { brand_profile_id },
-    }),
-
   computeRelevance: (runId: number, brand_profile_id?: number) =>
     api.post(`/brand-profile/runs/${runId}/relevance/compute`, undefined, {
       params: { brand_profile_id },
@@ -1133,11 +1123,6 @@ export interface CampaignKeywordsImportRequest {
   limit?: number
   sector?: string
   target_market?: string
-}
-
-export interface ProfileAnalyzeRequest {
-  company_url: string
-  competitor_urls?: string[]
 }
 
 export interface ProfileConfirmRequest {

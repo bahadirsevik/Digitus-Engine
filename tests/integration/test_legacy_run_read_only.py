@@ -2,7 +2,7 @@
 
 Ürün kararı: aktif tek motor v3. Mevcut v2/v2_1 run'ları üzerinden YENİ
 üretim (skorlama, relevance/embedding, kanal ataması, screening, SEO/ADS/
-SOCIAL içerik, social brief akışı, run-kapsamlı profil analizi/onayı) hem API
+SOCIAL içerik, social brief akışı) hem API
 sınırında hem task/dispatcher sınırında, HERHANGİ bir ücretli çağrıdan ve
 Celery dispatch'ten ÖNCE tipli olarak reddedilir. Okuma, geçmiş, listeleme ve
 export değişmeden çalışır. v3 run'ları bu kapıdan etkilenmez.
@@ -114,9 +114,6 @@ def paid_calls(monkeypatch):
                         boom("refresh_keyword_relevance"))
     monkeypatch.setattr("app.api.v1.brand_profile._run_relevance_computation",
                         boom("_run_relevance_computation"))
-    # Site crawl + AI profil analizi
-    monkeypatch.setattr("app.api.v1.brand_profile._run_profile_analysis",
-                        boom("_run_profile_analysis"))
     # Skorlama motoru
     monkeypatch.setattr(
         "app.core.scoring.score_engine.ScoreEngine.run_scoring",
@@ -305,12 +302,6 @@ def _blocked_requests(env):
          {"screening_mode": "assistive"}),
         ("relevance.compute", "post",
          f"/api/v1/brand-profile/runs/{run}/relevance/compute?{q}", None),
-        ("profile.analyze", "post",
-         f"/api/v1/brand-profile/runs/{run}/profile/analyze?{q}",
-         {"company_url": "https://yeni.example"}),
-        ("profile.confirm", "put",
-         f"/api/v1/brand-profile/runs/{run}/profile/confirm",
-         {"profile_data": {"brand_name": "Yeni"}}),
         ("seo_geo.single", "post", f"/api/v1/generation/seo-geo?{q}",
          {"keyword_id": env["kw"].id, "scoring_run_id": run}),
         ("seo_geo.bulk", "post",
@@ -361,7 +352,7 @@ def _blocked_requests(env):
 
 BLOCKED_LABELS = [
     "scoring.execute", "channels.assign", "channels.assign.screening",
-    "relevance.compute", "profile.analyze", "profile.confirm",
+    "relevance.compute",
     "seo_geo.single", "seo_geo.bulk", "ads.rsa", "ads.group_regenerate",
     "social.categories", "social.ideas", "social.contents",
     "social.contents_async", "social.bulk", "social.idea_regenerate",
