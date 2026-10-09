@@ -75,3 +75,33 @@ field, that is the change to make; nothing else needs revisiting first.
 
 Nothing committed. The change sits in the working tree alongside a large set of
 unrelated pre-existing modifications.
+
+## Güncelleme 2026-10-10 — kalan risk eski-yazım koruması ile kapatıldı
+
+`plan_yapilacaklar.md` madde 2.2: yukarıda kabul edilen artık risk (15 dk'yı aşan
+CANLI bir analizin `failed` görünmesi, kullanıcı tekrar deneyince iki koşunun paralel
+yürümesi ve eski koşunun bitişteki koşulsuz `status`/profil yazımıyla yeni koşuyu ya
+da onaylanmış profili ezmesi) artık kapalı. Karar ADR'nin geri kalanını değiştirmez:
+bayatlık hâlâ okuma anında çözülür.
+
+- `brand_profiles.analysis_attempt_id` (String(36), nullable; idempotent migration
+  `20261010_001`). Her dispatch (workspace oluşturma, `keywords/approve` legacy dalı,
+  `profile/approve` + `rerun_keywords`) satır kilidi altında yeni bir uuid4 yazar ve
+  task'a `attempt_id` olarak geçirir.
+- Task'ların BÜTÜN yazımları token'a koşulludur ve token kontrolü ile yazım aynı
+  transaction'da yapılır (`with_for_update` + `populate_existing` ile taze okuma →
+  eşitlik → yazım → commit): `running` geçişi, başarı yazımı (profile_data, status,
+  suggested_keywords, source_pages…) ve her `failed` yazımı. Token eşleşmezse hiçbir şey
+  yazılmaz, info log düşer. Mantık: `app/core/site_analyzer/analysis_attempt.py`.
+- Janitör (`fail_if_stuck` ve `fail_stuck_profiles`) artık profili okuyup koşulsuz
+  `failed` yazmaz: tek bir koşullu `UPDATE … WHERE status IN (running, pending) AND
+  <yaş koşulu> AND analysis_attempt_id IS NOT DISTINCT FROM <okunan token>` ile durum,
+  yaş ve attempt YAZIM ANINDA yeniden doğrulanır. `failed`'a çevirirken token da
+  döndürülür; janitörün öldürdüğü koşu geç bitse bile no-op olur.
+- Ek kolaylık olan 409 "Profil analizi sürüyor" eklenmedi: onay uçları zaten
+  `pending/running` durumunu satır kilidi altında 400 ile reddediyor; asıl açık (janitör
+  `failed` yaptıktan sonra yeniden deneme) token ile kapandığı için ayrı bir 409 gerekmedi.
+- Celery'ye taşıma BİLİNÇLİ OLARAK reddedilmeye devam ediyor (yukarıdaki gerekçe aynen
+  geçerli); genel iş yönetimi çatısı da eklenmedi.
+- Kalan sınır: 15 dk'yı aşan canlı bir analiz hâlâ kullanıcıya `failed` görünür ve
+  sonucu atılır (eski koşu artık yazamaz); yeni koşu bundan etkilenmez.

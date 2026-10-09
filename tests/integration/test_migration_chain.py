@@ -194,6 +194,52 @@ def test_corpus_screening_migration_is_idempotent(fresh_schema, db_engine):
         assert {i["name"] for i in inspector.get_indexes(table)} == names
 
 
+def test_profile_attempt_id_column_and_idempotent_migration(fresh_schema, db_engine):
+    """20261010_001: brand_profiles.analysis_attempt_id (String(36), nullable).
+
+    Baseline squash canli create_all kullandigi icin kolon head'de zaten vardir;
+    migration ikinci kez upgrade edildiginde patlamamali / kolonu cogaltmamali,
+    downgrade kolonu dusurmeli ve yeniden upgrade geri eklemeli.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert "analysis_attempt_id" in columns
+    assert columns["analysis_attempt_id"]["nullable"] is True
+    assert getattr(columns["analysis_attempt_id"]["type"], "length", None) == 36
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261010_001_add_profile_analysis_attempt_id.py")
+    spec = importlib.util.spec_from_file_location("mig_20261010_001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def present(conn) -> bool:
+        return "analysis_attempt_id" in {
+            c["name"] for c in inspect(conn).get_columns("brand_profiles")
+        }
+
+    with db_engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # kolon zaten var → no-op, hata yok
+            module.upgrade()
+            assert present(conn)
+            module.downgrade()          # kolon var → duser
+            assert not present(conn)
+            module.downgrade()          # kolon yok → no-op, hata yok
+            module.upgrade()            # geri ekler
+            assert present(conn)
+
+    assert "analysis_attempt_id" in {
+        c["name"] for c in inspect(db_engine).get_columns("brand_profiles")
+    }
+
+
 def test_partial_unique_indexes_have_predicates(fresh_schema, db_engine):
     """Reuse/aktiflik kisitlari PARTIAL unique olmali (tam unique degil):
     ayni kimlikte failed/fallback kayitlari birikebilmeli."""

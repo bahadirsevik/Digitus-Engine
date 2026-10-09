@@ -43,6 +43,13 @@ from app.core.engine_version_gate import (
 )
 from app.core.workspace import verify_scoring_run, verify_workspace
 from app.core.site_analyzer.stuck_janitor import fail_if_stuck
+from app.core.site_analyzer.analysis_attempt import (
+    lock_if_current,
+    lock_workspace_row,
+    mark_failed_if_current,
+    new_attempt_id,
+    start_attempt,
+)
 from app.core.policy import (
     PolicyValidationError,
     apply_competitor_review,
@@ -585,6 +592,9 @@ def create_workspace(
         )
         name = (parsed.hostname or request.company_url).removeprefix("www.")
 
+    # Yeni satır henüz kimseye görünmediği için kilit gerekmez: attempt token'ı
+    # satırla AYNI insert'te yazılır (analiz kapalıysa dispatch yok → token yok).
+    attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
     workspace = BrandProfile(
         name=name,
         company_url=request.company_url,
@@ -595,6 +605,7 @@ def create_workspace(
         default_language_id=request.default_language_id,
         status="pending",
         onboarding_flow=request.flow_version,
+        analysis_attempt_id=attempt_id,
     )
     db.add(workspace)
     db.commit()
@@ -608,6 +619,7 @@ def create_workspace(
                 workspace_id=workspace.id,
                 company_url=request.company_url,
                 competitor_urls=request.competitor_urls,
+                attempt_id=attempt_id,
             )
         else:
             # Legacy akış: ilk aşama keyword önerisi
@@ -618,6 +630,7 @@ def create_workspace(
                 competitor_urls=request.competitor_urls,
                 must_have_info=must_have_info,
                 excluded_info=request.excluded_info,
+                attempt_id=attempt_id,
             )
 
     return WorkspaceResponse.model_validate(workspace)
@@ -730,22 +743,28 @@ def approve_workspace_keywords(
     db: Session = Depends(get_db),
 ):
     """Approve/edit the suggested seed keywords and start profile generation."""
-    workspace = verify_workspace(db, workspace_id)
+    verify_workspace(db, workspace_id)
+    # Row lock + TAZE okuma (2.2): durum kontrolü ile attempt token'ı yazımı
+    # aynı kilit altında; eşzamanlı iki onay ikincisinde 400 alır.
+    workspace = lock_workspace_row(db, workspace_id)
 
     can_approve = workspace.status == "keywords_review" or (
         workspace.status == "failed" and bool(workspace.suggested_keywords)
     )
     if not can_approve:
+        detail_status = workspace.status
+        db.rollback()  # satır kilidini hemen bırak
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Keyword onayi icin durum '{workspace.status}' uygun degil "
+                f"Keyword onayi icin durum '{detail_status}' uygun degil "
                 "(keywords_review veya failed+keyword gerekli)"
             ),
         )
 
     keywords = _normalize_seed_keywords(request.keywords)
     if not keywords:
+        db.rollback()
         raise HTTPException(status_code=400, detail="En az 1 keyword gerekli")
 
     # Kanal tercihleri OPSIYONEL: gonderilmezse bugunku davranis birebir
@@ -775,6 +794,7 @@ def approve_workspace_keywords(
     workspace.suggested_keywords = keywords
     workspace.status = "running"
     workspace.error_message = None
+    attempt_id = start_attempt(workspace)
     db.commit()
     db.refresh(workspace)
 
@@ -782,6 +802,7 @@ def approve_workspace_keywords(
         _run_profile_from_keywords,
         workspace_id=workspace.id,
         keywords=keywords,
+        attempt_id=attempt_id,
     )
 
     return WorkspaceResponse.model_validate(workspace)
@@ -809,12 +830,9 @@ def approve_workspace_profile(
     verify_workspace(db, workspace_id)
     # Row lock (plan v13): status/profile_data dahil her okuma kilitli satırdan —
     # eşzamanlı politika mutasyonu / background analiz yarışları kapanır.
-    workspace = (
-        db.query(BrandProfile)
-        .filter(BrandProfile.id == workspace_id)
-        .with_for_update()
-        .first()
-    )
+    # populate_existing: verify_workspace satırı identity map'e zaten yükledi;
+    # bayat status ile karar verilmesin (2.2: token yazımı bu kilitle yapılır).
+    workspace = lock_workspace_row(db, workspace_id)
 
     if workspace.onboarding_flow != "profile_first":
         raise HTTPException(
@@ -879,11 +897,13 @@ def approve_workspace_profile(
         workspace.suggested_keywords = None
         workspace.status = "running"
         workspace.error_message = None
+        attempt_id = start_attempt(workspace)
         db.commit()
         db.refresh(workspace)
         background_tasks.add_task(
             _run_keyword_suggestion_from_profile,
             workspace_id=workspace.id,
+            attempt_id=attempt_id,
         )
     else:
         # Profil kartlari onaylandi; rakip kesfi/karari keyword uretiminden
@@ -2057,8 +2077,14 @@ def _run_keyword_suggestion(
     competitor_urls: list = None,
     must_have_info: str = None,
     excluded_info: str = None,
+    attempt_id: Optional[str] = None,
 ):
-    """Background task: crawl workspace site and generate reviewable seed keywords."""
+    """Background task: crawl workspace site and generate reviewable seed keywords.
+
+    `attempt_id` (plan_yapilacaklar.md 2.2): dispatch'in yazdığı token. Task'ın
+    BÜTÜN yazımları (running geçişi, başarı, her failed) bu token'a koşulludur;
+    eşleşmezse hiçbir şey yazılmaz (bkz. core/site_analyzer/analysis_attempt.py).
+    """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
     from app.core.site_analyzer.profile_extractor import ProfileExtractor
@@ -2066,8 +2092,8 @@ def _run_keyword_suggestion(
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
         workspace.status = "running"
@@ -2082,19 +2108,24 @@ def _run_keyword_suggestion(
 
         crawl = extractor.crawl_for_profile_content(company_url)
         if crawl["error"] and not crawl["site_content"]:
-            workspace.status = "failed"
-            workspace.error_message = f"Anahtar kelime onerisi basarisiz: {crawl['error']}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Anahtar kelime onerisi basarisiz: {crawl['error']}",
+            )
             return
-
-        workspace.source_pages = crawl["source_pages"]
-        workspace.crawl_content_cache = crawl["site_content"]
 
         suggestions = extractor.suggest_keywords(
             crawl["site_content"],
             must_have_info=must_have_info,
             excluded_info=excluded_info,
         )
+
+        # Kısa süreli kilit + token kontrolü: tüm başarı yazımları tek transaction
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
+        workspace.source_pages = crawl["source_pages"]
+        workspace.crawl_content_cache = crawl["site_content"]
         workspace.suggested_keywords = _normalize_seed_keywords(suggestions)[:10] or None
         if not workspace.suggested_keywords:
             workspace.status = "failed"
@@ -2110,11 +2141,10 @@ def _run_keyword_suggestion(
         logger.error(f"Workspace keyword suggestion failed for workspace_id={workspace_id}: {e}")
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu")
-                db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu"),
+            )
         except Exception:
             pass
     finally:
@@ -2126,11 +2156,14 @@ def _run_profile_analysis_first(
     workspace_id: int,
     company_url: str,
     competitor_urls: list = None,
+    attempt_id: Optional[str] = None,
 ):
     """Background task (profil-önce akış, adım 1): crawl + AI profil çıkarma.
 
     suggested_keywords bu aşamada ÜRETİLMEZ — 10 KW, profil onayından sonra
     `_run_keyword_suggestion_from_profile` ile ayrıca istenir.
+
+    `attempt_id`: bkz. `_run_keyword_suggestion` — tüm yazımlar token'a koşulludur.
     """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
@@ -2140,8 +2173,8 @@ def _run_profile_analysis_first(
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
         workspace.status = "running"
@@ -2156,9 +2189,10 @@ def _run_profile_analysis_first(
 
         crawl = extractor.crawl_for_profile_content(company_url)
         if crawl["error"] and not crawl["site_content"]:
-            workspace.status = "failed"
-            workspace.error_message = f"Profil analizi basarisiz: {crawl['error']}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Profil analizi basarisiz: {crawl['error']}",
+            )
             return
 
         profile = extractor.extract_profile_from_site_content(crawl["site_content"])
@@ -2171,13 +2205,12 @@ def _run_profile_analysis_first(
         if competitor_urls and profile:
             validation = extractor.validate_with_competitors(profile, competitor_urls)
 
-        # Kısa süreli kilit + gate (plan v13)
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
+        # Kısa süreli kilit + gate (plan v13) + attempt token kontrolü (2.2):
+        # token eşleşmezse (yeni koşu başladı / janitor failed yaptı) HİÇBİR
+        # şey yazılmaz — profile_data dahil.
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
         workspace.source_pages = crawl["source_pages"]
         workspace.crawl_content_cache = crawl["site_content"]
         apply_profile_data_update(db, workspace, profile)
@@ -2196,11 +2229,10 @@ def _run_profile_analysis_first(
         logger.error(f"Profile-first analysis failed for workspace_id={workspace_id}: {e}")
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Profil analizi başarısız oldu")
-                db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Profil analizi başarısız oldu"),
+            )
         except Exception:
             pass
     finally:
@@ -2208,8 +2240,13 @@ def _run_profile_analysis_first(
         db.close()
 
 
-def _run_keyword_suggestion_from_profile(workspace_id: int):
+def _run_keyword_suggestion_from_profile(
+    workspace_id: int,
+    attempt_id: Optional[str] = None,
+):
     """Background task (profil-önce akış, adım 3→4): onaylı profilden 10 KW önerisi.
+
+    `attempt_id` (2.2): bkz. `_run_keyword_suggestion` — tüm yazımlar token'a koşulludur.
 
     preliminary_info (mutlaka-olsun) doluysa profil AI ile revize edilir
     (fail-open) ve keyword önerisi revize profile dayanır — böylece kullanıcının
@@ -2242,8 +2279,8 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
         workspace.status = "running"
@@ -2266,9 +2303,10 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
             extractor, company_url, workspace.crawl_content_cache
         )
         if content_error:
-            workspace.status = "failed"
-            workspace.error_message = f"Anahtar kelime onerisi basarisiz: {content_error}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Anahtar kelime onerisi basarisiz: {content_error}",
+            )
             return
 
         # SALT-BELLEK revizyon: yalniz asagidaki keyword onerisi prompt'unu
@@ -2300,12 +2338,10 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
         ]
 
         # Crawl and AI work is complete; keep the row lock only for writes.
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
+        # Attempt token kontrolü aynı kilit altında (2.2): eski koşu yazamaz.
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
         if crawled_source_pages is not None:
             workspace.source_pages = crawled_source_pages
             workspace.crawl_content_cache = site_content
@@ -2332,11 +2368,10 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
         )
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu")
-                db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu"),
+            )
         except Exception:
             pass
     finally:
@@ -2347,8 +2382,12 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
 def _run_profile_from_keywords(
     workspace_id: int,
     keywords: List[str],
+    attempt_id: Optional[str] = None,
 ):
-    """Background task: generate the full profile from approved seed keywords."""
+    """Background task: generate the full profile from approved seed keywords.
+
+    `attempt_id` (2.2): bkz. `_run_keyword_suggestion` — tüm yazımlar token'a koşulludur.
+    """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
     from app.core.site_analyzer.profile_extractor import (
@@ -2360,8 +2399,8 @@ def _run_profile_from_keywords(
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
         workspace.status = "running"
@@ -2383,16 +2422,18 @@ def _run_profile_from_keywords(
             extractor, company_url, workspace.crawl_content_cache
         )
         if content_error:
-            workspace.status = "failed"
-            workspace.error_message = f"Profil uretimi basarisiz: {content_error}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Profil uretimi basarisiz: {content_error}",
+            )
             return
 
         approved_keywords = _normalize_seed_keywords(keywords)
         if not approved_keywords:
-            workspace.status = "failed"
-            workspace.error_message = "Profil uretimi basarisiz: En az 1 keyword gerekli"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                "Profil uretimi basarisiz: En az 1 keyword gerekli",
+            )
             return
 
         profile = extractor.extract_profile_from_keywords(
@@ -2413,13 +2454,12 @@ def _run_profile_from_keywords(
                 competitor_urls,
             )
 
-        # Kısa süreli kilit + gate (plan v13)
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
+        # Kısa süreli kilit + gate (plan v13) + attempt token kontrolü (2.2):
+        # token eşleşmezse (yeni koşu başladı / janitor failed yaptı) HİÇBİR
+        # şey yazılmaz — profile_data dahil.
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
         if crawled_source_pages is not None:
             workspace.source_pages = crawled_source_pages
             workspace.crawl_content_cache = site_content
@@ -2439,97 +2479,10 @@ def _run_profile_from_keywords(
         logger.error(f"Workspace profile generation failed for workspace_id={workspace_id}: {e}")
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Profil uretimi basarisiz oldu")
-                db.commit()
-        except Exception:
-            pass
-    finally:
-        _close_ai_quietly(ai)
-        db.close()
-
-
-def _run_workspace_profile_analysis(
-    workspace_id: int,
-    company_url: str,
-    competitor_urls: list = None,
-    preliminary_info: str = None,
-):
-    """Background task: workspace için site crawl + AI profil çıkarma."""
-    from app.database.connection import SessionLocal
-    from app.generators.ai_service import get_ai_service
-    from app.core.site_analyzer.profile_extractor import ProfileExtractor
-    from app.core.keyword_normalize import normalize_keyword
-
-    db = SessionLocal()
-    ai = None  # finally'de kapatılır (Codex v9-3)
-    try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
-            return
-
-        workspace.status = "running"
-        db.commit()
-
-        ai = get_ai_service(api_key=settings.GEMINI_API_KEY)
-        # Telemetri kapsamı (Codex v8-3): BackgroundTasks'ta finalize
-        # güvencesi yok → her event anında yazılır (flush_every=1)
-        ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
-        extractor = ProfileExtractor(ai)
-
-        result = extractor.extract_profile(company_url, preliminary_info=preliminary_info)
-
-        if result["error"] and not result["profile"]:
-            workspace.status = "failed"
-            workspace.error_message = result["error"]
-            db.commit()
-            return
-
-        validation = None
-        if competitor_urls and result["profile"]:
-            validation = extractor.validate_with_competitors(
-                result["profile"], competitor_urls
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Profil uretimi basarisiz oldu"),
             )
-
-        # Kısa süreli kilit + gate (plan v13)
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
-        apply_profile_data_update(db, workspace, result["profile"])
-        workspace.source_pages = result["source_pages"]
-
-        # AI'ın önerdiği keyword'leri hafif normalize et
-        suggested_raw = (result.get("profile") or {}).get("suggested_keywords", [])
-        if suggested_raw:
-            normalized_suggestions = list(dict.fromkeys(
-                kw.strip().lower() for kw in suggested_raw
-                if kw and kw.strip()
-            ))
-            workspace.suggested_keywords = normalized_suggestions or None
-
-        if validation is not None:
-            workspace.validation_data = validation
-
-        workspace.status = "draft"
-        workspace.error_message = None
-        db.commit()
-
-        logger.info(f"Workspace profile analysis completed for workspace_id={workspace_id}")
-
-    except Exception as e:
-        logger.error(f"Workspace profile analysis failed for workspace_id={workspace_id}: {e}")
-        try:
-            db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Profil analizi başarısız oldu")
-                db.commit()
         except Exception:
             pass
     finally:

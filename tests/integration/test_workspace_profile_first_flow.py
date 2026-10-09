@@ -225,7 +225,7 @@ def test_profile_first_db_write_failure_rolls_back_and_marks_failed(
 # ── profile/approve ───────────────────────────────────────────────
 
 def test_profile_approve_merges_excludes_rebuilds_anchors_and_starts_keywords(
-    client, make_workspace, monkeypatch,
+    client, db_session, make_workspace, monkeypatch,
 ):
     kw_calls = []
     monkeypatch.setattr(
@@ -262,7 +262,14 @@ def test_profile_approve_merges_excludes_rebuilds_anchors_and_starts_keywords(
     blob = " ".join(profile["anchor_texts"]).lower()
     assert "manuel anchor" not in blob
     assert "portfoy izleme" in blob
-    assert kw_calls == [{"workspace_id": workspace.id}]
+    # Dispatch (2.2): yeni attempt token'ı satıra yazılır ve task'a geçirilir
+    assert len(kw_calls) == 1
+    assert kw_calls[0]["workspace_id"] == workspace.id
+    assert kw_calls[0]["attempt_id"]
+    db_session.expire_all()
+    assert db_session.get(BrandProfile, workspace.id).analysis_attempt_id == (
+        kw_calls[0]["attempt_id"]
+    )
 
 
 def test_profile_approve_inline_edit_keeps_status_in_keywords_review(
@@ -324,7 +331,9 @@ def test_profile_approve_can_defer_keywords_until_competitor_review(
     )
     assert continued.status_code == 200
     assert continued.json()["status"] == "running"
-    assert keyword_calls == [{"workspace_id": workspace.id}]
+    assert len(keyword_calls) == 1
+    assert keyword_calls[0]["workspace_id"] == workspace.id
+    assert keyword_calls[0]["attempt_id"]
 
 
 def test_active_competitor_discovery_blocks_keyword_start(
@@ -458,7 +467,7 @@ def test_keywords_approve_legacy_behavior_unchanged(client, make_workspace, monk
     calls = []
     monkeypatch.setattr(
         brand_profile_api, "_run_profile_from_keywords",
-        lambda workspace_id, keywords: calls.append((workspace_id, keywords)),
+        lambda workspace_id, keywords, attempt_id: calls.append((workspace_id, keywords)),
     )
     workspace = make_workspace(
         status="keywords_review",

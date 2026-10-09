@@ -13,7 +13,7 @@ def test_workspace_keyword_approve_stores_cleaned_keywords_and_starts_profile_ge
     )
     calls = []
 
-    def fake_run_profile_from_keywords(workspace_id, keywords):
+    def fake_run_profile_from_keywords(workspace_id, keywords, attempt_id):
         calls.append((workspace_id, keywords))
 
     monkeypatch.setattr(brand_profile_api, "_run_profile_from_keywords", fake_run_profile_from_keywords)

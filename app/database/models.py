@@ -1111,6 +1111,14 @@ class BrandProfile(Base):
     crawl_content_cache = Column(Text, nullable=True)  # AI'a verilen hazirlanmis site icerigi
     error_message = Column(Text)
 
+    # Arka plan profil analizi "attempt" token'i (plan_yapilacaklar.md 2.2).
+    # Her baslatma (create / keywords-approve / profile-approve rerun) satir
+    # kilidi altinda yeni bir uuid4 yazar; task'in butun status/profile
+    # yazimlari ve janitor yazimlari bu degere KOSULLUDUR. Token'i degismis
+    # (eski) bir attempt hicbir sey yazamaz. Mantik: app/core/site_analyzer/
+    # analysis_attempt.py. NULL = hic analiz baslatilmamis / eski satir.
+    analysis_attempt_id = Column(String(36), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
