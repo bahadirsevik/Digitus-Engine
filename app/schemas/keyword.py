@@ -90,7 +90,7 @@ class KeywordImportRequest(BaseModel):
 
 class SkippedKeywordDetail(BaseModel):
     keyword: str
-    # 'skipped_exact' | 'skipped_fuzzy' | 'batch_duplicate' | 'skipped_theme' | 'limit_exceeded'
+    # 'skipped_exact' | 'skipped_fuzzy' | 'batch_duplicate' | 'skipped_theme' | 'limit_exceeded' | 'skipped_junk'
     reason: str
     matched: Optional[str] = None  # matching existing/kept keyword text OR matched exclude theme
     # 'Geri al' akışının minimum payload'ı response'tan kurabilmesi için
@@ -116,6 +116,8 @@ class KeywordImportResponse(BaseModel):
     fuzzy_merged_in_batch: int = 0
     skipped_theme: int = 0
     skipped_limit: int = 0
+    # Ortak cop filtresi (bos / yalniz sayi-sembol) — plan 3.3
+    skipped_junk: int = 0
     pool_limit: int = 0
     pool_total: int = 0
     skipped_details: List[SkippedKeywordDetail] = Field(default_factory=list)

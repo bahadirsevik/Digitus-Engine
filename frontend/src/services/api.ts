@@ -697,6 +697,7 @@ export interface SkippedKeywordDetail {
     | 'batch_duplicate'
     | 'skipped_theme'
     | 'limit_exceeded'
+    | 'skipped_junk'
     | string
   matched?: string | null
   monthly_volume?: number | null
@@ -719,6 +720,7 @@ export interface KeywordImportResponse {
   fuzzy_merged_in_batch?: number
   skipped_theme?: number
   skipped_limit?: number
+  skipped_junk?: number
   pool_limit?: number
   pool_total?: number
   skipped_details?: SkippedKeywordDetail[]

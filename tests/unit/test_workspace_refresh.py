@@ -63,6 +63,24 @@ def test_refresh_preserves_existing_when_google_ads_has_no_exact_match():
     assert result["rows"][0]["data_source"] == "manual"
 
 
+def test_refresh_new_ideas_skip_junk_but_keep_gtin_and_model_queries():
+    ideas = [
+        SimpleNamespace(keyword="123", avg_monthly_searches=5),
+        SimpleNamespace(keyword="!!!", avg_monthly_searches=5),
+        SimpleNamespace(keyword="50%", avg_monthly_searches=5),
+        SimpleNamespace(keyword="8681234567890 sensodyne", avg_monthly_searches=5),
+        SimpleNamespace(keyword="iphone 15 pro 256", avg_monthly_searches=5),
+    ]
+
+    result = build_refreshed_workspace_keywords([], ideas, include_new_ideas=True)
+
+    assert result["diff"]["added"] == 2
+    assert [r["keyword"] for r in result["rows"]] == [
+        "8681234567890 sensodyne",
+        "iphone 15 pro 256",
+    ]
+
+
 def test_refresh_can_include_new_ideas():
     existing = [
         ExistingWorkspaceKeyword(
