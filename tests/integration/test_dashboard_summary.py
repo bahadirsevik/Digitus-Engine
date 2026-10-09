@@ -83,6 +83,38 @@ def test_summary_with_active_run_id_override(
     assert res2.json()["active_run"]["id"] == older.id
 
 
+def _relevance_step(body):
+    return next(s for s in body["pipeline"] if s["key"] == "relevance")
+
+
+def test_summary_v3_run_relevance_step_is_not_applicable(
+    client, make_workspace, make_keyword, make_scoring_run
+):
+    ws = make_workspace(status="confirmed", profile_data={"anchor_texts": ["x"]})
+    make_keyword("kw1", brand_profile_id=ws.id)
+    make_scoring_run(brand_profile_id=ws.id, status="scored", algorithm_version="v3")
+
+    res = client.get(f"/api/v1/dashboard/workspace-summary?brand_profile_id={ws.id}")
+    step = _relevance_step(res.json())
+    assert step["state"] == "skipped"
+    assert step["detail"] == "V3'te kullanılmaz"
+    assert step["path"] is None
+
+
+def test_summary_legacy_run_relevance_step_unchanged(
+    client, make_workspace, make_keyword, make_scoring_run
+):
+    ws = make_workspace(status="confirmed", profile_data={"anchor_texts": ["x"]})
+    make_keyword("kw1", brand_profile_id=ws.id)
+    run = make_scoring_run(brand_profile_id=ws.id, status="scored", algorithm_version="v2")
+
+    res = client.get(f"/api/v1/dashboard/workspace-summary?brand_profile_id={ws.id}")
+    step = _relevance_step(res.json())
+    assert step["state"] == "pending"
+    assert step["detail"] == "bekliyor"
+    assert step["path"] == f"/relevance?run_id={run.id}"
+
+
 def test_summary_cross_workspace_run_returns_404(
     client, make_workspace, make_scoring_run
 ):

@@ -1310,7 +1310,7 @@ export interface PipelineStep {
   label: string
   state: 'pending' | 'in_progress' | 'complete' | 'blocked' | 'skipped'
   detail: string | null
-  path: string
+  path: string | null
 }
 
 export interface ExportSummary {

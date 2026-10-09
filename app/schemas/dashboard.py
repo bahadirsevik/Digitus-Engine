@@ -53,7 +53,8 @@ class PipelineStep(BaseModel):
     label: str
     state: Literal["pending", "in_progress", "complete", "blocked", "skipped"]
     detail: Optional[str] = None
-    path: str
+    # None: adım uygulanamaz (örn. V3'te ilgi skoru), tıklanabilir hedef yok
+    path: Optional[str] = None
 
 
 class ExportSummary(BaseModel):

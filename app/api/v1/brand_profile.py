@@ -53,7 +53,6 @@ from app.core.policy.review import policy_effect_snapshot
 from app.core.scoring.state_machine import (
     invalidate_workspace_outputs,
     transition,
-    transition_atomic,
 )
 from app.core.telemetry import UsageCollector
 from app.core.keyword_normalize import normalize_keyword

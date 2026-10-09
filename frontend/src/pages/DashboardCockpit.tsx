@@ -297,16 +297,28 @@ export default function DashboardCockpit({ summary, loading, onChangeRun, onRefr
       </section>
 
       <section className="cockpit-timeline" aria-label="Akış durumu">
-        {summary.pipeline.map((step, idx) => (
-          <Link key={step.key} to={step.path} className={`timeline-step state-${step.state}`}>
-            <div className="step-icon">{PIPELINE_STATE_ICON[step.state]}</div>
-            <div className="step-body">
-              <small>{idx + 1}. adım</small>
-              <strong>{step.label}</strong>
-              <span>{humanize(step.detail)}</span>
+        {summary.pipeline.map((step, idx) => {
+          const body = (
+            <>
+              <div className="step-icon">{PIPELINE_STATE_ICON[step.state]}</div>
+              <div className="step-body">
+                <small>{idx + 1}. adım</small>
+                <strong>{step.label}</strong>
+                <span>{humanize(step.detail)}</span>
+              </div>
+            </>
+          )
+          const cls = `timeline-step state-${step.state}`
+          return step.path ? (
+            <Link key={step.key} to={step.path} className={cls}>
+              {body}
+            </Link>
+          ) : (
+            <div key={step.key} className={cls}>
+              {body}
             </div>
-          </Link>
-        ))}
+          )
+        })}
       </section>
 
       <section className="cockpit-shell">
