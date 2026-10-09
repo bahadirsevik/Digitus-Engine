@@ -196,6 +196,15 @@ Genel kurallar (CLAUDE.md'den):
 
 ---
 
+> **Paket 2 durumu (10.10): TAMAM.**
+> - Commit'ler: 7728838 (2.1), 0286f26 (2.2, migration 20261010_001), 4a3c007 (janitor
+>   testleri).
+> - Backend 4478 passed / 0 kırmızı.
+> - Dağıtımda `alembic merge` gerekir (sunucu dalındaki auth migration'ları); ayrıntı
+>   `.dev-team/STATE.md`.
+
+---
+
 ## Paket 3 — Kullanıcı deneyimi ve kalite (≈2 gün)
 
 ### 3.1 Dışlama kutularında kaydedilmemiş düzenlemelerin kaybolması

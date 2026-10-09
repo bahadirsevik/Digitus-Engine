@@ -397,4 +397,27 @@ made in this workstream.
     - Canlı brief akışı ekranı sunucudan geri yüklüyor (`getBriefState`), localStorage'a bağlı
       değil; bu hatadan etkilenmiyordu (Codex notu, doğrulandı).
   - Paket 1 KAPANDI (Codex: engelleyici bulgu yok).
+- 10.10 Paket 2 TAMAM.
+  - Kapı: veri modeli değiştiği için açıktı. Ancak tasarım planda kayıtlıydı, Codex iki
+    turda inceledi ve kullanıcı onayladı; bu yüzden Architect/Council yeniden koşulmadı.
+  - Commit'ler:
+    - 7728838 (2.1): negatif ∩ hedef. Yalnız açık metinsel broad/phrase/exact; önek/fuzzy
+      yok. Tamamlama güvenli olmayan kelime eklemez. Atılanlar
+      AdGenerationSet.warnings'e yazılır; arayüz yok.
+    - 0286f26 (2.2): `analysis_attempt_id` + migration 20261010_001 (idempotent). Dört
+      `_run_*` task'ının running/başarı/hata yazımları token'a koşullu; janitor koşullu
+      UPDATE + token döndürme; ölü `_run_workspace_profile_analysis` silindi; ADR-002
+      güncellendi.
+    - 4a3c007: QA bulgusu S1. Janitor'ın token ve yaş koşullarını AYRI ayrı ayırt eden 4
+      test.
+  - Tam paket: backend 4478 passed / 112 skip / 0 kırmızı (4a3c007 öncesi). Guard dosyası
+    56 passed. Frontend değişmedi (227).
+  - Mutasyon testi YAPILAMADI: production kodunu geçici bozma düzenlemesi izin
+    politikasınca engellendi. Ayırt edicilik QA'nın gerekçeli mutasyon tablosuna dayanıyor.
+  - Dev DB 20261010_001'e yükseltildi.
+  - **DAĞITIM NOTU:** sunucudaki feat/auth-login dalında lean'de olmayan migration'lar var
+    (20261006_001/002). Merge sonrası alembic iki head görür; açılıştaki
+    `alembic upgrade head` hata verir. Merge'de `alembic merge` revizyonu gerekir.
+  - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
+    görev kontrolü).
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.

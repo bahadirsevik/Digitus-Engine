@@ -330,11 +330,16 @@ Digitus-Engine-main/
   2. `fail_if_stuck()` ayni esikle **okuma aninda**: `get_profile` ve `get_workspace`
      (frontend'in yokladigi uc). Acilis supurmesi restart aninda TAZE olan satiri atlar ve
      bir daha kosmaz — o satiri kurtaran yalnizca bu okuma-ani kontroludur.
-  Bilinen artik risk (ADR-002'de kabul edildi): 15 dk'yi asan CANLI bir analiz de failed
-  gorunur; kullanici tekrar denerse `analyze_profile`'da tek-ucus kilidi olmadigi icin
-  ikinci kosu baslar ve `_run_profile_analysis`'in kosulsuz `status='draft'` yazimi
-  yenisini ezebilir. Sahada bildirilirse cozum: ayri/uzun okuma esigi + 409 tek-ucus
-  kilidi (Bolum 12'deki ADS dispatch kalibi).
+  **Eski-yazim korumasi (10.10, ADR-002 guncellemesi):**
+  - Her baslatma `brand_profiles.analysis_attempt_id` token'i yazar
+    (`app/core/site_analyzer/analysis_attempt.py`).
+  - `_run_*` task'larinin running, basari ve hata yazimlarinin HEPSI ayni transaction'da
+    token'a kosulludur.
+  - Janitor kosullu UPDATE ile yazim aninda status + yas + token'i yeniden dogrular ve
+    token'i dondurur.
+  - Kalan sinir: 15 dk'yi asan CANLI bir analiz hala failed gorunur ve gec gelen sonucu
+    atilir (kullanici tekrar baslatir). Yeni profil task'i eklerken token'i al ve her
+    yazimi `lock_if_current` / `mark_failed_if_current` ile yap.
 - **`alembic.ini` icindeki `sqlalchemy.url`**: Statik deger var, `migrations/env.py` override ediyor (sorun degil ama kafa karistirici)
 - **Backend bagimlilik pinleri eski** (2024 basi donemi); buyuk surum atlamalari dikkatli yapilmali
 - `brand_profile.py` (~1000 LOC) API katmaninda is mantigi barindiriyor; sanitization ve
