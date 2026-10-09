@@ -102,6 +102,13 @@ Genel kurallar (CLAUDE.md'den):
   kalır.
 - **Test:** V3 run'ında compute → 409 ve embedding çağrısı yok; legacy okuma bozulmadı.
 
+> **Paket 1 durumu (09.10): TAMAM.**
+> - Commit'ler:
+>   - 60f4d40, 6215c6a, f69e041, 11cd062 (planın dört işi),
+>   - QA düzeltmeleri: d5932e5, 5ab6874.
+> - Tam paket: backend 4402 passed / 0 kırmızı; frontend 224 passed.
+> - Ayrıntı: `.dev-team/STATE.md`.
+
 ---
 
 ## Paket 2 — Ürün doğruluğu (≈2-3 gün)
@@ -321,6 +328,7 @@ V3'te hiçbir screening işi oluşmuyor; dispatcher V3'te modu sabit `off` yapı
 | `intent_analyzer.py`, `pool_builder.py`, `brand_filter.py`, `competitor_filter.py`, `ai_budget.py` | Ölü |
 | `pre_filters/*` | Ölü; ama `SeoPreFilter.PRICE_ROOTS` V3 sonuç rozetlerinde canlı (`scoring.py:761`) → taşı |
 | `scoring/*_scorer.py`, `normalizer.py`, `ScoreEngine.run_scoring` | Ölü; `create_scoring_run` ve `get_top_keywords_by_channel` kalır |
+| `_run_relevance_computation` + `scoring_tasks` uyumluluk sarmalayıcısı + `scoring.py` v2 execute dalı | Erişilemez (Paket 1 QA notu); v2 relevance zinciri birlikte emekliye ayrılır |
 | `brand_defense.py`, `ai_json.py`, `state_machine.py` | CANLI, dokunma |
 
 ### Kapsam dışı bırakılanlar

@@ -374,3 +374,17 @@ made in this workstream.
 - 23.09 rev.2: Codex incelemesi (NO-GO) işlendi. K4 çelişkisi düzeltildi. Eklenenler: idempotency/attempts tablosu, içerik kopya koruması (unique kısıtı canlı denetimden sonra), kalıcı süre durumu + scenario_segments, primary_keyword_id, K10 (içerikli fikre yeniden üretim 409), K11 (brief kategori sonrası kilitli), K12 (/social/bulk flag → 410). Sıradaki: K10–K12 teyidi, sonra F1.
 - 23.09 rev.3: Codex rev.2'ye GO verdi, K10–K12 onaylandı. Eklenenler: SocialContent.brief_id + UNIQUE(idea_id) WHERE brief_id IS NOT NULL, deneme lease/heartbeat + okuma anında worker_lost uzlaştırması, format_payload (segments/slides/posts), çakışmasız süre aralıkları, statik Story. Sıradaki: F1.
 - 06.10 ADS export kelime bazlı görünüm: toplantı geri bildirimi (açıklamalar kelimeyle eşleşmiyordu). Excel'e 'Kelime Bazlı Reklamlar' sayfası + kelime_bazli_reklamlar.csv; reklam_gruplari.csv [:3] kırpması kaldırıldı. Kapı KAPALI (bilinen kalıp). Plan Codex 2 tur GO. tests/unit/test_export_ads_keyword_view.py; export testleri 56 passed. Commit YOK.
+- 09.10 Paket 1 (plan_yapilacaklar.md) TAMAM. Kapı KAPALI (bilinen kalıplar; şema değişikliği yok).
+  - Commit'ler: 60f4d40 (run-düzeyi profil uçları silindi, kullanıcı onaylı), 6215c6a
+    (Content-Disposition yardımcısı, Türkçe adda 500), f69e041 (görev takibi run'a bağlı +
+    `scoring_run_id`), 11cd062 (V3'te relevance compute 409 + otomatik tetik no-op).
+  - QA bulgularından sonra: d5932e5 (run'a geri dönüşte görev + URL task_id), 5ab6874 (dashboard
+    İlgi Skoru V3'te "skipped", ölü import).
+  - Tam paket: backend 4402 passed / 112 skip / 0 kırmızı; frontend 224 passed, lint, format ve build temiz.
+  - Bilinçli atlananlar:
+    - Channels.tsx `runAssignment` geç yanıt koruması (route'suz sayfa, Paket 5.2'de silinecek).
+    - Keywords `selectScoreRun` önbelleği (keşif yoklaması kendiliğinden düzeltiyor).
+  - Paket 5.3'e not: `_run_relevance_computation` + `scoring_tasks` uyumluluk sarmalayıcısı +
+    `scoring.py` v2 execute dalı erişilemez durumda; v2 relevance zinciri birlikte emekliye
+    ayrılabilir.
+  - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.
