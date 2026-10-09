@@ -448,6 +448,15 @@ made in this workstream.
     - Keywords `selectScoreRun` `chainRunStatus`'u sıfırlamıyor (≤3 sn eski durum).
     - Dirty A + B'den terim ekle-çıkar zinciri soft terimi geri ekleyebilir.
     - Refresh'te atılan çöp sayısı raporlanmıyor.
+  - Codex incelemesi sonrası (doğrulandı):
+    - b77bdda: başarısız analiz bildirimi "çalışıyor" + spinner + %100 + 7/6 adım gösteriyordu,
+      bantta tüm adımlar "done" görünüyordu (`stageInfo` failed'i done sayıyordu). Artık
+      durduğu adım `is-failed`, yüzde korunuyor, toast hatayı gösteriyor; 3 test eklendi.
+    - dd267ef: kararsız test bulundu ve düzeltildi. BrandProfile.exclusion testleri
+      textarea DOM'a girer girmez okuyordu; form effect'i doldurmadan önce boştu. Tam
+      pakette 6 koşunun 2'sinde kırmızıydı, düzeltme sonrası 6/6 yeşil (252 passed). Ürün
+      hatası değil, test yarışı.
+  - Paket 3 KAPANDI.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
     görev kontrolü).
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.

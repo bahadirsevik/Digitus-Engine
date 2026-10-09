@@ -280,7 +280,8 @@ Genel kurallar (CLAUDE.md'den):
 
 > **Paket 3 durumu (10.10): TAMAM.**
 > - Commit'ler: 61906df (3.1), b1f9542 (3.2), 1b4d9a3 (3.3).
-> - Backend 4525 passed / 0 kırmızı; frontend 249 passed.
+> - Codex sonrası: b77bdda (başarısız analiz bildirimi), dd267ef (kararsız test).
+> - Backend 4525 passed / 0 kırmızı; frontend 252 passed (6/6 koşu).
 > - Ayrıntı ve açık nitler: `.dev-team/STATE.md`.
 
 ---
