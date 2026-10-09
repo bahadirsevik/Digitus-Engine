@@ -510,6 +510,110 @@ def test_fail_stuck_profiles_ignores_row_restarted_after_candidate_read(
     assert token == holder["token_b"]
 
 
+# Clause-isolation tests. A normal re-dispatch bumps updated_at (onupdate), so the
+# race tests above are blocked by the age clause AND the token clause at once;
+# removing either clause alone would keep them green. The tests below leave
+# exactly ONE clause as the only thing that can stop the janitor UPDATE.
+
+
+def test_fail_if_stuck_token_clause_alone_blocks_restarted_row(db_session, make_workspace):
+    """Token-clause isolation (lazy path): B is restarted AND backdated again.
+
+    Status is running and the row is 45 min old at write time, so the status and
+    age clauses both pass; only `analysis_attempt_id IS NOT DISTINCT FROM A`
+    (row now holds B) can stop the UPDATE. Without the token clause this flips.
+    """
+    ws = make_workspace(name="janitor-token-only-lazy", status="running")
+    token_a = _dispatch(ws.id)
+    _backdate(ws.id, 45)
+    db_session.refresh(ws)           # janitor's stale copy: token A, 45 min old
+    assert ws.analysis_attempt_id == token_a
+
+    token_b = _dispatch(ws.id)       # B starts (bumps updated_at)...
+    assert token_b != token_a
+    _backdate(ws.id, 45)             # ...and the row is old again: age clause passes
+
+    assert fail_if_stuck(db_session, ws, stale_minutes=15) is False
+
+    status, error, token, *_ = _snapshot(ws.id)
+    assert status == "running"
+    assert error is None
+    assert token == token_b
+
+
+def test_fail_stuck_profiles_token_clause_alone_blocks_restarted_row(
+    db_session, make_workspace, monkeypatch,
+):
+    """Token-clause isolation (startup scan): same staging as the lazy variant."""
+    ws = make_workspace(name="janitor-token-only-startup", status="running")
+    token_a = _dispatch(ws.id)
+    _backdate(ws.id, 45)
+    real_candidates = janitor_module._stuck_candidates
+    holder = {}
+
+    def candidates_then_restart_and_backdate(db, threshold):
+        found = real_candidates(db, threshold)
+        assert found == [(ws.id, token_a)]
+        holder["token_b"] = _dispatch(ws.id)
+        _backdate(ws.id, 45)         # age + status clauses pass; only token differs
+        return found
+
+    monkeypatch.setattr(janitor_module, "_stuck_candidates", candidates_then_restart_and_backdate)
+
+    assert fail_stuck_profiles(db_session, stale_minutes=15) == 0
+
+    status, error, token, *_ = _snapshot(ws.id)
+    assert status == "running"
+    assert error is None
+    assert token == holder["token_b"]
+
+
+def test_fail_if_stuck_age_clause_alone_blocks_freshly_touched_row(db_session, make_workspace):
+    """Age-clause isolation (lazy path): same token, running, but updated_at is fresh.
+
+    Token matches (no re-dispatch) and status is running, so only the age clause
+    in the UPDATE can stop the flip. Without it the janitor would fail a live run.
+    """
+    ws = make_workspace(name="janitor-age-only-lazy", status="running")
+    token_a = _dispatch(ws.id)
+    _backdate(ws.id, 45)
+    db_session.refresh(ws)           # janitor's stale copy: 45 min old
+
+    _backdate(ws.id, 0)              # raw UPDATE: updated_at = now, token untouched
+
+    assert fail_if_stuck(db_session, ws, stale_minutes=15) is False
+
+    status, error, token, *_ = _snapshot(ws.id)
+    assert status == "running"
+    assert error is None
+    assert token == token_a
+
+
+def test_fail_stuck_profiles_age_clause_alone_blocks_freshly_touched_row(
+    db_session, make_workspace, monkeypatch,
+):
+    """Age-clause isolation (startup scan): candidate read old, then touched fresh."""
+    ws = make_workspace(name="janitor-age-only-startup", status="running")
+    token_a = _dispatch(ws.id)
+    _backdate(ws.id, 45)
+    real_candidates = janitor_module._stuck_candidates
+
+    def candidates_then_touch(db, threshold):
+        found = real_candidates(db, threshold)
+        assert found == [(ws.id, token_a)]
+        _backdate(ws.id, 0)          # fresh updated_at, same token, still running
+        return found
+
+    monkeypatch.setattr(janitor_module, "_stuck_candidates", candidates_then_touch)
+
+    assert fail_stuck_profiles(db_session, stale_minutes=15) == 0
+
+    status, error, token, *_ = _snapshot(ws.id)
+    assert status == "running"
+    assert error is None
+    assert token == token_a
+
+
 def test_janitor_rotates_token_when_it_fails_a_row(db_session, make_workspace):
     ws = make_workspace(name="janitor-rotates", status="running")
     token_a = _dispatch(ws.id)
