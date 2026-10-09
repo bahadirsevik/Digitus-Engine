@@ -159,7 +159,10 @@ scripts/site_profile_extract_test.py
 scripts/test_gemini_simple.py
 
 # Gelistirme / analiz dosyalari
-.claude/
+# .claude/: yalniz proje skill'leri (dev-team) versiyonlanir; settings.local.json
+# anahtar icerir, ASLA commit'lenmez.
+.claude/*
+!.claude/skills/
 _repo_check/
 labs/
 ACTION-PLAN.md
