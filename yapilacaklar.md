@@ -12,9 +12,6 @@ run'lar arasında karışması (§1.3).
 
 ## Kodda doğrulanmış açıklar
 
-- **Yabancı pazar (UK) desteği**: arayüzde ülke yalnız Türkiye/Almanya
-  (`frontend/src/pages/brandProfileState.ts`). UK = 2826 eklenmeli; ws60
-  (Lucibook) Türkiye geo'suyla çekildi, 2826 ile yeniden çekilmeli.
 - **Google Ads API importunda çöp/GTIN filtresi yok**: `_is_junk_keyword`
   yalnız CSV yolunda (`app/core/csv_import/google_ads_parser.py`).
 - **Reklam grubunda negatif ∩ hedef kelime kontrolü yok**: ADS üretimi hâlâ
@@ -40,7 +37,4 @@ run'lar arasında karışması (§1.3).
 - `profile/confirm` ucunda workspace doğrulaması eksik.
 - Export'ta excel/xlsx adlandırma tutarsızlığı; bazı task anahtarları run
   bazlı değil.
-- ws29/30/38/39'da `competition_score` index/10 ile yazılmış (çoğu 1,00'a
-  doymuş). V3 ADS formülü `R`'yi kullandığı için bu workspace'lerde ADS
-  skorları bozuk.
 - Migration `20260918_002` downgrade'i v3 satırında ham CHECK hatası veriyor.

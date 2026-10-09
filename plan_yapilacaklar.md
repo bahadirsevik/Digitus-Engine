@@ -1,6 +1,6 @@
 # Yapılacaklar Planı (V3)
 
-Tarih: 09.10.2026 · Dal: `deploy/lean-taslak` · Durum: TASLAK, onay bekliyor
+Tarih: 09.10.2026 (rev. 1: 1.5 ve Faz 5 çıkarıldı — test verisi önemsiz, sunucu DB'si sıfırdan) · Dal: `deploy/lean-taslak` · Durum: TASLAK, onay bekliyor
 
 Bu plan `yapilacaklar.md`'deki maddeleri koda bakarak açar: her madde için sorun,
 kanıt (dosya:satır), çözüm adımları, test ve tahmini efor. Kod incelemesi 09.10'da
@@ -84,19 +84,6 @@ Genel kurallar (CLAUDE.md'den):
   (alternatif: dokunmayıp CLAUDE.md'ye "v3 sonrası downgrade desteklenmez" notu).
 - **Test:** v3 satırı olan DB'de downgrade → beklenen mesaj.
 - **Efor:** 1 saat.
-
-### 1.5 Dört workspace'te rekabet verisi bozuk (operasyonel)
-- **Sorun:** ws29 (Dijital Ajans prod), ws30 (GR7 prod), ws38/39 (deneme)
-  `competition_score`'u index/10 ile yazılmış: yalnız 11 farklı değer, %73-88'i
-  1,00'a doymuş (DB'de 09.10'da doğrulandı). V3 ADS formülü `(1 - 0,5·R)` kullandığı
-  için bu workspace'lerde ADS skorları aşağı çekilir. Dört workspace'te de V3 run'ı
-  yok (son run'lar Temmuz-Ağustos).
-- **Çözüm:** Kod değişikliği gerekmez. `POST /brand-profile/workspaces/{id}/keywords/refresh`
-  metrikleri Google Ads'ten doğru ölçekle (`service.py:86`, index/100) yeniden
-  çeker. ws38/39 deneme ise arşivlenebilir. **Karar:** hangi workspace yenilensin,
-  hangisi arşivlensin. Google Ads API kotası dışında maliyet yok.
-- **Doğrulama:** yenileme sonrası farklı değer sayısı >11 ve max < 1,00.
-- **Efor:** 15 dk.
 
 ---
 
@@ -345,56 +332,12 @@ tablolar ve migration'lar SİLİNMEZ.
 
 ---
 
-## Faz 5 — Yabancı pazar (UK) desteği — **Karar**
+## Faz 5 — Yabancı pazar (UK) desteği — ERTELENDİ
 
-Araştırma sonucu: UK'yi listeye eklemek yalnız Google Ads metriklerini düzeltir.
-Neredeyse tüm AI promptları Türkçe yazılmış ve Türkçe çıktı istiyor. Hiçbir yerde
-dil parametresi yok. Bu yüzden bir UK workspace'i bugün şunları alır:
-
-- Doğru hacim, trend ve rekabet verisi.
-- Ama Türkçe yazılmış marka profili ve tohum kelimeler
-  (`profile_extractor.py:65, 120, 206, 242`).
-- "Türkiye pazarındaki" rakipler (`competitor_discovery.py:130-134`).
-- Türkçe reklam, blog ve sosyal içerik.
-- Türkçe yazıldığı için İngilizce kelimelerle hiç eşleşmeyen dışlama temaları.
-- 81 ile göre çalışan lokasyon filtresi. Açılırsa "van", "batman" gibi İngilizce
-  kelimeleri yanlışlıkla siler.
-
-### 5-A Asgari: yalnız metrikler (yarım gün)
-1. `brandProfileState.ts:46-54`: UK 2826 + İngilizce 1000.
-2. `workspace_refresh.py:71-72, 87-88`: yenilemede satırın eski geo/dil etiketini değil
-   workspace'inkini yaz.
-3. `/google-ads/import` geo/dil almıyor (`google_ads.py:656-666`) → workspace
-   değerini geçir veya ucu kaldır.
-4. Dil takma adları 1033/2057 → 1000 (`google_ads.py:27-29`).
-5. ws60 (Lucibook): geo 2826 / dil 1000'e çek, keyword yenile.
-
-### 5-B Tam destek (3-5 gün, ücretli doğrulama koşusu gerekir)
-1. **Pazar ve dil seçimi.** Workspace oluşturma sihirbazında seçilsin; bugün profil
-   çıkarımı seçimden ÖNCE çalışıyor (`brand_profile.py:736-759`). TLD'den varsayılan
-   önerilsin (`.co.uk` → 2826/1000).
-2. **Tek locale haritası.** Backend'de 2792→tr, 2826→en-GB, 2276→de. Şu yerlerde
-   kullanılır:
-   - Profil çıkarımı promptları ve crawler'ın `Accept-Language` başlığı
-     (`crawler.py:104`).
-   - Rakip keşfi metni.
-   - ADS, SEO/GEO ve sosyal üreticiler: açık bir çıktı dili satırı.
-3. **Dile duyarlı doğrulayıcılar.**
-   - ADS iddia ve kısaltma kuralları (`validators.py:32-44, 350-393`; `_tr_lower`
-     "IPHONE"u "ıphone" yapıyor).
-   - SEO soru başlığı tespiti (`seo_checker.py:60-65`).
-4. **Kurallar ve listeler.**
-   - Lokasyon filtresi: geo ≠ 2792 ise `none` dışındaki modlar kapalı.
-   - Marka savunması negatiflerine İngilizce set (`brand_defense.py:45-57`).
-   - Türkçe ek kırpması dil Türkçe değilse kapalı (`keyword_dedup.py:63`).
-5. **V3 motoru (hassas).** `firm_block`'a yalnız Türkiye/Türkçe DIŞINDA bir
-   "Pazar/Dil" satırı eklenir; böylece mevcut TR hash'leri ve tazelik değişmez.
-   Prompt sürüm artışı, parity testi güncellemesi ve benchmark ile yeniden doğrulama
-   gerekir.
-
-**Karar:** 5-A şimdi mi yapılsın? 5-B için gerçek bir yabancı müşteri talebi var mı?
-(Yoksa 5-B ertelenir ve UK seçeneği "yalnız metrikler; içerik Türkçe" uyarısıyla
-açılır.)
+09.10 kullanıcı kararı: şu an gerek yok (Lucibook tek seferlik). Araştırma bulgusu
+kayıt için: UK eklemek yalnız Google Ads metriklerini düzeltir; profil, rakip keşfi
+ve tüm içerik promptları Türkçe çıktı ister, dil parametresi hiçbir prompta ulaşmaz.
+Talep gelirse ayrı plan yazılır.
 
 ---
 
@@ -404,20 +347,17 @@ açılır.)
 |---|---|---|
 | 1.1 | Run üzerinden onay ucu kaldırılsın mı, korunsun mu? | Kaldır |
 | 1.4 | Migration downgrade'ine koruma eklensin mi? | Ekle (yalnız downgrade gövdesi) |
-| 1.5 | ws29/30 yenilensin, ws38/39 arşivlensin mi? | Evet |
 | 2.3 | Etiket metinleri; tek mi iki mi "Kaydet"? | Tek kaydet + yeni etiketler |
 | 2.4 | ADR-002 "Seçenek A" geri alınıp kilit eklensin mi? | Evet; ADR güncellenir |
 | 3.3 | Corpus screening kaldırılsın mı? | Evet; V3'te ölü, iki servisi boşa çalıştırıyor |
-| 5 | Yabancı pazar: 5-A şimdi mi, 5-B ne zaman? | 5-A şimdi + uyarı; 5-B talep gelince |
 
 ## 7. Önerilen sıra ve toplam efor
 
-1. **Faz 1:** 1.1–1.5, yaklaşık 1 gün.
+1. **Faz 1:** 1.1–1.4, yaklaşık 1 gün.
 2. **Faz 2:** 2.1, 2.2, 2.5 kararsız; 2.3 ve 2.4 karar sonrası. Yaklaşık 4–5 gün.
 3. **Faz 3:** 3.1 ve 3.2 hemen; 3.3 karar sonrası; 3.4 en son. Yaklaşık 3–4 gün.
 4. **Faz 4:** yaklaşık 1,5 gün. Faz 3'ten önce de yapılabilir; büyük silmeleri CI
    altında yapmak daha güvenli.
-5. **Faz 5-A:** yarım gün.
 
-Toplam: yaklaşık 10–12 iş günü (Faz 5-B hariç). Her madde ayrı commit; her fazın
+Toplam: yaklaşık 10–11 iş günü. Her madde ayrı commit; her fazın
 sonunda tam test paketi.
