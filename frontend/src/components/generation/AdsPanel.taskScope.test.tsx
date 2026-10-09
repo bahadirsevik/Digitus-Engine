@@ -161,6 +161,51 @@ describe('AdsPanel görev kapsamı (run bazlı)', () => {
     expect(storedTasks()['ads_task:10:2']).toBeUndefined()
   })
 
+  it('A -> B -> A: B’deyken gelen geç görev, A’ya dönünce gösterilir ve yoklanır', async () => {
+    let resolveStart: (value: unknown) => void = () => {}
+    mocks.createAdsRsa.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve
+        })
+    )
+
+    const { rerender } = render(<AdsPanel runId={1} />)
+    fireEvent.click(await screen.findByText('Reklam Üret'))
+    rerender(<AdsPanel runId={2} />)
+    expect(await screen.findByText('Reklam Üret')).toBeTruthy()
+
+    await act(async () => {
+      resolveStart({ data: { task_id: 'task-late', generation_set_id: 9 } })
+    })
+    expect(storedTasks()['ads_task:10:1']).toBe('task-late')
+
+    rerender(<AdsPanel runId={1} />)
+    expect(await screen.findByText('Üretiliyor…')).toBeTruthy()
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-late', 10))
+  })
+
+  it('A’nın tamamlanmış görevi A -> B -> A sonrası yeniden yoklanmaz', async () => {
+    localStorage.setItem(STORAGE, JSON.stringify({ 'ads_task:10:1': 'task-A' }))
+    mocks.getStatus.mockImplementation((taskId: string) =>
+      Promise.resolve({
+        data: { task_id: taskId, status: 'completed', progress: 100, ...TASKS[taskId] },
+      })
+    )
+
+    const { rerender } = render(<AdsPanel runId={1} />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-A', 10))
+    await waitFor(() => expect(storedTasks()['ads_task:10:1']).toBeUndefined())
+
+    rerender(<AdsPanel runId={2} />)
+    expect(await screen.findByText('Reklam Üret')).toBeTruthy()
+    mocks.getStatus.mockClear()
+    rerender(<AdsPanel runId={1} />)
+    expect(await screen.findByText('Reklam Üret')).toBeTruthy()
+
+    expect(mocks.getStatus).not.toHaveBeenCalledWith('task-A', 10)
+  })
+
   it('B’de başlatılan görev A’nın kaydını ezmez', async () => {
     localStorage.setItem(STORAGE, JSON.stringify({ 'ads_task:10:1': 'task-A' }))
     mocks.createAdsRsa.mockResolvedValue({ data: { task_id: 'task-B', generation_set_id: 7 } })

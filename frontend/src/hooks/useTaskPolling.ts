@@ -61,7 +61,13 @@ export function useScopedTaskId(
     key: storageKey,
     id: getStoredTaskId(storageKey),
   }))
-  const taskId = entry.key === storageKey ? entry.id : getStoredTaskId(storageKey)
+  let taskId = entry.id
+  if (entry.key !== storageKey) {
+    // Anahtar değişti: önbellekteki kayıt (bu anahtarın önceki ziyaretinden kalma olabilir)
+    // kullanılmaz; yeni anahtarın kaydı depodan taze okunur ve aynı render'da state'e alınır.
+    taskId = getStoredTaskId(storageKey)
+    setEntry({ key: storageKey, id: taskId })
+  }
   const setTaskId = useCallback(
     (id: string | null) => setEntry({ key: storageKey, id }),
     [storageKey]

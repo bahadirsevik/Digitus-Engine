@@ -148,14 +148,24 @@ export default function Channels() {
     return resultData?.current_message
   }, [assignPolling.resultData])
 
+  // URL'deki task_id yalnız yönlendirildiği run için ve yalnız bir kez uygulanır;
+  // başka bir run'ın anahtarı altına asla yazılmaz.
+  const appliedUrlTaskRef = useRef<string | null>(null)
   useEffect(() => {
     const taskIdFromUrl = searchParams.get('task_id')
-    if (taskIdFromUrl) {
+    const urlScope = taskIdFromUrl ? `${requestedRunId}:${taskIdFromUrl}` : null
+    if (
+      taskIdFromUrl &&
+      requestedRunId !== null &&
+      requestedRunId === selectedRun &&
+      appliedUrlTaskRef.current !== urlScope
+    ) {
+      appliedUrlTaskRef.current = urlScope
       setAssignTaskId(taskIdFromUrl)
     } else {
       setAssignTaskId(getStoredTaskId(assignTaskStorageKey))
     }
-  }, [searchParams, assignTaskStorageKey, setAssignTaskId])
+  }, [searchParams, requestedRunId, selectedRun, assignTaskStorageKey, setAssignTaskId])
 
   const fetchRuns = useCallback(async () => {
     if (!activeWorkspace?.id) {
