@@ -413,6 +413,9 @@ cd frontend && npm run dev
 # Frontend kalite kontrolleri (commit oncesi zorunlu)
 cd frontend && npm run lint && npm run format:check && npm run build && npm run test
 
+# Backend lint (CI ile ayni; test container'inda)
+docker-compose -f docker-compose.test.yml run --rm --no-deps test_app sh -c "pip install -q ruff==0.6.9 && ruff check ."
+
 # Celery worker
 celery -A app.tasks.celery_app worker --loglevel=info
 
@@ -748,8 +751,12 @@ docker-compose restart frontend
 ```
 
 ### CI/CD Pipeline
-- **Mevcut durumda CI/CD yok**: `.github/` dizini bulunmuyor
-- GitHub Actions ile test, lint ve deploy pipeline'i eklenmeli
+- GitHub Actions: `.github/workflows/ci.yml` (push `deploy/lean-taslak` + pull_request;
+  secret yok, ucretli AI cagrisi yok, deploy otomasyonu YOK). 3 is:
+  `lint-backend` (`ruff check .`), `test-backend` (izole `docker-compose.test.yml`:
+  `alembic upgrade head && pytest tests/`), `frontend` (`npm ci` + lint + format:check + build + test)
+- Ruff: `ruff==0.6.9` (`requirements-dev.txt`, prod imajina girmez), kurallar `ruff.toml`:
+  yalniz `E9, F63, F7, F82` (sozdizimi/gecersiz karsilastirma/tanimsiz isim); format/stil kurali YOK
 
 ---
 
@@ -778,14 +785,14 @@ docker-compose restart frontend
   API anahtarlarina dikkat
 
 ### Altyapi
-- **CI/CD pipeline'i yok** (GitHub Actions eklenmeli)
+- CI var (Bolum 9); deploy otomasyonu bilincli olarak yok
 - **Site profil analizi BackgroundTasks ile web process icinde** — takili profil sorunu
   ADR-002 ile kapandi (startup janitoru + okuma-ani `fail_if_stuck`); Celery'ye tasima
   BILINCLI OLARAK REDDEDILDI, bkz. Bolum 4 Teknik Borclar
 - Celery beat schedule'da aktif periyodik gorev tanimlanmamis (sadece ornek/yorum)
 
 ### Kod Kalitesi
-- Backend'de linter/formatter yok (ruff onerisi); frontend'de ESLint 8 EOL, 9'a gecis gerekli
+- Backend'de yalniz sinirli ruff (E9/F63/F7/F82), formatter yok; frontend'de ESLint 8 EOL, 9'a gecis gerekli
 - Type checking araci (mypy) kullanilmiyor
 - `brand_profile.py` ~1000 satir — is mantigi core'a tasinmali
 
