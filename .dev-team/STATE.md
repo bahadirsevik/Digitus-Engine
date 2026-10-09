@@ -389,7 +389,12 @@ made in this workstream.
     ayrılabilir.
   - 10.10 Codex incelemesi sonrası 6c13a42: başlatma isteği sürerken sayfadan çıkılırsa görev
     kimliği kayboluyordu. Kimlik artık başlatıldığı run'ın anahtarına her zaman yazılıyor.
-    Kapsam: ADS generate ve grup regenerate, SEO bulk, SocialStepper içerik; ayrıca Channels.tsx'e
-    tek satır. Unmount testleri eski kodda kırmızı; frontend 227 passed. Backend
-    değişmedi, en son tam paket 4402.
+    Kapsam: ADS generate ve grup regenerate, SEO bulk. Unmount testleri eski kodda kırmızı;
+    frontend 227 passed. Backend değişmedi, en son tam paket 4402.
+    - SocialStepper ve Channels.tsx'e de aynı düzeltme yapıldı, ama ikisi de canlı değil:
+      `/social` ekranı SocialBriefWorkspace kullanıyor (SocialStepper yalnız `ds-entry.ts`'te);
+      Channels.tsx route'suz.
+    - Canlı brief akışı ekranı sunucudan geri yüklüyor (`getBriefState`), localStorage'a bağlı
+      değil; bu hatadan etkilenmiyordu (Codex notu, doğrulandı).
+  - Paket 1 KAPANDI (Codex: engelleyici bulgu yok).
   - Sıradaki: Paket 2, kullanıcı sonuçları gördükten sonra.
