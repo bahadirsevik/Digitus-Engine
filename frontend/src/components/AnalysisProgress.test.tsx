@@ -29,7 +29,7 @@ function renderBanner(props: {
 /** Banner'daki adımları [etiket, durum] sırasıyla döndürür. */
 function stepStates(): Array<[string, string]> {
   return Array.from(document.querySelectorAll('.kwx-step')).map((el) => {
-    const state = /is-(done|active|todo)/.exec(el.className)?.[1] ?? '?'
+    const state = /is-(done|active|todo|failed)/.exec(el.className)?.[1] ?? '?'
     return [(el.textContent ?? '').trim(), state]
   })
 }
@@ -124,6 +124,61 @@ describe('AnalysisProgress V3 steps', () => {
     expect(screen.getByText('Analiz sırasında hata oluştu')).toBeInTheDocument()
     expect(screen.getByText('patladı')).toBeInTheDocument()
     expect(stepStates().some(([, s]) => s === 'active')).toBe(false)
+  })
+
+  it('failed stage is not shown as completed: steps stop at the failing one', () => {
+    renderBanner({ stage: 'failed', taskProgress: 40, channels: ALL, errorMessage: 'patladı' })
+    expect(stepStates()).toEqual([
+      ['Analiz başladı', 'done'],
+      ['Kelime aileleri', 'done'],
+      ['ADS', 'failed'],
+      ['SEO', 'todo'],
+      ['SOCIAL', 'todo'],
+      ['Havuz teslimi', 'todo'],
+    ])
+    const fill = document.querySelector('.kwx-progressbar-fill') as HTMLElement
+    expect(fill.style.width).toBe('40%')
+    expect(document.querySelector('.kwx-banner .kwx-spin')).toBeNull()
+  })
+
+  it('toast: failed task is not shown as running', () => {
+    render(
+      <MemoryRouter>
+        <AnalysisToast
+          stage="failed"
+          taskProgress={40}
+          channels={ALL}
+          message="ADS Niche motoru çalışıyor"
+          errorMessage="Motor hatası"
+          onDismiss={vi.fn()}
+          onOpen={vi.fn()}
+        />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Analiz başarısız oldu')).toBeInTheDocument()
+    expect(screen.queryByText('Yapay zekâ analizi çalışıyor')).not.toBeInTheDocument()
+    expect(screen.getByText('Motor hatası')).toBeInTheDocument()
+    expect(screen.getByText('3/6 adım')).toBeInTheDocument()
+    expect(screen.getByText('40%')).toBeInTheDocument()
+    expect(document.querySelector('.kwx-toast .kwx-spin')).toBeNull()
+    expect(document.querySelector('.kwx-toast.is-failed')).not.toBeNull()
+    expect(screen.queryByText('Bu işlem 5 dakikadan uzun sürebilir.')).not.toBeInTheDocument()
+  })
+
+  it('toast: failed without an error message names the step it stopped at', () => {
+    render(
+      <MemoryRouter>
+        <AnalysisToast
+          stage="failed"
+          taskProgress={85}
+          channels={{ ads: false, seo: false, social: true }}
+          onDismiss={vi.fn()}
+          onOpen={vi.fn()}
+        />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('SOCIAL adımında durdu')).toBeInTheDocument()
+    expect(screen.getByText('2/3 adım')).toBeInTheDocument()
   })
 
   it('toast: shows the engine message and step counter', () => {

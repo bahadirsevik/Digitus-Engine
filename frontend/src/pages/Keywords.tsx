@@ -1290,6 +1290,7 @@ export default function Keywords() {
           taskProgress={assignPolling.progress || 0}
           channels={chainChannels}
           message={chainMessage}
+          errorMessage={assignPolling.errorMessage}
           onDismiss={() => setToastOpen(false)}
           onOpen={() => setKeywordView('scores', selectedScoreRunId)}
         />

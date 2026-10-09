@@ -46,7 +46,8 @@ function buildSteps(channels?: AnalysisChannels): StepDef[] {
 }
 
 function stageInfo(stage: ChainStage, taskProgress: number, steps: StepDef[]) {
-  if (stage === 'assigning') {
+  // Hata tamamlanma DEĞİLDİR: durduğu adım ve yüzde korunur
+  if (stage !== 'done') {
     const pct = Math.max(0, Math.min(100, Math.round(taskProgress)))
     let active = 0
     steps.forEach((step, i) => {
@@ -151,17 +152,20 @@ export function AnalysisBanner({
         </div>
 
         <div className="kwx-progressbar">
-          <div className="kwx-progressbar-fill" style={{ width: `${failed ? 100 : pct}%` }} />
+          <div className="kwx-progressbar-fill" style={{ width: `${pct}%` }} />
         </div>
 
         <div className="kwx-steps">
           {steps.map(({ key, label }, i) => {
-            const state = done || i < active ? 'done' : i === active && !failed ? 'active' : 'todo'
+            const state =
+              done || i < active ? 'done' : i === active ? (failed ? 'failed' : 'active') : 'todo'
             return (
               <div key={key} className={`kwx-step is-${state}`}>
                 <span className="kwx-step-dot">
                   {state === 'done' ? (
                     <Check size={10} strokeWidth={3} />
+                  ) : state === 'failed' ? (
+                    <X size={10} strokeWidth={3} />
                   ) : state === 'active' ? (
                     <span className="kwx-spin">
                       <RefreshCw size={11} strokeWidth={2.6} />
@@ -190,6 +194,7 @@ export function AnalysisToast({
   taskProgress,
   channels,
   message,
+  errorMessage,
   onDismiss,
   onOpen,
 }: {
@@ -197,22 +202,29 @@ export function AnalysisToast({
   taskProgress: number
   channels?: AnalysisChannels
   message?: string | null
+  errorMessage?: string | null
   onDismiss: () => void
   onOpen: () => void
 }) {
   const done = stage === 'done'
+  const failed = stage === 'failed'
   const steps = buildSteps(channels)
   const { active, pct } = stageInfo(stage, taskProgress, steps)
+  const stepLabel = steps[Math.min(active, steps.length - 1)].label
   const activeLabel = done
     ? 'Tüm adımlar tamamlandı'
-    : message || steps[Math.min(active, steps.length - 1)].label
+    : failed
+      ? errorMessage || `${stepLabel} adımında durdu`
+      : message || stepLabel
 
   return (
-    <div className={`kwx-toast${done ? ' is-done' : ''}`}>
+    <div className={`kwx-toast${done ? ' is-done' : ''}${failed ? ' is-failed' : ''}`}>
       <div className="kwx-toast-head">
         <span className="kwx-toast-icon">
           {done ? (
             <Check size={18} strokeWidth={2.6} />
+          ) : failed ? (
+            <X size={18} strokeWidth={2.6} />
           ) : (
             <span className="kwx-spin">
               <RefreshCw size={16} strokeWidth={2.4} />
@@ -221,7 +233,11 @@ export function AnalysisToast({
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="kwx-toast-title">
-            {done ? 'Analiz tamamlandı' : 'Yapay zekâ analizi çalışıyor'}
+            {done
+              ? 'Analiz tamamlandı'
+              : failed
+                ? 'Analiz başarısız oldu'
+                : 'Yapay zekâ analizi çalışıyor'}
           </div>
           <div className="kwx-toast-sub">{activeLabel}</div>
         </div>
@@ -239,7 +255,9 @@ export function AnalysisToast({
         <div className="kwx-toast-bar">
           <div className="kwx-progressbar-fill" style={{ width: `${pct}%` }} />
         </div>
-        {!done && <div className="kwx-toast-warn">Bu işlem 5 dakikadan uzun sürebilir.</div>}
+        {!done && !failed && (
+          <div className="kwx-toast-warn">Bu işlem 5 dakikadan uzun sürebilir.</div>
+        )}
         <button type="button" className="kwx-toast-open" onClick={onOpen}>
           {done ? 'Skorları gör' : 'Ayrıntıları gör'}
         </button>

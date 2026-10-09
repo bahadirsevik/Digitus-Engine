@@ -121,6 +121,9 @@ describe('Keywords V3 analysis chain', () => {
     await startAnalysis()
 
     expect(await screen.findByText('Analiz sırasında hata oluştu')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('motor çöktü')).toBeInTheDocument())
+    // Hata hem ana bantta hem sağ üst bildirimde görünür; bildirim "çalışıyor" demez
+    await waitFor(() => expect(screen.getAllByText('motor çöktü')).toHaveLength(2))
+    expect(screen.getByText('Analiz başarısız oldu')).toBeInTheDocument()
+    expect(screen.queryByText('Yapay zekâ analizi çalışıyor')).not.toBeInTheDocument()
   })
 })
