@@ -58,7 +58,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.social.idea_flow import _build_plan_coverage_snapshot
-from app.core.social.idea_planner import build_social_idea_generation_plan
+from app.core.social.idea_planner import (
+    SocialIdeaGenerationPlan,
+    build_social_idea_generation_plan,
+)
 from app.core.social.idea_retry_planner import build_social_idea_retry_plan
 from app.core.social.idea_retry_flow import (
     SocialIdeaRetryFlowError,

@@ -270,10 +270,6 @@ def order_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(rows, key=order_key)
 
 
-def order_rows_volume_only(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return sorted(rows, key=volume_order_key)
-
-
 # ── A6: aile tekillestirme (skorlama SONRASI) ───────────────────────────────
 
 
