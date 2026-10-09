@@ -181,6 +181,29 @@ def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
     raise error_cls(message)
 
 
+def _id_problem(items: Sequence[Any], wanted: set,
+                id_field: str) -> Optional[str]:
+    """Cevaptaki ID'lerin ilk yapisal sorunu; sorun yoksa None.
+
+    Fazladan / bilinmeyen ID sessizce yok SAYILMAZ; tekrar eden ID'de
+    "sonuncu kazanir" YAPILMAZ (hangi kaydin dogru oldugu bilinemez).
+    """
+    seen: set = set()
+    for item in items:
+        if not isinstance(item, Mapping) or id_field not in item:
+            continue
+        try:
+            ident = int(item[id_field])
+        except (TypeError, ValueError):
+            return f"cevapta sayisal olmayan id: {item.get(id_field)!r}"
+        if ident not in wanted:
+            return f"cevapta istenmeyen id {ident} — yapisal hata"
+        if ident in seen:
+            return f"cevapta tekrar eden id {ident} — yapisal hata"
+        seen.add(ident)
+    return None
+
+
 def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
               rows: Sequence[Mapping[str, Any]],
               build_prompt: Callable[[Sequence[Mapping[str, Any]]], str],
@@ -246,6 +269,16 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
                     item.setdefault(response_id_field, int(raw_id))
                     items.append(item)
             if items is not None:
+                # Istenmeyen / tekrar eden / sayisal olmayan ID: hangi kaydin
+                # dogru oldugu bilinemez, cevap BUTUNUYLE reddedilir — ama
+                # parse hatasi gibi ayni batch yeniden sorulur. Yakin-ikiz
+                # kelimelerde (ör. "financial bookkeeping" / "... software")
+                # model ara sira ID'yi kaydirir; tek kayma koşuyu öldürmez.
+                problem = _id_problem(items, wanted, response_id_field)
+                if problem is not None:
+                    last_validation = problem
+                    items = None
+                    continue
                 break
         if items is None:
             if last_validation is not None:
@@ -260,27 +293,12 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
                 f"{stage}: cevap {MAX_ATTEMPTS} denemede de kirpik/bozuk "
                 f"('{result_key}' listesi yok) — DEVAM EDILMEDI")
 
-        seen_here: set = set()
+        # ID'ler dongude `_id_problem` ile dogrulandi: hepsi sayisal, istenen
+        # kume icinde ve tekil.
         for item in items:
             if not isinstance(item, Mapping) or response_id_field not in item:
                 continue
-            try:
-                ident = int(item[response_id_field])
-            except (TypeError, ValueError):
-                raise error_cls(
-                    f"{stage}: cevapta sayisal olmayan id: "
-                    f"{item.get(response_id_field)!r}")
-            if ident not in wanted:
-                # Fazladan / bilinmeyen ID: sessizce yok SAYILMAZ.
-                raise error_cls(
-                    f"{stage}: cevapta istenmeyen id {ident} — yapisal hata")
-            if ident in seen_here:
-                # Ayni cevapta TEKRAR EDEN id: sessizce "sonuncu kazanir"
-                # YAPILMAZ; hangi kaydin dogru oldugu bilinemez.
-                raise error_cls(
-                    f"{stage}: cevapta tekrar eden id {ident} — yapisal hata")
-            seen_here.add(ident)
-            collected[ident] = dict(item)
+            collected[int(item[response_id_field])] = dict(item)
 
     ask(rows)
     missing = [ident for ident in expected if ident not in collected]
