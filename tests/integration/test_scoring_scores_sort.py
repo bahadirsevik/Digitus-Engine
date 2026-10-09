@@ -30,6 +30,31 @@ def _scores(client, run_id, workspace_id, **params):
     return response.json()
 
 
+def test_xlsx_export_with_non_latin1_run_name_returns_200(
+    client, make_workspace, make_scoring_run, make_keyword, make_keyword_score
+):
+    ws = make_workspace(name="A", status="confirmed")
+    run = make_scoring_run(
+        brand_profile_id=ws.id,
+        name='Şişli İçerik "test"',
+        status="scored",
+        algorithm_version="v2",
+    )
+    _seed_score(make_keyword, make_keyword_score, workspace_id=ws.id, run_id=run.id, keyword="a", ads_score=1)
+
+    response = client.get(
+        f"/api/v1/scoring/runs/{run.id}/export/xlsx",
+        params={"brand_profile_id": ws.id},
+    )
+
+    assert response.status_code == 200
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("attachment; filename=\"")
+    assert "filename*=UTF-8''" in disposition
+    assert "%C5%9E" in disposition  # Ş
+    assert disposition.count('"') == 2  # kullanici tirnaklari header'i bozmaz
+
+
 def test_scores_sort_ads_score_desc_nulls_last(
     client, make_workspace, make_scoring_run, make_keyword, make_keyword_score
 ):

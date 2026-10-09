@@ -31,6 +31,7 @@ from app.core.workspace import verify_workspace
 from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
 from app.dependencies import get_db
+from app.core.http_headers import content_disposition
 from app.schemas.keyword import (
     KeywordCreate,
     KeywordImportRequest,
@@ -239,7 +240,7 @@ def export_keyword_pool_xlsx(
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 

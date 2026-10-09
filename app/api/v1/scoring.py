@@ -13,6 +13,7 @@ from sqlalchemy import asc, desc, func, nullslast
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
+from app.core.http_headers import content_disposition
 from app.core.scoring.score_engine import ScoreEngine
 from app.core.trial_authorization import (
     authorization_record, lock_workspace, matching_combination,
@@ -1039,5 +1040,5 @@ def export_scoring_xlsx(
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )

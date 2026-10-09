@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_ai
+from app.core.http_headers import content_disposition
 from app.generators.ai_service import AIService
 from app.core.channel.channel_engine import ChannelEngine
 from app.core.channel.assignment_dispatcher import (
@@ -346,7 +347,7 @@ def export_channel_pool_xlsx(
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
