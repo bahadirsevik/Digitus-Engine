@@ -15,6 +15,8 @@ import {
   splitNewlineItems,
   extractErrorMessage,
   GEO_OPTIONS,
+  HARD_EXCLUDE_HELP,
+  HARD_EXCLUDE_LABEL,
   LANGUAGE_OPTIONS,
 } from '../brandProfileState'
 import LocationPolicyControl from '../../components/LocationPolicyControl'
@@ -266,8 +268,15 @@ export default function ProfileReviewCards({
           onChange={(e) => setMustHave(e.target.value)}
         />
         <div style={{ height: 12 }} />
-        <label className="bpx-label">Mutlaka olmaması gerekenler</label>
+        <label className="bpx-label" htmlFor="review-hard-exclude">
+          {HARD_EXCLUDE_LABEL}
+        </label>
+        <p className="bpx-section-hint" id="review-hard-exclude-help">
+          {HARD_EXCLUDE_HELP}
+        </p>
         <textarea
+          id="review-hard-exclude"
+          aria-describedby="review-hard-exclude-help"
           className="bpx-textarea"
           rows={2}
           placeholder='Dışlanacak konuları yazın — örn. "kripto para, temettü takibi"'

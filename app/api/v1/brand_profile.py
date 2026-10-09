@@ -285,6 +285,28 @@ def _merge_exclude_themes(user_excluded: Any, ai_excluded: Any) -> List[str]:
     )
 
 
+def _preserve_hard_exclusions(
+    sanitized: Dict[str, Any], excluded_info: Any
+) -> Dict[str, Any]:
+    """exclude_themes = kesin dışlama terimleri (B) ∪ kullanıcının A listesi.
+
+    Kutu A ("Kaçınılacak temalar") yalnız kendi terimlerini gönderir; kutu B
+    ("Kesin dışlama" = `excluded_info`) terimlerini `apply_competitor_review`
+    exclude_themes'e de birleştirir. Eski/bayat bir istemci listesi B'nin yeni
+    eklediği terimleri ezmesin diye bu birleşim SUNUCUDA yeniden kurulur.
+    Sıra deterministiktir (B önce — `apply_competitor_review` ile aynı), tema
+    kümesi değişmedikçe `policy_version` artmaz. `excluded_info` boşsa dokunmaz.
+    """
+    from app.core.policy.topic_policy import merge_normalized
+
+    hard_terms = _parse_excluded_info(excluded_info)
+    if hard_terms:
+        sanitized["exclude_themes"] = merge_normalized(
+            hard_terms, sanitized.get("exclude_themes")
+        )
+    return sanitized
+
+
 def _normalize_seed_keywords(keywords: List[str]) -> List[str]:
     """Normalize and de-duplicate user-approved seed keywords; preserve display text."""
     seen = set()
@@ -311,12 +333,14 @@ def _generate_anchor_texts(profile: Dict[str, Any]) -> List[str]:
 def _apply_profile_review_data(
     incoming: Dict[str, Any],
     existing: Dict[str, Any],
+    excluded_info: Any = None,
 ) -> Dict[str, Any]:
     """Profil-önce akışın 5-kart onayı: kart alanları düzenlenebilir.
 
     `_sanitize_profile_data`'dan farkı: target_audience ve brand_summary bu
     akışta kullanıcı tarafından DÜZENLENEBİLİR (kart 1 ve 4). company_name ve
     sector kilitli kalır. anchor_texts her zaman yeniden türetilir.
+    `excluded_info` verilirse kesin dışlama terimleri exclude_themes'te korunur.
     """
     sanitized: Dict[str, Any] = dict(existing or {})
     incoming = incoming or {}
@@ -335,6 +359,7 @@ def _apply_profile_review_data(
         else:
             sanitized[field] = _normalize_list_items(existing.get(field, []))
 
+    _preserve_hard_exclusions(sanitized, excluded_info)
     _apply_location_policy(sanitized, incoming, existing)
     sanitized["anchor_texts"] = _generate_anchor_texts(sanitized)
     return sanitized
@@ -342,7 +367,8 @@ def _apply_profile_review_data(
 
 def _sanitize_profile_data(
     incoming: Dict[str, Any],
-    existing: Dict[str, Any]
+    existing: Dict[str, Any],
+    excluded_info: Any = None,
 ) -> Dict[str, Any]:
     """
     Protect locked fields and normalize editable lists.
@@ -366,6 +392,7 @@ def _sanitize_profile_data(
         else:
             sanitized[field] = _normalize_list_items(existing.get(field, []))
 
+    _preserve_hard_exclusions(sanitized, excluded_info)
     _apply_location_policy(sanitized, incoming, existing)
     sanitized["anchor_texts"] = _generate_anchor_texts(sanitized)
 
@@ -864,7 +891,9 @@ def approve_workspace_profile(
 
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
-    profile = _apply_profile_review_data(incoming_data, existing_data)
+    profile = _apply_profile_review_data(
+        incoming_data, existing_data, excluded_info=workspace.excluded_info
+    )
     # Kart düzenlemeleri TEK yazma kapısından (anchor diff + sürümleme)
     apply_profile_data_update(db, workspace, profile)
 
@@ -937,7 +966,9 @@ def preview_workspace_anchors(
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
 
     if isinstance(request.profile_data, dict) and request.profile_data:
-        profile = _apply_profile_review_data(request.profile_data, existing_data)
+        profile = _apply_profile_review_data(
+            request.profile_data, existing_data, excluded_info=workspace.excluded_info
+        )
     else:
         profile = existing_data
 
@@ -984,7 +1015,12 @@ def confirm_workspace(
 
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
-    sanitized = _sanitize_profile_data(incoming_data, existing_data)
+    # B'nin (excluded_info) kesin dışlama terimleri bayat istemci listesiyle
+    # ezilmesin: sunucu exclude_themes'i kullanıcı A terimleri ∪ B terimleri
+    # olarak yeniden kurar (plan_yapilacaklar 3.1).
+    sanitized = _sanitize_profile_data(
+        incoming_data, existing_data, excluded_info=workspace.excluded_info
+    )
     _ensure_confirmable_profile(sanitized)
     # TEK yazma kapısı: anchor diff → anchor_version + çıktı stale (plan v13)
     apply_profile_data_update(db, workspace, sanitized)

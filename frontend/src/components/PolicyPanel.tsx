@@ -224,7 +224,7 @@ export default function PolicyPanel({
               </span>
               <p className="polx-hint">
                 Önceki panelden kalan yazım-varyantı engelleri — görünür kalır, kaldırılabilir; yeni
-                alias eklenmez (konu dışlamaları "Mutlaka olmaması gerekenler"den yönetilir).
+                alias eklenmez (konu dışlamaları "Kesin dışlama"dan yönetilir).
               </p>
               <div className="polx-terms">
                 {approvedAliases.map((t) => (
