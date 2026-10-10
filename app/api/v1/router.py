@@ -24,6 +24,8 @@ from app.core.login import require_login
 # API key gecerli olsa bile giris kapisini ACMAZ (bkz. app/core/login.py).
 # Auth uclarinin kendisi bu router'a BAGLI DEGILDIR (main.py'de ayri monte
 # edilir), aksi halde giris ucu giris isterdi.
+# require_login yalniz Request'e baglidir (Depends(get_db) zinciri YOK): flag
+# kapaliyken ne DB oturumu acilir ne oturum deposuna (Redis) gidilir.
 api_router = APIRouter(dependencies=[Depends(verify_api_key), Depends(require_login)])
 
 # Include all sub-routers

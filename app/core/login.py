@@ -18,6 +18,8 @@ tum workspace'leri gorur. Veri izolasyonu ayri bir istir
 """
 from __future__ import annotations
 
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
@@ -65,14 +67,12 @@ def read_session_token(request: Request) -> Optional[str]:
     return request.cookies.get(settings.SESSION_COOKIE_NAME)
 
 
-def resolve_current_user(
-    request: Request,
-    db: Session = Depends(get_db),
-) -> Optional[CurrentUser]:
+def _session_user_id(request: Request) -> Optional[int]:
     """
-    Oturumu cozer. Giris yoksa None doner — HATA FIRLATMAZ.
+    Cookie'deki oturumu oturum deposundan (Redis) cozer ve kullanici id'sini
+    doner; cookie yok / oturum yok / gecersiz ise None.
 
-    Hem zorunlu hem istege bagli kapilarin ortak govdesi.
+    DB'ye DOKUNMAZ: bu sayede gecersiz oturumlar DB oturumu acmadan reddedilir.
     """
     token = read_session_token(request)
     if not token:
@@ -96,10 +96,15 @@ def resolve_current_user(
     user_id = payload.get("user_id")
     if not isinstance(user_id, int):
         return None
+    return user_id
 
-    # Kullaniciyi her istekte DB'den okuruz: hesap pasife alinirsa veya
-    # silinirse acik oturumlar ANINDA gecersizlesir. Birincil anahtar
-    # uzerinden indeksli tek SELECT.
+
+def _load_active_user(db: Session, user_id: int) -> Optional[CurrentUser]:
+    """
+    Kullaniciyi her istekte DB'den okuruz: hesap pasife alinirsa veya
+    silinirse acik oturumlar ANINDA gecersizlesir. Birincil anahtar
+    uzerinden indeksli tek SELECT.
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active or user.deleted_at is not None:
         return None
@@ -112,16 +117,63 @@ def resolve_current_user(
     )
 
 
-def require_login(
-    current: Optional[CurrentUser] = Depends(resolve_current_user),
+def resolve_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
 ) -> Optional[CurrentUser]:
+    """
+    Oturumu cozer. Giris yoksa None doner — HATA FIRLATMAZ.
+
+    `get_current_user` (/auth/me, /auth/change-password) icin Depends tabanli
+    yol. Router seviyesindeki kapi (`require_login`) bunu KULLANMAZ — bkz. orada.
+    """
+    user_id = _session_user_id(request)
+    if user_id is None:
+        return None
+    return _load_active_user(db, user_id)
+
+
+@contextmanager
+def _gate_db_session(request: Request) -> Iterator[Session]:
+    """
+    Kapinin kendi DB oturumu. `Depends(get_db)` KULLANILAMAZ: FastAPI
+    dependency'leri govdeden ONCE cozer ve LOGIN_ENABLED=false iken bile
+    her istekte DB oturumu acardi.
+
+    FastAPI test override'lari (`app.dependency_overrides[get_db]`) burada da
+    gecerlidir; saglayici generator ise `finally` blogu her yolda calisir.
+    """
+    provider = request.app.dependency_overrides.get(get_db, get_db)
+    produced = provider()
+    if isinstance(produced, Generator):
+        try:
+            yield next(produced)
+        finally:
+            produced.close()
+    else:
+        yield produced
+
+
+def require_login(request: Request) -> Optional[CurrentUser]:
     """
     Giris zorunlu kapisi. Router seviyesinde dependency olarak kullanilir.
 
-    LOGIN_ENABLED false ise hicbir sey yapmaz (feature flag kapali).
+    LOGIN_ENABLED false ise hicbir sey yapmaz: ne DB oturumu acilir ne oturum
+    deposuna (Redis) gidilir — cookie gonderilse bile. Bu yuzden yalniz
+    `Request`'e baglidir; `Depends(get_db)` zinciri bilerek yoktur.
+
+    Acikken: cookie / oturum yoksa DB oturumu da ACILMAZ (401).
     """
     if not settings.LOGIN_ENABLED:
         return None
+
+    user_id = _session_user_id(request)
+    if user_id is None:
+        raise _UNAUTHENTICATED
+
+    with _gate_db_session(request) as db:
+        current = _load_active_user(db, user_id)
+
     if current is None:
         raise _UNAUTHENTICATED
     if current.must_change_password:
