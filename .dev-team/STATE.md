@@ -517,6 +517,13 @@ made in this workstream.
         alınınca kırmızı.
   - Birleşik dal: backend 4540 passed / 0 kırmızı; frontend 255; lint, format, build, ruff
     temiz.
+  - S-1 (12b76b8) + login yarışı (911aaba) eklendi.
+    - Birleşik dal tam paket 4567 passed.
+    - Codex: dağıtıma engel YOK (51 ilgili test bağımsız geçti).
+    - Yarışta login yanıtı 200 dönebilir, ama üretilen eski sürümlü oturum korunan uçta
+      401 alır.
+  - Runbook: plan_yapilacaklar.md "Dağıtım runbook'u"; beklenen head 20261010_003.
+    Kullanıcı sunucuda uygulayacak.
   - Auth'ta not edilen, değiştirilmeyenler:
     - change-password, oturum deposu yokken eski oturumları iptal edemiyor (TTL'e kadar
       geçerli).
