@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 # Crawl limits
 MAX_PAGES_PER_SITE = 5
 REQUEST_TIMEOUT = 15  # seconds
-MAX_CONTENT_LENGTH = 50_000  # chars per page
+MAX_CONTENT_LENGTH = 50_000  # chars per page — CIKARILAN METIN siniri
+# Ham HTML yalniz bellek guvenligi icin sinirlanir. Metin siniri HTML'e
+# uygulanmamali: agir temali sitelerde <head> (CSS/JS) 30K+ karakter tutar ve
+# asil icerik (<main>) 50K'dan sonra baslar; HTML'i kesmek icerigi hic
+# gormeden atar (proteinim.com: <main> 75.683. karakterde, metin 96 karakter
+# kaliyordu -> "no page passed quality gate").
+MAX_HTML_LENGTH = 2_000_000
 
 # --- Icerik-kodlama guvenligi (fail-closed) --------------------------------
 # YALNIZ bu kodlamalar ilan edilir ve kabul edilir. `br` (brotli) BILINCLI olarak
@@ -213,7 +219,7 @@ class SiteCrawler:
             if "text/html" not in content_type:
                 return None
 
-            html = response.text[:MAX_CONTENT_LENGTH]
+            html = response.text[:MAX_HTML_LENGTH]
             soup = BeautifulSoup(html, "lxml")
 
             # Remove noise elements

@@ -308,6 +308,77 @@ Genel kurallar (CLAUDE.md'den):
 3. **Dağıtım.** Sunucuda merge, migration ve `celery_worker` restart (önce görev kontrolü).
 4. **İhtiyaç oldukça küçük temizlikler.** Paket 5 tek büyük silme işi olarak YAPILMAZ.
 
+## Dağıtım runbook'u (deploy/auth-lean-merge → sunucu)
+
+Codex notu (doğrulandı): prod compose'da worker'lar ve beat yalnız db/redis'e bağlı,
+migration'ı beklemez. Tek `up -d --build` yeni worker'ı eski şemaya karşı başlatabilir.
+Sıra:
+
+1. **Yeni işi durdur:** `app`, `frontend` VE `celery_beat` durdurulur.
+   - Beat 60 sn'de bir screening uzlaştırma görevi üretebilir (Codex notu).
+   - Worker'lar açık kalır ve süren görevleri bitirir.
+2. **Görevlerin bitmesini bekle:** `task_results` içinde running/pending = 0.
+   - Sayı uzun süre düşmezse beklemeye devam etme. Takılmış ya da worker'sız kuyrukta
+     bekleyen görevi incele.
+   - Kayıtları topluca sıfırlama.
+3. **Worker'ları durdur:** `celery_worker`, `celery_screening_worker`.
+4. **Yedek al:** pg_dump. Komut başarılı olmalı, dosya boş olmamalı (boyut + başlık
+   kontrolü).
+5. **Kodu al:** `git fetch` + `git merge --ff-only origin/deploy/auth-lean-merge`.
+6. **İmajları derle:** `docker compose build` (`APP_GIT_SHA` ile).
+7. **Migration'ı ayrı adımda uygula:** yeni app imajıyla tek seferlik
+   `alembic upgrade head`; ardından `alembic current` = **20261010_003** (S-1 ile; önce
+   20261010_002 idi).
+8. **Başlat:** migration başarılıysa `up -d`; sağlık kontrolü, giriş ekranı ve birkaç
+   sayfa.
+9. **Migration hata verirse:** servisleri BAŞLATMA. Yedekten dönüş OTOMATİK karar
+   değildir.
+   - Önce hata mesajı ve `alembic current` incelenir. Postgres DDL transaction içinde
+     çalıştığı için çoğu hatada migration zaten geri alınmış olur.
+   - Yedek yalnız şema/veri gerçekten bozulduysa geri yüklenir.
+
+## Güvenlik — takip edilecek (temizlik değil)
+
+**S-1. Parola değişimi eski oturumları kesin olarak kesmiyor.**
+- Kaynak: auth dalı; login kapısı düzeltmesinin getirdiği bir sorun değil.
+- `/auth/change-password` (ve logout), oturum deposu (Redis) o an erişilemezse
+  `SessionBackendUnavailable`'ı yutup başarı döner; eski oturumlar silinmez.
+- Oturum TTL'i her istekte tazelendiği için (`app/core/sessions.py`
+  `get_session(refresh=True)`), aktif kullanılan eski oturum süresiz yaşayabilir.
+- Öneri:
+  - Kullanıcı satırında bir oturum sürümü tutulur (ör. `users.session_version` veya
+    `password_changed_at`). Oturum yükü bu değeri taşır; `resolve_current_user` her
+    istekte DB'deki değerle karşılaştırır, uyuşmazsa 401.
+  - Böylece iptal Redis'e bağlı olmaz.
+  - Alternatif: Redis yokken change-password'ü başarısız saymak (fail-closed 503).
+  - Migration gerektirir → kullanıcı onayı.
+- **Codex önerisi (10.10): veritabanında oturum sürümü.**
+  - Parola değişimiyle sürüm AYNI transaction'da artırılır.
+  - Her istekte oturumun taşıdığı sürüm kullanıcının sürümüyle karşılaştırılır; Redis'te
+    eski kayıt kalsa bile erişim reddedilir.
+  - Mevcut oturumların yeni alana geçişi açıkça tanımlanmalı (ör. sürüm alanı olmayan eski
+    oturum yükü = sürüm 0 kabul edilir; kullanıcı sürümü varsayılan 0).
+  - Dağıtımdan ayrı, küçük ve testli bir düzeltme.
+- **DURUM (10.10): uygulandı, `deploy/auth-lean-merge` 12b76b8.**
+  - `users.session_version` + migration 20261010_003 (idempotent).
+  - Login sürümü oturum yüküne yazar. Her çözümlemede sürüm kullanıcınınkiyle
+    karşılaştırılır. Sürümsüz eski oturum yalnız kullanıcı sürümü 0 iken geçerli; bozuk
+    değer → red.
+  - Sürümü artıran yollar: change-password ve CLI `--reset-password` (hash ile aynı
+    commit), CLI `--deactivate`.
+  - Login kapalıyken DB/Redis'e dokunmama korunuyor. 21 yeni test + 3 migration testi.
+  - **911aaba (Codex bulgusu):** login sürümü commit SONRASI okuyordu. Eski parolayla
+    başlayan bir giriş, araya giren parola değişiminin yeni sürümünü alıp geçerli oturum
+    elde ediyordu (Codex reprodüksiyonu: 401 yerine 200).
+    - Sürüm artık doğrulanan hash ile aynı okumadan alınıyor.
+    - Rehash koşullu UPDATE oldu (yeni parolayı eskiyle ezmesin).
+    - 2 yarış testi ayrı DB oturumuyla gerçek araya girme yapıyor; eski kodda kırmızı.
+  - Birleşik dal tam paket: 4567 passed / 0 kırmızı.
+- **Kalan risk (kabul edilen, takipte):** logout, Redis hatasında yalnız çerezi siler.
+  Çalınmış bir çerez TTL boyunca (kullanıldıkça uzayarak) geçerli kalır. Oturum başına
+  iptal farklı tasarım ister; sürüm artırmak kullanıcının diğer tüm oturumlarını da
+  kapatır.
+
 ## Paket 5 — İhtiyaç oldukça küçük temizlikler (tek büyük iş değil)
 Çalışan üründeki hataların önüne geçmez; fırsat oldukça yapılır.
 

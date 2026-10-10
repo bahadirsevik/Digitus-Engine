@@ -499,6 +499,51 @@ made in this workstream.
     - uzun AI dışlama cümlelerinin eşleşmeme riski
     - QA nitleri
   - Sıradaki adım: auth dalı GitHub'a gelince migration birleşimi.
+- 10.10 MIGRATION BİRLEŞİMİ TAMAM (dağıtım hazır, yapılmadı).
+  - Auth dalının GitHub'a gelişi:
+    - Sunucunun deploy anahtarı salt okunur olduğu için git bundle + scp ile alındı.
+    - Gizli bilgi taraması temiz.
+    - `feat/auth-login` (db90e94) değiştirilmeden GitHub'a push edildi.
+  - Birleşik dal `deploy/auth-lean-merge` (worktree `../dg-auth-merge`, GitHub'da, c001ea2):
+    - 7a353b4: lean merge, çakışmasız.
+    - 0a6c7b5: alembic merge revizyonu 20261010_002.
+      - Revises: 20261006_002 + 20261010_001.
+      - Boş DB → tek head; sunucu yolu 20261006_002 → head doğrulandı.
+    - 9793504: auth frontend'inde 3 dosyaya prettier.
+    - c001ea2: login kapısı LOGIN_ENABLED=false iken get_db ve Redis zincirine girmiyor.
+      - Önceden `Depends(resolve_current_user → get_db)` her istekte oturum açıyordu ve
+        test_23 kırmızıydı.
+      - 15 odaklı API testi eklendi: kapalı, açık, must_change_password. Düzeltme geri
+        alınınca kırmızı.
+  - Birleşik dal: backend 4540 passed / 0 kırmızı; frontend 255; lint, format, build, ruff
+    temiz.
+  - S-1 (12b76b8) + login yarışı (911aaba) eklendi.
+    - Birleşik dal tam paket 4567 passed.
+    - Codex: dağıtıma engel YOK (51 ilgili test bağımsız geçti).
+    - Yarışta login yanıtı 200 dönebilir, ama üretilen eski sürümlü oturum korunan uçta
+      401 alır.
+  - Runbook: plan_yapilacaklar.md "Dağıtım runbook'u"; beklenen head 20261010_003.
+- 11.10 ~02:26 (+03) DAĞITIM TAMAM. Sunucu `feat/auth-login` yerel dalı 911aaba'ya
+  fast-forward.
+  - Yedek: ~/yedek_20261011_0220.sql (1,7 MB).
+  - Migration'lar: 20261010_001 → 002 (merge) → 003, hatasız.
+  - Servisler: app (2 uvicorn worker), celery worker, beat ayakta. DB ve Redis yeniden
+    başlatılmadı; oturumlar korundu.
+  - Sunucu notları:
+    - Klon tek-dal; `git fetch origin <dal>` uzak ref oluşturmaz, `FETCH_HEAD`
+      kullanılır.
+    - Sunucuda artık dev `docker-compose.yml` da var; her komutta
+      `-f docker-compose.prod.yml` ŞART.
+  - Sıradaki: tarayıcı kontrolü (giriş, test kullanıcısıyla parola değişimi, küçük
+    analiz).
+  - Öneri: lean dalı auth'u içermiyor. İleride iki dal ayrışmasın diye
+    `deploy/auth-lean-merge` lean'e birleştirilmeli (karar kullanıcıda).
+  - Auth'ta not edilen, değiştirilmeyenler:
+    - change-password, oturum deposu yokken eski oturumları iptal edemiyor (TTL'e kadar
+      geçerli).
+    - conftest `app.database.connection.get_db`'yi override ediyor; uçlar
+      `app.dependencies.get_db` kullanıyor (farklı nesne) → bazı testler test oturumu yerine
+      SessionLocal ile koşuyor.
   - Sıradaki (Codex önerisi): birleşmiş migration zincirinin doğrulanması + kısa görsel
     kontrol → dağıtım. Paket 5 dağıtımın ön koşulu DEĞİL.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce

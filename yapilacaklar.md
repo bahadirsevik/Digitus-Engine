@@ -10,7 +10,15 @@ korumasının artıkları, run-15 doğrulamaları) 09.10'da listeden çıkarıld
 (§3.2), Türkçe run adında Excel indirmesinde olası 500 (§1.2), görev takibinin
 run'lar arasında karışması (§1.3).
 
-## Kodda doğrulanmış açıklar
+## Güvenlik (öncelikli, temizlik değil)
+
+- **S-1:** Parola değişimi eski oturumları kesin olarak kesmiyor.
+  - Redis yokken iptal sessizce atlanıyor.
+  - Oturum TTL'i her kullanımda uzuyor; eski oturum süresiz yaşayabilir.
+  - Ayrıntı ve öneri: `plan_yapilacaklar.md` "Güvenlik" bölümü.
+  - Durum: auth dalı (`deploy/auth-lean-merge`), onay bekliyor.
+
+## Kodda doğrulanmış açıklar (Paket 1–4 ile çoğu kapandı; güncel durum planda)
 
 - **Google Ads API importunda çöp/GTIN filtresi yok**: `_is_junk_keyword`
   yalnız CSV yolunda (`app/core/csv_import/google_ads_parser.py`).
