@@ -367,6 +367,13 @@ Sıra:
   - Sürümü artıran yollar: change-password ve CLI `--reset-password` (hash ile aynı
     commit), CLI `--deactivate`.
   - Login kapalıyken DB/Redis'e dokunmama korunuyor. 21 yeni test + 3 migration testi.
+  - **911aaba (Codex bulgusu):** login sürümü commit SONRASI okuyordu. Eski parolayla
+    başlayan bir giriş, araya giren parola değişiminin yeni sürümünü alıp geçerli oturum
+    elde ediyordu (Codex reprodüksiyonu: 401 yerine 200).
+    - Sürüm artık doğrulanan hash ile aynı okumadan alınıyor.
+    - Rehash koşullu UPDATE oldu (yeni parolayı eskiyle ezmesin).
+    - 2 yarış testi ayrı DB oturumuyla gerçek araya girme yapıyor; eski kodda kırmızı.
+  - Birleşik dal tam paket: 4567 passed / 0 kırmızı.
 - **Kalan risk (kabul edilen, takipte):** logout, Redis hatasında yalnız çerezi siler.
   Çalınmış bir çerez TTL boyunca (kullanıldıkça uzayarak) geçerli kalır. Oturum başına
   iptal farklı tasarım ister; sürüm artırmak kullanıcının diğer tüm oturumlarını da
