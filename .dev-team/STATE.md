@@ -486,6 +486,19 @@ made in this workstream.
   - Ortak `tasksFromListResponse` eklendi; frontend 255 passed (3/3 koşu).
   - Kullanıcı notu: "Kesin dışlama" kutusu "Değişiklikleri Kaydet"in ALTINDA, rakip
     listesinin altında. Kullanıcı ilk bakışta bulamadı → yakınlık/yönlendirme UX'i açık soru.
+  - Kullanıcı görsel testi geçti: adım çubuğu 0 → %85 SOCIAL → %100 (yalnız SOCIAL koşusu).
+- 10.10 KULLANICI KARARI — sıra:
+  1. migration birleşimini doğrula
+  2. görsel kontrol
+  3. dağıtım
+  4. ihtiyaç oldukça küçük temizlikler
+
+  Paket 5 tek büyük silme işi olarak YAPILMAYACAK.
+  - Ertelenen küçükler:
+    - kesin dışlama ayırıcıları (`;`, `. `) + yardım/yönlendirme notu
+    - uzun AI dışlama cümlelerinin eşleşmeme riski
+    - QA nitleri
+  - Sıradaki adım: auth dalı GitHub'a gelince migration birleşimi.
   - Sıradaki (Codex önerisi): birleşmiş migration zincirinin doğrulanması + kısa görsel
     kontrol → dağıtım. Paket 5 dağıtımın ön koşulu DEĞİL.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce

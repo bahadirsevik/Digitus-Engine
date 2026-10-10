@@ -299,7 +299,16 @@ Genel kurallar (CLAUDE.md'den):
 
 ---
 
-## Paket 5 — İhtiyaç oldukça temizlik
+## Sıra (kullanıcı kararı, 10.10)
+1. **Migration birleşimini doğrula.** Auth dalı (`feat/auth-login`, 20261006_001/002) lean
+   ile birleştirilir, `alembic merge` yapılır. Boş DB'de `upgrade head`, migration zinciri
+   testi ve tam paket koşulur.
+2. **Görsel kontrol.** Lean'de yapıldı (adım çubuğu + dışlama çipleri). Birleşmiş dalda kısa
+   tekrar.
+3. **Dağıtım.** Sunucuda merge, migration ve `celery_worker` restart (önce görev kontrolü).
+4. **İhtiyaç oldukça küçük temizlikler.** Paket 5 tek büyük silme işi olarak YAPILMAZ.
+
+## Paket 5 — İhtiyaç oldukça küçük temizlikler (tek büyük iş değil)
 Çalışan üründeki hataların önüne geçmez; fırsat oldukça yapılır.
 
 ### 5.1 Corpus screening (DeepSeek tam evren taraması) — iki ayrı iş
