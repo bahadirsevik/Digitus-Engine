@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, ChevronDown, RefreshCw, X } from 'lucide-react'
-import { channelsApi, scoringApi, tasksApi } from '../services/api'
+import { channelsApi, scoringApi, tasksApi, tasksFromListResponse } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import type { ScoringRun } from '../types/models'
 import TaskProgress from './TaskProgress'
@@ -158,7 +158,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       const res = await tasksApi.listByRun(runId, activeWorkspace.id)
       // Run değiştiyse A'nın görevi B'nin paneline yazılmaz
       if (isCancelled()) return
-      const tasks = (Array.isArray(res.data) ? res.data : []) as RunTask[]
+      const tasks = tasksFromListResponse<RunTask>(res.data)
       const task = tasks.find(
         (item) =>
           item.task_type === 'channel_assignment' &&

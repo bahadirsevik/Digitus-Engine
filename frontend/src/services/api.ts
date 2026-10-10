@@ -673,6 +673,16 @@ export const tasksApi = {
     api.post(`/tasks/${taskId}/cancel`, undefined, { params: { brand_profile_id } }),
 }
 
+/**
+ * `GET /tasks/run/{id}` ve `GET /tasks/` yanıtı `{ tasks, total }` NESNESİDİR
+ * (TaskListResponse). Dizi bekleyen eski okuma görevi hiç bulamıyordu; tek okuma noktası.
+ */
+export function tasksFromListResponse<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[]
+  const tasks = (data as { tasks?: unknown } | null | undefined)?.tasks
+  return Array.isArray(tasks) ? (tasks as T[]) : []
+}
+
 // Types
 export interface KeywordCreate {
   keyword: string

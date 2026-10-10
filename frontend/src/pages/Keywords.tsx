@@ -25,6 +25,7 @@ import {
   keywordsApi,
   scoringApi,
   tasksApi,
+  tasksFromListResponse,
   KeywordCreate,
   EnrichedKeywordOut,
   KeywordUploadCsvResponse,
@@ -460,7 +461,7 @@ export default function Keywords() {
   const discoverChannelAssignmentTask = async (runId: number) => {
     if (!activeWorkspace?.id) return null
     const res = await tasksApi.listByRun(runId, activeWorkspace.id)
-    const tasks = (Array.isArray(res.data) ? res.data : []) as RunTask[]
+    const tasks = tasksFromListResponse<RunTask>(res.data)
     const channelTasks = tasks
       .filter((task) => task.task_type === 'channel_assignment')
       .sort((a, b) => String(b.task_id).localeCompare(String(a.task_id)))

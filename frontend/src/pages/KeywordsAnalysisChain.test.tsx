@@ -68,8 +68,13 @@ describe('Keywords V3 analysis chain', () => {
   })
 
   it('shows engine message and only the enabled channel steps while the task runs', async () => {
+    // Uçun GERÇEK biçimi: { tasks, total } (TaskListResponse). Eski testler dizi
+    // veriyordu ve sayfanın görevi hiç bulamadığını gizliyordu.
     vi.mocked(tasksApi.listByRun).mockResolvedValue({
-      data: [{ task_id: 't1', task_type: 'channel_assignment', status: 'running' }],
+      data: {
+        tasks: [{ task_id: 't1', task_type: 'channel_assignment', status: 'running' }],
+        total: 1,
+      },
     } as never)
     vi.mocked(tasksApi.getStatus).mockResolvedValue({
       data: {
@@ -106,7 +111,10 @@ describe('Keywords V3 analysis chain', () => {
 
   it('task failed: banner shows the task error message', async () => {
     vi.mocked(tasksApi.listByRun).mockResolvedValue({
-      data: [{ task_id: 't2', task_type: 'channel_assignment', status: 'failed' }],
+      data: {
+        tasks: [{ task_id: 't2', task_type: 'channel_assignment', status: 'failed' }],
+        total: 1,
+      },
     } as never)
     vi.mocked(tasksApi.getStatus).mockResolvedValue({
       data: {
