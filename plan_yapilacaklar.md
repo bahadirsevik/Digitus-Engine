@@ -308,6 +308,44 @@ Genel kurallar (CLAUDE.md'den):
 3. **Dağıtım.** Sunucuda merge, migration ve `celery_worker` restart (önce görev kontrolü).
 4. **İhtiyaç oldukça küçük temizlikler.** Paket 5 tek büyük silme işi olarak YAPILMAZ.
 
+## Dağıtım runbook'u (deploy/auth-lean-merge → sunucu)
+
+Codex notu (doğrulandı): prod compose'da worker'lar ve beat yalnız db/redis'e bağlı,
+migration'ı beklemez. Tek `up -d --build` yeni worker'ı eski şemaya karşı başlatabilir.
+Sıra:
+
+1. **Yeni işi durdur:** `app` ve `frontend` durdurulur. Yeni analiz/üretim
+   başlatılamaz; worker'lar süren görevleri bitirir.
+2. **Görevlerin bitmesini bekle:** `task_results` içinde running/pending = 0.
+3. **Worker'ları ve beat'i durdur:** `celery_worker`, `celery_screening_worker`,
+   `celery_beat`.
+4. **Yedek al:** pg_dump. Komut başarılı olmalı, dosya boş olmamalı (boyut + başlık
+   kontrolü).
+5. **Kodu al:** `git fetch` + `git merge --ff-only origin/deploy/auth-lean-merge`.
+6. **İmajları derle:** `docker compose build` (`APP_GIT_SHA` ile).
+7. **Migration'ı ayrı adımda uygula:** yeni app imajıyla tek seferlik
+   `alembic upgrade head`; ardından `alembic current` = 20261010_002.
+8. **Başlat:** migration başarılıysa `up -d`; sağlık kontrolü, giriş ekranı ve birkaç
+   sayfa.
+9. **Geri dönüş:** migration başarısızsa servisleri BAŞLATMA; yedekten geri yükle ve
+   önceki commit'e dön.
+
+## Güvenlik — takip edilecek (temizlik değil)
+
+**S-1. Parola değişimi eski oturumları kesin olarak kesmiyor.**
+- Kaynak: auth dalı; login kapısı düzeltmesinin getirdiği bir sorun değil.
+- `/auth/change-password` (ve logout), oturum deposu (Redis) o an erişilemezse
+  `SessionBackendUnavailable`'ı yutup başarı döner; eski oturumlar silinmez.
+- Oturum TTL'i her istekte tazelendiği için (`app/core/sessions.py`
+  `get_session(refresh=True)`), aktif kullanılan eski oturum süresiz yaşayabilir.
+- Öneri:
+  - Kullanıcı satırında bir oturum sürümü tutulur (ör. `users.session_version` veya
+    `password_changed_at`). Oturum yükü bu değeri taşır; `resolve_current_user` her
+    istekte DB'deki değerle karşılaştırır, uyuşmazsa 401.
+  - Böylece iptal Redis'e bağlı olmaz.
+  - Alternatif: Redis yokken change-password'ü başarısız saymak (fail-closed 503).
+  - Migration gerektirir → kullanıcı onayı.
+
 ## Paket 5 — İhtiyaç oldukça küçük temizlikler (tek büyük iş değil)
 Çalışan üründeki hataların önüne geçmez; fırsat oldukça yapılır.
 
