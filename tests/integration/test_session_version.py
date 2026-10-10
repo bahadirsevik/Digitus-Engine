@@ -95,6 +95,116 @@ class TestVersionFlowsIntoSession:
         assert client.get(ME).status_code == 200
 
 
+# ───────────────────── giris ile parola degisimi yarisi ─────────────────────
+
+
+def _interleave_password_change(monkeypatch, db_engine, user_id, new_hash):
+    """
+    `login` icindeki parola dogrulamasi BITTIKTEN HEMEN SONRA, AYRI bir DB
+    oturumunda (kendi baglantisi) change-password'un yaptigini yapar: yeni
+    hash + session_version + 1, commit. Boylece giris istegi dogrulamayi ESKI
+    parolayla gecmis, ama commit'ine baska bir transaction'in degisikligi
+    girmis olur. Tek atimliktir.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    real_verify = verify_password
+    fired = {"n": 0}
+
+    def verify_then_change(plain, hashed):
+        ok = real_verify(plain, hashed)
+        if fired["n"] == 0:
+            fired["n"] += 1
+            other = sessionmaker(bind=db_engine)()
+            try:
+                other.execute(
+                    text(
+                        "UPDATE users SET password_hash = :h, "
+                        "session_version = session_version + 1 WHERE id = :i"
+                    ),
+                    {"h": new_hash, "i": user_id},
+                )
+                other.commit()
+            finally:
+                other.close()
+        return ok
+
+    monkeypatch.setattr("app.api.v1.auth.verify_password", verify_then_change)
+    return fired
+
+
+class TestLoginRacingPasswordChange:
+    def test_login_started_with_old_password_never_gets_a_valid_session(
+        self, enabled, client, store, make_user, db_session, db_engine, monkeypatch
+    ):
+        from app.core.passwords import hash_password
+
+        user = make_user()
+        new_hash = hash_password(NEW_PASSWORD)
+        fired = _interleave_password_change(monkeypatch, db_engine, user.id, new_hash)
+
+        # Giris ESKI parolayla baslar; dogrulamadan sonra parola degisir.
+        resp = client.post(
+            "/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD}
+        )
+
+        assert fired["n"] == 1  # araya girme gercekten gerceklesti
+        assert resp.status_code == 200, resp.text
+        token = _session_token(client)
+        # Oturum DOGRULAMA anindaki surumu tasir, degisim sonrasini degil.
+        assert store.sessions[token]["session_version"] == 0
+        persisted = _fresh(db_session)
+        assert persisted.session_version == 1
+        assert persisted.password_hash == new_hash
+        # Kapi ve /auth/me bu oturumu reddeder.
+        guarded = client.get(PROTECTED)
+        assert guarded.status_code == 401
+        assert guarded.json()["detail"]["code"] == "NOT_AUTHENTICATED"
+        assert client.get(ME).status_code == 401
+
+    def test_rehash_does_not_overwrite_a_concurrently_changed_password(
+        self, enabled, client, store, make_user, db_session, db_engine, monkeypatch
+    ):
+        from app.core.passwords import hash_password
+
+        user = make_user()
+        new_hash = hash_password(NEW_PASSWORD)
+        monkeypatch.setattr("app.api.v1.auth.needs_rehash", lambda h: True)
+        fired = _interleave_password_change(monkeypatch, db_engine, user.id, new_hash)
+
+        resp = client.post(
+            "/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD}
+        )
+
+        assert fired["n"] == 1
+        assert resp.status_code == 200, resp.text
+        persisted = _fresh(db_session)
+        # Yeni parolanin hash'i oldugu gibi duruyor: eski parolanin yeniden
+        # hash'i onu ezmedi.
+        assert persisted.password_hash == new_hash
+        assert verify_password(NEW_PASSWORD, persisted.password_hash)
+        assert not verify_password(PASSWORD, persisted.password_hash)
+        assert persisted.session_version == 1
+
+    def test_uncontended_rehash_still_upgrades_the_hash(
+        self, enabled, client, store, make_user, db_session, monkeypatch
+    ):
+        user = make_user()
+        old_hash = user.password_hash
+        monkeypatch.setattr("app.api.v1.auth.needs_rehash", lambda h: True)
+
+        _login(client)
+
+        persisted = _fresh(db_session)
+        assert persisted.password_hash != old_hash
+        assert verify_password(PASSWORD, persisted.password_hash)
+        assert persisted.last_login_at is not None
+        assert persisted.session_version == 0
+        assert store.sessions[_session_token(client)]["session_version"] == 0
+        assert client.get(PROTECTED).status_code == 200
+        assert client.get(ME).status_code == 200
+
+
 # ───────────────────── ayni transaction ─────────────────────
 
 

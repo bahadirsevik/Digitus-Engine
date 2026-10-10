@@ -162,7 +162,13 @@ def login(
         user = db.query(User).filter(User.email == email).first()
 
         # Kullanici yoksa da dogrulama maliyeti odenir (zaman sizdirmasi).
+        # Dogrulanan hash ve oturum surumu AYNI okumadan alinir: ikisi de
+        # "bu parolanin dogrulandigi andaki" satirin degeridir. Surum commit
+        # sonrasi yeniden OKUNMAZ; aksi halde dogrulama ile commit arasinda
+        # baska bir islem parolayi degistirip surumu artirirsa ESKI parolayla
+        # baslayan giris YENI surumu tasiyip gecerli oturum alirdi.
         password_hash = user.password_hash if user else _DUMMY_HASH
+        verified_version = int(user.session_version or 0) if user else 0
         password_ok = verify_password(payload.password, password_hash)
 
         account_usable = (
@@ -181,8 +187,16 @@ def login(
             )
 
         # Argon2 parametreleri yukseltildiyse hash'i sessizce tasi.
-        if needs_rehash(user.password_hash):
-            user.password_hash = hash_password(payload.password)
+        # Kosullu yazim: hash dogrulandigi andaki degerinde DEGILSE (parola bu
+        # arada degisti) yeniden hash'leme atlanir; yoksa eski parolanin
+        # hash'i yeni hash'in uzerine yazilirdi.
+        if needs_rehash(password_hash):
+            db.query(User).filter(
+                User.id == user.id, User.password_hash == password_hash
+            ).update(
+                {User.password_hash: hash_password(payload.password)},
+                synchronize_session=False,
+            )
 
         clear_failed_logins(email, ip)
         user.last_login_at = datetime.now(timezone.utc)
@@ -193,9 +207,9 @@ def login(
             email=user.email,
             ip=ip,
             user_agent=request.headers.get("User-Agent"),
-            # Commit sonrasi okunur: parola degisimi sayaci artirmissa yeni
-            # oturum GUNCEL surumu tasir, yoksa kapi onu reddederdi.
-            session_version=int(user.session_version or 0),
+            # Parolanin DOGRULANDIGI andaki surum (yukarida yakalandi). Parola
+            # bu arada degistiyse oturum eski surumu tasir ve kapi reddeder.
+            session_version=verified_version,
         )
     except SessionBackendUnavailable:
         logger.error("Oturum deposuna ulasilamadi — giris reddedildi")
