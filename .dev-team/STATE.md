@@ -476,6 +476,16 @@ made in this workstream.
     Paket 4 KAPANDI.
   - CI yalnızca lean dalını doğrular; henüz birleşmemiş auth dalının migration zincirini
     doğrulamaz.
+- 10.10 kullanıcının görsel testinde bulunan hata (dfc6f3b).
+  - Analiz bandı ara adımları hiç göstermiyordu. `GET /tasks/run/{id}` `{tasks,total}`
+    döndürüyor; Keywords ve ChannelWorkspaceView ise dizi bekliyordu, bu yüzden görev
+    HİÇ bulunmuyordu. Kanıt: app loglarında `/tasks/{id}` isteği yok.
+  - Hata lean'in ilk ağacından (0e45fed) beri vardı. Testler dizi mock'ladığı için yeşildi
+    (3.2'de gerçek yanıt biçimi kontrol edilmedi — ders: mock'lar gerçek API şeklini
+    kullanmalı).
+  - Ortak `tasksFromListResponse` eklendi; frontend 255 passed (3/3 koşu).
+  - Kullanıcı notu: "Kesin dışlama" kutusu "Değişiklikleri Kaydet"in ALTINDA, rakip
+    listesinin altında. Kullanıcı ilk bakışta bulamadı → yakınlık/yönlendirme UX'i açık soru.
   - Sıradaki (Codex önerisi): birleşmiş migration zincirinin doğrulanması + kısa görsel
     kontrol → dağıtım. Paket 5 dağıtımın ön koşulu DEĞİL.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
