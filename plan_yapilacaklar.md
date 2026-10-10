@@ -314,11 +314,14 @@ Codex notu (doğrulandı): prod compose'da worker'lar ve beat yalnız db/redis'e
 migration'ı beklemez. Tek `up -d --build` yeni worker'ı eski şemaya karşı başlatabilir.
 Sıra:
 
-1. **Yeni işi durdur:** `app` ve `frontend` durdurulur. Yeni analiz/üretim
-   başlatılamaz; worker'lar süren görevleri bitirir.
+1. **Yeni işi durdur:** `app`, `frontend` VE `celery_beat` durdurulur.
+   - Beat 60 sn'de bir screening uzlaştırma görevi üretebilir (Codex notu).
+   - Worker'lar açık kalır ve süren görevleri bitirir.
 2. **Görevlerin bitmesini bekle:** `task_results` içinde running/pending = 0.
-3. **Worker'ları ve beat'i durdur:** `celery_worker`, `celery_screening_worker`,
-   `celery_beat`.
+   - Sayı uzun süre düşmezse beklemeye devam etme. Takılmış ya da worker'sız kuyrukta
+     bekleyen görevi incele.
+   - Kayıtları topluca sıfırlama.
+3. **Worker'ları durdur:** `celery_worker`, `celery_screening_worker`.
 4. **Yedek al:** pg_dump. Komut başarılı olmalı, dosya boş olmamalı (boyut + başlık
    kontrolü).
 5. **Kodu al:** `git fetch` + `git merge --ff-only origin/deploy/auth-lean-merge`.
@@ -327,8 +330,11 @@ Sıra:
    `alembic upgrade head`; ardından `alembic current` = 20261010_002.
 8. **Başlat:** migration başarılıysa `up -d`; sağlık kontrolü, giriş ekranı ve birkaç
    sayfa.
-9. **Geri dönüş:** migration başarısızsa servisleri BAŞLATMA; yedekten geri yükle ve
-   önceki commit'e dön.
+9. **Migration hata verirse:** servisleri BAŞLATMA. Yedekten dönüş OTOMATİK karar
+   değildir.
+   - Önce hata mesajı ve `alembic current` incelenir. Postgres DDL transaction içinde
+     çalıştığı için çoğu hatada migration zaten geri alınmış olur.
+   - Yedek yalnız şema/veri gerçekten bozulduysa geri yüklenir.
 
 ## Güvenlik — takip edilecek (temizlik değil)
 
@@ -345,6 +351,13 @@ Sıra:
   - Böylece iptal Redis'e bağlı olmaz.
   - Alternatif: Redis yokken change-password'ü başarısız saymak (fail-closed 503).
   - Migration gerektirir → kullanıcı onayı.
+- **Codex önerisi (10.10): veritabanında oturum sürümü.**
+  - Parola değişimiyle sürüm AYNI transaction'da artırılır.
+  - Her istekte oturumun taşıdığı sürüm kullanıcının sürümüyle karşılaştırılır; Redis'te
+    eski kayıt kalsa bile erişim reddedilir.
+  - Mevcut oturumların yeni alana geçişi açıkça tanımlanmalı (ör. sürüm alanı olmayan eski
+    oturum yükü = sürüm 0 kabul edilir; kullanıcı sürümü varsayılan 0).
+  - Dağıtımdan ayrı, küçük ve testli bir düzeltme.
 
 ## Paket 5 — İhtiyaç oldukça küçük temizlikler (tek büyük iş değil)
 Çalışan üründeki hataların önüne geçmez; fırsat oldukça yapılır.
