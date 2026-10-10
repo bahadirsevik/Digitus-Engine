@@ -523,7 +523,21 @@ made in this workstream.
     - Yarışta login yanıtı 200 dönebilir, ama üretilen eski sürümlü oturum korunan uçta
       401 alır.
   - Runbook: plan_yapilacaklar.md "Dağıtım runbook'u"; beklenen head 20261010_003.
-    Kullanıcı sunucuda uygulayacak.
+- 11.10 ~02:26 (+03) DAĞITIM TAMAM. Sunucu `feat/auth-login` yerel dalı 911aaba'ya
+  fast-forward.
+  - Yedek: ~/yedek_20261011_0220.sql (1,7 MB).
+  - Migration'lar: 20261010_001 → 002 (merge) → 003, hatasız.
+  - Servisler: app (2 uvicorn worker), celery worker, beat ayakta. DB ve Redis yeniden
+    başlatılmadı; oturumlar korundu.
+  - Sunucu notları:
+    - Klon tek-dal; `git fetch origin <dal>` uzak ref oluşturmaz, `FETCH_HEAD`
+      kullanılır.
+    - Sunucuda artık dev `docker-compose.yml` da var; her komutta
+      `-f docker-compose.prod.yml` ŞART.
+  - Sıradaki: tarayıcı kontrolü (giriş, test kullanıcısıyla parola değişimi, küçük
+    analiz).
+  - Öneri: lean dalı auth'u içermiyor. İleride iki dal ayrışmasın diye
+    `deploy/auth-lean-merge` lean'e birleştirilmeli (karar kullanıcıda).
   - Auth'ta not edilen, değiştirilmeyenler:
     - change-password, oturum deposu yokken eski oturumları iptal edemiyor (TTL'e kadar
       geçerli).
