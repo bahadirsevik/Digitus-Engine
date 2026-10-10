@@ -126,6 +126,44 @@ def test_fetch_page_rejects_brotli(monkeypatch):
     assert crawler._fetch_page("https://example.test/") is None
 
 
+def test_fetch_page_reads_main_content_after_a_heavy_head(monkeypatch):
+    """Agir temali sitede <main> 50K karakterden SONRA baslar (proteinim.com: 75.683).
+
+    Eskiden ham HTML MAX_CONTENT_LENGTH ile kesildigi icin icerik hic ayristirilmiyor,
+    sayfa 'too_short' sayilip profil analizi 'no page passed quality gate' ile dusuyordu.
+    """
+    heavy_head = "<style>" + ("a{color:red}" * 6000) + "</style>"  # ~72K karakter
+    body_text = "Whey protein, amino asit ve vitamin urunleri satan resmi magaza. " * 10
+    html = (f"<html><head><title>Magaza</title>{heavy_head}</head>"
+            f"<body><header>Giris Yap Sepetim</header><main><p>{body_text}</p></main>"
+            "</body></html>")
+    assert html.find("<main>") > 50_000
+
+    def handler(request):
+        return httpx.Response(200, headers={"content-type": "text/html"}, text=html)
+    crawler, client = _crawler_with(handler)
+    monkeypatch.setattr(httpx, "Client", client)
+    page = crawler._fetch_page("https://example.test/")
+    assert page is not None
+    assert page["quality"]["usable"] is True
+    assert "Whey protein" in page["text"]
+
+
+def test_fetch_page_still_caps_extracted_text(monkeypatch):
+    """Cikarilan METIN hala MAX_CONTENT_LENGTH ile sinirli."""
+    from app.core.site_analyzer.crawler import MAX_CONTENT_LENGTH
+
+    html = "<html><body><main><p>" + ("kelime " * 20_000) + "</p></main></body></html>"
+
+    def handler(request):
+        return httpx.Response(200, headers={"content-type": "text/html"}, text=html)
+    crawler, client = _crawler_with(handler)
+    monkeypatch.setattr(httpx, "Client", client)
+    page = crawler._fetch_page("https://example.test/")
+    assert page is not None
+    assert len(page["text"]) <= MAX_CONTENT_LENGTH
+
+
 def test_fetch_page_marks_binary_body_unusable(monkeypatch):
     """Kodlama basligi temiz olsa bile cop metin ICERIK olarak kullanilamaz.
 
