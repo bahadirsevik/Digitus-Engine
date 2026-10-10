@@ -1267,6 +1267,14 @@
   background: #4ade80;
   color: #04110e;
 }
+.kwx-step.is-failed {
+  color: var(--error);
+}
+.kwx-step.is-failed .kwx-step-dot {
+  border-color: var(--error);
+  background: var(--error);
+  color: #fff;
+}
 .kwx-banner-links {
   margin-top: 18px;
   padding-top: 16px;
@@ -1339,6 +1347,13 @@
 }
 .kwx-toast.is-done .kwx-toast-icon {
   background: #4ade80;
+}
+.kwx-toast.is-failed {
+  border-color: rgba(229, 72, 77, 0.35);
+}
+.kwx-toast.is-failed .kwx-toast-icon {
+  background: var(--error);
+  color: #fff;
 }
 .kwx-toast-title {
   font-size: 13.5px;

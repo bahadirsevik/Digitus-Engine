@@ -4,9 +4,14 @@
  * Kök eleman display:contents — form kartı ChannelWorkspaceView'daki iki
  * kolonlu gridin sağ hücresine, banner/sonuçlar tam genişliğe oturur.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle, RefreshCw, Sparkles, X } from 'lucide-react'
-import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from '../../hooks/useTaskPolling'
+import {
+  useTaskPolling,
+  useScopedTaskId,
+  getWorkspaceTaskKey,
+  setStoredTaskId,
+} from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
 import { useBrandStore } from '../../stores/brandStore'
 import {
@@ -279,12 +284,24 @@ function AdGroupCard({
 
 export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringRun | null }) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const taskStorageKey = getWorkspaceTaskKey('ads_task', activeWorkspace?.id)
+  const taskStorageKey = getWorkspaceTaskKey('ads_task', activeWorkspace?.id, runId)
+  // Run/workspace kapsamı: await sonrası dönen yanıt, kapsam değiştiyse state'e yazılmaz
+  const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
+  const scopeRef = useRef(scopeKey)
+  scopeRef.current = scopeKey
+  // Unmount sonrası dönen başlatma yanıtı UI state'ine/yan etkiye dokunmaz
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const [brandName, setBrandName] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [usps, setUsps] = useState('')
-  const [taskId, setTaskId] = useState<string | null>(getStoredTaskId(taskStorageKey))
+  const [taskId, setTaskId] = useScopedTaskId(taskStorageKey)
   const [results, setResults] = useState<AdsResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -298,12 +315,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const [pendingSetId, setPendingSetId] = useState<number | null>(null)
   const [activating, setActivating] = useState(false)
 
-  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id)
+  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_ads === false
-
-  useEffect(() => {
-    setTaskId(getStoredTaskId(taskStorageKey))
-  }, [taskStorageKey])
 
   // Run/workspace değişince eski marka bağlamı TAŞINMAZ ve autofill state
   // okumadan KOŞULSUZ doldurur — reset+autofill ayrı effect'lerdeyken autofill
@@ -312,6 +325,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   useEffect(() => {
     setResults(null)
     setError(null)
+    setLoading(false)
+    setActivating(false)
     setBrandName('')
     setWebsiteUrl('')
     setUsps('')
@@ -371,12 +386,14 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
 
   const fetchResults = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
+    const requestScope = scopeRef.current
     try {
       const res = await generationApi.getAdsRsa(
         runId,
         activeWorkspace.id,
         selectedSetId ?? undefined
       )
+      if (scopeRef.current !== requestScope) return
       const data = res.data as AdsResult
       setResults(data.total_groups > 0 ? data : null)
     } catch (e) {
@@ -386,8 +403,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
 
   const fetchSets = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
+    const requestScope = scopeRef.current
     try {
       const res = await generationApi.getAdsSets(runId, activeWorkspace.id)
+      if (scopeRef.current !== requestScope) return
       const data = res.data as AdsSetListResult
       setSets(data.sets || [])
       setActiveSetId(data.active_set_id ?? null)
@@ -420,29 +439,38 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
 
   const activateSet = async (setId: number) => {
     if (!activeWorkspace?.id) return
+    const requestScope = scopeRef.current
     setActivating(true)
     setError(null)
     try {
       await generationApi.activateAdsSet(setId, activeWorkspace.id)
+      if (scopeRef.current !== requestScope) return
       setSelectedSetId(null) // varsayılan görünüm = yeni aktif set
       await fetchSets()
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       setError(apiErrorMessage(err, 'Set aktive edilemedi'))
     } finally {
-      setActivating(false)
+      if (scopeRef.current === requestScope) setActivating(false)
     }
   }
 
   const regenerateGroup = async (groupId: number) => {
     if (!activeWorkspace?.id) return
+    const requestScope = scopeRef.current
     setError(null)
     setToastOpen(true)
     try {
       const res = await generationApi.regenerateAdGroup(groupId, activeWorkspace.id)
       const data = res.data as { task_id: string; generation_set_id?: number }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, data.task_id)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       const stale = policyStaleFromError(err)
       setError(stale ? stale.message : apiErrorMessage(err, 'Grup yeniden üretilemedi'))
     }
@@ -453,6 +481,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       setError('Marka çalışması seçin')
       return
     }
+    const requestScope = scopeRef.current
     setLoading(true)
     setError(null)
     setResults(null)
@@ -473,10 +502,15 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
         activeWorkspace.id
       )
       const data = res.data as { task_id: string; generation_set_id?: number }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, data.task_id)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
       void fetchSets()
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       // Plan v13: bayat havuz 409'u "devam eden üretim" DEĞİLDİR — kendi
       // mesajıyla gösterilir (kanal atamasını yenileme çağrısı içerir)
       const stale = policyStaleFromError(err)
@@ -490,7 +524,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
         )
       }
     } finally {
-      setLoading(false)
+      if (scopeRef.current === requestScope) setLoading(false)
     }
   }
 

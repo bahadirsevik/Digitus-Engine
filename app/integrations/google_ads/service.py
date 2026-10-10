@@ -128,6 +128,14 @@ class ImportResult:
     skipped_fuzzy: int
     truncated: bool
     truncated_reason: Optional[str]
+    skipped_junk: int = 0
+
+
+def _legacy_bulk_counts(result: Any) -> "tuple[int, int]":
+    """create_keywords_bulk(return_details=True) sonucundan (created, skipped_junk)."""
+    if isinstance(result, dict):
+        return int(result.get("created", 0) or 0), int(result.get("skipped_junk", 0) or 0)
+    return int(result or 0), 0
 
 
 class GoogleAdsService:
@@ -474,8 +482,11 @@ class GoogleAdsService:
             if t in existing_texts
         )
 
-        created_count = int(create_keywords_bulk(db, keyword_dicts) or 0)
-        skipped_fuzzy = len(keyword_dicts) - already_existing - created_count
+        created_count, skipped_junk = _legacy_bulk_counts(
+            create_keywords_bulk(db, keyword_dicts, return_details=True)
+        )
+        # Cop kelimeler fuzzy sayilmasin: ayri raporlanir.
+        skipped_fuzzy = len(keyword_dicts) - already_existing - created_count - skipped_junk
 
         return ImportResult(
             created=created_count,
@@ -483,6 +494,7 @@ class GoogleAdsService:
             skipped_fuzzy=max(0, skipped_fuzzy),
             truncated=truncated,
             truncated_reason=truncated_reason,
+            skipped_junk=skipped_junk,
         )
 
     def list_campaigns(self, customer_id: str) -> List[CampaignInfo]:
@@ -649,8 +661,10 @@ class GoogleAdsService:
         existing_texts = {row.keyword.lower().strip() for row in existing_matches}
         already_existing = sum(1 for t in incoming_texts_lower if t in existing_texts)
 
-        created_count = int(create_keywords_bulk(db, keyword_dicts) or 0)
-        skipped_fuzzy = len(keyword_dicts) - already_existing - created_count
+        created_count, skipped_junk = _legacy_bulk_counts(
+            create_keywords_bulk(db, keyword_dicts, return_details=True)
+        )
+        skipped_fuzzy = len(keyword_dicts) - already_existing - created_count - skipped_junk
 
         return ImportResult(
             created=created_count,
@@ -658,4 +672,5 @@ class GoogleAdsService:
             skipped_fuzzy=max(0, skipped_fuzzy),
             truncated=False,
             truncated_reason=None,
+            skipped_junk=skipped_junk,
         )

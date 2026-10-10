@@ -4,7 +4,7 @@
  * Kök eleman display:contents — form kartı ChannelWorkspaceView'daki iki
  * kolonlu gridin sağ hücresine, banner/sonuçlar tam genişliğe oturur.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlignLeft,
   Calendar,
@@ -19,7 +19,12 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from '../../hooks/useTaskPolling'
+import {
+  useTaskPolling,
+  useScopedTaskId,
+  getWorkspaceTaskKey,
+  setStoredTaskId,
+} from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
 import { useBrandStore } from '../../stores/brandStore'
 import { apiErrorMessage, generationApi, policyStaleFromError } from '../../services/api'
@@ -337,27 +342,44 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
 
 export default function SeoGeoPanel({ runId, run }: { runId: number; run?: ScoringRun | null }) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const taskStorageKey = getWorkspaceTaskKey('seo_task', activeWorkspace?.id)
+  const taskStorageKey = getWorkspaceTaskKey('seo_task', activeWorkspace?.id, runId)
+  // Run/workspace kapsamı: await sonrası dönen yanıt, kapsam değiştiyse state'e yazılmaz
+  const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
+  const scopeRef = useRef(scopeKey)
+  scopeRef.current = scopeKey
+  // Unmount sonrası dönen başlatma yanıtı UI state'ine dokunmaz
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const [limit, setLimit] = useState(10)
   const [tone, setTone] = useState('informative')
-  const [taskId, setTaskId] = useState<string | null>(getStoredTaskId(taskStorageKey))
+  const [taskId, setTaskId] = useScopedTaskId(taskStorageKey)
   const [results, setResults] = useState<SEOGeoItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(true)
 
-  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id)
+  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_seo === false
 
+  // Run/workspace değişince önceki run'ın sonuçları ve devam eden istek durumu taşınmaz
   useEffect(() => {
-    setTaskId(getStoredTaskId(taskStorageKey))
-  }, [taskStorageKey])
+    setResults([])
+    setError(null)
+    setLoading(false)
+  }, [scopeKey])
 
   const fetchResults = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
+    const requestScope = scopeRef.current
     try {
       const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
+      if (scopeRef.current !== requestScope) return
       setResults((res.data as { items?: SEOGeoItem[] }).items || [])
     } catch (e) {
       console.error('Failed to fetch SEO results:', e)
@@ -379,18 +401,25 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       setError('Marka çalışması seçin')
       return
     }
+    const requestScope = scopeRef.current
     setLoading(true)
     setError(null)
     setToastOpen(true)
     try {
       const res = await generationApi.bulkSeoGeo(runId, limit, activeWorkspace.id, tone)
-      setTaskId((res.data as { task_id: string }).task_id)
+      const startedTaskId = (res.data as { task_id: string }).task_id
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, startedTaskId)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
+      setTaskId(startedTaskId)
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       // Plan v13: bayat havuz 409'u kendi mesajıyla (yeniden atama çağrısı)
       const stale = policyStaleFromError(err)
       setError(stale ? stale.message : apiErrorMessage(err))
     } finally {
-      setLoading(false)
+      if (scopeRef.current === requestScope) setLoading(false)
     }
   }
 

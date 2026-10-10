@@ -29,9 +29,14 @@ import {
 import { useBrandStore } from '../stores/brandStore'
 import { workspaceApi, ProfileConfirmRequest, WorkspaceResponse } from '../services/api'
 import {
+  editableExcludeThemes,
   extractErrorMessage,
   getWorkspacePhase,
+  HARD_EXCLUDE_CHIP_NOTE,
   listToTextarea,
+  parseExcludedInfo,
+  SOFT_EXCLUDE_HELP,
+  SOFT_EXCLUDE_LABEL,
   splitNewlineItems,
   statusLabel,
   toActiveWorkspace as workspaceToActiveWorkspace,
@@ -70,7 +75,16 @@ interface ProfileFormState {
   location_exempt_terms: string[]
 }
 
-const LIST_FIELD_CONFIG = [
+type ListFieldKey =
+  | 'products'
+  | 'services'
+  | 'use_cases'
+  | 'problems_solved'
+  | 'brand_terms'
+  | 'protected_themes'
+  | 'exclude_themes'
+
+const LIST_FIELD_CONFIG: ReadonlyArray<{ key: ListFieldKey; label: string; help?: string }> = [
   { key: 'products', label: 'Ürünler' },
   { key: 'services', label: 'Hizmetler' },
   { key: 'use_cases', label: 'Kullanım Alanları' },
@@ -79,8 +93,10 @@ const LIST_FIELD_CONFIG = [
   // Korunacak temalar dışlanacak temalardan ÖNCE gösterilir: çakışmada
   // korumanın kazandığını okuma sırası da anlatsın.
   { key: 'protected_themes', label: 'Korunacak Temalar' },
-  { key: 'exclude_themes', label: 'Dışlanacak Temalar' },
-] as const
+  // Kutu A: yumuşak (eleme yapmaz). Kesin dışlama terimleri (kutu B) burada
+  // düzenlenemez; aşağıda salt-okunur çip olarak gösterilir.
+  { key: 'exclude_themes', label: SOFT_EXCLUDE_LABEL, help: SOFT_EXCLUDE_HELP },
+]
 
 function emptyProfileForm(): ProfileFormState {
   return {
@@ -100,7 +116,10 @@ function emptyProfileForm(): ProfileFormState {
   }
 }
 
-function profileToForm(profileData?: Record<string, unknown>): ProfileFormState {
+function profileToForm(
+  profileData?: Record<string, unknown>,
+  excludedInfo?: string | null
+): ProfileFormState {
   const form = emptyProfileForm()
   if (!profileData) return form
 
@@ -119,7 +138,8 @@ function profileToForm(profileData?: Record<string, unknown>): ProfileFormState 
     problems_solved: listToTextarea(profileData.problems_solved),
     brand_terms: listToTextarea(profileData.brand_terms),
     protected_themes: listToTextarea(profileData.protected_themes),
-    exclude_themes: listToTextarea(profileData.exclude_themes),
+    // Yalnız kullanıcının düzenleyebildiği A terimleri; B'den gelenler çip olarak ayrı
+    exclude_themes: listToTextarea(editableExcludeThemes(profileData.exclude_themes, excludedInfo)),
     location_filter_mode: readLocationFilterMode(profileData),
     focus_cities: readFocusCities(profileData),
     location_exempt_terms: readLocationExemptTerms(profileData),
@@ -207,6 +227,13 @@ function WorkspaceModal({
 
   // Legacy formlar (keyword-önce çalışmalar + confirmed düzenleme)
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
+  // Kaydedilmemiş A/profil düzenlemesi var mı: kirliyken sunucudan yeniden
+  // yükleme (örn. kutu B kaydı sonrası) formu SIFIRLAMAZ.
+  const profileDirtyRef = useRef(false)
+  const editProfileForm = (updater: (form: ProfileFormState) => ProfileFormState) => {
+    profileDirtyRef.current = true
+    setProfileForm(updater)
+  }
   const [keywordDraft, setKeywordDraft] = useState<string[]>(
     initialWorkspace?.suggested_keywords || []
   )
@@ -222,11 +249,14 @@ function WorkspaceModal({
     setWs(initialWorkspace)
     setKeywordDraft(initialWorkspace?.suggested_keywords || [])
     setCompetitorDiscoveryActive(false)
+    profileDirtyRef.current = false
   }, [initialWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (ws?.profile_data) setProfileForm(profileToForm(ws.profile_data))
-  }, [ws?.profile_data])
+    if (ws?.profile_data && !profileDirtyRef.current) {
+      setProfileForm(profileToForm(ws.profile_data, ws.excluded_info))
+    }
+  }, [ws?.profile_data, ws?.excluded_info])
 
   useEffect(() => {
     setKeywordDraft(ws?.suggested_keywords || [])
@@ -337,6 +367,7 @@ function WorkspaceModal({
         setError('Onay cevabı beklenen çalışma ile eşleşmedi. Listeyi yenileyip tekrar deneyin.')
         return
       }
+      profileDirtyRef.current = false
       handleFinished(confirmed)
     } catch (err: unknown) {
       setError(extractErrorMessage(err))
@@ -654,32 +685,56 @@ function WorkspaceModal({
               mode={profileForm.location_filter_mode}
               focusCities={profileForm.focus_cities}
               exemptTerms={profileForm.location_exempt_terms}
-              onModeChange={(mode) => setProfileForm((f) => ({ ...f, location_filter_mode: mode }))}
+              onModeChange={(mode) =>
+                editProfileForm((f) => ({ ...f, location_filter_mode: mode }))
+              }
               onFocusCitiesChange={(cities) =>
-                setProfileForm((f) => ({ ...f, focus_cities: cities }))
+                editProfileForm((f) => ({ ...f, focus_cities: cities }))
               }
               onExemptTermsChange={(terms) =>
-                setProfileForm((f) => ({ ...f, location_exempt_terms: terms }))
+                editProfileForm((f) => ({ ...f, location_exempt_terms: terms }))
               }
               disabled={confirming}
             />
 
-            {LIST_FIELD_CONFIG.map(({ key, label }) => (
-              <div className="form-group" key={key}>
-                <label>{label}</label>
-                <textarea
-                  className="bpx-textarea"
-                  rows={3}
-                  value={profileForm[key as keyof ProfileFormState] as string}
-                  onChange={(e) =>
-                    setProfileForm((f) => ({
-                      ...f,
-                      [key]: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            ))}
+            {LIST_FIELD_CONFIG.map(({ key, label, help }) => {
+              const helpId = help ? `profile-field-help-${key}` : undefined
+              // Kesin dışlama (kutu B) terimleri: A'nın düzenlenebilir listesinden
+              // AYRI, salt-okunur. Kayıtta gönderilmez; sunucu korur.
+              const hardTerms = key === 'exclude_themes' ? parseExcludedInfo(ws.excluded_info) : []
+              return (
+                <div className="form-group" key={key}>
+                  <label htmlFor={`profile-field-${key}`}>{label}</label>
+                  {help && (
+                    <p className="bpx-section-hint" id={helpId}>
+                      {help}
+                    </p>
+                  )}
+                  <textarea
+                    id={`profile-field-${key}`}
+                    className="bpx-textarea"
+                    rows={3}
+                    aria-describedby={helpId}
+                    value={profileForm[key]}
+                    onChange={(e) => editProfileForm((f) => ({ ...f, [key]: e.target.value }))}
+                  />
+                  {hardTerms.length > 0 && (
+                    <div className="bpx-chiprow" data-testid="hard-exclude-chips">
+                      {hardTerms.map((term) => (
+                        <span
+                          key={term}
+                          className="bpx-chip is-readonly"
+                          title="Silmek için aşağıdaki Kesin dışlama kutusunu kullanın"
+                        >
+                          {term}
+                          <span className="bpx-chip-note">{HARD_EXCLUDE_CHIP_NOTE}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             <div className="bpx-modal-footer is-end bpx-inline-footer">
               <button

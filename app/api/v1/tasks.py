@@ -23,6 +23,7 @@ class TaskStatusResponse(BaseModel):
     """Task durum yanıtı."""
     task_id: str
     task_type: Optional[str] = None
+    scoring_run_id: Optional[int] = None
     status: str
     progress: int = 0
     result_data: Optional[dict] = None
@@ -130,6 +131,7 @@ def list_recent_tasks(
             TaskStatusResponse(
                 task_id=t.task_id,
                 task_type=t.task_type,
+                scoring_run_id=t.scoring_run_id,
                 status=t.status,
                 progress=t.progress or 0,
                 result_data=t.result_data,

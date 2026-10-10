@@ -31,6 +31,7 @@ from app.core.workspace import verify_workspace
 from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
 from app.dependencies import get_db
+from app.core.http_headers import content_disposition
 from app.schemas.keyword import (
     KeywordCreate,
     KeywordImportRequest,
@@ -239,7 +240,7 @@ def export_keyword_pool_xlsx(
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -355,6 +356,14 @@ def create_keyword(
         keyword = crud.get_keyword_by_text(db, keyword_data.keyword)
         if keyword:
             return KeywordResponse.model_validate(keyword)
+    if isinstance(result, dict) and result.get("skipped_junk"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Geçersiz kelime: boş, yalnızca sayı veya yalnızca sembol içeren "
+                "ifadeler eklenemez."
+            ),
+        )
     if isinstance(result, dict) and result.get("skipped_theme"):
         matched = next(
             (d.get("matched") for d in result.get("skipped_details", [])
@@ -485,10 +494,12 @@ def import_keywords(
             + result.get("fuzzy_merged_in_batch", 0)
             + result.get("skipped_theme", 0)
             + result.get("skipped_limit", 0)
+            + result.get("skipped_junk", 0)
         )
         fuzzy_merged_in_batch = result.get("fuzzy_merged_in_batch", 0)
         skipped_theme = result.get("skipped_theme", 0)
         skipped_limit = result.get("skipped_limit", 0)
+        skipped_junk = result.get("skipped_junk", 0)
         skipped_details = result.get("skipped_details", [])
         theme_warnings = result.get("theme_warnings", [])
     else:
@@ -499,6 +510,7 @@ def import_keywords(
         fuzzy_merged_in_batch = 0
         skipped_theme = 0
         skipped_limit = 0
+        skipped_junk = 0
         skipped_details = []
         theme_warnings = []
 
@@ -519,6 +531,7 @@ def import_keywords(
         fuzzy_merged_in_batch=fuzzy_merged_in_batch,
         skipped_theme=skipped_theme,
         skipped_limit=skipped_limit,
+        skipped_junk=skipped_junk,
         pool_limit=WORKSPACE_KEYWORD_LIMIT,
         pool_total=total_after,
         skipped_details=skipped_details,

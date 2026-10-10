@@ -2,7 +2,7 @@
 Pydantic schemas for Google Ads RSA generation.
 """
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Any, Optional, List, Dict
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -139,6 +139,10 @@ class AdGroupFullSchema(BaseModel):
     headlines_shortened: int = 0
     headlines_regenerated: int = 0
     dki_converted_count: int = 0
+
+    # Hedefle çakışıp atılan negatifler (plan 2.1) — yalnız worker'a taşınır;
+    # exclude=True: API yanıtına/serileştirmeye ASLA girmez, DB'ye yazılmaz.
+    dropped_negatives: List[Dict[str, Any]] = Field(default_factory=list, exclude=True)
 
 
 class AdGroupDBSchema(BaseModel):

@@ -320,8 +320,12 @@ def _pipeline(
     if ar and ar_status == "failed":
         scoring_state = "blocked"
 
+    # V3 embedding relevance'ı kullanmaz (compute 409 döner): adım uygulanamaz
+    relevance_na = bool(ar and getattr(ar, "algorithm_version", None) == "v3")
     if not ar:
         relevance_state = "pending"
+    elif relevance_na:
+        relevance_state = "skipped"
     elif ar.skip_relevance:
         relevance_state = "skipped"
     elif relevance_exists:
@@ -387,8 +391,12 @@ def _pipeline(
             "relevance",
             "İlgi Skoru",
             relevance_state,
-            "atlandı" if ar and ar.skip_relevance else ("hesaplandı" if relevance_exists else "bekliyor"),
-            f"/relevance{qs}",
+            (
+                "V3'te kullanılmaz"
+                if relevance_na
+                else "atlandı" if ar and ar.skip_relevance else ("hesaplandı" if relevance_exists else "bekliyor")
+            ),
+            None if relevance_na else f"/relevance{qs}",
         ),
         step(
             "channels",
@@ -505,6 +513,7 @@ def build_summary(
                 enable_ads=bool(run.enable_ads),
                 enable_seo=bool(run.enable_seo),
                 enable_social=bool(run.enable_social),
+                algorithm_version=run.algorithm_version or "v2",
             )
             if run
             else None

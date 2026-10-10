@@ -14,6 +14,7 @@ from app.core.keyword_dedup import (
     has_meaningful_metrics,
     strip_turkish_suffixes,
 )
+from app.core.keyword_junk import junk_reason
 from app.core.keyword_normalize import normalize_keyword
 from app.database.crud import _keyword_insert_data, _legacy_keyword_data_source
 from app.database.models import Keyword, WorkspaceKeyword
@@ -146,6 +147,18 @@ def build_import_plan(
 
     for row in keyword_rows:
         keyword = (row.get("keyword") or "").strip()
+        # Savunma katmani: parser disindaki cagiranlardan gelen cop satirlar da
+        # ayni kaynaktan (junk_reason) elenir ve junk_rows'ta raporlanir.
+        _junk = junk_reason(keyword)
+        if _junk is not None:
+            plan.junk_rows.append({
+                "keyword": keyword,
+                "source_file": row.get("_source_file") or source_file_name,
+                "source_row": row.get("_source_row"),
+                "reason": "junk_row",
+                "matched": _junk,
+            })
+            continue
         normalized = normalize_keyword(keyword)
         detail = _detail(row, reason="accepted")
         detail["normalized_keyword"] = normalized

@@ -19,6 +19,8 @@ export const reasonLabel = (detail: SkippedKeywordDetail): string => {
         : 'Yasakli temayla elendi'
     case 'limit_exceeded':
       return 'Havuz limiti doldu'
+    case 'skipped_junk':
+      return 'Geçersiz kelime (boş / yalnız sayı veya sembol)'
     default:
       return detail.reason
   }

@@ -18,17 +18,28 @@ lazy-staleness deseni (bkz. PREVIEW_STALE_MINUTES / DISCOVERY_STALE_MINUTES,
 app/api/v1/brand_profile.py). Her okumada çağrılması güvenlidir: değişiklik
 yoksa no-op + commit yok.
 
+Janitör yazımları KOŞULLUDUR (plan_yapilacaklar.md 2.2, rev. 3): hem toplu hem
+tekil yol, profili okuduktan sonra koşulsuz `failed` yazmaz. Yazım anında
+tek bir `UPDATE ... WHERE` ile durum (running/pending), yaş ve attempt token'ı
+(`analysis_attempt_id IS NOT DISTINCT FROM <okunan>`) yeniden doğrulanır;
+Postgres, kilit bekleyen UPDATE'in WHERE'ini son commit'lenmiş satıra karşı
+tekrar değerlendirir. Janitörün incelediği eski koşu arada yeniden başlatıldıysa
+(yeni token + taze updated_at) ya da bitmişse satıra dokunulmaz. `failed`'a
+çevirirken token da DÖNDÜRÜLÜR; böylece janitörün öldürdüğü koşu geç bitse bile
+(analysis_attempt.py) hiçbir şey yazamaz.
+
 Kapsam sınırı: YALNIZ BrandProfile statüleri — Celery task'larına (TaskResult)
 DOKUNMAZ; onların kendi yaşam döngüsü vardır.
 """
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from loguru import logger
-from sqlalchemy import or_
+from sqlalchemy import and_, or_, update
 from sqlalchemy.orm import Session
 
 from app.core.constants import PROFILE_STALE_MINUTES
+from app.core.site_analyzer.analysis_attempt import new_attempt_id
 from app.database.models import BrandProfile
 
 STUCK_STATUSES = ("running", "pending")
@@ -51,41 +62,96 @@ def _profile_age_reference(profile: BrandProfile) -> Optional[datetime]:
     return reference
 
 
+def _stale_clause(threshold: datetime):
+    """SQL yaş koşulu — `_profile_age_reference` ile AYNI kural.
+
+    updated_at, yoksa created_at eşikten eski. Bu iki tanım ayrışmamalı:
+    biri değişirse diğeri de değişmeli.
+    """
+    return or_(
+        BrandProfile.updated_at < threshold,
+        and_(BrandProfile.updated_at.is_(None), BrandProfile.created_at < threshold),
+    )
+
+
+def _stuck_candidates(db: Session, threshold: datetime) -> List[Tuple[int, Optional[str]]]:
+    """Eşikten eski running/pending profillerin (id, görülen attempt token'ı) listesi.
+
+    Bu yalnızca ADAY listesidir; yazım `_fail_row_if_still_stuck` ile yazım
+    anında yeniden doğrulanır.
+    """
+    rows = (
+        db.query(BrandProfile.id, BrandProfile.analysis_attempt_id)
+        .filter(BrandProfile.status.in_(STUCK_STATUSES))
+        .filter(_stale_clause(threshold))
+        .all()
+    )
+    return [(row[0], row[1]) for row in rows]
+
+
+def _fail_row_if_still_stuck(
+    db: Session,
+    profile_id: int,
+    token_seen: Optional[str],
+    threshold: datetime,
+) -> bool:
+    """Tek koşullu UPDATE: durum + yaş + attempt token'ı YAZIM ANINDA doğrulanır.
+
+    True: satır failed yapıldı (ve token döndürüldü). False: satır bu arada
+    değişti (yeni koşu başladı, bitti, onaylandı…) — hiçbir şey yazılmadı.
+    Commit çağıranın.
+    """
+    result = db.execute(
+        update(BrandProfile)
+        .where(
+            BrandProfile.id == profile_id,
+            BrandProfile.status.in_(STUCK_STATUSES),
+            _stale_clause(threshold),
+            BrandProfile.analysis_attempt_id.is_not_distinct_from(token_seen),
+        )
+        .values(
+            status="failed",
+            error_message=STUCK_ERROR_MESSAGE,
+            # Token döndürülür: bu koşu geç biterse eşleşmeyen token yüzünden no-op olur.
+            analysis_attempt_id=new_attempt_id(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
+
+
 def fail_stuck_profiles(db: Session, *, stale_minutes: int = PROFILE_STALE_MINUTES) -> int:
     """Eşikten eski running/pending profilleri failed işaretler.
 
     Yaş, `updated_at` üzerinden ölçülür (codex: created_at eski ama yeni
     running'e alınmış kayıtta yanlış pozitif üretir); updated_at boşsa
     created_at'e düşülür. Failed'a çekilen kayıt sayısını döndürür ve loglar.
+
+    Aday listesi okunur, ama her satırın failed yazımı koşulludur
+    (`_fail_row_if_still_stuck`): okuma ile yazma arasında yeniden başlatılan
+    ya da biten bir satır etkilenmez.
     """
     threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
 
-    stuck = (
-        db.query(BrandProfile)
-        .filter(BrandProfile.status.in_(STUCK_STATUSES))
-        .filter(
-            or_(
-                BrandProfile.updated_at < threshold,
-                BrandProfile.updated_at.is_(None) & (BrandProfile.created_at < threshold),
-            )
-        )
-        .all()
-    )
+    candidates = _stuck_candidates(db, threshold)
 
-    for profile in stuck:
-        profile.status = "failed"
-        profile.error_message = STUCK_ERROR_MESSAGE
-
-    if stuck:
+    failed_ids: List[int] = []
+    for profile_id, token_seen in candidates:
+        if _fail_row_if_still_stuck(db, profile_id, token_seen, threshold):
+            failed_ids.append(profile_id)
+        # Satır başına commit: kilit süresi kısa kalır, bir satırın hatası
+        # önceki yazımları geri almaz.
         db.commit()
+
+    if failed_ids:
         logger.warning(
-            f"Profil janitörü: {len(stuck)} takılı profil failed işaretlendi "
-            f"(eşik {stale_minutes} dk): {[p.id for p in stuck]}"
+            f"Profil janitörü: {len(failed_ids)} takılı profil failed işaretlendi "
+            f"(eşik {stale_minutes} dk): {failed_ids}"
         )
     else:
         logger.info("Profil janitörü: takılı profil yok")
 
-    return len(stuck)
+    return len(failed_ids)
 
 
 def fail_if_stuck(
@@ -102,8 +168,12 @@ def fail_if_stuck(
     aynı eşik kuralını lazy uygular (repo'daki PREVIEW/DISCOVERY_STALE_MINUTES
     deseniyle aynı yaklaşım).
 
-    Profile None ise veya statü stuck değilse no-op (False). Değişiklik
-    yoksa commit ATILMAZ.
+    Profile None ise veya statü stuck değilse no-op (False). Yaş/durum ön
+    kontrolü bellekteki satıra bakar; ASIL karar yazım anında verilir
+    (`_fail_row_if_still_stuck`): bellekteki kopya bayatsa (satır bu arada
+    yeniden başlatıldı / bitti) hiçbir şey yazılmaz ve False döner. Yazım
+    denendiyse commit atılır; böylece `profile` expire olur ve çağıran taze
+    değerleri okur.
     """
     if profile is None or profile.status not in STUCK_STATUSES:
         return False
@@ -116,11 +186,19 @@ def fail_if_stuck(
     if reference >= threshold:
         return False
 
-    profile.status = "failed"
-    profile.error_message = STUCK_ERROR_MESSAGE
+    profile_id = profile.id
+    token_seen = profile.analysis_attempt_id
+    flipped = _fail_row_if_still_stuck(db, profile_id, token_seen, threshold)
     db.commit()
+    if not flipped:
+        logger.info(
+            f"Profil janitörü (lazy): profil {profile_id} yazım anında artık "
+            f"takılı değil (yeniden başlatıldı/bitti), dokunulmadı"
+        )
+        return False
+
     logger.warning(
-        f"Profil janitörü (lazy): profil {profile.id} okuma anında takılı "
+        f"Profil janitörü (lazy): profil {profile_id} okuma anında takılı "
         f"bulundu, failed işaretlendi (eşik {stale_minutes} dk)"
     )
     return True

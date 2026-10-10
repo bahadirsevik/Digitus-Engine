@@ -8,16 +8,6 @@ from pydantic import BaseModel, Field, ConfigDict
 
 # ==================== REQUEST SCHEMAS ====================
 
-class ProfileAnalyzeRequest(BaseModel):
-    """Request to trigger site profile analysis."""
-    company_url: str = Field(..., description="Firma web sitesi URL'si")
-    competitor_urls: Optional[List[str]] = Field(
-        None,
-        max_length=3,
-        description="Rakip site URL'leri (max 3)"
-    )
-
-
 class ProfileConfirmRequest(BaseModel):
     """Request to confirm/edit a draft profile."""
     profile_data: Optional[Dict[str, Any]] = Field(

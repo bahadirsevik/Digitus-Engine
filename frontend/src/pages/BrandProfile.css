@@ -1748,6 +1748,16 @@
 .bpx-chip.has-x {
   padding-right: 8px;
 }
+/* Kesin dışlamadan gelen terim: A kutusunda salt-okunur, silinemez */
+.bpx-chip.is-readonly {
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  border-color: var(--border-strong);
+}
+.bpx-chip-note {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
 .bpx-chip-x {
   flex: 0 0 auto;
   width: 18px;

@@ -20,6 +20,67 @@ export function splitNewlineItems(raw: string): string[] {
     .filter(Boolean)
 }
 
+// ── İki dışlama kutusunun ortak metinleri + B kaynaklı terim yardımcıları ──
+// Kutu A (profile_data.exclude_themes) YUMUŞAK: eleme yapmaz, AI'yı yönlendirir.
+// Kutu B (excluded_info) SERT: terimi içeren kelimeler elenir; sunucu B
+// terimlerini exclude_themes'e de birleştirir (kayıtta kullanıcı A listesiyle
+// birlikte korur).
+
+export const SOFT_EXCLUDE_LABEL = 'Kaçınılacak temalar'
+export const SOFT_EXCLUDE_HELP = 'Eleme yapmaz, yapay zekâyı yönlendirir.'
+export const HARD_EXCLUDE_LABEL = 'Kesin dışlama'
+export const HARD_EXCLUDE_HELP = 'Bu konuları içeren kelimeler elenir.'
+export const HARD_EXCLUDE_CHIP_NOTE = 'kesin dışlamadan gelir'
+
+// Sunucudaki normalize_turkish ile aynı niyet: büyük/küçük harf, Türkçe
+// karakterler, noktalama ve boşluk farkları aynı terim sayılır.
+const TURKISH_FOLD: Record<string, string> = {
+  ç: 'c',
+  ğ: 'g',
+  ı: 'i',
+  ö: 'o',
+  ş: 's',
+  ü: 'u',
+}
+
+export function normalizeTermKey(text: string): string {
+  return text
+    .replace(/İ/g, 'i')
+    .toLowerCase()
+    .replace(/[çğıöşü]/g, (ch) => TURKISH_FOLD[ch] ?? ch)
+    .replace(/[^\p{L}\p{N}_\s-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** excluded_info metnini (virgül/yeni satır) tekilleştirilmiş terim listesine böler. */
+export function parseExcludedInfo(value: string | null | undefined): string[] {
+  if (!value) return []
+  const seen = new Set<string>()
+  const terms: string[] = []
+  value.split(/[,\n]+/).forEach((raw) => {
+    const text = raw.trim()
+    const key = normalizeTermKey(text)
+    if (!text || !key || seen.has(key)) return
+    seen.add(key)
+    terms.push(text)
+  })
+  return terms
+}
+
+/** A kutusunda düzenlenebilir terimler: kayıtlı exclude_themes − B (kesin dışlama) terimleri. */
+export function editableExcludeThemes(
+  themes: unknown,
+  excludedInfo: string | null | undefined
+): string[] {
+  if (!Array.isArray(themes)) return []
+  const hardKeys = new Set(parseExcludedInfo(excludedInfo).map(normalizeTermKey))
+  return themes
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item && !hardKeys.has(normalizeTermKey(item)))
+}
+
 export function extractErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail

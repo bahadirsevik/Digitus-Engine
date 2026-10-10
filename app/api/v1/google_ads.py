@@ -145,6 +145,7 @@ class ImportResponse(BaseModel):
     created: int
     already_existing: int
     skipped_fuzzy: int
+    skipped_junk: int = 0
     truncated: bool
     truncated_reason: Optional[str]
     message: str
@@ -671,12 +672,14 @@ def import_keywords(payload: ImportRequest, db: Session = Depends(get_db)):
         created=result.created,
         already_existing=result.already_existing,
         skipped_fuzzy=result.skipped_fuzzy,
+        skipped_junk=result.skipped_junk,
         truncated=result.truncated,
         truncated_reason=result.truncated_reason,
         message=(
             f"{result.created} keyword olusturuldu (data_source=google_ads_api). "
             f"{result.already_existing} zaten mevcuttu (data_source degistirilmedi). "
-            f"{result.skipped_fuzzy} fuzzy eslesme ile atildi."
+            f"{result.skipped_fuzzy} fuzzy eslesme ile atildi. "
+            f"{result.skipped_junk} gecersiz kelime (bos / yalniz sayi veya sembol) atildi."
         ),
     )
 
@@ -792,11 +795,13 @@ def import_campaign_keywords(
         created=result.created,
         already_existing=result.already_existing,
         skipped_fuzzy=result.skipped_fuzzy,
+        skipped_junk=result.skipped_junk,
         truncated=result.truncated,
         truncated_reason=result.truncated_reason,
         message=(
             f"{result.created} keyword olusturuldu. "
             f"{result.already_existing} zaten mevcuttu. "
-            f"{result.skipped_fuzzy} benzer atlandi."
+            f"{result.skipped_fuzzy} benzer atlandi. "
+            f"{result.skipped_junk} gecersiz kelime atildi."
         ),
     )

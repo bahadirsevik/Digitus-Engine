@@ -329,8 +329,33 @@ class ExcelExporter(BaseExporter):
             checks.column_dimensions[get_column_letter(i)].width = width
 
     def _add_ads_sheets(self, wb: Workbook, ads):
-        """Ads sheetleri (5 tane). Başlık/Açıklama/Negatif sheet'leri TÜM
+        """Ads sheetleri (6 tane). Başlık/Açıklama/Negatif sheet'leri TÜM
         kayıtları taşır; 'Reklam Metinleri' bilinçli bir ÖNİZLEME satırıdır."""
+        # Kelime Bazlı Reklamlar: (reklam grubu, hedef kelime) başına bir satır.
+        # Açıklamalar gruba aittir; grubun her kelimesi için tekrarlanır.
+        # Bu görünüm yeni reklam üretmez, mevcut grup içeriğini kelimeye açar.
+        ws = wb.create_sheet("Kelime Bazlı Reklamlar")
+        desc_count = max((len(g.descriptions) for g in ads.ad_groups), default=0)
+        headers = (['Kelime', 'Reklam Grubu']
+                   + [f'Açıklama {i}' for i in range(1, desc_count + 1)]
+                   + ['Başlıklar'])
+        ws.append(headers)
+        self._style_header(ws, 1, len(headers))
+        for g in ads.ad_groups:
+            descs = [d.description_text for d in g.descriptions]
+            descs += [''] * (desc_count - len(descs))
+            headline_cell = ' | '.join(h.headline_text for h in g.headlines)
+            for kw in g.target_keywords:
+                ws.append([_sx(v) for v in [kw, g.group_name, *descs, headline_cell]])
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for i in range(1, len(headers) + 1):
+            width = 30 if i <= 2 else (90 if i == len(headers) else 60)
+            ws.column_dimensions[get_column_letter(i)].width = width
+
         # Hazir reklam metinleri (RSA onizleme: ilk 3 baslik + 2 aciklama —
         # tam listeler asagidaki ozel sheet'lerde)
         ws = wb.create_sheet("Reklam Metinleri")

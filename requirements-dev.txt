@@ -1,0 +1,2 @@
+# Dev/CI-only tools; deliberately NOT in requirements.txt (prod image stays lean).
+ruff==0.6.9

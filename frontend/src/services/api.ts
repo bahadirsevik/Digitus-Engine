@@ -445,16 +445,6 @@ export const brandProfileApi = {
       { decisions }
     ),
 
-  analyzeProfile: (runId: number, data: ProfileAnalyzeRequest, brand_profile_id?: number) =>
-    api.post(`/brand-profile/runs/${runId}/profile/analyze`, data, {
-      params: { brand_profile_id },
-    }),
-
-  confirmProfile: (runId: number, data?: ProfileConfirmRequest, brand_profile_id?: number) =>
-    api.put(`/brand-profile/runs/${runId}/profile/confirm`, data || {}, {
-      params: { brand_profile_id },
-    }),
-
   computeRelevance: (runId: number, brand_profile_id?: number) =>
     api.post(`/brand-profile/runs/${runId}/relevance/compute`, undefined, {
       params: { brand_profile_id },
@@ -501,24 +491,6 @@ export interface AssignmentPreflight {
   capacities?: Record<string, number>
 }
 
-export interface ScreeningRunStatus {
-  exists: boolean
-  screening_job_id?: number
-  status?: string
-  error_code?: string | null
-  screening_mode?: ScreeningMode | null
-  cost_usd?: number | null
-  provider_calls?: number | null
-  planned_requests?: number | null
-  ceiling_charges?: number | null
-  coverage_resolved?: number | null
-  universe_size?: number
-  unresolved?: number | null
-  contract_violations?: number | null
-  applied_to_live_pool?: boolean
-  counterfactual?: Record<string, unknown> | null
-}
-
 export interface ScreeningApproval {
   screening_mode: ScreeningMode
   preflight_sha256: string
@@ -541,12 +513,6 @@ export const channelsApi = {
       },
       { params: { brand_profile_id } }
     ),
-
-  // Son tarama işinin durumu/sonucu (salt okunur)
-  getScreeningStatus: (runId: number, brand_profile_id: number) =>
-    api.get<ScreeningRunStatus>(`/channels/runs/${runId}/screening`, {
-      params: { brand_profile_id },
-    }),
 
   // Hiçbir şey başlatmaz; ücretli çağrı YAPMAZ
   getAssignmentPreflight: (
@@ -704,9 +670,21 @@ export const googleAdsApi = {
 }
 
 // Tasks API
+/** `GET /tasks/{id}` ve `GET /tasks/run/{run_id}` görev durumu. */
+export interface TaskStatusInfo {
+  task_id: string
+  task_type?: string | null
+  /** Görevin bağlı olduğu scoring run (eski kayıtlarda null olabilir) */
+  scoring_run_id?: number | null
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  result_data?: Record<string, unknown>
+  error_message?: string
+}
+
 export const tasksApi = {
   getStatus: (taskId: string, brand_profile_id?: number) =>
-    api.get(`/tasks/${taskId}`, { params: { brand_profile_id } }),
+    api.get<TaskStatusInfo>(`/tasks/${taskId}`, { params: { brand_profile_id } }),
 
   listByRun: (runId: number, brand_profile_id?: number) =>
     api.get(`/tasks/run/${runId}`, { params: { brand_profile_id } }),
@@ -716,6 +694,16 @@ export const tasksApi = {
 
   cancel: (taskId: string, brand_profile_id?: number) =>
     api.post(`/tasks/${taskId}/cancel`, undefined, { params: { brand_profile_id } }),
+}
+
+/**
+ * `GET /tasks/run/{id}` ve `GET /tasks/` yanıtı `{ tasks, total }` NESNESİDİR
+ * (TaskListResponse). Dizi bekleyen eski okuma görevi hiç bulamıyordu; tek okuma noktası.
+ */
+export function tasksFromListResponse<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[]
+  const tasks = (data as { tasks?: unknown } | null | undefined)?.tasks
+  return Array.isArray(tasks) ? (tasks as T[]) : []
 }
 
 // Types
@@ -742,6 +730,7 @@ export interface SkippedKeywordDetail {
     | 'batch_duplicate'
     | 'skipped_theme'
     | 'limit_exceeded'
+    | 'skipped_junk'
     | string
   matched?: string | null
   monthly_volume?: number | null
@@ -764,6 +753,7 @@ export interface KeywordImportResponse {
   fuzzy_merged_in_batch?: number
   skipped_theme?: number
   skipped_limit?: number
+  skipped_junk?: number
   pool_limit?: number
   pool_total?: number
   skipped_details?: SkippedKeywordDetail[]
@@ -1158,11 +1148,6 @@ export interface CampaignKeywordsImportRequest {
   target_market?: string
 }
 
-export interface ProfileAnalyzeRequest {
-  company_url: string
-  competitor_urls?: string[]
-}
-
 export interface ProfileConfirmRequest {
   profile_data?: Record<string, unknown>
 }
@@ -1336,7 +1321,7 @@ export interface PipelineStep {
   label: string
   state: 'pending' | 'in_progress' | 'complete' | 'blocked' | 'skipped'
   detail: string | null
-  path: string
+  path: string | null
 }
 
 export interface ExportSummary {

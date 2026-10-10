@@ -22,7 +22,7 @@ Bu modul saglayici cagrisi YAPMAZ; yalniz metin ve sema uretir.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Sequence, Tuple
 
 from app.core.engine.context import firm_block as ads_firm_block
 

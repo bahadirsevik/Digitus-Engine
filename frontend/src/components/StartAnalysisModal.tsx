@@ -62,9 +62,9 @@ export default function StartAnalysisModal({
 }) {
   const [on, setOn] = useState({ ads: true, seo: true, social: true })
   const [counts, setCounts] = useState({
-    ads: DEFAULT_CAPACITIES.ads,
-    seo: DEFAULT_CAPACITIES.seo,
-    social: DEFAULT_CAPACITIES.social,
+    ads: String(DEFAULT_CAPACITIES.ads),
+    seo: String(DEFAULT_CAPACITIES.seo),
+    social: String(DEFAULT_CAPACITIES.social),
   })
   const [engineV3Enabled, setEngineV3Enabled] = useState<boolean | null>(null)
   const [starting, setStarting] = useState(false)
@@ -181,6 +181,11 @@ export default function StartAnalysisModal({
   if (!open) return null
 
   const validation = validateStartAnalysis(on)
+  const invalidCapacity = CHANNELS.some(
+    (channel) =>
+      on[channel.id] &&
+      (!/^[1-9]\d*$/.test(counts[channel.id]) || !Number.isSafeInteger(Number(counts[channel.id])))
+  )
   const engineUnavailable = engineV3Enabled === false
 
   // (a) Belt-and-braces: bir önizleme BAŞARIYLA yüklendiyse (ör. create'in
@@ -203,7 +208,7 @@ export default function StartAnalysisModal({
   const locationBlocked = locationUnknown || (locationModeActive && locationStatus !== 'ready')
 
   const handleStart = async () => {
-    if (validation || engineV3Enabled !== true || locationBlocked) return
+    if (validation || invalidCapacity || engineV3Enabled !== true || locationBlocked) return
     setStarting(true)
     setError('')
     try {
@@ -213,9 +218,9 @@ export default function StartAnalysisModal({
         ads: on.ads,
         seo: on.seo,
         social: on.social,
-        adsCapacity: counts.ads,
-        seoCapacity: counts.seo,
-        socialCapacity: counts.social,
+        adsCapacity: Number(counts.ads),
+        seoCapacity: Number(counts.seo),
+        socialCapacity: Number(counts.social),
         locationGate:
           locationModeActive && locationPreview
             ? {
@@ -289,9 +294,10 @@ export default function StartAnalysisModal({
                   <input
                     type="number"
                     min={1}
+                    step={1}
                     value={counts[c.id]}
                     disabled={!active || starting}
-                    onChange={(e) => setCounts((s) => ({ ...s, [c.id]: Number(e.target.value) }))}
+                    onChange={(e) => setCounts((s) => ({ ...s, [c.id]: e.target.value }))}
                   />
                 </label>
               </div>
@@ -303,6 +309,12 @@ export default function StartAnalysisModal({
           <div className="kwx-modal-warning" role="alert">
             <AlertTriangle size={14} />
             <span>{validation.message}</span>
+          </div>
+        )}
+        {invalidCapacity && (
+          <div className="kwx-modal-warning" role="alert">
+            <AlertTriangle size={14} />
+            <span>Seçili kanalların kelime sayısı 1 veya daha büyük bir tam sayı olmalı.</span>
           </div>
         )}
         {engineUnavailable && (
@@ -378,7 +390,11 @@ export default function StartAnalysisModal({
             className="kwx-modal-start"
             onClick={handleStart}
             disabled={
-              starting || validation !== null || engineV3Enabled !== true || locationBlocked
+              starting ||
+              validation !== null ||
+              invalidCapacity ||
+              engineV3Enabled !== true ||
+              locationBlocked
             }
           >
             {starting ? (

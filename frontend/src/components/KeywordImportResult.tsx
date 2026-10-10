@@ -20,6 +20,11 @@ const formatImportSummary = (r: KeywordImportResponse): string => {
   if ((r.skipped_limit || 0) > 0) {
     parts.push(`${r.skipped_limit} satir havuz limiti nedeniyle atlandi`)
   }
+  if ((r.skipped_junk || 0) > 0) {
+    parts.push(
+      `${r.skipped_junk} satir gecersiz kelime (bos / yalniz sayi veya sembol) nedeniyle atlandi`
+    )
+  }
   return `${r.requested} satir islendi: ${parts.join(' | ')}`
 }
 

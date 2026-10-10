@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from app.core.keyword_junk import junk_reason
+
 
 HEADER_SIGNALS = (
     "keyword",
@@ -275,11 +277,11 @@ def _get(cols: list[str], idx: int | None) -> str:
 
 
 def _is_junk_keyword(keyword: str) -> bool:
+    # Icerik kurallari (bos / sembol / yalniz sayi) ortak modulde; burada yalniz
+    # CSV'ye ozgu yapisal satirlar (baslik, tarih) kalir.
+    if junk_reason(keyword) is not None:
+        return True
     stripped = keyword.strip().strip('"')
-    if not stripped:
-        return True
-    if all(ch.isdigit() or ch in ".,%- " for ch in stripped):
-        return True
     return any(pattern.search(stripped) for pattern in JUNK_PATTERNS)
 
 

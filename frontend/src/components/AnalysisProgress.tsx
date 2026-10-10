@@ -1,34 +1,30 @@
 /**
  * Analiz ilerleme banner'ı + sağ-üst toast — Claude Design "Anahtar Kelimeler"
- * tasarımından. Tasarımdaki simüle LLM adımları yerine GERÇEK zincire bağlanır:
- * run status (relevance) + kanal atama TaskResult progress'i.
+ * tasarımından. Gerçek V3 kanal atama task'ının ilerlemesine bağlanır.
  *
- * Adımlar (gerçek pipeline):
- *   0 Skorlama            — banner göründüğünde zaten bitmiştir (senkron istek)
- *   1 İlgi skoru          — run.status === relevance_computing
- *   2 Aday sıralaması     — server-controlled screening pending/running
- *   3 Kanal atamaları(AI) — channel task pending/running (bar = gerçek %)
- *   4 Sonuçlar            — task completed / run channel_assigned
+ * Adımlar run'ın açık kanallarından kurulur (orkestratör ilerleme noktaları,
+ * app/core/engine/orchestrator.py; kapalı kanal kendi noktasını atlar):
+ *   Analiz başladı (0) → Kelime aileleri (15, yalnız ADS veya SEO açıksa) →
+ *   ADS (40) → SEO (65) → SOCIAL (85) → Havuz teslimi (92) → 100 bitti.
+ * Aktif adım = ulaşılmış en yüksek bilinen nokta; yüzde = task progress'i;
+ * alt başlık = motorun gerçek mesajı (result_data.current_message).
  */
 import { Check, RefreshCw, X, ArrowRight, DollarSign, Search, Share2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-export type ChainStage = 'relevance' | 'screening' | 'assigning' | 'done' | 'failed'
+export type ChainStage = 'assigning' | 'done' | 'failed'
 
-// Tasarımdaki ayrıntılı adım listesi, GERÇEK pipeline'a eşlendi.
-// 2+ indeksli adımlar kanal atama task'ının milestone eşiklerinden türetilir
-// (engine: 5/15 havuz → 15-50 intent → 50-60 marka filtresi → 60-80 ön
-// filtreler → 80-95 havuz/expansion → 95+ bitiş).
-const STEPS = [
-  'Skorlama hesaplanıyor (ADS · SEO · SOCIAL)',
-  'İlgi skoru hesaplanıyor',
-  'Aday kelimeler önceliklendiriliyor',
-  'Aday havuzları oluşturuluyor',
-  'Yapay zekâ · arama niyeti analizi',
-  'Yapay zekâ · marka filtresi ve ön eleme',
-  'Kanal havuzları dağıtılıyor',
-  'Sonuçlar hazırlanıyor',
-]
+export interface AnalysisChannels {
+  ads?: boolean
+  seo?: boolean
+  social?: boolean
+}
+
+interface StepDef {
+  key: string
+  label: string
+  at: number
+}
 
 const CHANNEL_LINKS = [
   { path: '/ads', label: 'ADS', icon: DollarSign },
@@ -36,26 +32,30 @@ const CHANNEL_LINKS = [
   { path: '/social', label: 'Social', icon: Share2 },
 ]
 
-// Task progress'i (0-100) tasarımdaki alt-adım indeksine çevir
-function assignSubStep(taskProgress: number): number {
-  if (taskProgress < 15) return 0 // aday havuzları
-  if (taskProgress < 50) return 1 // niyet analizi
-  if (taskProgress < 80) return 2 // marka filtresi + ön eleme
-  if (taskProgress < 95) return 3 // havuz dağıtımı
-  return 4 // sonuçlar
+function buildSteps(channels?: AnalysisChannels): StepDef[] {
+  const ads = channels?.ads !== false
+  const seo = channels?.seo !== false
+  const social = channels?.social !== false
+  const steps: StepDef[] = [{ key: 'start', label: 'Analiz başladı', at: 0 }]
+  if (ads || seo) steps.push({ key: 'family', label: 'Kelime aileleri', at: 15 })
+  if (ads) steps.push({ key: 'ads', label: 'ADS', at: 40 })
+  if (seo) steps.push({ key: 'seo', label: 'SEO', at: 65 })
+  if (social) steps.push({ key: 'social', label: 'SOCIAL', at: 85 })
+  steps.push({ key: 'pool', label: 'Havuz teslimi', at: 92 })
+  return steps
 }
 
-function stageInfo(stage: ChainStage, taskProgress: number) {
-  // aktif adım + toplam yüzde (skorlama bitmiş sayılır)
-  if (stage === 'relevance') return { active: 1, pct: 18 }
-  if (stage === 'screening') return { active: 2, pct: 28 }
-  if (stage === 'assigning') {
-    return {
-      active: 3 + assignSubStep(taskProgress),
-      pct: 35 + Math.round(taskProgress * 0.63),
-    }
+function stageInfo(stage: ChainStage, taskProgress: number, steps: StepDef[]) {
+  // Hata tamamlanma DEĞİLDİR: durduğu adım ve yüzde korunur
+  if (stage !== 'done') {
+    const pct = Math.max(0, Math.min(100, Math.round(taskProgress)))
+    let active = 0
+    steps.forEach((step, i) => {
+      if (pct >= step.at) active = i
+    })
+    return { active, pct }
   }
-  return { active: STEPS.length, pct: 100 }
+  return { active: steps.length, pct: 100 }
 }
 
 export function ChannelNav({ compact }: { compact?: boolean }) {
@@ -80,17 +80,22 @@ export function ChannelNav({ compact }: { compact?: boolean }) {
 export function AnalysisBanner({
   stage,
   taskProgress,
+  channels,
+  message,
   errorMessage,
   onDismiss,
 }: {
   stage: ChainStage
   taskProgress: number
+  channels?: AnalysisChannels
+  message?: string | null
   errorMessage?: string | null
   onDismiss: () => void
 }) {
   const done = stage === 'done'
   const failed = stage === 'failed'
-  const { active, pct } = stageInfo(stage, taskProgress)
+  const steps = buildSteps(channels)
+  const { active, pct } = stageInfo(stage, taskProgress, steps)
 
   return (
     <div className={`kwx-banner${done ? ' is-done' : ''}${failed ? ' is-failed' : ''}`}>
@@ -123,7 +128,15 @@ export function AnalysisBanner({
                 'Görevler sayfasından ayrıntıya bakabilir, analizi yeniden başlatabilirsiniz.'
               ) : (
                 <>
-                  Skorlama bittikten sonra kelimeler yapay zekâ adımlarından geçiyor.{' '}
+                  {message && (
+                    <>
+                      <b className="strong" data-testid="analysis-message">
+                        {message}
+                      </b>
+                      {' — '}
+                    </>
+                  )}
+                  Kelimeler yapay zekâ adımlarından geçiyor.{' '}
                   <b className="warn">Bu işlem 5 dakikadan uzun sürebilir.</b> Bu ekranı
                   kapatabilirsiniz — işlem arka planda sürer, durumu{' '}
                   <b className="strong">Görevler</b>'den de izleyebilirsiniz.
@@ -139,17 +152,20 @@ export function AnalysisBanner({
         </div>
 
         <div className="kwx-progressbar">
-          <div className="kwx-progressbar-fill" style={{ width: `${failed ? 100 : pct}%` }} />
+          <div className="kwx-progressbar-fill" style={{ width: `${pct}%` }} />
         </div>
 
         <div className="kwx-steps">
-          {STEPS.map((label, i) => {
-            const state = done || i < active ? 'done' : i === active && !failed ? 'active' : 'todo'
+          {steps.map(({ key, label }, i) => {
+            const state =
+              done || i < active ? 'done' : i === active ? (failed ? 'failed' : 'active') : 'todo'
             return (
-              <div key={i} className={`kwx-step is-${state}`}>
+              <div key={key} className={`kwx-step is-${state}`}>
                 <span className="kwx-step-dot">
                   {state === 'done' ? (
                     <Check size={10} strokeWidth={3} />
+                  ) : state === 'failed' ? (
+                    <X size={10} strokeWidth={3} />
                   ) : state === 'active' ? (
                     <span className="kwx-spin">
                       <RefreshCw size={11} strokeWidth={2.6} />
@@ -176,24 +192,39 @@ export function AnalysisBanner({
 export function AnalysisToast({
   stage,
   taskProgress,
+  channels,
+  message,
+  errorMessage,
   onDismiss,
   onOpen,
 }: {
   stage: ChainStage
   taskProgress: number
+  channels?: AnalysisChannels
+  message?: string | null
+  errorMessage?: string | null
   onDismiss: () => void
   onOpen: () => void
 }) {
   const done = stage === 'done'
-  const { active, pct } = stageInfo(stage, taskProgress)
-  const activeLabel = done ? 'Tüm adımlar tamamlandı' : STEPS[Math.min(active, STEPS.length - 1)]
+  const failed = stage === 'failed'
+  const steps = buildSteps(channels)
+  const { active, pct } = stageInfo(stage, taskProgress, steps)
+  const stepLabel = steps[Math.min(active, steps.length - 1)].label
+  const activeLabel = done
+    ? 'Tüm adımlar tamamlandı'
+    : failed
+      ? errorMessage || `${stepLabel} adımında durdu`
+      : message || stepLabel
 
   return (
-    <div className={`kwx-toast${done ? ' is-done' : ''}`}>
+    <div className={`kwx-toast${done ? ' is-done' : ''}${failed ? ' is-failed' : ''}`}>
       <div className="kwx-toast-head">
         <span className="kwx-toast-icon">
           {done ? (
             <Check size={18} strokeWidth={2.6} />
+          ) : failed ? (
+            <X size={18} strokeWidth={2.6} />
           ) : (
             <span className="kwx-spin">
               <RefreshCw size={16} strokeWidth={2.4} />
@@ -202,7 +233,11 @@ export function AnalysisToast({
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="kwx-toast-title">
-            {done ? 'Analiz tamamlandı' : 'Yapay zekâ analizi çalışıyor'}
+            {done
+              ? 'Analiz tamamlandı'
+              : failed
+                ? 'Analiz başarısız oldu'
+                : 'Yapay zekâ analizi çalışıyor'}
           </div>
           <div className="kwx-toast-sub">{activeLabel}</div>
         </div>
@@ -213,14 +248,16 @@ export function AnalysisToast({
       <div className="kwx-toast-body">
         <div className="kwx-toast-meta">
           <span>
-            {done ? STEPS.length : active}/{STEPS.length} adım
+            {done ? steps.length : active + 1}/{steps.length} adım
           </span>
           <span className="kwx-mono">{pct}%</span>
         </div>
         <div className="kwx-toast-bar">
           <div className="kwx-progressbar-fill" style={{ width: `${pct}%` }} />
         </div>
-        {!done && <div className="kwx-toast-warn">Bu işlem 5 dakikadan uzun sürebilir.</div>}
+        {!done && !failed && (
+          <div className="kwx-toast-warn">Bu işlem 5 dakikadan uzun sürebilir.</div>
+        )}
         <button type="button" className="kwx-toast-open" onClick={onOpen}>
           {done ? 'Skorları gör' : 'Ayrıntıları gör'}
         </button>

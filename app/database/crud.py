@@ -13,6 +13,7 @@ from app.database.models import (
     BrandProfile, WorkspaceKeyword,
 )
 from app.core.keyword_dedup import deduplicate_keywords
+from app.core.keyword_junk import junk_reason
 from app.core.keyword_normalize import normalize_keyword
 
 
@@ -115,7 +116,10 @@ def create_keywords_bulk(
                     ekleyecek adaylara uygulanır (duplicate satırlar kendi skip
                     nedenleriyle raporlanır).
 
-    Filtre sırası (workspace yolu): tema → exact/fuzzy duplicate → limit.
+    Filtre sırası: çöp kelime (junk_reason; force_include atlamaz, her iki yol)
+    → batch dedup. Workspace yolu devamı: tema → exact/fuzzy duplicate → limit.
+    Legacy (brand_profile_id=None) yol `return_details=True` ile de dict döner
+    (skipped_junk dahil); aksi halde int.
 
     Returns:
         int (legacy): created + linked (workspace mode'da "ne kadar kw geldi" semantiği)
@@ -129,6 +133,7 @@ def create_keywords_bulk(
     skipped_theme = 0
     skipped_limit = 0
     skipped_global = 0
+    skipped_junk = 0
     skipped_details: List[Dict[str, str]] = []
     # P1.6: elenmeyen ama AI dislama temasina takilan satirlar (uyari).
     theme_warnings: List[Dict[str, Any]] = []
@@ -136,6 +141,18 @@ def create_keywords_bulk(
     # Sanitize data before inserting
     sanitized_keywords = []
     for kw_data in keywords_data:
+        # Ortak cop filtresi (plan 3.3): bos / yalniz sembol / yalniz sayi.
+        # Batch dedup'tan ONCE; force_include BUNU ATLAMAZ.
+        _junk = junk_reason(kw_data.get('keyword'))
+        if _junk is not None:
+            skipped_junk += 1
+            skipped_details.append({
+                'keyword': (kw_data.get('keyword') or '').strip(),
+                'reason': 'skipped_junk',
+                'matched': _junk,
+            })
+            continue
+
         # Sanitize trend values to prevent overflow (Numeric(7,2) max is 99999.99)
         if 'trend_12m' in kw_data:
             try:
@@ -389,6 +406,7 @@ def create_keywords_bulk(
                 'skipped_fuzzy': skipped_fuzzy,
                 'skipped_theme': skipped_theme,
                 'skipped_limit': skipped_limit,
+                'skipped_junk': skipped_junk,
                 'fuzzy_merged_in_batch': fuzzy_merged,
                 'skipped_details': skipped_details,
                 # P1.6: eleme DEGIL — kabul edilmis ama AI temasina takilan satirlar
@@ -493,6 +511,22 @@ def create_keywords_bulk(
                     skipped_global += 1
                     print(f"Keyword import error: {kw_data.get('keyword', 'unknown')}: {str(inner_e)[:100]}")
 
+    if return_details:
+        # Legacy yol artik detay da verebilir: cop sayisi fuzzy olarak YANLIS
+        # sayilmasin diye cagiranlar (google_ads service) ayri okur.
+        return {
+            'created': created,
+            'linked': 0,
+            'skipped_exact': 0,
+            'skipped_fuzzy': 0,
+            'skipped_theme': 0,
+            'skipped_limit': 0,
+            'skipped_junk': skipped_junk,
+            'skipped_global': skipped_global,
+            'fuzzy_merged_in_batch': fuzzy_merged,
+            'skipped_details': skipped_details,
+            'theme_warnings': [],
+        }
     return created
 
 

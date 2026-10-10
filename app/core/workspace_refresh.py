@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List
 
+from app.core.keyword_junk import junk_reason
 from app.core.keyword_normalize import normalize_keyword
 
 
@@ -93,6 +94,9 @@ def build_refreshed_workspace_keywords(
     if include_new_ideas:
         for normalized, idea in idea_by_norm.items():
             if normalized in existing_by_norm:
+                continue
+            # Ortak cop filtresi: yeni fikirler bos / yalniz sayi-sembol olamaz.
+            if junk_reason(idea.keyword) is not None:
                 continue
             added_rows.append({
                 "keyword_id": None,

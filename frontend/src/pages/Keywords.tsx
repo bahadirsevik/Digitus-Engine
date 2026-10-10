@@ -21,17 +21,16 @@ import {
 } from 'lucide-react'
 import {
   apiErrorMessage,
-  channelsApi,
   downloadBlobResponse,
   keywordsApi,
   scoringApi,
   tasksApi,
+  tasksFromListResponse,
   KeywordCreate,
   EnrichedKeywordOut,
   KeywordUploadCsvResponse,
   KeywordImportResponse,
   SkippedKeywordDetail,
-  type ScreeningRunStatus,
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import GoogleAdsKeywordSearch from '../components/GoogleAdsKeywordSearch'
@@ -45,7 +44,7 @@ import { UrlSeedIdea } from '../services/api'
 import { WORKSPACE_KEYWORD_LIMIT } from '../constants'
 import { Users, X } from 'lucide-react'
 import type { ScoringRun } from '../types/models'
-import { getStoredTaskId, getWorkspaceTaskKey, useTaskPolling } from '../hooks/useTaskPolling'
+import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
 import './Keywords.css'
 
 type TabId = 'csv' | 'manual' | 'google-ads' | 'url' | 'competitor'
@@ -118,6 +117,7 @@ interface Keyword {
 interface RunTask {
   task_id: string
   task_type?: string | null
+  scoring_run_id?: number | null
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress?: number
   result_data?: Record<string, unknown> | null
@@ -238,55 +238,25 @@ export default function Keywords() {
     Number.isNaN(initialRunId) || initialRunId <= 0 ? null : initialRunId
   )
   const [scoreRunsLoading, setScoreRunsLoading] = useState(false)
-  // Sunucu kontrollü aday sıralaması kullanıcıdan mod/onay istemez.
-  // Bu salt-okunur durum yalnız mevcut analiz ilerleme panelini besler.
-  const [screeningStatus, setScreeningStatus] = useState<ScreeningRunStatus | null>(null)
-  const [assignTaskId, setAssignTaskId] = useState<string | null>(null)
   const [taskDiscoveryActive, setTaskDiscoveryActive] = useState(false)
   // Analiz zinciri banner/toast durumu.
   const [chainActive, setChainActive] = useState(false)
   const [chainDismissed, setChainDismissed] = useState(false)
   const [toastOpen, setToastOpen] = useState(false)
   const [chainRunStatus, setChainRunStatus] = useState<string | null>(null)
-  const assignTaskStorageKey = getWorkspaceTaskKey('channel_assign', activeWorkspace?.id)
+  const assignTaskStorageKey = getWorkspaceTaskKey(
+    'channel_assign',
+    activeWorkspace?.id,
+    selectedScoreRunId
+  )
+  const [assignTaskId, setAssignTaskId] = useScopedTaskId(assignTaskStorageKey)
   const assignPolling = useTaskPolling(
     assignTaskId,
     assignTaskStorageKey,
     3000,
-    activeWorkspace?.id
-  )
-
-  const refreshScreeningStatus = async () => {
-    if (!selectedScoreRunId || !activeWorkspace?.id) {
-      setScreeningStatus(null)
-      return
-    }
-    try {
-      const res = await channelsApi.getScreeningStatus(selectedScoreRunId, activeWorkspace.id)
-      setScreeningStatus(res.data.exists ? res.data : null)
-    } catch {
-      setScreeningStatus(null)
-    }
-  }
-
-  // Zincir aktifken job henüz yaratılmamış olsa bile sorgu devam eder.
-  // Böylece scoring -> screening arasındaki kısa boşluk UI'da kaybolmaz.
-  useEffect(() => {
-    if (!chainActive && !assignPolling.isActive && !screeningStatus) return
-    void refreshScreeningStatus()
-    const childActive =
-      screeningStatus?.status === 'pending' || screeningStatus?.status === 'running'
-    if (!chainActive && !assignPolling.isActive && !childActive) return
-    const timer = window.setInterval(() => void refreshScreeningStatus(), 5000)
-    return () => window.clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    selectedScoreRunId,
     activeWorkspace?.id,
-    chainActive,
-    assignPolling.isActive,
-    screeningStatus?.status,
-  ])
+    selectedScoreRunId
+  )
 
   const [sourceCollapsed, setSourceCollapsed] = useState(false)
   const [newKeyword, setNewKeyword] = useState<KeywordCreate>({
@@ -322,10 +292,6 @@ export default function Keywords() {
   }, [searchParams])
 
   useEffect(() => {
-    setAssignTaskId(getStoredTaskId(assignTaskStorageKey))
-  }, [assignTaskStorageKey])
-
-  useEffect(() => {
     if (!selectedScoreRunId || view !== 'scores' || !activeWorkspace?.id) {
       setTaskDiscoveryActive(false)
       return
@@ -346,12 +312,12 @@ export default function Keywords() {
     }
 
     void findTask()
-    if (!taskDiscoveryActive || assignTaskId) return
-
-    const interval = window.setInterval(findTask, 3000)
+    // Cleanup HER durumda döner: run değişince uçuştaki keşif yanıtı yok sayılır
+    const interval =
+      taskDiscoveryActive && !assignTaskId ? window.setInterval(findTask, 3000) : null
     return () => {
       cancelled = true
-      window.clearInterval(interval)
+      if (interval !== null) window.clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScoreRunId, view, activeWorkspace?.id, taskDiscoveryActive, assignTaskId])
@@ -465,19 +431,26 @@ export default function Keywords() {
     }
   }, [chainActive, selectedScoreRunId, activeWorkspace?.id, assignTaskId, assignPolling.isActive])
 
-  // Gerçek zincir aşaması: task failed/completed > task aktif > relevance > (boşlukta relevance say)
+  // Gerçek zincir aşaması (V3): hata (task veya run, task bulunmadan da) > bitti > çalışıyor.
   const chainStage: ChainStage | null = (() => {
     if (!chainActive) return null
     const taskStatus = assignPolling.status?.status
-    if (taskStatus === 'failed') return 'failed'
+    if (taskStatus === 'failed' || chainRunStatus === 'failed') return 'failed'
     if (taskStatus === 'completed' || chainRunStatus === 'channel_assigned') return 'done'
-    if (screeningStatus?.status === 'pending' || screeningStatus?.status === 'running') {
-      return 'screening'
-    }
-    if (assignTaskId && (taskStatus === 'running' || taskStatus === 'pending')) return 'assigning'
-    if (chainRunStatus === 'channel_assigning') return 'assigning'
-    return 'relevance'
+    return 'assigning'
   })()
+
+  // Seçili run'ın açık kanalları (bilinmiyorsa hepsi açık sayılır)
+  const chainRun = scoreRuns.find((run) => run.id === selectedScoreRunId)
+  const chainChannels = {
+    ads: chainRun?.enable_ads,
+    seo: chainRun?.enable_seo,
+    social: chainRun?.enable_social,
+  }
+  const chainMessage =
+    typeof assignPolling.resultData?.current_message === 'string'
+      ? assignPolling.resultData.current_message
+      : null
 
   const dismissChain = () => {
     setChainDismissed(true)
@@ -488,7 +461,7 @@ export default function Keywords() {
   const discoverChannelAssignmentTask = async (runId: number) => {
     if (!activeWorkspace?.id) return null
     const res = await tasksApi.listByRun(runId, activeWorkspace.id)
-    const tasks = (Array.isArray(res.data) ? res.data : []) as RunTask[]
+    const tasks = tasksFromListResponse<RunTask>(res.data)
     const channelTasks = tasks
       .filter((task) => task.task_type === 'channel_assignment')
       .sort((a, b) => String(b.task_id).localeCompare(String(a.task_id)))
@@ -801,6 +774,8 @@ export default function Keywords() {
         <AnalysisBanner
           stage={chainStage}
           taskProgress={assignPolling.progress || 0}
+          channels={chainChannels}
+          message={chainMessage}
           errorMessage={assignPolling.errorMessage}
           onDismiss={dismissChain}
         />
@@ -1314,6 +1289,9 @@ export default function Keywords() {
         <AnalysisToast
           stage={chainStage}
           taskProgress={assignPolling.progress || 0}
+          channels={chainChannels}
+          message={chainMessage}
+          errorMessage={assignPolling.errorMessage}
           onDismiss={() => setToastOpen(false)}
           onOpen={() => setKeywordView('scores', selectedScoreRunId)}
         />

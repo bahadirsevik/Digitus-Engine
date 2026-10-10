@@ -30,6 +30,7 @@ class RunContext:
     enable_ads: bool = True
     enable_seo: bool = True
     enable_social: bool = True
+    algorithm_version: str = "v2"
 
 
 @dataclass
@@ -216,7 +217,12 @@ def build_next_action(ctx: NextActionContext) -> NextAction:
         )
 
     if active.status == "scored":
-        if not active.skip_relevance and not ctx.relevance_exists:
+        # V3 embedding relevance'ı kullanmaz (compute 409 döner): öneri yok
+        if (
+            not active.skip_relevance
+            and not ctx.relevance_exists
+            and active.algorithm_version != "v3"
+        ):
             return _na(
                 "compute_relevance",
                 "İlgi Skoru Hesapla",

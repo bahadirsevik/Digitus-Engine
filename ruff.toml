@@ -1,0 +1,9 @@
+# Ruff 0.6.9 (pinned in requirements-dev.txt). CI lint gate: ONLY real-bug rules.
+# No formatting, no style rules -- widen the rule set deliberately, not by accident.
+target-version = "py311"
+extend-exclude = ["benchmark", "frontend", "exports"]
+
+[lint]
+# E9: syntax/IO errors, F63: invalid comparisons/asserts,
+# F7: statement errors (break/return outside loop...), F82: undefined names.
+select = ["E9", "F63", "F7", "F82"]
