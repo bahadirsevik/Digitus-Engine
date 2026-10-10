@@ -75,11 +75,16 @@ def create_session(
     email: str,
     ip: Optional[str] = None,
     user_agent: Optional[str] = None,
+    session_version: int = 0,
 ) -> str:
     """
     Yeni oturum acar ve DUZ token dondurur (cookie'ye konacak deger).
 
     Duz token hicbir yerde saklanmaz; cagirandan sonra geri alinamaz.
+
+    session_version: kullanicinin O ANKI `users.session_version` degeri. Kapi
+    (app/core/login.py) her istekte bunu DB'dekiyle karsilastirir; parola
+    degisince sayac artar ve bu oturum Redis'ten silinmese bile gecersiz olur.
     """
     token = secrets.token_urlsafe(TOKEN_BYTES)
     token_hash = hash_token(token)
@@ -88,6 +93,7 @@ def create_session(
     payload = {
         "user_id": user_id,
         "email": email,
+        "session_version": int(session_version),
         "ip": ip,
         # User-Agent uzun olabilir; denetim icin 200 karakter yeterli.
         "user_agent": (user_agent or "")[:200],

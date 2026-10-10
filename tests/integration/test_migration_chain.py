@@ -272,3 +272,107 @@ def test_money_columns_are_numeric(fresh_schema, db_engine):
                  for c in inspector.get_columns(table)}
         for column in columns:
             assert "NUMERIC" in types[column], f"{table}.{column}: {types[column]}"
+
+
+def _run_alembic(*args):
+    result = subprocess.run(
+        ["alembic", *args], capture_output=True, text=True, cwd="/app"
+    )
+    assert result.returncode == 0, (
+        f"alembic {' '.join(args)} failed:\n"
+        f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+    return result.stdout + result.stderr
+
+
+def test_single_head_is_user_session_version(fresh_schema):
+    """Merge sonrasi tek head 20261010_003 olmali (iki head upgrade'i durdurur)."""
+    heads = [
+        line for line in _run_alembic("heads").splitlines() if "(head)" in line
+    ]
+    assert len(heads) == 1, heads
+    assert heads[0].startswith("20261010_003"), heads
+
+
+def test_user_session_version_column_and_idempotent_migration(fresh_schema, db_engine):
+    """20261010_003: users.session_version INTEGER NOT NULL DEFAULT 0.
+
+    Kolon head'de create_all ile zaten vardir; ikinci upgrade no-op olmali,
+    downgrade kolonu dusurmeli, yeniden upgrade geri eklemeli.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("users")}
+    assert "session_version" in columns
+    assert columns["session_version"]["nullable"] is False
+    assert "INT" in str(columns["session_version"]["type"]).upper()
+    assert "0" in str(columns["session_version"]["default"])
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261010_003_add_user_session_version.py")
+    spec = importlib.util.spec_from_file_location("mig_20261010_003", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def present(conn) -> bool:
+        return "session_version" in {
+            c["name"] for c in inspect(conn).get_columns("users")
+        }
+
+    with db_engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # kolon zaten var -> no-op
+            module.upgrade()
+            assert present(conn)
+            module.downgrade()          # duser
+            assert not present(conn)
+            module.downgrade()          # yok -> no-op
+            module.upgrade()            # geri ekler
+            assert present(conn)
+
+    assert "session_version" in {
+        c["name"] for c in inspect(db_engine).get_columns("users")
+    }
+
+
+def test_upgrade_from_server_revision_20261006_002_to_head(fresh_schema, db_engine):
+    """Sunucunun mevcut revizyonu 20261006_002'den head'e yukseltme calismali.
+
+    Sunucu durumu simule edilir: 001/003 kolonlari yok, revizyon 20261006_002'ye
+    damgali, users'ta mevcut bir satir var. Upgrade satiri korumali ve yeni
+    kullanicilar icin session_version 0 olmali.
+    """
+    with db_engine.begin() as conn:
+        conn.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS session_version"))
+        conn.execute(
+            text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS analysis_attempt_id")
+        )
+        conn.execute(text("DELETE FROM users WHERE email = 'server@example.test'"))
+        conn.execute(text(
+            "INSERT INTO users (email, password_hash) "
+            "VALUES ('server@example.test', 'x')"
+        ))
+    try:
+        _run_alembic("stamp", "20261006_002")
+        _run_alembic("upgrade", "head")
+
+        inspector = inspect(db_engine)
+        assert "session_version" in {c["name"] for c in inspector.get_columns("users")}
+        assert "analysis_attempt_id" in {
+            c["name"] for c in inspector.get_columns("brand_profiles")
+        }
+        with db_engine.connect() as conn:
+            version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+            row = conn.execute(text(
+                "SELECT session_version FROM users WHERE email = 'server@example.test'"
+            )).scalar()
+        assert version == "20261010_003"
+        assert row == 0
+    finally:
+        with db_engine.begin() as conn:
+            conn.execute(text("DELETE FROM users WHERE email = 'server@example.test'"))

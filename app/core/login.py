@@ -24,10 +24,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.sessions import SessionBackendUnavailable, get_session
+from app.core.sessions import SessionBackendUnavailable, get_session, revoke_session
 from app.database.models import User
 from app.dependencies import get_db
 
@@ -67,10 +68,29 @@ def read_session_token(request: Request) -> Optional[str]:
     return request.cookies.get(settings.SESSION_COOKIE_NAME)
 
 
-def _session_user_id(request: Request) -> Optional[int]:
+@dataclass(frozen=True)
+class _SessionIdentity:
+    """Oturum deposundan cozulen, henuz DB'ye karsi DOGRULANMAMIS kimlik."""
+
+    token: str
+    user_id: int
+    # Oturum yukunun tasidigi `users.session_version`. Alan YOKSA 0 sayilir
+    # (alan eklenmeden once acilan eski oturumlar); gecersiz tipte ise -1
+    # (hicbir kullanici surumuyle eslesmez).
+    session_version: int
+
+
+def _payload_session_version(payload: dict) -> int:
+    version = payload.get("session_version", 0)
+    if isinstance(version, bool) or not isinstance(version, int):
+        return -1
+    return version
+
+
+def _session_identity(request: Request) -> Optional[_SessionIdentity]:
     """
-    Cookie'deki oturumu oturum deposundan (Redis) cozer ve kullanici id'sini
-    doner; cookie yok / oturum yok / gecersiz ise None.
+    Cookie'deki oturumu oturum deposundan (Redis) cozer; cookie yok / oturum
+    yok / gecersiz ise None.
 
     DB'ye DOKUNMAZ: bu sayede gecersiz oturumlar DB oturumu acmadan reddedilir.
     """
@@ -96,17 +116,42 @@ def _session_user_id(request: Request) -> Optional[int]:
     user_id = payload.get("user_id")
     if not isinstance(user_id, int):
         return None
-    return user_id
+    return _SessionIdentity(
+        token=token,
+        user_id=user_id,
+        session_version=_payload_session_version(payload),
+    )
 
 
-def _load_active_user(db: Session, user_id: int) -> Optional[CurrentUser]:
+def _drop_stale_session(token: str) -> None:
+    """
+    Surumu eskimis oturumu depodan silmeyi dener — EN IYI CABA.
+
+    Reddetme kararini DB'deki surum verir; silme yalniz depoyu temizler. Depo
+    hatasi (Redis yok vb.) istegi 500'e CEVIRMEZ: oturum zaten reddedildi.
+    """
+    try:
+        revoke_session(token)
+    except Exception:  # noqa: BLE001 - en iyi caba, reddetme zaten gerceklesti
+        logger.warning("Surumu eskimis oturum depodan silinemedi")
+
+
+def _load_active_user(db: Session, identity: _SessionIdentity) -> Optional[CurrentUser]:
     """
     Kullaniciyi her istekte DB'den okuruz: hesap pasife alinirsa veya
     silinirse acik oturumlar ANINDA gecersizlesir. Birincil anahtar
     uzerinden indeksli tek SELECT.
+
+    Oturumun surumu kullanicinin guncel `session_version` degerine esit
+    olmalidir: parola degisimi sayaci artirir, eski oturumlar Redis'te
+    kalsa (silme basarisiz olsa / TTL tazelenip dursa) bile burada reddedilir.
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == identity.user_id).first()
     if user is None or not user.is_active or user.deleted_at is not None:
+        return None
+
+    if identity.session_version != int(user.session_version or 0):
+        _drop_stale_session(identity.token)
         return None
 
     return CurrentUser(
@@ -127,10 +172,10 @@ def resolve_current_user(
     `get_current_user` (/auth/me, /auth/change-password) icin Depends tabanli
     yol. Router seviyesindeki kapi (`require_login`) bunu KULLANMAZ — bkz. orada.
     """
-    user_id = _session_user_id(request)
-    if user_id is None:
+    identity = _session_identity(request)
+    if identity is None:
         return None
-    return _load_active_user(db, user_id)
+    return _load_active_user(db, identity)
 
 
 @contextmanager
@@ -167,12 +212,12 @@ def require_login(request: Request) -> Optional[CurrentUser]:
     if not settings.LOGIN_ENABLED:
         return None
 
-    user_id = _session_user_id(request)
-    if user_id is None:
+    identity = _session_identity(request)
+    if identity is None:
         raise _UNAUTHENTICATED
 
     with _gate_db_session(request) as db:
-        current = _load_active_user(db, user_id)
+        current = _load_active_user(db, identity)
 
     if current is None:
         raise _UNAUTHENTICATED

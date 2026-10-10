@@ -1953,6 +1953,13 @@ class User(Base):
     must_change_password = Column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # Oturum surumu: her parola degisimi/sifirlamasi AYNI transaction'da bunu
+    # artirir. Oturum yuku giris aninda bu degeri tasir; kapi her istekte
+    # DB'deki ile karsilastirir ve uyusmayani reddeder. Boylece eski
+    # oturumlarin iptali Redis'e (fail-open silme) BAGLI olmaz.
+    session_version = Column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

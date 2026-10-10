@@ -169,6 +169,9 @@ def main() -> int:
                     failures += 1
                     continue
                 existing.is_active = False
+                # Surum artar: sonradan yeniden etkinlestirilse bile pasifken
+                # acik kalmis oturumlar geri donmez (Redis silinemese de).
+                existing.session_version = User.session_version + 1
                 db.commit()
                 _revoke(existing.id)
                 print(f"[pasif]   {email} (acik oturumlari kapatildi)")
@@ -202,6 +205,9 @@ def main() -> int:
                 existing.is_active = True
                 existing.deleted_at = None
                 existing.must_change_password = must_change
+                # Parola ile AYNI commit'te: eski oturumlar Redis temizligi
+                # basarisiz olsa bile kapida reddedilir.
+                existing.session_version = User.session_version + 1
                 db.commit()
                 _revoke(existing.id)
                 suffix = "  PAROLA DEGISTIRME ZORUNLU" if must_change else ""

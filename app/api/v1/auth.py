@@ -193,6 +193,9 @@ def login(
             email=user.email,
             ip=ip,
             user_agent=request.headers.get("User-Agent"),
+            # Commit sonrasi okunur: parola degisimi sayaci artirmissa yeni
+            # oturum GUNCEL surumu tasir, yoksa kapi onu reddederdi.
+            session_version=int(user.session_version or 0),
         )
     except SessionBackendUnavailable:
         logger.error("Oturum deposuna ulasilamadi — giris reddedildi")
@@ -295,12 +298,20 @@ def change_password(
     user.password_hash = hash_password(payload.new_password)
     # Zorunluluk kalkar: artik kullanicinin kendi belirledigi parola var.
     user.must_change_password = False
+    # Oturum surumu parola ile AYNI commit'te artar: eski oturumlarin iptali
+    # Redis'e bagli degildir (kapi surumu her istekte DB'den karsilastirir).
+    # SQL ifadesi: es zamanli iki degisimde artis kaybolmaz.
+    user.session_version = User.session_version + 1
     db.commit()
 
+    # Surum artisi iptali ZATEN garanti etti; depo temizligi en iyi cabadir.
     try:
         revoke_all_sessions(user.id)
     except SessionBackendUnavailable:
-        logger.warning("Parola degisti ama oturumlar kapatilamadi (Redis yok)")
+        logger.warning(
+            "Parola degisti; eski oturumlar surum artisiyla gecersiz ama "
+            "depodan silinemedi (Redis yok)"
+        )
 
     logger.bind(user_id=user.id).info("Parola degistirildi, oturumlar kapatildi")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

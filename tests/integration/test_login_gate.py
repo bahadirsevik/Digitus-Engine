@@ -43,6 +43,9 @@ class FakeSessionStore:
         self.calls: list[str] = []
         self.unavailable = False
         self.forbid = False
+        # True ise YALNIZ silme islemleri (revoke_*) depo hatasi verir; okuma
+        # ve olusturma calisir (Redis'te silme basarisiz, okuma basarili).
+        self.fail_deletes = False
 
     def _enter(self, name: str) -> None:
         self.calls.append(name)
@@ -50,11 +53,19 @@ class FakeSessionStore:
             raise AssertionError(f"Oturum deposuna dokunulmamaliydi: {name}")
         if self.unavailable:
             raise SessionBackendUnavailable("test: depo yok")
+        if self.fail_deletes and name.startswith("revoke_"):
+            raise SessionBackendUnavailable("test: silme basarisiz")
 
-    def create_session(self, *, user_id, email, ip=None, user_agent=None):
+    def create_session(
+        self, *, user_id, email, ip=None, user_agent=None, session_version=0
+    ):
         self._enter("create_session")
         token = secrets.token_urlsafe(16)
-        self.sessions[token] = {"user_id": user_id, "email": email}
+        self.sessions[token] = {
+            "user_id": user_id,
+            "email": email,
+            "session_version": session_version,
+        }
         return token
 
     def get_session(self, token, *, refresh=True):
@@ -112,6 +123,8 @@ class DbSpy:
 def store(monkeypatch):
     fake = FakeSessionStore()
     monkeypatch.setattr("app.core.login.get_session", fake.get_session)
+    # Kapi, surumu eskimis oturumu en iyi caba ile siler.
+    monkeypatch.setattr("app.core.login.revoke_session", fake.revoke_session)
     for name in (
         "create_session",
         "revoke_session",
