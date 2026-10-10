@@ -1810,7 +1810,6 @@ export const socialBriefApi = {
 
 export default api
 
-
 // ── Auth ──
 // Bu uçlar /api/v1/auth altındadır ve api_router'a bağlı DEĞİLDİR; bu yüzden
 // baseURL ('/api/v1') + '/auth/...' doğru adresi verir.

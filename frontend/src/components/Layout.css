@@ -153,7 +153,6 @@
   }
 }
 
-
 /* ── Kullanici satiri + cikis (giris ozelligi) ── */
 
 .sidebar-user {
@@ -185,7 +184,10 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .sidebar-logout:hover {
