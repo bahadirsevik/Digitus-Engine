@@ -327,7 +327,8 @@ Sıra:
 5. **Kodu al:** `git fetch` + `git merge --ff-only origin/deploy/auth-lean-merge`.
 6. **İmajları derle:** `docker compose build` (`APP_GIT_SHA` ile).
 7. **Migration'ı ayrı adımda uygula:** yeni app imajıyla tek seferlik
-   `alembic upgrade head`; ardından `alembic current` = 20261010_002.
+   `alembic upgrade head`; ardından `alembic current` = **20261010_003** (S-1 ile; önce
+   20261010_002 idi).
 8. **Başlat:** migration başarılıysa `up -d`; sağlık kontrolü, giriş ekranı ve birkaç
    sayfa.
 9. **Migration hata verirse:** servisleri BAŞLATMA. Yedekten dönüş OTOMATİK karar
@@ -358,6 +359,18 @@ Sıra:
   - Mevcut oturumların yeni alana geçişi açıkça tanımlanmalı (ör. sürüm alanı olmayan eski
     oturum yükü = sürüm 0 kabul edilir; kullanıcı sürümü varsayılan 0).
   - Dağıtımdan ayrı, küçük ve testli bir düzeltme.
+- **DURUM (10.10): uygulandı, `deploy/auth-lean-merge` 12b76b8.**
+  - `users.session_version` + migration 20261010_003 (idempotent).
+  - Login sürümü oturum yüküne yazar. Her çözümlemede sürüm kullanıcınınkiyle
+    karşılaştırılır. Sürümsüz eski oturum yalnız kullanıcı sürümü 0 iken geçerli; bozuk
+    değer → red.
+  - Sürümü artıran yollar: change-password ve CLI `--reset-password` (hash ile aynı
+    commit), CLI `--deactivate`.
+  - Login kapalıyken DB/Redis'e dokunmama korunuyor. 21 yeni test + 3 migration testi.
+- **Kalan risk (kabul edilen, takipte):** logout, Redis hatasında yalnız çerezi siler.
+  Çalınmış bir çerez TTL boyunca (kullanıldıkça uzayarak) geçerli kalır. Oturum başına
+  iptal farklı tasarım ister; sürüm artırmak kullanıcının diğer tüm oturumlarını da
+  kapatır.
 
 ## Paket 5 — İhtiyaç oldukça küçük temizlikler (tek büyük iş değil)
 Çalışan üründeki hataların önüne geçmez; fırsat oldukça yapılır.
