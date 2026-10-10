@@ -499,6 +499,30 @@ made in this workstream.
     - uzun AI dışlama cümlelerinin eşleşmeme riski
     - QA nitleri
   - Sıradaki adım: auth dalı GitHub'a gelince migration birleşimi.
+- 10.10 MIGRATION BİRLEŞİMİ TAMAM (dağıtım hazır, yapılmadı).
+  - Auth dalının GitHub'a gelişi:
+    - Sunucunun deploy anahtarı salt okunur olduğu için git bundle + scp ile alındı.
+    - Gizli bilgi taraması temiz.
+    - `feat/auth-login` (db90e94) değiştirilmeden GitHub'a push edildi.
+  - Birleşik dal `deploy/auth-lean-merge` (worktree `../dg-auth-merge`, GitHub'da, c001ea2):
+    - 7a353b4: lean merge, çakışmasız.
+    - 0a6c7b5: alembic merge revizyonu 20261010_002.
+      - Revises: 20261006_002 + 20261010_001.
+      - Boş DB → tek head; sunucu yolu 20261006_002 → head doğrulandı.
+    - 9793504: auth frontend'inde 3 dosyaya prettier.
+    - c001ea2: login kapısı LOGIN_ENABLED=false iken get_db ve Redis zincirine girmiyor.
+      - Önceden `Depends(resolve_current_user → get_db)` her istekte oturum açıyordu ve
+        test_23 kırmızıydı.
+      - 15 odaklı API testi eklendi: kapalı, açık, must_change_password. Düzeltme geri
+        alınınca kırmızı.
+  - Birleşik dal: backend 4540 passed / 0 kırmızı; frontend 255; lint, format, build, ruff
+    temiz.
+  - Auth'ta not edilen, değiştirilmeyenler:
+    - change-password, oturum deposu yokken eski oturumları iptal edemiyor (TTL'e kadar
+      geçerli).
+    - conftest `app.database.connection.get_db`'yi override ediyor; uçlar
+      `app.dependencies.get_db` kullanıyor (farklı nesne) → bazı testler test oturumu yerine
+      SessionLocal ile koşuyor.
   - Sıradaki (Codex önerisi): birleşmiş migration zincirinin doğrulanması + kısa görsel
     kontrol → dağıtım. Paket 5 dağıtımın ön koşulu DEĞİL.
   - Celery: generation_tasks gövdesi değişti; deploy'da celery_worker restart (önce
