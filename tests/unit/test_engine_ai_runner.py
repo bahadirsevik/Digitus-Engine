@@ -126,7 +126,8 @@ class QueueAI:
         self.call_counts: Counter = Counter()
 
     def for_stage(self, stage: str, *, model: str = None,
-                  thinking_level: str = None) -> "_ScopedQueueAI":
+                  thinking_level: str = None,
+                  provider: str = None) -> "_ScopedQueueAI":
         return _ScopedQueueAI(self, stage)
 
     def _respond(self, stage: str, prompt: str) -> str:

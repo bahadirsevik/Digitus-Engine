@@ -100,7 +100,8 @@ class FakeAdsAI:
         self.call_counts: Counter = Counter()
 
     def for_stage(self, stage: str, *, model: str = None,
-                  thinking_level: str = None) -> "_ScopedFakeAdsAI":
+                  thinking_level: str = None,
+                  provider: str = None) -> "_ScopedFakeAdsAI":
         return _ScopedFakeAdsAI(self, stage)
 
     def _respond(self, stage: str, prompt: str) -> str:

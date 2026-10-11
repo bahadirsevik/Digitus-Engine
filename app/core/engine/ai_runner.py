@@ -95,11 +95,11 @@ class AiStageError(RuntimeError):
 def _scoped(ai: Any, stage: str, model: str, thinking_level: str,
             provider: str = "gemini") -> Any:
     if hasattr(ai, "for_stage"):
-        if provider != "gemini":     # gemini'de cagri bugunku haliyle BAYT-AYNI
-            return ai.for_stage(stage, model=model,
-                                thinking_level=thinking_level,
-                                provider=provider)
-        return ai.for_stage(stage, model=model, thinking_level=thinking_level)
+        # Provider GEMINI DAHIL her zaman acik gecer: aksi halde RoutedAIService
+        # global AI_STAGE_ROUTES'u yeniden okur ve muhurlu (gemini, model)
+        # cifti (anthropic, gemini-model) olarak cozulebilir (Codex Faz 0 #1).
+        return ai.for_stage(stage, model=model, thinking_level=thinking_level,
+                            provider=provider)
     return ai
 
 

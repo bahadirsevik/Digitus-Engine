@@ -53,7 +53,8 @@ class OrchestrationAI:
         self._lock = threading.Lock()
 
     def for_stage(self, stage: str, *, model: str = None,
-                  thinking_level: str = None) -> "OrchestrationAI._Scoped":
+                  thinking_level: str = None,
+                  provider: str = None) -> "OrchestrationAI._Scoped":
         return OrchestrationAI._Scoped(self, stage)
 
     class _Scoped:

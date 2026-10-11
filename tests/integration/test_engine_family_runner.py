@@ -114,7 +114,8 @@ class FakeFamilyAI:
         self.call_counts: Counter = Counter()
 
     def for_stage(self, stage: str, *, model: str = None,
-                  thinking_level: str = None) -> "_ScopedFakeAI":
+                  thinking_level: str = None,
+                  provider: str = None) -> "_ScopedFakeAI":
         return _ScopedFakeAI(self, stage)
 
     def _respond(self, stage: str, prompt: str) -> str:

@@ -17,7 +17,18 @@ from typing import Any
 
 from app.core.social.provider_schema import ProviderSchemaError
 
-SCHEMA_TRANSFORMER_VERSION = "1"
+SCHEMA_TRANSFORMER_VERSION = "2"
+
+# Anthropic structured outputs desteklemez (resmi doc "Not supported", 11.10.2026):
+# sayisal/dizgi/dizi uzunluk kisitlari ve 0/1 disi minItems. Kopyadan DUSER,
+# is kurali description'a tasinir; kanonik sema ve yerel fail-closed dogrulama
+# (content_contract vb.) kurali korur (Codex Faz 0 #3).
+_UNSUPPORTED_CONSTRAINTS = ("maxItems", "minLength", "maxLength", "minimum",
+                            "maximum", "exclusiveMinimum", "exclusiveMaximum",
+                            "multipleOf", "minProperties", "maxProperties",
+                            "example")
+_SUPPORTED_FORMATS = frozenset({"date-time", "time", "date", "duration", "email",
+                                "hostname", "uri", "ipv4", "ipv6", "uuid"})
 
 _MAP_KEYS = ("properties", "$defs")      # ad -> şema
 _LIST_KEYS = ("anyOf", "allOf")          # şema listesi
@@ -28,8 +39,14 @@ def _convert(node: Any, path: str) -> dict[str, Any]:
     if type(node) is not dict:
         raise ProviderSchemaError(f"{path}: şema düğümü nesne olmalı")
     out: dict[str, Any] = {}
+    dropped: list[str] = []
     for key, value in node.items():
         if key == "propertyOrdering":
+            continue
+        if key in _UNSUPPORTED_CONSTRAINTS or (
+                key == "minItems" and value not in (0, 1)) or (
+                key == "format" and value not in _SUPPORTED_FORMATS):
+            dropped.append(f"{key}={value!r}")
             continue
         if key in _MAP_KEYS:
             if type(value) is not dict:
@@ -43,6 +60,11 @@ def _convert(node: Any, path: str) -> dict[str, Any]:
             out[key] = [_convert(s, f"{path}|{i}") for i, s in enumerate(value)]
         else:
             out[key] = copy.deepcopy(value)
+
+    if dropped:
+        note = "[kısıt: " + ", ".join(dropped) + "]"
+        desc = out.get("description")
+        out["description"] = f"{desc} {note}" if isinstance(desc, str) and desc else note
 
     node_type = out.get("type")
     if node_type is not None and not (

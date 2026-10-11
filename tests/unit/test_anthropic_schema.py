@@ -32,11 +32,11 @@ def _type_ok(t, v):
     }[t]
 
 
-def _accepts(schema, v) -> bool:
+def _accepts(schema, v, lengths=True) -> bool:
     if schema.get("nullable") and v is None:
         return True
     if "anyOf" in schema:
-        return any(_accepts(s, v) for s in schema["anyOf"])
+        return any(_accepts(s, v, lengths) for s in schema["anyOf"])
     t = schema.get("type")
     types = t if isinstance(t, list) else ([t] if t else [])
     if types and not any(_type_ok(x, v) for x in types):
@@ -49,11 +49,12 @@ def _accepts(schema, v) -> bool:
             return False
         if schema.get("additionalProperties") is False and set(v) - set(props):
             return False
-        return all(_accepts(props[k], x) for k, x in v.items() if k in props)
+        return all(_accepts(props[k], x, lengths) for k, x in v.items() if k in props)
     if isinstance(v, list):
-        if len(v) < schema.get("minItems", 0) or len(v) > schema.get("maxItems", 10**9):
+        if lengths and (len(v) < schema.get("minItems", 0)
+                        or len(v) > schema.get("maxItems", 10**9)):
             return False
-        return all(_accepts(schema["items"], x) for x in v) if "items" in schema else True
+        return all(_accepts(schema["items"], x, lengths) for x in v) if "items" in schema else True
     return True
 
 
@@ -72,7 +73,7 @@ def _walk_objects(node):
 
 
 def test_version_constant():
-    assert SCHEMA_TRANSFORMER_VERSION == "1"
+    assert SCHEMA_TRANSFORMER_VERSION == "2"   # rev: desteklenmeyen kisitlar duser
 
 
 def test_additional_properties_false_everywhere_and_required_kept():
@@ -169,7 +170,10 @@ def test_accept_reject_parity_with_canonical_and_gemini(name):
     assert canonical == before
     for payload, expected in cases:
         assert _accepts(canonical, payload) is expected, payload
-        assert _accepts(anth, payload) is expected, payload
+        # Anthropic kopyasi uzunluk kisitlarini TASIMAZ (API desteklemez);
+        # o kural yerel dogrulamada kalir -> uzunluk disi kabul/ret birebir.
+        assert _accepts(anth, payload, lengths=False) is _accepts(
+            canonical, payload, lengths=False), payload
         assert _accepts(gem, payload) is expected, payload
 
 
@@ -185,3 +189,61 @@ def test_extra_field_is_the_only_known_divergence():
     extra = {"results": [], "ekstra": 1}
     assert _accepts(FUNNEL_SCHEMA, extra) is True
     assert _accepts(to_anthropic_response_schema(FUNNEL_SCHEMA), extra) is False
+
+
+_UNSUPPORTED = {"maxItems", "minLength", "maxLength", "minimum", "maximum",
+                "multipleOf", "exclusiveMinimum", "exclusiveMaximum",
+                "minProperties", "maxProperties", "example"}
+
+
+def _walk_all(node):
+    if isinstance(node, dict):
+        yield node
+        for v in node.values():
+            yield from _walk_all(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _walk_all(v)
+
+
+def _assert_anthropic_clean(schema):
+    anth = to_anthropic_response_schema(schema)
+    for node in _walk_all(anth):
+        assert not (_UNSUPPORTED & set(node)), node
+        assert node.get("minItems", 0) in (0, 1), node
+    return anth
+
+
+def test_social_content_schema_drops_unsupported_array_constraints():
+    """Codex Faz 0 #3: aktif SOCIAL semasi hashtags icin minItems 5 / maxItems 20
+    tasir; Anthropic kopyasinda dusmeli ve description'a tasinmali."""
+    from app.core.social.content_contract import (
+        ContentTargetSpec, build_social_content_response_schema)
+    canonical = build_social_content_response_schema(
+        ContentTargetSpec(1, "instagram", "post"))
+    before = copy.deepcopy(canonical)
+    anth = _assert_anthropic_clean(canonical)
+    assert canonical == before
+    tags = anth["properties"]["hashtags"]
+    assert "minItems" not in tags and "maxItems" not in tags
+    assert "minItems=5" in tags["description"] and "maxItems=20" in tags["description"]
+
+
+def test_repo_schemas_have_no_unsupported_constraints():
+    for schema in (FUNNEL_SCHEMA, SCREENING_SCHEMA,
+                   get_social_category_response_schema()):
+        _assert_anthropic_clean(schema)
+
+
+def test_min_items_zero_or_one_kept_and_unknown_format_dropped():
+    schema = {"type": "object", "properties": {
+        "a": {"type": "array", "minItems": 1, "items": {"type": "string",
+                                                       "format": "turkish-slug"}},
+        "b": {"type": "string", "format": "email", "maxLength": 5}},
+        "required": ["a", "b"]}
+    anth = to_anthropic_response_schema(schema)
+    assert anth["properties"]["a"]["minItems"] == 1
+    assert "format" not in anth["properties"]["a"]["items"]
+    assert anth["properties"]["b"]["format"] == "email"
+    assert "maxLength" not in anth["properties"]["b"]
+    assert "maxLength=5" in anth["properties"]["b"]["description"]

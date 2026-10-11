@@ -45,6 +45,8 @@ _SITE = (_BRAND + " Ürünler: masif meşe masa, ceviz kitaplık, TV ünitesi. "
 def _cases() -> Dict[str, Dict[str, Any]]:
     from app.core.site_analyzer.profile_extractor import (
         PROFILE_EXTRACTION_PROMPT, PROFILE_RESPONSE_SCHEMA)
+    from app.core.social.content_contract import (
+        ContentTargetSpec, build_social_content_response_schema)
 
     return {
         "c1_optional": dict(stage="ads_intent", json_mode=True, schema=_OPT, cap=600,
@@ -69,20 +71,27 @@ def _cases() -> Dict[str, Dict[str, Any]]:
                         cap=2500, prompt=_BRAND + " Bu marka için yaklaşık 1500 "
                         "token uzunluğunda, numaralı 40 maddelik Türkçe sosyal "
                         "medya içerik fikri listesi yaz."),
+        # Codex Faz 0 #3: gercek uretim semasi (minItems/maxItems donusumde duser)
+        "c7_social_schema": dict(
+            stage="social_brief_contents", json_mode=True, cap=1500,
+            schema=build_social_content_response_schema(
+                ContentTargetSpec(1, "instagram", "post")),
+            prompt=_BRAND + " için Instagram gönderisi üret: başlık, metin, "
+            "CTA ve 5-20 hashtag; şemaya birebir uy."),
     }
 
 
 def build_spike_plan() -> List[Dict[str, Any]]:
     cases = _cases()
     # (case, effort, tekrar): haiku 20, sonnet 8, opus yok
-    spec = {HAIKU: [("c1_optional", "low", 4), ("c2_nullable", "low", 3),
+    spec = {HAIKU: [("c1_optional", "low", 3), ("c2_nullable", "low", 3),
                     ("c3_nested", "low", 3), ("c4_json_mode", "low", 4),
                     ("c5_effort", "low", 2), ("c5_effort", "medium", 2),
-                    ("c6_long", "low", 2)],
+                    ("c6_long", "low", 2), ("c7_social_schema", "low", 1)],
             SONNET: [("c1_optional", "low", 1), ("c2_nullable", "low", 1),
                      ("c3_nested", "low", 1), ("c4_json_mode", "low", 1),
                      ("c5_effort", "low", 1), ("c5_effort", "medium", 1),
-                     ("c6_long", "low", 2)]}
+                     ("c6_long", "low", 1), ("c7_social_schema", "low", 1)]}
     plan = []
     for model, rows in spec.items():
         for case, effort, reps in rows:

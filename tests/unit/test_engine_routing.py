@@ -199,19 +199,47 @@ def test_deepseek_route_for_engine_stage_passes_through_unchanged(monkeypatch):
 
 
 # ---------- gemini yolu bayt-aynı ----------
-def test_gemini_provider_does_not_pass_provider_kwarg():
+def test_gemini_provider_is_passed_explicitly():
     calls = []
 
-    class StrictAI:                       # bugunku imza: provider kabul ETMEZ
-        def for_stage(self, stage, *, model, thinking_level):
-            calls.append((stage, model, thinking_level))
+    class RecordingAI:
+        def for_stage(self, stage, *, model, thinking_level, provider):
+            calls.append((stage, model, thinking_level, provider))
             return self
 
         def complete_json(self, prompt, **kw):
             return json.dumps({"results": [{"id": 1}]})
 
-    _run_single(StrictAI(), "ads_funnel", "gemini", "gemini-3.8-flash")
-    assert calls == [("ads_funnel", "gemini-3.8-flash", "low")]
+    _run_single(RecordingAI(), "ads_funnel", "gemini", "gemini-3.8-flash")
+    assert calls == [("ads_funnel", "gemini-3.8-flash", "low", "gemini")]
+
+
+def test_sealed_gemini_route_survives_global_route_change(monkeypatch):
+    """Codex Faz 0 #1: muhur (gemini, gemini-3.8-flash) iken global route
+    anthropic'e cevrilse bile cagri Gemini backend'ine muhurlu modelle gider;
+    Anthropic transport'u HIC cagrilmaz."""
+    http_calls = []
+
+    def harness(request):
+        http_calls.append(request)
+        raise AssertionError("anthropic backend cagrilmamaliydi")
+
+    class FakeGemini(MockAIService):          # varsayilan (gemini) backend
+        seen = []
+
+        def _execute(self, prompt, **kw):
+            self.seen.append((kw.get("stage"), kw.get("model")))
+            return json.dumps({"results": [{"id": 1}]})
+
+    gemini = FakeGemini()
+    anth = AnthropicService(api_key="k", transport=httpx2.MockTransport(harness),
+                            limiter=AnthropicRateLimiter())
+    router = RecordingRouter(gemini, anthropic_backend=anth)
+    _route(monkeypatch, "ads_funnel", "anthropic", HAIKU)   # muhurden SONRA degisen ayar
+    _run_single(router, "ads_funnel", "gemini", "gemini-3.8-flash")
+    assert router.stage_calls == [("ads_funnel", "gemini-3.8-flash", "gemini")]
+    assert gemini.seen == [("ads_funnel", "gemini-3.8-flash")]
+    assert http_calls == []                   # Anthropic'e tek istek bile gitmedi
 
 
 # ---------- refusal asla tekrar edilmez ----------

@@ -54,7 +54,8 @@ class DeterministicAI:
         self._lock = threading.Lock()
 
     def for_stage(self, stage: str, *, model: str = None,
-                  thinking_level: str = None) -> "DeterministicAI._Scoped":
+                  thinking_level: str = None,
+                  provider: str = None) -> "DeterministicAI._Scoped":
         return DeterministicAI._Scoped(self, stage)
 
     class _Scoped:

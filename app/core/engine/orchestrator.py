@@ -38,8 +38,7 @@ from app.core.engine.family.runner import (
     family_prompt_shas,
     run_family_stage,
 )
-from app.core.engine.persistence import seal_manifest
-from app.core.engine.routing import resolve_stage_route
+from app.core.engine.persistence import routes_for_seal, seal_manifest
 from app.core.engine.policy_gate import finalize_engine_delivery
 from app.core.engine.seo.runner import (
     seo_models,
@@ -136,15 +135,10 @@ def run_v3_orchestration(
     # finalize canlı profille karşılaştırıp fail-closed durur.
     from app.core.policy.location_policy import policy_snapshot
 
-    # Rota (provider+model) MUHURDAN ONCE global AI_STAGE_ROUTES'tan cozulur
-    # ve manifest'e yazilir; sonrasinda runner'lar yalniz muhurden okur.
-    # "deterministic" AI asamasi degildir (provider yok, model ayni kalir).
-    all_providers: Dict[str, str] = {}
-    for stage, default_model in list(all_models.items()):
-        if default_model == "deterministic":
-            continue
-        all_providers[stage], all_models[stage] = resolve_stage_route(
-            stage, default_model)
+    # Rota (provider+model) MUHURDAN ONCE cozulur ve manifest'e yazilir;
+    # run zaten muhurluyse MEVCUT muhurden okunur (resume ayar degisiminden
+    # etkilenmez). Sonrasinda runner'lar yalniz muhurden okur.
+    all_providers, all_models = routes_for_seal(run, all_models)
 
     seal_manifest(
         run,

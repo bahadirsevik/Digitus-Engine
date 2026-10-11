@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -196,6 +196,31 @@ def stage_route(run: ScoringRun, stage: str) -> "tuple[str, str]":
         raise StageContextMismatch(
             f"{stage}: muhurde model kaydi yok — muhurlenmemis asama kosulamaz")
     return _sealed_provider(section, stage), model
+
+
+def routes_for_seal(run: ScoringRun, models: Mapping[str, str]
+                    ) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Muhur icin (providers, models): run ZATEN muhurluyse mevcut muhurden,
+    degilse global AI_STAGE_ROUTES'tan cozulur (Codex Faz 0 #2: ayar
+    degisikligi eski kosunun rotasini degistirmez, resume engellenmez).
+    "deterministic" AI asamasi degildir, oldugu gibi kalir."""
+    from app.core.engine.routing import resolve_stage_route
+
+    manifest = run.execution_manifest if isinstance(run.execution_manifest, dict) else {}
+    existing = manifest.get(MANIFEST_KEY) if isinstance(manifest, dict) else None
+    providers: Dict[str, str] = {}
+    resolved: Dict[str, str] = dict(models)
+    for stage, default_model in models.items():
+        if default_model == "deterministic":
+            continue
+        if isinstance(existing, dict) and stage in (existing.get("models") or {}):
+            resolved[stage] = existing["models"][stage]
+            providers[stage] = (existing.get("providers") or {}).get(
+                stage, DEFAULT_PROVIDER)
+        else:
+            providers[stage], resolved[stage] = resolve_stage_route(
+                stage, default_model)
+    return providers, resolved
 
 
 def manifest_section(run: ScoringRun) -> Dict[str, Any]:

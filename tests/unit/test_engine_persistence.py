@@ -935,3 +935,49 @@ def test_schema_3_location_policy_still_readable():
     run = _stub_run()
     _anthropic_seal(run)
     assert manifest_location_policy(run)["mode"] == "none"
+
+
+from app.config import settings  # noqa: E402
+
+
+class TestRoutesForSeal:
+    """Codex Faz 0 #2: muhurlu run'da rota MUHURDEN, yeni run'da AYARDAN."""
+
+    def _models(self):
+        return {"ads_intent": "gemini-3.8-flash", "ads_funnel": "gemini-3.8-flash",
+                "social_normbounds": "deterministic"}
+
+    def test_unsealed_run_resolves_from_settings(self, monkeypatch):
+        from app.core.engine.persistence import routes_for_seal
+        monkeypatch.setattr(settings, "AI_STAGE_ROUTES", {
+            "ads_intent": {"provider": "anthropic", "model": "claude-haiku-5-5"}},
+            raising=False)
+        run = types.SimpleNamespace(id=1, execution_manifest=None)
+        providers, models = routes_for_seal(run, self._models())
+        assert providers == {"ads_intent": "anthropic", "ads_funnel": "gemini"}
+        assert models == {"ads_intent": "claude-haiku-5-5",
+                          "ads_funnel": "gemini-3.8-flash",
+                          "social_normbounds": "deterministic"}
+
+    def test_sealed_run_ignores_changed_settings(self, monkeypatch):
+        from app.core.engine.persistence import (
+            MANIFEST_KEY, routes_for_seal, seal_manifest)
+        monkeypatch.setattr(settings, "AI_STAGE_ROUTES", {}, raising=False)
+        run = types.SimpleNamespace(id=1, execution_manifest=None)
+        seal_manifest(run, firm_block_sha256="f" * 64,
+                      algorithm_versions={"ads": "nihai_niche_v1"},
+                      models=self._models(), prompt_shas={"ads_intent": "p"},
+                      location_policy=_loc_snap({}))
+        monkeypatch.setattr(settings, "AI_STAGE_ROUTES", {
+            "ads_intent": {"provider": "anthropic", "model": "claude-haiku-5-5"}},
+            raising=False)
+        providers, models = routes_for_seal(run, self._models())
+        assert providers == {"ads_intent": "gemini", "ads_funnel": "gemini"}
+        assert models["ads_intent"] == "gemini-3.8-flash"
+        # ayni (providers, models) ile yeniden muhur BIREBIR aynidir -> resume acik
+        before = json.dumps(run.execution_manifest[MANIFEST_KEY], sort_keys=True)
+        seal_manifest(run, firm_block_sha256="f" * 64,
+                      algorithm_versions={"ads": "nihai_niche_v1"},
+                      models=models, prompt_shas={"ads_intent": "p"},
+                      location_policy=_loc_snap({}), providers=providers)
+        assert json.dumps(run.execution_manifest[MANIFEST_KEY], sort_keys=True) == before

@@ -28,7 +28,7 @@ class FakeAI:
         self.queue = list(queue)
         self.calls = 0
 
-    def for_stage(self, stage, *, model=None, thinking_level=None):
+    def for_stage(self, stage, *, model=None, thinking_level=None, provider=None):
         return _Scoped(self)
 
     def _respond(self) -> str:
