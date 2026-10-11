@@ -1,5 +1,47 @@
 # Current Status
 
+Last updated: 2026-10-11
+Branch: `deploy/lean-taslak`
+Active phase: **Gemini→Claude karsilastirma — Faz 0 tesisat KOD TAMAM (2 commit), spike API anahtari bekliyor**
+Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 (konsey 2 tur + Codex 3 inceleme GO).
+
+## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
+
+- **Dalga 1 `4ede981`:** `AnthropicService` (anthropic==1.13.0/httpx2, max_retries=0, adaptive thinking +
+  effort tablosu, allowance-dahil max_tokens, structured output `output_config.format`, refusal/429/5xx/4xx
+  eslemesi, Gemini-sekilli usage namespace: prompt_token_count = input + cache_read + cache_creation);
+  `to_anthropic_response_schema` (additionalProperties:false, optional alanlar OLDUGU GIBI);
+  `RoutedAIService` "anthropic" slotu + mock; ledger `reserve(provider=)`, cache-farkinda `_usage_totals`
+  (cache write > 0 -> TAVAN, shortcut), `_anthropic` backend taramasi; PRICE_TABLE claude-haiku/sonnet/opus-5-5
+  (resmi sayfa 11.10); `AiUsageEvent` provider/cache/queue_wait_ms/http_attempts + idempotent migration
+  `20261011_001`; screening provider CHECK genisledi. 228 ilgili test yesil.
+- **Dalga 2 `1422fd4`:** `engine/routing.resolve_stage_route`; orchestrator rotayi MUHURDEN ONCE cozer,
+  runner'lar `stage_route(run, stage)` ile MUHURDEN okur (kosu ortasinda route degisikligi etkisiz);
+  `StageContext.provider`; manifest schema 3 (providers + adapter kimlik alanlari) yalniz gemini-disi route
+  varken, aksi halde schema 2 BAYT-AYNI (golden test); eski manifest gemini varsayimiyla resume; "refusal"
+  fatal mark; benchmark `CharacterizationBudget` provider-farkinda (anthropic zarfi, allowance cift sayilmaz,
+  provider->butce eslemesi, cagri-basi fiyat); `profile_inputs` (crawl dondurma); `claude_spike`
+  (≤30 sentetik cagri, kuru kosu tavani 0,33 $, muhurlu JSON).
+- **Tam paket: 4690 passed / 112 skipped / 0 failed** (temel 4527; +163 yeni), docker-compose.test.yml,
+  override ile `digitus_lean_test_*` konteyner adlari (eski `dg-auth-merge` test_db ile ad cakismasi).
+- Bulgu: ledger eszamanlilik testi ilk yazimda yanlis tasarlanmisti (thread icinde settle taahhudu
+  dusuruyordu) -> iki fazli yapildi; ledger kilidi dogru calisiyor (5 ok / 3 BudgetExceeded).
+- Bulgu (T4): gemini/deepseek route'lari artik motor asamasinda ETKILI (eskiden runner sabiti eziyordu);
+  route bos -> bayt-ayni. Uretim .env'de AI_STAGE_ROUTES yok.
+
+## Open / next
+
+1. **Spike (Faz 0 madde 5) ANTHROPIC_API_KEY bekliyor** — `python -m app.core.benchmark.claude_spike
+   --out benchmark/claude_spike.json` (tavan 0,50 $; kuru kosu 29 cagri / 0,33 $). Sonra allowance/effort
+   kalibrasyonu, optional-alan kabulu, rate-limit basliklari, tokenizer orani muhurlenir.
+2. Faz 0 madde 6 (arsiv benchmark moduller: bakeoff_*/patron_*/annotation_io -> lean), 8 (butce yeniden
+   muhuru, spike p90), 9 (`claude_bakeoff_plan.json`), 10 (Faz 2 idiomatik prompt SHA) — spike SONRASI.
+3. Gemini tarafi: `thoughts_tokens` kontrolu + genai ic retry hata enjeksiyonu (placeholder "not run").
+4. Konsol: net kredi/devir/kapsam/Batch API (manuel). K12 belge referansi Faz 1 oncesi.
+5. PUSH YAPILMADI — iki commit yerel. Sunucu feat/auth-login'den calisiyor; push karari kullanicinin.
+
+## Previous status (2026-09-17)
+
 Last updated: 2026-09-17
 Branch: `algoritma-kilitleri`
 Active phase: **Kilitli algoritmalarin uretime entegrasyonu — Faz 5 KAPANDI; sirada Faz 6 (post-policy + ChannelPool teslimi)**
