@@ -55,3 +55,22 @@ def test_n_max_rounds_down(plan):
     assert _n_max(100.0, 3.6) == 27 and _n_max(100.0, 1.25) == 80
     assert plan["n_max_3_2"]["Aday"]["n_max"] == 27
     assert plan["n_max_3_2"]["Her şey Haiku"]["n_max"] == 294
+
+
+def test_workspace_scope_is_enforced(plan):
+    from app.core.benchmark.claude_bakeoff_plan import (
+        WorkspaceNotApproved, assert_workspace_allowed)
+    from app.core.benchmark.reference_characterization import seal
+    p = dict(plan)
+    p["workspaces"] = {**plan["workspaces"],
+                       "ids": {"Optimice": 21, "GR-7": 30, "Dijital": 29, "Noksel": 48}}
+    p = seal(p)
+    assert_workspace_allowed(p, 30, "1B")
+    assert_workspace_allowed(p, 29, "1A")
+    assert_workspace_allowed(p, 48, "profile")
+    with pytest.raises(WorkspaceNotApproved):      # Dijital 1B'de yok
+        assert_workspace_allowed(p, 29, "1B")
+    with pytest.raises(WorkspaceNotApproved):      # onay dışı id
+        assert_workspace_allowed(p, 99, "1A")
+    with pytest.raises(WorkspaceNotApproved):      # id eşlemesi boş -> hepsi ret
+        assert_workspace_allowed(plan, 30, "1B")

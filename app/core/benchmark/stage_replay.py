@@ -5,8 +5,9 @@ Her yakalanmis `initial` / `attempt==1` cagri ayni motor fonksiyonundan
 ayni. `ai` cagiran tarafindan BudgetGuardedAI ile sarilmis gelir; burasi
 FIYATLAMA YAPMAZ, ag kullanmaz.
 
-shortcut: replay retry re-sends the full captured prompt, not the missing-ids
-subset (hedefli tekrarda prompt eksik-ID alt kumesi icin yeniden kurulmaz);
+Hedefli tekrar replay'de KAPALIDIR (Codex Faz 1 #2): eksik-ID alt kumesinin
+prompt'u uretimle birebir kurulamaz; kiyas iki tarafta da ILK DENEME ile
+simetriktir, teslim-sonrasi kiyas 1B'nin isidir.
 upgrade if 1A retry rates matter.
 shortcut: `response_parser` kullanan asamalar (SOCIAL) icin parser, cagiranin
 `response_parsers={stage: fn}` argumaniyla verilmeli; verilmezse varsayilan
@@ -49,6 +50,12 @@ def replay_capture(calls: List[Dict[str, Any]], *, ai: Any, provider: str,
     if missing:                          # fail-closed: hicbir cagri yapilmadan
         raise CharacterizationError(f"model_for_stage eksik: {missing}")
     parsers = response_parsers or {}
+    need_parser = sorted({c["stage"] for c in todo
+                          if c.get("has_response_parser")} - set(parsers))
+    if need_parser:                      # Codex Faz 1 #2: sessiz varsayilan parse YOK
+        raise CharacterizationError(
+            f"asama(lar) uretimde response_parser kullaniyor, replay'e verilmedi: "
+            f"{need_parser}")
     out_calls: List[Dict[str, Any]] = []
     by_provider: Dict[str, List[dict]] = {}
     aborted: Optional[BaseException] = None
@@ -69,13 +76,20 @@ def replay_capture(calls: List[Dict[str, Any]], *, ai: Any, provider: str,
             try:
                 if ids:
                     id_field = c.get("id_field") or "keyword_id"
+                    # Codex Faz 1 #2: alt kume prompt'u uretimle birebir
+                    # kurulamaz -> hedefli tekrar KAPALI; ilk-deneme kismi
+                    # sonuc + eksik ID listesi doner (karsilastirma iki
+                    # tarafta da ILK DENEME ile simetriktir).
                     got = ai_runner.run_batch(
                         ai, rows=[{id_field: i} for i in ids],
                         build_prompt=lambda _subset, p=c["prompt"]: p,
                         id_field=id_field,
                         response_id_field=c.get("response_id_field") or "id",
-                        response_parser=parsers.get(stage), **common)
+                        response_parser=parsers.get(stage),
+                        targeted_retries=0, allow_missing=True, **common)
                     rec["parsed"] = {str(k): v for k, v in got.items()}
+                    rec["missing_ids"] = [i for i in ids if i not in got]
+                    rec["targeted_retry_replayed"] = False
                 else:
                     rec["parsed"] = ai_runner.run_single(
                         ai, prompt=c["prompt"], **common)

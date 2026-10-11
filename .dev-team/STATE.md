@@ -76,6 +76,16 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
   Optimice "ADS 16" kaynagi belirsiz (artefakt 123); hybrid_run API'nin `require_run_allowed`/deneme-ws kapisini
   atlar (ws38/39'a yoneltme); `AI_STAGE_ROUTES` global -> ayni process'te es zamanli iki run_hybrid yasak.
 
+- **Codex Faz 1 altyapi incelemesi (`inceleme_claude_gemini_faz1_altyapi_codex.md`) -> 3 P1 + 1 test DOGRU, duzeltildi:**
+  (1) `faz1_ledger.Faz1Ledger` (benchmark/faz1_budget_ledger.json, muhurlu): K7 tavanlari DENEY TOPLAMI; hybrid_run ve
+  profile_compare tavani defterden KALAN alir, bitiste taahhudu (settle edilmemis tavan yakimi dahil) isler; tukenmis
+  tavan -> AI/DB kurulmadan hata; (2) replay hedefli tekrari KAPATIR (`run_batch(targeted_retries=0, allow_missing=True)`,
+  uretim varsayilani degismez): alt kume prompt'u uretimle birebir kurulamaz -> kiyas iki tarafta ILK DENEME ile simetrik,
+  `missing_ids` kaydedilir; `has_response_parser` yakalanir, parser verilmeden replay BASLAMAZ; (3) `assert_workspace_allowed`
+  (1A/1B/profile kapsami, ad->id eslemesinden): run_hybrid ve profile_compare hedef ws'i DB/AI oncesi dogrular; (4) ic ice
+  scoped() regresyon testi xfail -> gercek assert. Hedefli 37+85 yesil; DB e2e 9 yesil. TAM PAKET henuz yeniden kosulmadi
+  (bellek kesintisi; kullanici izniyle).
+
 ## Open / next
 
 0. **Faz 1 oncesi kalan:** TAM PAKET yeniden kosusu; `extract_items` DB smoke; 1A icin referans G/G/G kosusunu

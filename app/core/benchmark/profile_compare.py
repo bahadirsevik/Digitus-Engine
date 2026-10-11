@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from app.core.benchmark import profile_inputs
-from app.core.benchmark.claude_bakeoff_plan import faz1_blockers
+from app.core.benchmark.claude_bakeoff_plan import (
+    assert_workspace_allowed, faz1_blockers)
+from app.core.benchmark.faz1_ledger import LEDGER_PATH, Faz1Ledger
 from app.core.benchmark.hybrid_run import (
     HYBRID_MAX_REQUESTS, Faz1Blocked, StageRoutePinnedAI, resolve_caps,
 )
@@ -84,15 +86,20 @@ def default_providers() -> Dict[str, Tuple[str, str]]:
             "haiku": ("anthropic", "claude-haiku-5-5")}
 
 
-def _default_ai_factory(plan: Mapping[str, Any], collector: Any):
-    """label bazlı guarded+pinned ai; kök ve provider bütçeleri etiketler arası PAYLAŞILIR."""
+def _default_ai_factory(plan: Mapping[str, Any], collector: Any,
+                        ledger: Optional[Faz1Ledger] = None):
+    """label bazlı guarded+pinned ai; kök ve provider bütçeleri etiketler arası PAYLAŞILIR;
+    tavan deney defterinden KALAN olarak alınır (Codex Faz 1 #1)."""
     from app.generators.ai_service import GeminiService, RoutedAIService
 
     root = RoutedAIService(GeminiService(retry_attempts=1))
     root.collector = collector
+    caps = resolve_caps(plan)
+    if ledger is not None:
+        caps = ledger.remaining(caps)
     budgets = {p: CharacterizationBudget(max_requests=HYBRID_MAX_REQUESTS, max_cost_usd=cap,
                                          model=None, provider=p)
-               for p, cap in resolve_caps(plan).items()}
+               for p, cap in caps.items()}
 
     def factory(label: str, provider: str, model: str):
         pinned = StageRoutePinnedAI(root, {STAGE: {"provider": provider, "model": model}})
@@ -156,10 +163,13 @@ def run_profile_compare(*, workspace_ids: Sequence[int],
                         providers: Mapping[str, Tuple[str, str]], plan: Mapping[str, Any],
                         collector: Any, ai_factory: Optional[Callable] = None,
                         out_path: Optional[str] = None, dry_run: bool = False,
-                        inputs_dir: Optional[str] = None) -> Dict[str, Any]:
+                        inputs_dir: Optional[str] = None,
+                        ledger: Optional[Faz1Ledger] = None) -> Dict[str, Any]:
     blockers = faz1_blockers(dict(plan))
     if blockers:
         raise Faz1Blocked(blockers)
+    for ws in workspace_ids:              # Codex Faz 1 #3: kapsam dışı ws -> dur
+        assert_workspace_allowed(dict(plan), ws, "profile")
     labels = list(providers)
     with _inputs_dir(inputs_dir):
         frozen = {ws: profile_inputs.load_profile_input(ws) for ws in workspace_ids}
@@ -176,7 +186,9 @@ def run_profile_compare(*, workspace_ids: Sequence[int],
     }
     if dry_run:
         return seal(doc)
-    factory = ai_factory or _default_ai_factory(plan, collector)
+    if ai_factory is None and ledger is None:
+        ledger = Faz1Ledger.open(LEDGER_PATH)
+    factory = ai_factory or _default_ai_factory(plan, collector, ledger)
     totals: Dict[str, Dict[str, Any]] = {}
     ai = None
     for ws, label in order:
@@ -195,6 +207,10 @@ def run_profile_compare(*, workspace_ids: Sequence[int],
     doc["usage_totals"] = totals
     summ = getattr(ai, "summary", None)
     doc["budget_summary"] = summ() if callable(summ) else None
+    if ledger is not None and doc["budget_summary"] is not None:
+        ledger.record(kind="profile_compare", ref=",".join(map(str, workspace_ids)),
+                      budget_summary=doc["budget_summary"])
+        ledger.save()
     sealed = seal(doc)
     if out_path:
         p = Path(out_path)

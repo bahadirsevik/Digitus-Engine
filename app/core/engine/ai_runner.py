@@ -186,13 +186,14 @@ def _emit(sink: Callable[[dict], None], record: dict) -> None:
 
 
 def _meta(stage, provider, model, thinking_level, expected_ids, result_key,
-          id_field, response_id_field) -> Optional[dict]:
+          id_field, response_id_field, has_response_parser=False) -> Optional[dict]:
     if CAPTURE_SINK is None:
         return None
     return {"stage": stage, "provider": provider, "model": model,
             "thinking_level": thinking_level, "expected_ids": sorted(expected_ids),
             "result_key": result_key, "id_field": id_field,
-            "response_id_field": response_id_field}
+            "response_id_field": response_id_field,
+            "has_response_parser": bool(has_response_parser)}
 
 
 def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
@@ -260,8 +261,15 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
                   Callable[[Any, Sequence[int]], Mapping[str, Any]]
               ] = None,
               error_cls: type = AiStageError,
-              provider: str = "gemini") -> Dict[int, Dict[str, Any]]:
+              provider: str = "gemini",
+              targeted_retries: int = TARGETED_RETRIES,
+              allow_missing: bool = False) -> Dict[int, Dict[str, Any]]:
     """ID bazli asama (A2 / A2C / A3) — eksiksiz kume donmezse HATA.
+
+    `targeted_retries` / `allow_missing` yalniz benchmark replay icindir
+    (uretim varsayilanlari degismez): replay, alt kume prompt'unu uretimle
+    birebir kuramadigi icin hedefli tekrari KAPATIR ve eksik ID'leri
+    kismi sonucla birlikte cagirana birakir.
 
     Donen sozluk: beklenen HER ID icin bir cevap ogesi. Cagiran taraf bunu
     dogruladiktan sonra tek seferde kaydeder; bu fonksiyon DB'ye dokunmaz.
@@ -282,7 +290,8 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
                                 schema, kind, attempt,
                                 _meta(stage, provider, model, thinking_level,
                                       wanted, result_key, id_field,
-                                      response_id_field))
+                                      response_id_field,
+                                      response_parser is not None))
             except BudgetExceeded:        # TAVAN: tekrar YOK, sarmalama YOK
                 raise
             except Exception as exc:      # saglayici/transport hatasi
@@ -352,7 +361,7 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
 
     ask(rows)
     missing = [ident for ident in expected if ident not in collected]
-    for _ in range(TARGETED_RETRIES):
+    for _ in range(targeted_retries):
         if not missing:
             break
         # YALNIZ eksik kumesi tekrar sorulur (hedefli tekrar).
@@ -360,6 +369,8 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
             "targeted_retry")
         missing = [ident for ident in expected if ident not in collected]
 
+    if missing and allow_missing:
+        return collected
     if missing:
         raise error_cls(
             f"{stage}: hedefli tekrara ragmen {len(missing)} ID eksik "

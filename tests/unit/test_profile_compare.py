@@ -35,7 +35,8 @@ def open_plan():
     p["decisions"]["K12_document_reference"] = "belge-ref"
     p["spike"]["console_reconciled"] = True
     p["credit"] = {**p.get("credit", {}), "net_available_usd": 80.0}
-    p["workspaces"]["ids"] = {"GR-7": 21}
+    # profil kapsami: planin id eslemesindeki her ws onaylidir (99 = donmus girdisi yok)
+    p["workspaces"]["ids"] = {"GR-7": 30, "Optimice": 21, "Noksel": 99}
     return seal(p)
 
 
@@ -151,6 +152,13 @@ def test_blocked_plan_raises_before_any_call(tmp_path):
         pc.run_profile_compare(workspace_ids=[1], providers=PROVIDERS, plan=plan, collector=None,
                                ai_factory=lambda *a: called.append(a), inputs_dir=str(tmp_path))
     assert not called
+
+
+def test_unapproved_workspace_rejected_before_inputs(tmp_path, open_plan):
+    from app.core.benchmark.claude_bakeoff_plan import WorkspaceNotApproved
+    with pytest.raises(WorkspaceNotApproved):
+        pc.run_profile_compare(workspace_ids=[7], providers=PROVIDERS, plan=open_plan,
+                               collector=None, inputs_dir=str(tmp_path), dry_run=True)
 
 
 def test_missing_frozen_input_fails(tmp_path, open_plan):

@@ -238,3 +238,42 @@ def test_routes_override_restores_even_on_exception(monkeypatch):
         with hr.routes_override(routes):
             raise RuntimeError("boom")
     assert settings.AI_STAGE_ROUTES == {"intent": {"x": 1}}
+
+
+def test_run_hybrid_rejects_unapproved_workspace_before_db(open_plan):
+    """Codex Faz 1 #3: onayli id listesi dolu ama hedef listede degil -> DB/AI yok."""
+    from app.core.benchmark.claude_bakeoff_plan import WorkspaceNotApproved
+    from app.core.benchmark.reference_characterization import seal
+    p = dict(open_plan)
+    p["workspaces"] = {**open_plan["workspaces"], "ids": {"GR-7": 30, "Optimice": 21}}
+    p = seal(p)
+    with pytest.raises(WorkspaceNotApproved):
+        hr.run_hybrid(None, workspace_id=99, config_name="Aday", plan=p,
+                      collector=object(), dry_run=True)
+    # onayli hedef ayni cagriyla gecer (dry-run, AI yok)
+    out = hr.run_hybrid(None, workspace_id=30, config_name="Aday", plan=p,
+                        collector=object(), dry_run=True)
+    assert out["kind"] == "hybrid_dry_run"
+
+
+def test_build_benchmark_ai_uses_ledger_remaining(sealed_plan, monkeypatch, tmp_path):
+    """Codex Faz 1 #1: ikinci komut onceki harcamayi devralir; tukenmis tavan -> hata."""
+    import app.generators.ai_service as mod
+    from app.core.benchmark.faz1_ledger import Faz1Ledger
+    from app.core.benchmark.reference_characterization import CharacterizationError
+
+    class _C:
+        def __init__(self, **kw): pass
+    monkeypatch.setattr(mod.genai, "Client", _C)
+    led = Faz1Ledger.open(tmp_path / "l.json")
+    led.record(kind="hybrid_run", ref="ws21:Aday",
+               budget_summary={"anthropic": {"cost_committed_usd": 45.0},
+                               "gemini": {"cost_committed_usd": 19.5}})
+    ai = hr.build_benchmark_ai("Aday", sealed_plan, collector=object(), ledger=led)
+    s = ai.summary()
+    assert s["anthropic"]["max_cost_usd"] == pytest.approx(5.0)
+    assert s["gemini"]["max_cost_usd"] == pytest.approx(0.5)
+    led.record(kind="hybrid_run", ref="ws30:Aday",
+               budget_summary={"anthropic": {"cost_committed_usd": 5.0}})
+    with pytest.raises(CharacterizationError):
+        hr.build_benchmark_ai("Aday", sealed_plan, collector=object(), ledger=led)

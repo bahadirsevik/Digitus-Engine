@@ -27,7 +27,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
+from app.core.benchmark.faz1_ledger import LEDGER_PATH, Faz1Ledger
 from app.core.benchmark.claude_bakeoff_plan import (
+    assert_workspace_allowed,
     CONTENT_STAGES, O_STAGES, Y_STAGES, faz1_blockers,
 )
 from app.core.benchmark.reference_characterization import (
@@ -170,13 +172,16 @@ class StageRoutePinnedAI:
 
 def build_benchmark_ai(config_name: str, plan: Mapping[str, Any], *,
                        collector: Any,
-                       caps_usd: Optional[Mapping[str, float]] = None
+                       caps_usd: Optional[Mapping[str, float]] = None,
+                       ledger: Optional[Faz1Ledger] = None
                        ) -> BudgetGuardedAI:
     configs = build_configs(plan)
     if config_name not in configs:
         raise ValueError("bilinmeyen konfigürasyon %r (izinli: %s)"
                          % (config_name, ", ".join(configs)))
     caps = resolve_caps(plan, caps_usd)
+    if ledger is not None:            # deney TOPLAMI: önceki komutların harcaması düşülür
+        caps = ledger.remaining(caps)
     root = RoutedAIService(GeminiService(retry_attempts=1))
     root.collector = collector
     pinned = StageRoutePinnedAI(root, configs[config_name])
@@ -374,12 +379,15 @@ def run_hybrid(db, *, workspace_id: int, config_name: str,
                content: Sequence[str] = CONTENT_FAMILIES,
                seo_keyword_limit: Optional[int] = None,
                dry_run: bool = False, ai: Any = None,
-               caps_usd: Optional[Mapping[str, float]] = None
+               caps_usd: Optional[Mapping[str, float]] = None,
+               ledger: Optional[Faz1Ledger] = None
                ) -> Dict[str, Any]:
     # 1) Codex #1: bloklayıcı varsa HİÇBİR şey kurulmadan dur.
     blockers = faz1_blockers(dict(plan))
     if blockers:
         raise Faz1Blocked(blockers)
+    # 1b) Codex Faz 1 #3: hedef ws planın 1B kapsamında ONAYLI olmalı.
+    assert_workspace_allowed(dict(plan), workspace_id, "1B")
     configs = build_configs(plan)
     if config_name not in configs:
         raise ValueError("bilinmeyen konfigürasyon %r" % config_name)
@@ -413,8 +421,10 @@ def run_hybrid(db, *, workspace_id: int, config_name: str,
     )
     from app.core.site_analyzer.brand_defaults import BrandDefaultsResolver
 
+    if ledger is None:                # Codex Faz 1 #1: komutlar arası toplam
+        ledger = Faz1Ledger.open(LEDGER_PATH)
     ai = ai or build_benchmark_ai(config_name, plan, collector=collector,
-                                  caps_usd=caps_usd)
+                                  caps_usd=caps_usd, ledger=ledger)
     clock: Dict[str, float] = {}
     errors: Dict[str, str] = {}
     out_content: Dict[str, Any] = {}
@@ -479,6 +489,12 @@ def run_hybrid(db, *, workspace_id: int, config_name: str,
         closer = getattr(ai, "close", None)
         if callable(closer):
             closer()
+        summ = getattr(ai, "summary", None)
+        if callable(summ):                # harcama deftere işlenir (taahhüt, muhafazakâr)
+            ledger.record(kind="hybrid_run",
+                          ref="ws%s:%s" % (workspace_id, config_name),
+                          budget_summary=summ())
+            ledger.save()
 
     return seal({
         "kind": "hybrid_run", "workspace_id": workspace_id,

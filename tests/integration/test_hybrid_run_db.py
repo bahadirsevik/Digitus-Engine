@@ -319,20 +319,27 @@ def sealed_plan():
     return hr.load_plan(str(PLAN_FILE))       # yalnız okunur, verify_seal'li
 
 
-def _unblock(plan):
+def _unblock(plan, ws_id=None):
     p = copy.deepcopy(plan)
     p["decisions"]["K12_document_reference"] = "belge-ref"
     p["spike"]["console_reconciled"] = True
     p["credit"] = {**p.get("credit", {}), "net_available_usd": 80.0}
-    p["workspaces"]["ids"] = {"GR-7": 21, "Optimice": 19}
+    # Codex Faz 1 #3: hedef ws planin 1B kapsaminda ONAYLI olmali -> fixture ws'i
+    p["workspaces"]["ids"] = {"GR-7": ws_id if ws_id is not None else 21, "Optimice": 19}
     p = seal(p)
     assert faz1_blockers(p) == []
     return p
 
 
 @pytest.fixture
-def open_plan(sealed_plan):
-    return _unblock(sealed_plan)
+def open_plan(sealed_plan, world):
+    return _unblock(sealed_plan, world.id)
+
+
+@pytest.fixture(autouse=True)
+def _ledger_in_tmp(tmp_path, monkeypatch):
+    # Deney defteri testte repoya YAZILMAZ (Codex Faz 1 #1 defteri gecici dosyada)
+    monkeypatch.setattr(hr, "LEDGER_PATH", tmp_path / "faz1_budget_ledger.json")
 
 
 @pytest.fixture
@@ -669,7 +676,6 @@ def test_nested_scoped_calls_stay_under_budget_guard(
     assert "ads" in res["content"], res["content_errors"]
     gem_calls, gem_guarded = (fake.by_provider("gemini"),
                               res["budget_summary"]["gemini"]["requests_used"])
-    if gem_guarded != gem_calls:
-        pytest.xfail("BİLİNEN AÇIK: %d Gemini çağrısından yalnız %d'si budget guard'a "
-                     "girdi (iç içe scoped() -> guard'sız kök); hard-cap delik"
-                     % (gem_calls, gem_guarded))
+    assert gem_guarded == gem_calls, (
+        "HARD-CAP DELİĞİ: %d Gemini çağrısından yalnız %d'si budget guard'a girdi "
+        "(iç içe scoped() guard'sız köke indi)" % (gem_calls, gem_guarded))

@@ -158,6 +158,29 @@ def build_plan(spike_path: Path) -> Dict[str, Any]:
     return seal(doc)
 
 
+class WorkspaceNotApproved(RuntimeError):
+    """Hedef workspace mühürlü planın kapsamında değil (Codex Faz 1 #3)."""
+
+
+def assert_workspace_allowed(plan: Dict[str, Any], workspace_id: int,
+                             scope: str) -> None:
+    """`scope` ∈ {"1A","1B","profile"}: hedef id, planın o kapsamdaki ONAYLI
+    ad→id eşlemesinde olmalı; aksi hâlde DB/AI kurulmadan hata."""
+    ws = plan.get("workspaces") or {}
+    ids = ws.get("ids") or {}
+    if scope in ("1A", "1B"):
+        names = ws.get(scope) or []
+        allowed = {int(ids[n]) for n in names if n in ids}
+    elif scope == "profile":
+        allowed = {int(v) for v in ids.values()}
+    else:
+        raise ValueError(f"bilinmeyen kapsam: {scope!r}")
+    if not allowed or int(workspace_id) not in allowed:
+        raise WorkspaceNotApproved(
+            f"workspace {workspace_id} '{scope}' kapsamında onaylı değil "
+            f"(onaylı: {sorted(allowed) or 'yok'})")
+
+
 def faz1_blockers(plan: Dict[str, Any]) -> List[str]:
     """Faz 1 koşusunu engelleyen eksikler (boş liste = başlayabilir)."""
     verify_seal(plan)

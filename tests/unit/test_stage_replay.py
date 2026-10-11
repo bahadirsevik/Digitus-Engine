@@ -142,3 +142,28 @@ def test_compare_stage_outputs_agreement():
     assert s["fields"]["cls"] == {"n": 2, "agree": 1, "rate": 0.5}
     assert s["fields"]["t"]["rate"] == 1.0 and "why" not in s["fields"]
     assert out["a1"]["n_single"] == 1 and out["a1"]["n_single_agree"] == 1
+
+
+def test_replay_does_not_resend_full_prompt_on_missing_id(tmp_path):
+    """Codex Faz 1 #2: ilk cevapta ID 2 eksik -> ikinci bir prompt GONDERILMEZ,
+    kismi sonuc + missing_ids kaydedilir (hedefli tekrar replay'de kapali)."""
+    col = _collector()
+    ai = Rec(col, [_res({"id": 1, "v": "a"})])
+    art = replay_capture([_call(0, ids=(1, 2))], ai=ai, provider="anthropic",
+                         model_for_stage={"s_a2": "m"}, collector=col,
+                         out_path=tmp_path / "r.json")
+    assert len(ai.seen) == 1 and ai.seen[0]["prompt"] == "PROMPT-0"
+    c = art["calls"][0]
+    assert c["ok"] and c["parsed"] == {"1": {"id": 1, "v": "a"}}
+    assert c["missing_ids"] == [2] and c["targeted_retry_replayed"] is False
+
+
+def test_replay_requires_parser_when_capture_used_one(tmp_path):
+    col = _collector()
+    call = _call(0, ids=(1,))
+    call["has_response_parser"] = True
+    with pytest.raises(CharacterizationError):
+        replay_capture([call], ai=Rec(col, []), provider="anthropic",
+                       model_for_stage={"s_a2": "m"}, collector=col,
+                       out_path=tmp_path / "r.json")
+    assert not (tmp_path / "r.json").exists()
