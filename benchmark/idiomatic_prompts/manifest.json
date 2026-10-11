@@ -1,0 +1,55 @@
+{
+  "version": "1",
+  "created_at": "2026-10-11T13:02:50+00:00",
+  "plan_rev": 6,
+  "stages": {
+    "seo_generation": {
+      "file": "seo_generation.md",
+      "prompt_sha256": "2d6ef8cf8e154a21e7ee39ab7fa400c0f8d3b4bdde1ceffc726f30a5287f1b0d",
+      "source_template": "SEO_GEO_GENERATION_PROMPT",
+      "source_sha256": "79dfa7e0fcd592254e5a0fee5543538f328c789ee2466ae2351cb3e794d29cfd",
+      "variables": [
+        "brand_context",
+        "current_year",
+        "intro_words",
+        "keyword",
+        "link_pool_context",
+        "section_count",
+        "section_words_max",
+        "section_words_min",
+        "sector",
+        "target_market",
+        "tone",
+        "word_count_max",
+        "word_count_min"
+      ]
+    },
+    "ads_rsa": {
+      "file": "ads_rsa.md",
+      "prompt_sha256": "b5aa0e58af935e5ed75745e95ed06b1cdaf025f3e6321a791b010b046e12c806",
+      "source_template": "ADS_RSA_GENERATION_PROMPT",
+      "source_sha256": "df9a8ed1104f7b3b96e275f0a1d69684e4b417eec01dc868cf3dd5f28bd7a420",
+      "variables": [
+        "brand_name",
+        "brand_usp",
+        "group_name",
+        "group_theme",
+        "keywords",
+        "product_facts"
+      ]
+    },
+    "social_brief_contents": {
+      "file": "social_brief_contents.md",
+      "prompt_sha256": "e82483c4d78371b44a6a55879d93f4150be31b386936a07f9a3529ab23773a5b",
+      "source_template": "brief_content_prompt._PROMPT_TEMPLATE",
+      "source_sha256": "61cc248c2c16a7a400ae0edc1fc54da3688ce21d4692740651e50bceb4e80d93",
+      "variables": [
+        "caption_limit",
+        "format_instructions",
+        "input_json",
+        "platform"
+      ]
+    }
+  },
+  "payload_sha256": "6233329665cf62f4f7008841571a14de4720c98c36043d6603a679faa7661a05"
+}

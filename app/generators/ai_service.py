@@ -232,8 +232,13 @@ class AIService(ABC):
 class GeminiService(AIService):
     """Google Gemini API implementation."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None,
+                 retry_attempts: Optional[int] = None):
         self._api_key = api_key or os.getenv("GEMINI_API_KEY")
+        # google-genai SDK varsayilani 5 deneme (408/429/5xx, ustel bekleme).
+        # None = uretim davranisi aynen; benchmark adaleti icin 1 gecilir
+        # (anthropic max_retries=0 ile ayni deneme butcesi, plan §6.3).
+        self._retry_attempts = retry_attempts
         self.model_name = settings.GEMINI_MODEL
         self._client: Optional[genai.Client] = None
         self._client_pid: Optional[int] = None
@@ -266,7 +271,12 @@ class GeminiService(AIService):
             return client
         with self._client_lock:
             if self._client is None or self._client_pid != os.getpid():
-                self._client = genai.Client(api_key=self._api_key)
+                kwargs = {"api_key": self._api_key}
+                if self._retry_attempts is not None:
+                    kwargs["http_options"] = genai_types.HttpOptions(
+                        retry_options=genai_types.HttpRetryOptions(
+                            attempts=int(self._retry_attempts)))
+                self._client = genai.Client(**kwargs)
                 self._client_pid = os.getpid()
             return self._client
 

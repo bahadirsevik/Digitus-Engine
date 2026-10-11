@@ -1,0 +1,69 @@
+{
+ "kind": "reference_characterization_plan",
+ "model": "gemini-3.5-flash",
+ "repeats": 2,
+ "workspace_id": 21,
+ "source_run_id": 20,
+ "context_sha256": "30e691f40fc8f72f63b663027967f3eedc2d21e467c2f324b991caa8056a87ff",
+ "fixture": {
+  "items": 150,
+  "input_sha256": "d6f3c68bb38e84d212afbe51825c370d4616057017bf6d4c9a099343bd4d4c7d",
+  "labels_mask_sha256": "c2f2146ae5204764a2f905682f2cc6a7d3247b693399231c49543aa70788668e",
+  "label_schema_sha256": "e9f8ff682f90250b53f84860be56c57bcec62d554c285c5023106679c021ca26"
+ },
+ "planned_requests_per_repeat": {
+  "intent": 19,
+  "ads_prefilter": 25,
+  "social_prefilter": 25,
+  "seo_metadata": 38,
+  "total": 107
+ },
+ "cost_plan": {
+  "per_repeat_expected_usd": 1.0192,
+  "per_repeat_p90_usd": 1.2898,
+  "repeats": 2,
+  "total_expected_usd": 2.0383,
+  "total_ceiling_usd": 3.3534,
+  "ceiling_basis": "p90 × 1.3 retry payı — geçmiş telemetri TAHMİNİ, gerçek fatura değil"
+ },
+ "caps": {
+  "max_requests": 500,
+  "max_cost_usd": 4.0,
+  "output_bound": "max_output_tokens (thinking DAHİL — sağlayıcı-zorlamalı; kanıt: benchmark/gemini_thinking_spike.json)"
+ },
+ "active_stages": [
+  "intent",
+  "ads_prefilter",
+  "social_prefilter",
+  "seo_metadata"
+ ],
+ "skipped_stages": [
+  "brand_filter"
+ ],
+ "prompt_config": {
+  "prompt_source_sha256": {
+   "intent": "9d606434b7444f17f259d719fc9ed2938bde0e408b6541d857601d10520bdc90",
+   "ads_prefilter": "397e9aafd0efde5e4a0c5333f7e0e125abbf7cd17191ffe7a90db52b1c3494df",
+   "social_prefilter": "7bddc894a13f406af0a54b7f968bf661defa9cc7bd564d9bc7182a52a800ec70",
+   "seo_metadata": "a16903e6a3d8003a5bfa9f0c11437cc6660ce1df5c26ed7937cb13747fafc250",
+   "brand_filter": "c56e9571c2cbd7eb0fbdcfdc15d657e220744e42d9450544078d02d22061641a"
+  },
+  "response_schema_sha256": {
+   "intent_base": "e0f55e1b8a3a9ac5cd6d3ed420e1d7d20b22ccd9bb6265615a5d40d4d313eeb1",
+   "intent_seo": "d6e6fb31189a0353f9de559a5102752748ff9ede130aede07960b1433e07bf79",
+   "ads_prefilter": "53d08d7f360e6554d401c4e01c84f8f836d03b8b99b2db39031030e7114d2826",
+   "social_prefilter": "600f335e271b54e3d6b56ec2b9de40f0362e4a975d810ee1ce82952cf731037f",
+   "seo_metadata": "ac1842591befc74f3e19cfa4fbeb0949c51f877c568028b9abace6c1a0c71fe5",
+   "brand_filter": "da40874fdd485e3d26352f57f6a450dad51471761a576b3efd82a5218f22ce12"
+  },
+  "hard_cap_contract": {
+   "build_contents_source_sha256": "4d141864b24d36221e25e2fec1e22d677226114cbef4cc17210a296314f567a6",
+   "input_ceiling_source_sha256": "6ff05fda9a91d03c288ef85a3aa21af793d985cfe4d6e8c3ff3384ec5da91a85",
+   "output_bound_artifact": "benchmark/gemini_thinking_spike.json"
+  },
+  "route_config": {},
+  "gemini_thinking_level": "low"
+ },
+ "generated_at": "2026-07-29T05:07:53.235455+00:00",
+ "payload_sha256": "36f395638c52a9f2f3b514ccfb79069ef2e910a60e92e8ad343ea9194b9dd59a"
+}

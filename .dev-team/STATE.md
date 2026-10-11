@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-11
 Branch: `deploy/lean-taslak`
-Active phase: **Gemini→Claude karsilastirma — Faz 0: kod + SPIKE TAMAM; kalan: butce/kapi muhuru, arsiv benchmark modulleri, idiomatik prompt SHA, Gemini kontrolleri, K12**
+Active phase: **Gemini→Claude karsilastirma — FAZ 0 TAMAM (teknik). Faz 1 kapisi: K12 belge ref + konsol mutabakati + ws id muhuru (`faz1_blockers`)**
 Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 (konsey 2 tur + Codex 3 inceleme GO).
 
 ## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
@@ -41,14 +41,28 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
   1 header probu), settled **0,0837 $** (tavan 0,50, kuru tavan 0,32 -> rezervasyon zarflari gercegin ~3,8 kati,
   §9 yeniden muhurde daraltilabilir). **14/14 sema KABUL** (optional alan eksik birakilabiliyor, nullable calisiyor,
   gercek SOCIAL semasi iki modelde de kabul) -> `[T,"null"]` yedegi GEREKMEZ. max_tokens kirpilmasi 0.
-  Dusunme payi kucuk: low p99 489 tok (n=25), medium p99 288 (n=3) -> allowance 2000/4000 cok genis, oneri 500/300
-  (madde 8'de karar; kucultmek yalniz rezervasyonu etkiler, harcamayi degil). Tokenizer ~0,71 tok/bayt (Turkce) ->
+  Dusunme payi kucuk: low p99 489 tok (n=25), medium p99 288 (n=3) -> allowance 2000/4000 cok genis, Codex: n kucuk (25/3), gercek benchmark
+  verisi gelene kadar 2000/4000 KORUNUR; settled 0,0837 $ yerel fiyat tablosuyla hesap (probe haric), konsol karsilastirmasi yapilmadan 'faturayla dogrulandi' denmez; Faz 1 butcesi gercek asama girdi/cikti/cagri sayisiyla hesaplanir, spike yalniz kalibre eder. Tokenizer ~0,71 tok/bayt (Turkce) ->
   bayt tabanli girdi tavani ~%40 muhafazakar. Gecikme p50 3,8 s / p90 12 s (uzun ciktilar 14-24 s).
   Rate limit (tier): 1000 RPM, 2,4M TPM, 2M ITPM, 400K OTPM -> Faz 1 icin bol. anthropic 1.13.0, git a696d50.
   Konsol faturasi ile 0,08 $ karsilastirmasi KULLANICIDA (fiyat tablosu dogrulamasi).
 
+- **Dalga 3 (Faz 0 madde 6/8/9/10 + Gemini retry):** arsiv benchmark modulleri lean'e tasindi
+  (bakeoff_comparison/gates, patron_compare/dataset, annotation_io/excel + 5 test, 132 yesil; routing_harness'tan
+  2 saf fonksiyon teste inline) + fixture'lar (reference_characterization_gemini-3.5-flash.json, plan, annotation_sheet*);
+  `GeminiService(retry_attempts=None)`: google-genai SDK varsayilani 5 deneme (408/429/5xx) -> benchmark 1 gecer,
+  uretim aynen (test); `claude_bakeoff_plan.py` -> `benchmark/claude_bakeoff_plan.json` MUHURLU (K3/K7/K8/K12/K16/K18/K19,
+  §7.5, §8 kapilar, §9 butce 23/50, §3.2 N_max, adapter kimlikleri, spike sha; `faz1_blockers()` =
+  [K12_document_reference, spike_console_reconciled, workspace_ids]); Faz 2 idiomatik prompt'lar
+  `benchmark/idiomatic_prompts/{seo_generation,ads_rsa,social_brief_contents}.md` + manifest.json muhurlu
+  (K16 tek atis; kaynak sablon sha'lari baglandi; is kurallari birebir, yalniz XML yapi). Tam paket **4855 / 112 / 0**.
+
 ## Open / next
 
+0. **Faz 1 wiring (kod):** bakeoff_comparison provider/model pinleri gemini-3.5/deepseek -> Claude adayi icin sozlesme
+   genisletmesi; 1A istek yakalama/replay surucusu (K14) + 1B hibrit kosu CLI'i lean'de YOK (arsivde scripts/); profil
+   kiyasi icin `profile_inputs.freeze` cagrisi; DeepSeek hakem + patron kart uretimi (annotation_io). Idiomatik: SEO
+   revision/expansion, CLAIM_REWRITE, social repair prompt'lari Gemini metniyle kalir (karar: Faz 2 oncesi).
 1. ~~Spike~~ TAMAM (yukarida). **Madde 8 butce yeniden muhuru**: spike p90 zarflari ile §9 hucreleri; allowance karari — `python -m app.core.benchmark.claude_spike
    --out benchmark/claude_spike.json` (tavan 0,50 $; kuru kosu 29 cagri / 0,33 $). Sonra allowance/effort
    kalibrasyonu, optional-alan kabulu, rate-limit basliklari, tokenizer orani muhurlenir.
