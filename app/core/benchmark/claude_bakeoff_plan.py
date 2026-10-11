@@ -44,6 +44,12 @@ def _git_sha() -> str:
         return "unknown"
 
 
+def _n_max(credit_usd: float, usd_per_run: float) -> int:
+    """Kredi kipinde aylık koşu tavanı — her zaman AŞAĞI yuvarlanır."""
+    import math
+    return int(math.floor(credit_usd / usd_per_run))
+
+
 def build_plan(spike_path: Path) -> Dict[str, Any]:
     spike = json.loads(spike_path.read_text(encoding="utf-8"))
     verify_seal(spike)
@@ -137,11 +143,14 @@ def build_plan(spike_path: Path) -> Dict[str, Any]:
             "gemini_usd": {"estimate": 18.0, "cap": 20.0},
             "deepseek_usd": {"estimate": 2.0, "cap": 5.0, "pairs_max": 90},
         },
-        "n_max_3_2": {"Aday": {"usd_per_run": 3.6, "n_max": 28},
-                      "G/G/C": {"usd_per_run": 1.25, "n_max": 80},
-                      "Opus içerik": {"usd_per_run": 2.5, "n_max": 40},
-                      "Her şey Haiku": {"usd_per_run": 0.34, "n_max": 290},
-                      "Yalnız Y Haiku": {"usd_per_run": 0.17, "n_max": None}},
+        # N_max = floor(net kredi / koşu maliyeti); net kredi konsoldan gelene kadar
+        # 100 $ brüt varsayımı (Codex: 28×3,6 = 100,8 > 100 → aşağı yuvarlanır).
+        "credit": {"gross_assumed_usd": 100.0, "net_available_usd": None,
+                   "expiry": None, "rollover": None, "scope": None},
+        "n_max_3_2": {name: {"usd_per_run": c, "n_max": _n_max(100.0, c)}
+                      for name, c in (("Aday", 3.6), ("G/G/C", 1.25),
+                                      ("Opus içerik", 2.5), ("Her şey Haiku", 0.34))}
+                     | {"Yalnız Y Haiku": {"usd_per_run": 0.17, "n_max": None}},
         "workspaces": {"1A": ["Optimice", "GR-7", "Dijital", "Noksel"],
                        "1B": ["GR-7", "Optimice"], "profile": "10 onaylı ws",
                        "ids": None},                  # Faz 1 başında DB'den mühürlenir
@@ -157,6 +166,8 @@ def faz1_blockers(plan: Dict[str, Any]) -> List[str]:
         out.append("K12_document_reference")
     if not plan["spike"].get("console_reconciled"):
         out.append("spike_console_reconciled")
+    if plan.get("credit", {}).get("net_available_usd") is None:
+        out.append("credit_net_available_usd")
     if not plan["workspaces"].get("ids"):
         out.append("workspace_ids")
     return out

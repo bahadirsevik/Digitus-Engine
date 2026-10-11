@@ -1,8 +1,8 @@
 {
   "plan_version": "rev.6",
   "plan_file": "plan_claude_gemini_karsilastirma.md",
-  "sealed_at": "2026-10-11T13:01:19.353035+00:00",
-  "git_sha": "4ec29a5",
+  "sealed_at": "2026-10-11T13:21:13.731011+00:00",
+  "git_sha": "e9fd2ae",
   "decisions": {
     "K3_models": {
       "Y": "claude-haiku-5-5",
@@ -246,10 +246,17 @@
       "pairs_max": 90
     }
   },
+  "credit": {
+    "gross_assumed_usd": 100.0,
+    "net_available_usd": null,
+    "expiry": null,
+    "rollover": null,
+    "scope": null
+  },
   "n_max_3_2": {
     "Aday": {
       "usd_per_run": 3.6,
-      "n_max": 28
+      "n_max": 27
     },
     "G/G/C": {
       "usd_per_run": 1.25,
@@ -261,7 +268,7 @@
     },
     "Her şey Haiku": {
       "usd_per_run": 0.34,
-      "n_max": 290
+      "n_max": 294
     },
     "Yalnız Y Haiku": {
       "usd_per_run": 0.17,
@@ -282,5 +289,5 @@
     "profile": "10 onaylı ws",
     "ids": null
   },
-  "payload_sha256": "675ecbf5d1754c746eee49c9744b5ec3d61b9eaf42d07644aff4abac3d5cc064"
+  "payload_sha256": "aeac074407cac35768e9c9ce37696e2cc66f589d5fd3933d275737999b51c588"
 }

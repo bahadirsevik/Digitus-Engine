@@ -26,11 +26,12 @@ def test_plan_is_sealed_and_bound_to_spike(plan):
 
 
 def test_faz1_blocked_until_k12_console_and_ws_ids(plan):
-    assert faz1_blockers(plan) == ["K12_document_reference",
-                                   "spike_console_reconciled", "workspace_ids"]
+    assert faz1_blockers(plan) == ["K12_document_reference", "spike_console_reconciled",
+                                   "credit_net_available_usd", "workspace_ids"]
     unlocked = dict(plan)
     unlocked["decisions"] = {**plan["decisions"], "K12_document_reference": "sözleşme md. X"}
     unlocked["spike"] = {**plan["spike"], "console_reconciled": True}
+    unlocked["credit"] = {**plan["credit"], "net_available_usd": 97.5}
     unlocked["workspaces"] = {**plan["workspaces"], "ids": {"GR-7": 1, "Optimice": 2}}
     with pytest.raises(CharacterizationError):     # mühür bozuldu -> yeniden mühür şart
         faz1_blockers(unlocked)
@@ -47,3 +48,10 @@ def test_budget_and_caps_match_plan_rev6(plan):
     assert plan["adapter"]["sdk_retries"] == {"anthropic_max_retries": 0, "gemini_retry_attempts": 1}
     for m in ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"):
         assert plan["prices"][m]["valid_from"] == "2026-10-11"
+
+
+def test_n_max_rounds_down(plan):
+    from app.core.benchmark.claude_bakeoff_plan import _n_max
+    assert _n_max(100.0, 3.6) == 27 and _n_max(100.0, 1.25) == 80
+    assert plan["n_max_3_2"]["Aday"]["n_max"] == 27
+    assert plan["n_max_3_2"]["Her şey Haiku"]["n_max"] == 294
