@@ -1,0 +1,220 @@
+{
+  "kind": "hybrid_run",
+  "workspace_id": 29,
+  "config_name": "G/G/G",
+  "routes": {},
+  "scoring_run_id": 78,
+  "universe_fingerprint": "43e747ef88fd4be31bafc9ce334d6c3125449badd62bb61eea182996098d47b6",
+  "capacities": {
+    "ADS": 60,
+    "SEO": 30,
+    "SOCIAL": 30
+  },
+  "delivery_summary": {
+    "status": "channel_assigned",
+    "channels": [
+      "ADS",
+      "SEO",
+      "SOCIAL"
+    ],
+    "enabled_channels": [
+      "ADS",
+      "SEO",
+      "SOCIAL"
+    ],
+    "delivery_summary": {
+      "scoring_run_id": 78,
+      "policy_version": 2,
+      "firm_block_sha256": "38453e49e83ee0da2745a8421aea67558ecebe12f6b426ed4a748d2c55f76c69",
+      "strategic_keywords_count": 17,
+      "location_filter": {
+        "enabled": false,
+        "mode": "none",
+        "lexicon_version": "tr-provinces-v1",
+        "excluded_count": 0,
+        "excluded_by_reason": {},
+        "excluded_by_city": {}
+      },
+      "channels": {
+        "ADS": {
+          "total_candidates": 579,
+          "kept_count": 60,
+          "excluded_count": 519,
+          "pool_count": 60,
+          "capacity": 60,
+          "unfilled_count": 0
+        },
+        "SEO": {
+          "total_candidates": 179,
+          "kept_count": 30,
+          "excluded_count": 149,
+          "pool_count": 30,
+          "capacity": 30,
+          "unfilled_count": 0
+        },
+        "SOCIAL": {
+          "total_candidates": 230,
+          "kept_count": 30,
+          "excluded_count": 200,
+          "pool_count": 30,
+          "capacity": 30,
+          "unfilled_count": 0
+        }
+      }
+    },
+    "total_calls": 0
+  },
+  "manifest_section": {
+    "manifest_schema_version": 2,
+    "firm_block_sha256": "38453e49e83ee0da2745a8421aea67558ecebe12f6b426ed4a748d2c55f76c69",
+    "algorithm_versions": {
+      "family": "nihai_family_v2_gemini38",
+      "ads": "nihai_niche_v2_gemini38",
+      "seo": "seo_v31_kati2_v2",
+      "social": "social_v5_uretim_v1"
+    },
+    "models": {
+      "family_a1": "gemini-3.8-flash",
+      "family_a2": "gemini-3.8-flash",
+      "family_a2b": "gemini-3.8-flash",
+      "family_a2c": "gemini-3.8-flash",
+      "family_a3": "gemini-3.8-flash",
+      "ads_funnel": "gemini-3.8-flash",
+      "ads_intent": "gemini-3.8-flash",
+      "seo_rel": "gemini-3.8-flash",
+      "seo_bp": "gemini-3.8-flash",
+      "seo_subintent": "gemini-3.8-flash",
+      "seo_authority": "gemini-3.8-flash",
+      "seo_urlgroup": "gemini-3.8-flash",
+      "social_rel": "gemini-3.8-flash",
+      "social_normbounds": "deterministic",
+      "social_v4": "gemini-3.8-flash",
+      "social_intent": "gemini-3.8-flash"
+    },
+    "prompt_shas": {
+      "family_a1": "f444b5fb7288775a8db3ea4ccdba66bf1d7fc0b5443f04f62aef097dd7ce9cd9",
+      "family_a2": "831603d86a3cb65bc049eec71f2f299612fe0b59fcdabb75ee3493e22f176126",
+      "family_a2b": "57ff2d201a730b6a9174e2a5c646ee6423d407d111a12d0c896110f56f276c99",
+      "family_a2c": "831603d86a3cb65bc049eec71f2f299612fe0b59fcdabb75ee3493e22f176126",
+      "family_a3": "31bb1ad00e0e6dfa674e913ee02b2e857c47aac2b2cfe4ce9f926a36ba25404e",
+      "ads_funnel": "e426e0ae77b320693ec3df804ce6e7aef95c5f5c98c76112a36353494cd9d390",
+      "ads_intent": "4db6841f385ae9c06282282aa1f543a54d3166a149dd59aa33d4fbc95ab3d5dc",
+      "seo_rel": "09409ceb8c31b71d189fa18765c85a9c9ed8f08b7a66ab05e76ce94e78a8683f",
+      "seo_bp": "0e803677320f28b44eb63e8e50892d66ab6cc0ec861a48ef62c255a6219da9f3",
+      "seo_subintent": "0a941da824889a44cc13b607ed46491a2c992b21cf03e982e917891f99c2c2a7",
+      "seo_authority": "840c54fa6faa3f79eb99e79b029624d5a6a8a780bb353987d36012663ee30006",
+      "seo_urlgroup": "ff9643b92e15e50fc646a51572990ef124c5ccbb79f348410874ef7bf5c2410a",
+      "social_rel": "09409ceb8c31b71d189fa18765c85a9c9ed8f08b7a66ab05e76ce94e78a8683f",
+      "social_normbounds": "dd359f8317115aef7d33e14e746b07a167f533d1665feeeea990542d694e7e3b",
+      "social_v4": "64652f7bb466361b18b89375c559c1f713e2c69e0369a7daf25b3022be1a97d2",
+      "social_intent": "c95024b751837ab40a3c43b4473c327f384e797020e1115d1ad15679c48693f9"
+    },
+    "location_policy": {
+      "mode": "none",
+      "focus_cities": [],
+      "exempt_terms": [],
+      "city_lexicon_version": "tr-provinces-v1",
+      "city_lexicon_sha256": "5a82a64b7677f7eafc1ba1edf29ae7f595a51fa3d2bea93e1f260c169155401f",
+      "enforcement_fingerprint": "5dc808cc885eaa96b1822f3f61ed3c4205bc29915cb99ddb1896aa6bed29f414"
+    }
+  },
+  "content": {
+    "ads": {
+      "generation_set_id": 22,
+      "set_status": "active",
+      "n_groups": 13,
+      "failed_groups": 0
+    },
+    "seo": {
+      "content_ids": [
+        82,
+        83,
+        84,
+        86,
+        87,
+        89,
+        91,
+        93,
+        95,
+        97,
+        99,
+        100,
+        101,
+        103,
+        104,
+        106,
+        108,
+        110,
+        111,
+        113,
+        114,
+        116,
+        118,
+        120,
+        122,
+        123,
+        125,
+        127,
+        129,
+        131
+      ],
+      "n_requested": 30,
+      "failed": {}
+    },
+    "social": {
+      "brief_id": 19,
+      "attempt_ids": {
+        "categories": 43,
+        "ideas": 44,
+        "contents": 45
+      },
+      "idea_status": "completed",
+      "content_status": "partial",
+      "n_ideas": 9,
+      "persisted_idea_ids": [
+        220,
+        221,
+        222,
+        223,
+        224,
+        225,
+        227
+      ],
+      "unresolved_idea_ids": [
+        219,
+        226
+      ]
+    }
+  },
+  "content_errors": {},
+  "budget_summary": {
+    "gemini": {
+      "provider": "gemini",
+      "requests_used": 722,
+      "max_requests": 20000,
+      "cost_settled_usd": 2.813712,
+      "cost_committed_usd": 2.813712,
+      "ceiling_charges": 0,
+      "max_cost_usd": 5.0,
+      "thinking_allowance_tokens": 0,
+      "accounting": "reserve = tam request zarfı UTF-8 bayt (provider'ın GERÇEK payload üreticisiyle aynı kaynak: gemini = nihai contents + JSON talimatı + schema; deepseek = OpenAI-uyumlu gövde, şema gönderilmez) + max_tokens; settle = gerçek usage, usage yoksa/kısmi geçersizse tavan (ceiling charge)"
+    }
+  },
+  "usage": {
+    "requests": 722,
+    "prompt_tokens": 1319831,
+    "candidates_tokens": 484603,
+    "thoughts_tokens": 1754,
+    "failed_requests": 2,
+    "estimated_usd": 2.8137
+  },
+  "wall_clock_s": {
+    "setup": 0.548,
+    "orchestration": 332.248,
+    "content_ads": 136.965,
+    "content_seo": 1538.628,
+    "content_social": 102.802
+  },
+  "created_at": "2026-10-11T21:36:28.135102+00:00",
+  "payload_sha256": "2a0616ec1ff1379c8fe1d0784092d18779ec8ca31847d8a08390f1e7481ea978"
+}

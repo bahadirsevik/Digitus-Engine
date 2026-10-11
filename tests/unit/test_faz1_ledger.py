@@ -90,3 +90,40 @@ def test_settle_with_none_summary_records_zero(tmp_path):
     led.reserve(kind="hybrid_run", ref="x", caps=CAPS)
     assert led.settle(ref="x", budget_summary=None) == {}
     assert led.remaining(CAPS) == CAPS
+
+
+def test_two_processes_do_not_clobber_each_other(tmp_path):
+    """Paralel kosular: A rezerve, B rezerve, A settle -> B'nin rezervasyonu KAYBOLMAZ."""
+    p = tmp_path / "ledger.json"
+    a, b = Faz1Ledger.open(p), Faz1Ledger.open(p)
+    a.reserve(kind="hybrid_run", ref="ws29:G/G/G", caps={"gemini": 4.0}, total_caps=CAPS)
+    b.reserve(kind="hybrid_run", ref="ws21:Aday", caps={"anthropic": 8.0, "gemini": 2.0},
+              total_caps=CAPS)
+    a.settle(ref="ws29:G/G/G", budget_summary={"gemini": {"cost_committed_usd": 2.3}})
+    fresh = Faz1Ledger.open(p)
+    assert list(fresh.doc["pending"]) == ["ws21:Aday"]
+    assert fresh.spent("gemini") == pytest.approx(2.3)
+    b.settle(ref="ws21:Aday", budget_summary={"anthropic": {"cost_committed_usd": 3.0},
+                                               "gemini": {"cost_committed_usd": 0.4}})
+    fresh = Faz1Ledger.open(p)
+    assert fresh.doc["pending"] == {} and fresh.spent("gemini") == pytest.approx(2.7)
+    assert not (tmp_path / "ledger.json.lock").exists()
+
+
+def test_partial_caps_reserve_only_named_providers(tmp_path):
+    led = Faz1Ledger.open(tmp_path / "l.json")
+    rem = led.reserve(kind="hybrid_run", ref="x", caps={"gemini": 4.0})
+    assert rem == {"gemini": 4.0}
+    other = Faz1Ledger.open(tmp_path / "l.json")
+    assert other.remaining({"anthropic": 50.0})["anthropic"] == 50.0   # anthropic serbest
+
+
+def test_run_cap_is_bounded_by_experiment_total(tmp_path):
+    led = Faz1Ledger.open(tmp_path / "l.json")
+    led.record(kind="x", ref="y", budget_summary={"gemini": {"cost_committed_usd": 19.0}})
+    led.save()
+    rem = led.reserve(kind="hybrid_run", ref="r", caps={"gemini": 4.0}, total_caps=CAPS)
+    assert rem["gemini"] == pytest.approx(1.0)                  # 20 - 19, 4 degil
+    with pytest.raises(CharacterizationError):
+        Faz1Ledger.open(tmp_path / "l.json").reserve(kind="hybrid_run", ref="s",
+                                                     caps={"gemini": 4.0}, total_caps=CAPS)

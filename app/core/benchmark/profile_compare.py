@@ -192,8 +192,11 @@ def run_profile_compare(*, workspace_ids: Sequence[int],
     ledger_ref = "profile:" + ",".join(map(str, workspace_ids))
     remaining = None
     if ledger is not None:            # Codex Faz 1 2. tur: KALICI rezervasyon çağrıdan ÖNCE
+        used = {p for p, _m in providers.values()}        # yalniz kullanilan saglayicilar
         remaining = ledger.reserve(kind="profile_compare", ref=ledger_ref,
-                                   caps=resolve_caps(plan))
+                                   caps={p: c for p, c in resolve_caps(plan).items()
+                                         if p in used},
+                                   total_caps=resolve_caps(plan))
     factory = ai_factory or _default_ai_factory(plan, collector, caps_override=remaining)
     totals: Dict[str, Dict[str, Any]] = {}
     ai = None

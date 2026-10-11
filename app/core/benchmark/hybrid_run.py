@@ -173,13 +173,16 @@ class StageRoutePinnedAI:
 def build_benchmark_ai(config_name: str, plan: Mapping[str, Any], *,
                        collector: Any,
                        caps_usd: Optional[Mapping[str, float]] = None,
-                       ledger: Optional[Faz1Ledger] = None
+                       ledger: Optional[Faz1Ledger] = None,
+                       providers: Optional[set] = None
                        ) -> BudgetGuardedAI:
     configs = build_configs(plan)
     if config_name not in configs:
         raise ValueError("bilinmeyen konfigürasyon %r (izinli: %s)"
                          % (config_name, ", ".join(configs)))
     caps = resolve_caps(plan, caps_usd)
+    if providers is not None:         # yalniz konfigin KULLANDIGI saglayicilar butcelenir
+        caps = {p: c for p, c in caps.items() if p in providers}
     if ledger is not None:            # deney TOPLAMI: önceki komutların harcaması düşülür
         caps = ledger.remaining(caps)
     root = RoutedAIService(GeminiService(retry_attempts=1))
@@ -426,11 +429,15 @@ def run_hybrid(db, *, workspace_id: int, config_name: str,
     # Codex Faz 1 2. tur: KALICI rezervasyon çağrıdan ÖNCE (çökmede açık kalır,
     # sonraki komutlar harcanmış sayar); kapanışta settle ile mahsup.
     ledger_ref = "ws%s:%s" % (workspace_id, config_name)
-    remaining = ledger.reserve(kind="hybrid_run", ref=ledger_ref,
-                               caps=resolve_caps(plan, caps_usd))
+    # Yalniz konfigin KULLANDIGI saglayicilar rezerve edilir (G/G/G Anthropic
+    # tavanini kilitlemez -> paralel kosular mumkun); DeepSeek hibrit kosuda yok.
+    used = {"gemini"} | {r["provider"] for r in routes.values()}
+    caps_used = {p: c for p, c in resolve_caps(plan, caps_usd).items() if p in used}
+    remaining = ledger.reserve(kind="hybrid_run", ref=ledger_ref, caps=caps_used,
+                               total_caps=resolve_caps(plan))   # K7 deney toplami
     try:
         ai = ai or build_benchmark_ai(config_name, plan, collector=collector,
-                                      caps_usd=remaining)
+                                      caps_usd=remaining, providers=used)
     except BaseException:
         ledger.settle(ref=ledger_ref, budget_summary=None)
         raise
@@ -538,6 +545,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--content", default=",".join(CONTENT_FAMILIES))
     ap.add_argument("--seo-keyword-limit", type=int)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--caps", help="kosu basina tavan, yalniz asagi: claude=8,gemini=2 "
+                                   "(defterden KALANIN tamami yerine bu kadar ayrilir; "
+                                   "paralel kosulara izin verir)")
     a = ap.parse_args(argv)
 
     from app.core.telemetry import UsageCollector
@@ -551,7 +561,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             collector=UsageCollector(brand_profile_id=a.workspace),
             capacities=_parse_capacities(a.capacities) if a.capacities else None,
             content=tuple(c for c in a.content.split(",") if c),
-            seo_keyword_limit=a.seo_keyword_limit, dry_run=a.dry_run)
+            seo_keyword_limit=a.seo_keyword_limit, dry_run=a.dry_run,
+            caps_usd=({k: float(v) for k, v in (kv.split("=") for kv in a.caps.split(","))}
+                      if a.caps else None))
     except Faz1Blocked as exc:
         print("BLOKE: %s" % exc)
         return 2

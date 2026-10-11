@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-11
 Branch: `deploy/lean-taslak`
-Active phase: **Gemini→Claude karsilastirma — FAZ 1 ALTYAPISI KODLANDI (dalga A+B). Ucretli Faz 1 kosusu `faz1_blockers` ile KILITLI: K12 belge ref + konsol mutabakati + net kredi + ws id**
+Active phase: **Gemini→Claude karsilastirma — FAZ 1 KOSULARI TAMAM (11-12.10): Hissefy ws21 + Digitus ws29 × {G/G/G, Aday, G/G/C} + profil kiyasi; cikti paketi benchmark/faz1/export/ — degerlendirme PATRONDA**
 Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 (konsey 2 tur + Codex 3 inceleme GO).
 
 ## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
@@ -96,8 +96,21 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
   (rsa/blog/social), `common_layer`, kor kartlar round-trip ve false-green (dayanaksiz iddia -> hard_rule_ok False) YESIL.
   Not: `ad_headlines.headline_text` varchar(30) — 31 karakter DB'de zaten yazilamaz.
 
+- **FAZ 1 KOSULARI (11-12.10, patron karari: Hissefy+Digitus, degerlendirme patronda):** plan `amend_faz1_plan.py` ile
+  yeniden muhurlendi (K12 sozlu, kredi 99,92, ws 21/29, kapasite 60/30/30). 6 hibrit kosu + profil kiyasi basarili:
+  run 76/79/82 (ws21 GGG/Aday/GGC), 78/81/83 (ws29). Harcama (liste): Claude 19,18 $, Gemini 10,21 $. Basarisiz: run 77
+  (ws29 GGG, kosu tavani hatasi — tavan mantigi duzeltildi), run 80 (ws29 Aday: Haiku family_a2'de uydurma ID 11011,
+  2 denemede de -> fail-closed; tekrar 81 OK). Paket: benchmark/faz1/export/{README,ozet,ws*_havuzlar.xlsx,
+  ws*_icerikler.md/xlsx,profiller.md}. Kod: faz1_export (yeni), faz1_ledger kilit+reload+total_caps, hybrid_run
+  --caps + yalniz kullanilan saglayici rezervasyonu, ai_usage_events migration canli yerel DB'ye uygulandi.
+  Kosu mekanigi: test imaji konteyneri lean aginda, --env-file lean/.env + ayri anthropic.env (anahtar ana agac
+  .env'de), DATABASE_URL digitus_app'ten; ~30-40 dk/kosu (SEO blog dominant); ikiser paralel.
+  Gozlemler README'de (Haiku ID uydurma, Claude retry 3-7 vs Gemini 0-2, sosyal kaydedilen icerik Claude'da az,
+  Gemini provider kolonu NULL).
+
 ## Open / next
 
+0b. Takip: GeminiService collector.record(provider="gemini"); 1A replay / hakem / kapilar istege bagli; konsol mutabakati.
 0. **TAM PAKET 11.10 (izole docker-compose.test.yml, iki parca): unit 2566 passed/38 skipped + integration 2394 passed/74 skipped = 4960 / 0 hata.** Faz 1 oncesi kalan: 1A icin referans G/G/G kosusunu
    `StageCapture` ile sarmalayan sunucu adimi (hybrid_run'a `capture=True`); Faz 1 kosu sirasi/CLI betigi.
 0b. **Eski not — Faz 1 wiring (kod):** bakeoff_comparison provider/model pinleri gemini-3.5/deepseek -> Claude adayi icin sozlesme

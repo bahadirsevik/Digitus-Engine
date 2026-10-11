@@ -298,3 +298,16 @@ def test_build_benchmark_ai_uses_ledger_remaining(sealed_plan, monkeypatch, tmp_
                budget_summary={"anthropic": {"cost_committed_usd": 5.0}})
     with pytest.raises(CharacterizationError):
         hr.build_benchmark_ai("Aday", sealed_plan, collector=object(), ledger=led)
+
+
+def test_build_benchmark_ai_budgets_only_used_providers(sealed_plan, monkeypatch):
+    import app.generators.ai_service as mod
+
+    class _C:
+        def __init__(self, **kw): pass
+    monkeypatch.setattr(mod.genai, "Client", _C)
+    ai = hr.build_benchmark_ai("G/G/G", sealed_plan, collector=object(), providers={"gemini"})
+    assert set(ai.summary()) == {"gemini"}
+    ai2 = hr.build_benchmark_ai("Aday", sealed_plan, collector=object(),
+                                providers={"gemini", "anthropic"})
+    assert set(ai2.summary()) == {"gemini", "anthropic"}

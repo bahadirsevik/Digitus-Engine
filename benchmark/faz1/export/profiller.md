@@ -1,0 +1,479 @@
+# Profil çıkarımı kıyası (Hissefy ws21, Digitus ws29)
+
+Aynı dondurulmuş site içeriği ve ön bilgi üç modele birebir aynı prompt'la verildi. Etiketler açık (kör değil).
+
+
+## Hissefy (ws 21)
+
+
+### gemini — gemini-3.8-flash  (girdi 3013 / çıktı 924 token, 8896 ms)
+
+- **company_name:** Hissefy
+- **sector:** Finansal Teknolojiler ve Yatırım Analizi
+- **brand_summary:** Hissefy, Borsa İstanbul ve kripto varlıklar için yapay zekâ destekli hisse tarama, puanlama ve karşılaştırma imkânı sunan bir finansal analiz platformudur. Karmaşık teknik ve temel verileri sadeleştirerek yatırımcıların hızlı ve bilinçli kararlar almasını sağlar.
+- **products:**
+  - Kısa Vade Radar
+  - Orta-Uzun Vade Radar
+  - Özelleştirilebilir Karma Radarlar
+  - Yapay Zeka Destekli Hisse Analiz Modülü
+  - Hisse ve Varlık Puanlama Sistemi (0–100 Skor)
+  - Portföy Takip Paneli
+  - Hisse Karşılaştırma Aracı
+  - Sektör Analizleri Aracı
+  - Kripto Radar ve Analiz Aracı
+- **services:**
+  - BIST hisse tarama ve filtreleme
+  - Yapay zekâ destekli finansal veri yorumlama
+  - Temel ve teknik analiz göstergeleri sunumu
+  - Hisse performans ve risk seviyesi takibi
+- **target_audience:** Borsa İstanbul ve kripto para piyasalarında işlem yapan bireysel yatırımcılar, yeni başlayanlar ve profesyonel yatırımcılar.
+- **use_cases:**
+  - Kısa vadeli işlem fırsatlarını MACD, RSI gibi teknik göstergelerle tespit etme
+  - Orta ve uzun vadeli yatırım için kârlılık, borçluluk ve temettü kriterlerine göre şirket filtreleme
+  - Teknik ve temel göstergeleri birleştirerek kişisel tarama filtreleri oluşturma
+  - Hisselerin ve kripto varlıkların 0-100 arasındaki skorlarını ve geçmiş sinyal başarılarını inceleme
+  - Portföyün risk durumunu ve performansını tek bir ekranda izleme
+  - Sektör içi rakip şirketleri ve hisseleri yan yana karşılaştırma
+  - Yapay zekaya hisse performansı veya verileri hakkında soru sorarak sade analiz alma
+- **problems_solved:**
+  - 630 BIST hissesini tek tek incelemenin getirdiği zaman kaybı
+  - Karmaşık teknik ve temel analiz verileri arasındaki kafa karışıklığı
+  - Dağınık tablolarda portföy takibi yapmanın zorluğu
+  - Yatırım kararlarında sektör ve rakip bağlamını gözden kaçırma
+  - Yetersiz finansal okuryazarlık nedeniyle analiz yapamama sorunu
+- **brand_terms:**
+  - Hissefy
+  - Hissefy hisse tarama
+  - Hissefy radar
+  - Hissefy yapay zeka
+  - Hissefy borsa skorlama
+  - Hissefy portföy takip
+  - Hissefy karşılaştırma
+  - Hissefy kripto
+- **exclude_themes:**
+  - Yatırım tavsiyesi veya yatırım danışmanlığı
+  - Aracı kurum hizmetleri ve hisse alım-satım aracılığı
+  - Portföy yönetimi hizmeti
+  - Canlı ve anlık BIST veri sağlayıcılığı (veriler 15 dk gecikmelidir)
+- **anchor_texts:**
+  - Kısa Vade Radar Orta-Uzun Vade Radar Özelleştirilebilir Karma Radarlar Yapay Zeka Destekli Hisse Analiz Modülü Hisse ve Varlık Puanlama Sistemi (0–100 Skor) Portföy Takip Paneli Hisse Karşılaştırma Aracı Sektör Analizleri Aracı Kripto Radar ve Analiz Aracı
+  - BIST hisse tarama ve filtreleme Yapay zekâ destekli finansal veri yorumlama Temel ve teknik analiz göstergeleri sunumu Hisse performans ve risk seviyesi takibi
+  - Kısa vadeli işlem fırsatlarını MACD, RSI gibi teknik göstergelerle tespit etme Orta ve uzun vadeli yatırım için kârlılık, borçluluk ve temettü kriterlerine göre şirket filtreleme Teknik ve temel göstergeleri birleştirerek kişisel tarama filtreleri oluşturma Hisselerin ve kripto varlıkların 0-100 arasındaki skorlarını ve geçmiş sinyal başarılarını inceleme Portföyün risk durumunu ve performansını tek bir ekranda izleme Sektör içi rakip şirketleri ve hisseleri yan yana karşılaştırma Yapay zekaya hisse performansı veya verileri hakkında soru sorarak sade analiz alma
+  - 630 BIST hissesini tek tek incelemenin getirdiği zaman kaybı Karmaşık teknik ve temel analiz verileri arasındaki kafa karışıklığı Dağınık tablolarda portföy takibi yapmanın zorluğu Yatırım kararlarında sektör ve rakip bağlamını gözden kaçırma Yetersiz finansal okuryazarlık nedeniyle analiz yapamama sorunu
+  - Hissefy Hissefy hisse tarama Hissefy radar Hissefy yapay zeka Hissefy borsa skorlama Hissefy portföy takip Hissefy karşılaştırma Hissefy kripto
+  - Finansal Teknolojiler ve Yatırım Analizi Borsa İstanbul ve kripto para piyasalarında işlem yapan bireysel yatırımcılar, yeni başlayanlar ve profesyonel yatırımcılar.
+
+### sonnet — claude-sonnet-5-5  (girdi 5829 / çıktı 1311 token, 9664 ms)
+
+- **company_name:** Hissefy
+- **sector:** Finansal analiz platformu (fintech)
+- **brand_summary:** Hissefy, Borsa İstanbul'daki 630 hisseyi ve kripto varlıkları radarlar, 0–100 arası skorlar ve yapay zekâ destekli analizlerle değerlendiren, tarayıcı üzerinden çalışan bir finansal analiz platformudur. Karmaşık veriyi sadeleştirerek yatırımcıların daha hızlı ve bilinçli karar vermesini hedefler.
+- **products:**
+  - Kısa Vade Radar
+  - Orta-Uzun Vade Radar
+  - Yapay Zeka Analizi
+  - Sektör Analizleri
+  - Hisse Karşılaştırma
+  - Kripto Radar
+  - Portföy Takip Paneli
+  - Özelleştirilebilir Karma Radar
+  - Hisse Puanlama (0–100 skor)
+- **services:**
+  - Abonelik tabanlı finansal analiz platformu (paketler)
+  - 3 gün ücretsiz deneme
+  - Yapay zekâ destekli hisse yorumlama
+  - BIST hisse tarama ve puanlama
+  - Sinyal geçmiş başarı oranı gösterimi
+- **target_audience:** Borsa İstanbul'da işlem yapan, yeni başlayanlardan ileri düzey kullanıcılara kadar her seviyeden bireysel yatırımcılar ve kripto varlıklarla ilgilenen kullanıcılar
+- **use_cases:**
+  - Portföyü, performansı ve risk seviyesini tek ekrandan takip etmek
+  - Hazır radarlarla kısa ve orta-uzun vadeli hisse fırsatlarını keşfetmek
+  - Teknik ve temel kriterleri birleştirerek özel radar oluşturmak
+  - Yapay zekaya soru sorarak hisse yorumu almak
+  - Bir hisseyi sektöründeki rakipleriyle kıyaslamak
+  - Seçilen hisseleri yan yana karşılaştırmak
+  - Borçluluk, özkaynak kârlılığı, net kâr marjı, büyüme ve temettü geçmişine göre şirket filtrelemek
+- **problems_solved:**
+  - 630 hisseyi tek tek incelemek zorunda kalma
+  - Çok sayıda gösterge ve tablo arasında kaybolma
+  - Sinyal karmaşası
+  - Dağınık portföy takibi
+  - Teknik ve temel verinin ayrı ayrı değerlendirilmesi
+  - Finansal okuryazarlığı düşük kullanıcıların veriyi anlamakta zorlanması
+  - Karar sürecinin uzaması
+- **brand_terms:**
+  - Hissefy
+  - Hissefy hisse tarama
+  - Hissefy radar
+  - Hissefy Kısa Vade Radar
+  - Hissefy Orta-Uzun Vade Radar
+  - Hissefy yapay zeka analizi
+  - Hissefy hisse karşılaştırma
+  - Hissefy sektör analizleri
+  - Hissefy kripto
+  - Hissefy fiyatlandırma
+  - Hissefy giriş
+  - hissefy.com
+- **exclude_themes:**
+  - Aracılık hizmeti / aracı kurum
+  - Yatırım danışmanlığı
+  - Hisse alım satım işlemi
+  - Canlı gerçek zamanlı borsa verisi
+  - Kripto borsası
+  - Forex işlem platformu
+  - Borsa eğitimi kursları
+  - Bedava sinyal grupları
+  - Kâr garantisi
+- **anchor_texts:**
+  - Kısa Vade Radar Orta-Uzun Vade Radar Yapay Zeka Analizi Sektör Analizleri Hisse Karşılaştırma Kripto Radar Portföy Takip Paneli Özelleştirilebilir Karma Radar Hisse Puanlama (0–100 skor)
+  - Abonelik tabanlı finansal analiz platformu (paketler) 3 gün ücretsiz deneme Yapay zekâ destekli hisse yorumlama BIST hisse tarama ve puanlama Sinyal geçmiş başarı oranı gösterimi
+  - Portföyü, performansı ve risk seviyesini tek ekrandan takip etmek Hazır radarlarla kısa ve orta-uzun vadeli hisse fırsatlarını keşfetmek Teknik ve temel kriterleri birleştirerek özel radar oluşturmak Yapay zekaya soru sorarak hisse yorumu almak Bir hisseyi sektöründeki rakipleriyle kıyaslamak Seçilen hisseleri yan yana karşılaştırmak Borçluluk, özkaynak kârlılığı, net kâr marjı, büyüme ve temettü geçmişine göre şirket filtrelemek
+  - 630 hisseyi tek tek incelemek zorunda kalma Çok sayıda gösterge ve tablo arasında kaybolma Sinyal karmaşası Dağınık portföy takibi Teknik ve temel verinin ayrı ayrı değerlendirilmesi Finansal okuryazarlığı düşük kullanıcıların veriyi anlamakta zorlanması Karar sürecinin uzaması
+  - Hissefy Hissefy hisse tarama Hissefy radar Hissefy Kısa Vade Radar Hissefy Orta-Uzun Vade Radar Hissefy yapay zeka analizi Hissefy hisse karşılaştırma Hissefy sektör analizleri Hissefy kripto Hissefy fiyatlandırma Hissefy giriş hissefy.com
+  - Finansal analiz platformu (fintech) Borsa İstanbul'da işlem yapan, yeni başlayanlardan ileri düzey kullanıcılara kadar her seviyeden bireysel yatırımcılar ve kripto varlıklarla ilgilenen kullanıcılar
+
+### haiku — claude-haiku-5-5  (girdi 5829 / çıktı 1225 token, 6461 ms)
+
+- **company_name:** Hissefy
+- **sector:** Finansal analiz platformu
+- **brand_summary:** Hissefy, Borsa İstanbul hisselerini ve kripto varlıkları radarlar, 0–100 arası skorlar ve yapay zekâ destekli yorumlarla tarayan bir finansal analiz platformudur. Yatırım danışmanlığı veya aracılık hizmeti vermez.
+- **products:**
+  - Kısa Vade Radar
+  - Orta-Uzun Vade Radar
+  - Yapay Zeka Analizi
+  - Sektör Analizleri
+  - Hisse Karşılaştırma
+  - Portföy takip paneli
+  - Kripto radarı
+  - Kendi kriterlerinle oluşturulan karma radarlar
+- **services:**
+  - BIST 100, BIST 30 ve tüm hisselerin taranması
+  - 0–100 arası puanlama
+  - Sektörel karşılaştırma
+  - Hisseleri yan yana karşılaştırma
+  - Yapay zekâ ile soru-cevap ve yorumlanmış analiz
+  - 3 gün ücretsiz deneme
+- **target_audience:** Borsa İstanbul'da yatırım yapan, yeni başlayan ve ileri düzey bireysel yatırımcılar
+- **use_cases:**
+  - Kısa vadeli hisse fırsatlarını MACD, RSI, Bollinger ve Stokastik RSI filtreleriyle bulmak
+  - Borçluluk, özkaynak kârlılığı, büyüme ve temettü geçmişine göre uzun vadeli hisseleri ayıklamak
+  - Bir hisseyi sektördeki rakipleriyle karşılaştırmak
+  - Seçilen hisseleri aynı ekranda kıyaslamak
+  - Portföydeki hisseleri ve risk seviyesini tek panelden izlemek
+  - Kendi kriterleriyle özel radar oluşturmak
+- **problems_solved:**
+  - Yüzlerce hisseyi tek tek incelemek zorunluluğu
+  - Onlarca gösterge ve tablo arasında kaybolma
+  - Teknik ve temel veriyi birlikte okuma zorluğu
+  - Karmaşık sinyaller yerine sade ve yorumlanmış analiz ihtiyacı
+  - Riskin görünür olmaması
+  - Bağlamsız hisse değerlendirmesi
+- **brand_terms:**
+  - Hissefy
+  - Hissefy radar
+  - Hissefy Orta-Uzun Vade Radar
+  - Hissefy Kısa Vade Radar
+  - Hissefy yapay zeka analizi
+  - Hissefy hisse karşılaştırma
+  - Hissefy sektör analizi
+  - Hissefy portföy
+- **exclude_themes:**
+  - Aracı kurum hizmetleri ve hisse alım-satım işlemleri
+  - Yatırım danışmanlığı ve kişiye özel yatırım tavsiyesi
+  - Kredi kartı veya ödeme gerektiren işlemler
+  - Kurumsal yazılım kurulumu gerektiren çözümler
+  - Forex işlemleri ve döviz alım-satımı
+  - Vadeli işlem ve opsiyon ticareti
+  - Doğrudan kripto alım-satım platformu hizmeti
+- **anchor_texts:**
+  - Kısa Vade Radar Orta-Uzun Vade Radar Yapay Zeka Analizi Sektör Analizleri Hisse Karşılaştırma Portföy takip paneli Kripto radarı Kendi kriterlerinle oluşturulan karma radarlar
+  - BIST 100, BIST 30 ve tüm hisselerin taranması 0–100 arası puanlama Sektörel karşılaştırma Hisseleri yan yana karşılaştırma Yapay zekâ ile soru-cevap ve yorumlanmış analiz 3 gün ücretsiz deneme
+  - Kısa vadeli hisse fırsatlarını MACD, RSI, Bollinger ve Stokastik RSI filtreleriyle bulmak Borçluluk, özkaynak kârlılığı, büyüme ve temettü geçmişine göre uzun vadeli hisseleri ayıklamak Bir hisseyi sektördeki rakipleriyle karşılaştırmak Seçilen hisseleri aynı ekranda kıyaslamak Portföydeki hisseleri ve risk seviyesini tek panelden izlemek Kendi kriterleriyle özel radar oluşturmak
+  - Yüzlerce hisseyi tek tek incelemek zorunluluğu Onlarca gösterge ve tablo arasında kaybolma Teknik ve temel veriyi birlikte okuma zorluğu Karmaşık sinyaller yerine sade ve yorumlanmış analiz ihtiyacı Riskin görünür olmaması Bağlamsız hisse değerlendirmesi
+  - Hissefy Hissefy radar Hissefy Orta-Uzun Vade Radar Hissefy Kısa Vade Radar Hissefy yapay zeka analizi Hissefy hisse karşılaştırma Hissefy sektör analizi Hissefy portföy
+  - Finansal analiz platformu Borsa İstanbul'da yatırım yapan, yeni başlayan ve ileri düzey bireysel yatırımcılar
+
+## Digitus (ws 29)
+
+
+### gemini — gemini-3.8-flash  (girdi 2992 / çıktı 1030 token, 10559 ms)
+
+- **company_name:** Digitus
+- **sector:** Dijital Pazarlama ve Teknoloji Ajansı
+- **brand_summary:** Digitus; veri, yapay zeka ve insan odaklı stratejileri bir araya getirerek markaların bilinirliğini, satışlarını ve karlılığını artıran 'intelligence-driven' bir büyüme ve pazarlama ajansıdır.
+- **products:**
+  - Optimius
+  - Custom AI Yazılımlar
+- **services:**
+  - Analytics & Tracking Kurulumu (GA4, GTM, server-side tracking)
+  - Dashboard & Raporlama (Looker Studio, Data Studio)
+  - Audience Segmentasyonu
+  - Attribution Modelleme
+  - First-Party Data Stratejisi
+  - Rekabet & Pazar Analizi
+  - AI Destekli İçerik Üretimi
+  - Süreç Otomasyonu
+  - Predictive Analytics
+  - GEO (AI Arama Görünürlüğü / AI SEO)
+  - LLM & Chatbot Entegrasyonu
+  - SEO (Arama Motoru Optimizasyonu)
+  - Paid Media (Google Ads, Meta Ads)
+  - Programatik Reklamcılık
+  - CRO (Dönüşüm Oranı Optimizasyonu)
+  - Marketing Automation
+  - E-mail & Lifecycle Marketing
+  - Yazılım Geliştirme
+  - Web Sitesi Geliştirme
+  - Dijitalleşme Danışmanlığı
+  - MarTech Entegrasyonu
+  - API & Veri Entegrasyonları
+  - Pazarlama Stratejisi ve Marka Konumlandırma
+  - Kurumsal Kimlik Tasarımı
+  - Sosyal Medya Yönetimi
+  - Video Prodüksiyon
+  - UI/UX ve Grafik Tasarım
+  - Interaction Design
+- **target_audience:** Dijitalde büyümek, reklam bütçelerini veriye dayalı optimize etmek, AI ve MarTech teknolojilerini iş süreçlerine entegre etmek isteyen markalar ve işletmeler.
+- **use_cases:**
+  - İşletmeye özel yapay zeka yazılımları geliştirerek süreçlerin otomatikleştirilmesi
+  - Reklam kampanyalarında veri ve attribution modelleri kullanılarak bütçe israfının önlenmesi
+  - Web sitelerinin dönüşüm optimizasyonu (CRO) ve A/B testleri ile satış oranlarının artırılması
+  - Yeni nesil arama motorlarında ve AI özetlerinde (GEO) görünürlük kazanılması
+  - Kapsamlı kurumsal kimlik ve tasarım çalışmalarıyla marka bilinirliğinin ve güvenilirliğinin güçlendirilmesi
+- **problems_solved:**
+  - Sezgiye dayalı pazarlama kararları nedeniyle oluşan bütçe israfı
+  - Reklam kanallarının satışa gerçek katkısının ölçülememesi (attribution eksikliği)
+  - Cookie'siz geleceğe hazırlıksız olma ve birinci taraf veri eksikliği
+  - Düşük web sitesi dönüşüm oranları ve yüksek müşteri edinme maliyetleri (CAC)
+  - Tekrarlayan iş süreçleri nedeniyle verimlilik ve zaman kaybı
+  - Arama motorlarında ve AI tabanlı arama sonuçlarında görünürlük eksikliği
+  - Zayıf ve tutarsız marka algısı nedeniyle yaşanan güven kaybı
+- **brand_terms:**
+  - Digitus
+  - Digitus ajans
+  - Digitus Optimius
+  - Digitus dijital pazarlama
+  - Digitus SEO
+  - Digitus GEO
+- **exclude_themes:**
+  - Donanım satışı ve teknik servis
+  - Baskı ve matbaa hizmetleri
+  - Fiziksel etkinlik organizasyonu
+  - Çağrı merkezi dış kaynak personeli temini
+- **anchor_texts:**
+  - Optimius Custom AI Yazılımlar
+  - Analytics & Tracking Kurulumu (GA4, GTM, server-side tracking) Dashboard & Raporlama (Looker Studio, Data Studio) Audience Segmentasyonu Attribution Modelleme First-Party Data Stratejisi Rekabet & Pazar Analizi AI Destekli İçerik Üretimi Süreç Otomasyonu Predictive Analytics GEO (AI Arama Görünürlüğü / AI SEO) LLM & Chatbot Entegrasyonu SEO (Arama Motoru Optimizasyonu) Paid Media (Google Ads, Meta Ads) Programatik Reklamcılık CRO (Dönüşüm Oranı Optimizasyonu) Marketing Automation E-mail & Lifecycle Marketing Yazılım Geliştirme Web Sitesi Geliştirme Dijitalleşme Danışmanlığı MarTech Entegrasyonu API & Veri Entegrasyonları Pazarlama Stratejisi ve Marka Konumlandırma Kurumsal Kimlik Tasarımı Sosyal Medya Yönetimi Video Prodüksiyon UI/UX ve Grafik Tasarım Interaction Design
+  - İşletmeye özel yapay zeka yazılımları geliştirerek süreçlerin otomatikleştirilmesi Reklam kampanyalarında veri ve attribution modelleri kullanılarak bütçe israfının önlenmesi Web sitelerinin dönüşüm optimizasyonu (CRO) ve A/B testleri ile satış oranlarının artırılması Yeni nesil arama motorlarında ve AI özetlerinde (GEO) görünürlük kazanılması Kapsamlı kurumsal kimlik ve tasarım çalışmalarıyla marka bilinirliğinin ve güvenilirliğinin güçlendirilmesi
+  - Sezgiye dayalı pazarlama kararları nedeniyle oluşan bütçe israfı Reklam kanallarının satışa gerçek katkısının ölçülememesi (attribution eksikliği) Cookie'siz geleceğe hazırlıksız olma ve birinci taraf veri eksikliği Düşük web sitesi dönüşüm oranları ve yüksek müşteri edinme maliyetleri (CAC) Tekrarlayan iş süreçleri nedeniyle verimlilik ve zaman kaybı Arama motorlarında ve AI tabanlı arama sonuçlarında görünürlük eksikliği Zayıf ve tutarsız marka algısı nedeniyle yaşanan güven kaybı
+  - Digitus Digitus ajans Digitus Optimius Digitus dijital pazarlama Digitus SEO Digitus GEO
+  - Dijital Pazarlama ve Teknoloji Ajansı Dijitalde büyümek, reklam bütçelerini veriye dayalı optimize etmek, AI ve MarTech teknolojilerini iş süreçlerine entegre etmek isteyen markalar ve işletmeler.
+
+### sonnet — claude-sonnet-5-5  (girdi 5993 / çıktı 1583 token, 10769 ms)
+
+- **company_name:** Digitus
+- **sector:** Dijital pazarlama ajansı
+- **brand_summary:** Digitus, veri, yapay zeka ve insan odaklı stratejiyi birleştiren intelligence-driven bir pazarlama ajansıdır. Performans, teknoloji ve marka alanlarında ölçülebilir büyüme sağlamak için SEO, reklam, yazılım ve marka hizmetleri sunar.
+- **products:**
+  - Optimius (AI yazılımı)
+  - Özel AI araçları ve yazılımları
+  - Web siteleri
+  - Web uygulamaları ve custom araçlar
+- **services:**
+  - Analytics & Tracking Kurulumu (GA4, GTM, server-side tracking)
+  - Dashboard & Raporlama (Looker Studio)
+  - Audience Segmentasyonu
+  - Attribution Modelleme
+  - First-Party Data Stratejisi
+  - Rekabet & Pazar Analizi
+  - AI Destekli İçerik Üretimi
+  - Süreç Otomasyonu
+  - Predictive Analytics
+  - GEO (AI Arama Görünürlüğü)
+  - LLM & Chatbot Entegrasyonu
+  - SEO ve Teknik SEO
+  - Paid Search (Google Ads)
+  - Meta Ads
+  - Programatik Reklamcılık
+  - Ads Optimizasyonu
+  - CRO Dönüşüm Optimizasyonu
+  - Marketing Automation
+  - E-mail & Lifecycle Marketing
+  - Revenue Attribution
+  - Yazılım Geliştirme
+  - Dijitalleşme Danışmanlığı
+  - MarTech Entegrasyonu
+  - API & Veri Entegrasyonları
+  - Pazarlama Stratejisi
+  - Kurumsal Kimlik & Marka
+  - Sosyal Medya Yönetimi
+  - Video Prodüksiyon
+  - Tasarım (UI/UX, grafik, reklam kreatifleri)
+  - Interaction Design
+- **target_audience:** Dijital görünürlüğünü, satışlarını ve karlılığını veri ve AI destekli şekilde artırmak isteyen, pazarlama, teknoloji ve marka hizmetlerine ihtiyaç duyan işletmeler
+- **use_cases:**
+  - Doğru ölçüm için GA4 ve GTM kurulumu yaptırmak
+  - Reklam bütçesini attribution verisine göre yeniden dağıtmak
+  - Google AI Overview ve LLM aramalarında marka görünürlüğü kazanmak
+  - Tekrarlayan pazarlama süreçlerini otomatikleştirmek
+  - Mevcut reklam kampanyalarını audit ettirip verimliliği artırmak
+  - Dönüşüm odaklı yeni web sitesi yaptırmak
+  - CRM, otomasyon ve reklam araçlarını entegre etmek
+  - Logo, kurumsal kimlik ve marka kılavuzu oluşturmak
+  - Sosyal medya ve video içerik üretimi yaptırmak
+- **problems_solved:**
+  - Sezgiye dayalı kararlar ve bütçe israfı
+  - Hangi kanalın satış getirdiğinin bilinmemesi
+  - Cookie'siz döneme hazırlıksızlık
+  - Ziyaretçi trafiğinin müşteriye dönüşmemesi
+  - Veri silolarının ve dağınık sistemlerin olması
+  - Düşük organik ve AI arama görünürlüğü
+  - Tutarsız marka algısı
+  - Manuel ve zaman alan pazarlama süreçleri
+  - Yüksek müşteri edinme maliyeti
+- **brand_terms:**
+  - Digitus
+  - Digitus Ajans
+  - Digitus dijital pazarlama ajansı
+  - Digitus SEO
+  - Digitus performans pazarlama
+  - Digitus GEO
+  - Digitus Optimius
+  - Optimius
+  - digitusajans.com
+- **exclude_themes:**
+  - Fiziksel ürün satışı
+  - E-ticaret mağazası
+  - Ücretsiz SEO araçları
+  - İş ilanları ve kariyer
+  - Dijital pazarlama eğitimi ve kursları
+  - Hazır web sitesi şablonları
+  - Finans ve yatırım danışmanlığı
+  - Geleneksel medya ve açık hava reklamcılığı
+- **anchor_texts:**
+  - Optimius (AI yazılımı) Özel AI araçları ve yazılımları Web siteleri Web uygulamaları ve custom araçlar
+  - Analytics & Tracking Kurulumu (GA4, GTM, server-side tracking) Dashboard & Raporlama (Looker Studio) Audience Segmentasyonu Attribution Modelleme First-Party Data Stratejisi Rekabet & Pazar Analizi AI Destekli İçerik Üretimi Süreç Otomasyonu Predictive Analytics GEO (AI Arama Görünürlüğü) LLM & Chatbot Entegrasyonu SEO ve Teknik SEO Paid Search (Google Ads) Meta Ads Programatik Reklamcılık Ads Optimizasyonu CRO Dönüşüm Optimizasyonu Marketing Automation E-mail & Lifecycle Marketing Revenue Attribution Yazılım Geliştirme Dijitalleşme Danışmanlığı MarTech Entegrasyonu API & Veri Entegrasyonları Pazarlama Stratejisi Kurumsal Kimlik & Marka Sosyal Medya Yönetimi Video Prodüksiyon Tasarım (UI/UX, grafik, reklam kreatifleri) Interaction Design
+  - Doğru ölçüm için GA4 ve GTM kurulumu yaptırmak Reklam bütçesini attribution verisine göre yeniden dağıtmak Google AI Overview ve LLM aramalarında marka görünürlüğü kazanmak Tekrarlayan pazarlama süreçlerini otomatikleştirmek Mevcut reklam kampanyalarını audit ettirip verimliliği artırmak Dönüşüm odaklı yeni web sitesi yaptırmak CRM, otomasyon ve reklam araçlarını entegre etmek Logo, kurumsal kimlik ve marka kılavuzu oluşturmak Sosyal medya ve video içerik üretimi yaptırmak
+  - Sezgiye dayalı kararlar ve bütçe israfı Hangi kanalın satış getirdiğinin bilinmemesi Cookie'siz döneme hazırlıksızlık Ziyaretçi trafiğinin müşteriye dönüşmemesi Veri silolarının ve dağınık sistemlerin olması Düşük organik ve AI arama görünürlüğü Tutarsız marka algısı Manuel ve zaman alan pazarlama süreçleri Yüksek müşteri edinme maliyeti
+  - Digitus Digitus Ajans Digitus dijital pazarlama ajansı Digitus SEO Digitus performans pazarlama Digitus GEO Digitus Optimius Optimius digitusajans.com
+  - Dijital pazarlama ajansı Dijital görünürlüğünü, satışlarını ve karlılığını veri ve AI destekli şekilde artırmak isteyen, pazarlama, teknoloji ve marka hizmetlerine ihtiyaç duyan işletmeler
+
+### haiku — claude-haiku-5-5  (girdi 5993 / çıktı 2117 token, 9774 ms)
+
+- **company_name:** Digitus
+- **sector:** Intelligence-driven dijital pazarlama ajansı
+- **brand_summary:** Digitus, data, yapay zeka ve yaratıcı stratejiyi birleştiren intelligence-driven bir dijital pazarlama ajansıdır. Analytics ve veri altyapısından performans reklamcılığına, SEO/GEO'dan web geliştirmeye ve marka kimliğine kadar uçtan uca büyüme hizmetleri sunar.
+- **products:**
+  - Analytics & Tracking Kurulumu
+  - Dashboard & Raporlama
+  - Audience Segmentasyonu
+  - Attribution Modelleme
+  - First-Party Data Stratejisi
+  - Rekabet & Pazar Analizi
+  - Optimius (AI araçları)
+  - Custom AI Yazılımlar
+  - Predictive Analytics
+  - AI Destekli İçerik Üretimi
+  - Süreç Otomasyonu
+  - LLM & Chatbot Entegrasyonu
+  - SEO / GEO
+  - Paid Media (Meta & Search)
+  - CRO - Dönüşüm Optimizasyonu
+  - Marketing Automation
+  - E-mail & Lifecycle Marketing
+  - Revenue Attribution
+  - Paid Search (Google Ads)
+  - Meta Ads
+  - Programatik Reklamcılık
+  - Ads Optimizasyonu
+  - Yazılım Geliştirme
+  - Web Siteleri
+  - Dijitalleşme Danışmanlığı
+  - MarTech Entegrasyonu
+  - Teknik SEO & Altyapı
+  - API & Veri Entegrasyonları
+  - Pazarlama Stratejisi
+  - Kurumsal Kimlik & Marka
+  - SM Management
+  - Video Prodüksiyon
+  - Tasarım (UI/UX, grafik, reklam kreatifleri)
+  - Interaction Design
+- **services:**
+  - Analytics ve veri altyapısı kurulumu
+  - Dashboard ve raporlama
+  - Audience segmentasyonu
+  - Attribution modelleme
+  - First-party data stratejisi
+  - Rekabet ve pazar analizi
+  - Custom AI yazılım geliştirme
+  - Predictive analytics
+  - AI destekli içerik üretimi
+  - Süreç otomasyonu
+  - LLM ve chatbot entegrasyonu
+  - SEO ve GEO (AI arama görünürlüğü)
+  - Paid media yönetimi (Meta ve Google Ads, programatik)
+  - CRO ve landing page optimizasyonu
+  - Marketing automation
+  - E-mail ve lifecycle marketing
+  - Revenue attribution
+  - Ads optimizasyonu ve audit
+  - Yazılım geliştirme
+  - Web sitesi geliştirme
+  - Dijitalleşme danışmanlığı
+  - MarTech entegrasyonu
+  - Teknik SEO ve altyapı
+  - API ve veri entegrasyonları
+  - Pazarlama stratejisi ve marka konumlandırma
+  - Kurumsal kimlik ve marka kılavuzu
+  - Sosyal medya yönetimi
+  - Video prodüksiyon
+  - Tasarım ve interaction design
+- **target_audience:** Dijital büyüme, performans ve marka yatırımlarını veriye dayalı yönetmek isteyen işletmeler ve markalar; bütçe verimliliği, dönüşüm ve sürdürülebilir büyüme hedefleyen kurumsal ekipler.
+- **use_cases:**
+  - Kanal bazlı satış katkısını ölçüp bütçeyi karlılığa göre yeniden dağıtmak
+  - GA4 ve GTM ile doğru ölçüm altyapısı kurmak
+  - Looker Studio ile KPI'ları gerçek zamanlı izlemek
+  - Müşterileri davranış ve dönüşüm verisine göre segmentlere ayırmak
+  - Lead beslemeden yeniden satışa kadar süreci otomatikleştirmek
+  - AI Overview ve LLM aramalarında marka görünürlüğü kazanmak
+  - Müşteri hizmetleri ve lead generation için chatbot kullanmak
+  - Meta ve Google Ads kampanyalarını data ile hedeflemek ve optimize etmek
+  - Web sitesinin dönüşüm oranını A/B test ve ısı haritalarıyla artırmak
+  - Markanın tutarlı görsel kimliğini ve sosyal medya varlığını yönetmek
+- **problems_solved:**
+  - Bütçe israfı ve hangi kanalın satış getirdiği belirsizliği
+  - Kör noktalar ve fırsatların geç fark edilmesi
+  - Ekipler arasında veri ve dil farklılığı
+  - Cookie'siz gelecek için birinci taraf veri eksikliği
+  - Dağınık sistemler ve veri silolarının birbirini konuşamaması
+  - Manuel ve tekrar eden süreçlerin zaman kaybettirmesi
+  - Gelen trafiğin müşteriye dönüşememesi
+  - Düşük marka algısının reklam performansını olumsuz etkilemesi
+  - Teknik altyapı ve site hızı sorunları
+  - Geleneksel ve AI tabanlı aramalarda görünmezlik
+- **brand_terms:**
+  - Digitus
+  - Digitus ajans
+  - Digitus Optimius
+  - Digitus SEO
+  - Digitus GEO
+  - Digitus Meta Ads
+  - Digitus Google Ads
+  - Digitus analytics
+  - Digitus Looker Studio
+  - Digitus marka ajansı
+  - Digitus yapay zeka
+  - Digitus web sitesi
+- **exclude_themes:**
+  - Fiziksel ürün satışı ve e-ticaret mağazacılığı
+  - Muhasebe, hukuk veya finans danışmanlığı
+  - İK ve işe alım hizmetleri
+  - Lojistik ve üretim
+  - Sitede yer almayan genel yazılım eğitimleri
+  - Kişisel finans ve yatırım tavsiyeleri
+- **anchor_texts:**
+  - Analytics & Tracking Kurulumu Dashboard & Raporlama Audience Segmentasyonu Attribution Modelleme First-Party Data Stratejisi Rekabet & Pazar Analizi Optimius (AI araçları) Custom AI Yazılımlar Predictive Analytics AI Destekli İçerik Üretimi Süreç Otomasyonu LLM & Chatbot Entegrasyonu SEO / GEO Paid Media (Meta & Search) CRO - Dönüşüm Optimizasyonu Marketing Automation E-mail & Lifecycle Marketing Revenue Attribution Paid Search (Google Ads) Meta Ads Programatik Reklamcılık Ads Optimizasyonu Yazılım Geliştirme Web Siteleri Dijitalleşme Danışmanlığı MarTech Entegrasyonu Teknik SEO & Altyapı API & Veri Entegrasyonları Pazarlama Stratejisi Kurumsal Kimlik & Marka SM Management Video Prodüksiyon Tasarım (UI/UX, grafik, reklam kreatifleri) Interaction Design
+  - Analytics ve veri altyapısı kurulumu Dashboard ve raporlama Audience segmentasyonu Attribution modelleme First-party data stratejisi Rekabet ve pazar analizi Custom AI yazılım geliştirme Predictive analytics AI destekli içerik üretimi Süreç otomasyonu LLM ve chatbot entegrasyonu SEO ve GEO (AI arama görünürlüğü) Paid media yönetimi (Meta ve Google Ads, programatik) CRO ve landing page optimizasyonu Marketing automation E-mail ve lifecycle marketing Revenue attribution Ads optimizasyonu ve audit Yazılım geliştirme Web sitesi geliştirme Dijitalleşme danışmanlığı MarTech entegrasyonu Teknik SEO ve altyapı API ve veri entegrasyonları Pazarlama stratejisi ve marka konumlandırma Kurumsal kimlik ve marka kılavuzu Sosyal medya yönetimi Video prodüksiyon Tasarım ve interaction design
+  - Kanal bazlı satış katkısını ölçüp bütçeyi karlılığa göre yeniden dağıtmak GA4 ve GTM ile doğru ölçüm altyapısı kurmak Looker Studio ile KPI'ları gerçek zamanlı izlemek Müşterileri davranış ve dönüşüm verisine göre segmentlere ayırmak Lead beslemeden yeniden satışa kadar süreci otomatikleştirmek AI Overview ve LLM aramalarında marka görünürlüğü kazanmak Müşteri hizmetleri ve lead generation için chatbot kullanmak Meta ve Google Ads kampanyalarını data ile hedeflemek ve optimize etmek Web sitesinin dönüşüm oranını A/B test ve ısı haritalarıyla artırmak Markanın tutarlı görsel kimliğini ve sosyal medya varlığını yönetmek
+  - Bütçe israfı ve hangi kanalın satış getirdiği belirsizliği Kör noktalar ve fırsatların geç fark edilmesi Ekipler arasında veri ve dil farklılığı Cookie'siz gelecek için birinci taraf veri eksikliği Dağınık sistemler ve veri silolarının birbirini konuşamaması Manuel ve tekrar eden süreçlerin zaman kaybettirmesi Gelen trafiğin müşteriye dönüşememesi Düşük marka algısının reklam performansını olumsuz etkilemesi Teknik altyapı ve site hızı sorunları Geleneksel ve AI tabanlı aramalarda görünmezlik
+  - Digitus Digitus ajans Digitus Optimius Digitus SEO Digitus GEO Digitus Meta Ads Digitus Google Ads Digitus analytics Digitus Looker Studio Digitus marka ajansı Digitus yapay zeka Digitus web sitesi
+  - Intelligence-driven dijital pazarlama ajansı Dijital büyüme, performans ve marka yatırımlarını veriye dayalı yönetmek isteyen işletmeler ve markalar; bütçe verimliliği, dönüşüm ve sürdürülebilir büyüme hedefleyen kurumsal ekipler.
