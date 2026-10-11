@@ -29,6 +29,14 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
 - Bulgu (T4): gemini/deepseek route'lari artik motor asamasinda ETKILI (eskiden runner sabiti eziyordu);
   route bos -> bayt-ayni. Uretim .env'de AI_STAGE_ROUTES yok.
 
+- **Codex Faz 0 kod incelemesi (`inceleme_claude_gemini_faz0_kod_codex.md`) -> 3 P1 DOGRU, duzeltildi (4. commit):**
+  (1) `_scoped` provider'i gemini'de de ACIK gecer (eski hali global route'u yeniden okutuyordu ->
+  muhurlu (gemini, model) -> (anthropic, gemini-model) riski); (2) `routes_for_seal`: muhurlu run'da
+  rota MUHURDEN, resume ayar degisiminden etkilenmez; (3) `to_anthropic_response_schema` v2:
+  maxItems / minItems∉{0,1} / min-maxLength / sayisal sinirlar / bilinmeyen format DUSER,
+  description'a tasinir (SOCIAL hashtags 5-20 regresyon testi); spike plani gercek SOCIAL semasiyla
+  2 cagri ekledi (kuru kosu 0,32 $). Tam paket **4696 / 112 skipped / 0**.
+
 ## Open / next
 
 1. **Spike (Faz 0 madde 5) ANTHROPIC_API_KEY bekliyor** — `python -m app.core.benchmark.claude_spike
