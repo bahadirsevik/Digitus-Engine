@@ -536,6 +536,19 @@ made in this workstream.
       `-f docker-compose.prod.yml` ŞART.
   - Sıradaki: tarayıcı kontrolü (giriş, test kullanıcısıyla parola değişimi, küçük
     analiz).
+  - Dağıtım sonrası kullanıcı testi:
+    - Tam run (ws6, 33 kelime, 3 kanal) temiz, 1,5 dk. Süre sabit 16 AI aşamasından geliyor
+      → kanal paralelleştirmesi aday.
+    - Yeni çalışmada proteinim.com profil analizi "no page passed quality gate" ile düştü.
+      Sebep dağıtım DEĞİL: crawler ham HTML'i 50K'da kesiyordu (0b5d148, Mayıs'tan beri),
+      `<main>` 75.683'te; kalite kapısı (61c28c6, 23.09) bunu görünür yaptı.
+      Yereldeki ws46 profili elle yazılıp doğrudan DB'ye girildiği için hata yerelde
+      görülmemişti.
+    - Düzeltme 0cecc25: metin 50K, HTML 2M sınırı + regresyon testi. Birleşik dal 13c636d:
+      4569 passed.
+    - Sunucuya 11.10 ~03:18 alındı (migration yok). Proteinim analizi tamamlandı (ws7).
+  - Ders: tam pytest koşusundan önce HER ZAMAN `docker ps --filter name=test_app-run`. Boş
+    çıktı "durdu" demek değildir; iki eşzamanlı koşu ~30 dk boşa gitti.
   - Öneri: lean dalı auth'u içermiyor. İleride iki dal ayrışmasın diye
     `deploy/auth-lean-merge` lean'e birleştirilmeli (karar kullanıcıda).
   - Auth'ta not edilen, değiştirilmeyenler:
