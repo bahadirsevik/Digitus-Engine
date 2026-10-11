@@ -86,6 +86,12 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
   scoped() regresyon testi xfail -> gercek assert. Hedefli 37+85 yesil; DB e2e 9 yesil. TAM PAKET henuz yeniden kosulmadi
   (bellek kesintisi; kullanici izniyle).
 
+- **Codex Faz 1 2. tur -> 2 bulgu DOGRU, duzeltildi:** (1) defter IKI FAZLI: `reserve()` cagri ONCESI kalan tavani
+  dosyaya KALICI yazar (cokmede acik kalir, sonraki komutlar harcanmis sayar, `reconcile()` ile insan kapatir),
+  `settle()` kapanista (finally) taahhudu isler — hybrid_run ve profile_compare buna bagli; (2) replay
+  `max_attempts=1`: parse/saglayici hatasinda da TEK deneme (uretim MAX_ATTEMPTS=2 degismez) -> iki taraf ILK CEVAP
+  ile simetrik. Hedefli 140 yesil (DB e2e 9 dahil). TAM PAKET henuz yeniden kosulmadi.
+
 ## Open / next
 
 0. **Faz 1 oncesi kalan:** TAM PAKET yeniden kosusu; `extract_items` DB smoke; 1A icin referans G/G/G kosusunu

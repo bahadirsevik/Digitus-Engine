@@ -87,15 +87,16 @@ def default_providers() -> Dict[str, Tuple[str, str]]:
 
 
 def _default_ai_factory(plan: Mapping[str, Any], collector: Any,
-                        ledger: Optional[Faz1Ledger] = None):
+                        ledger: Optional[Faz1Ledger] = None,
+                        caps_override: Optional[Mapping[str, float]] = None):
     """label bazlı guarded+pinned ai; kök ve provider bütçeleri etiketler arası PAYLAŞILIR;
     tavan deney defterinden KALAN olarak alınır (Codex Faz 1 #1)."""
     from app.generators.ai_service import GeminiService, RoutedAIService
 
     root = RoutedAIService(GeminiService(retry_attempts=1))
     root.collector = collector
-    caps = resolve_caps(plan)
-    if ledger is not None:
+    caps = dict(caps_override) if caps_override else resolve_caps(plan)
+    if ledger is not None and not caps_override:
         caps = ledger.remaining(caps)
     budgets = {p: CharacterizationBudget(max_requests=HYBRID_MAX_REQUESTS, max_cost_usd=cap,
                                          model=None, provider=p)
@@ -188,29 +189,35 @@ def run_profile_compare(*, workspace_ids: Sequence[int],
         return seal(doc)
     if ai_factory is None and ledger is None:
         ledger = Faz1Ledger.open(LEDGER_PATH)
-    factory = ai_factory or _default_ai_factory(plan, collector, ledger)
+    ledger_ref = "profile:" + ",".join(map(str, workspace_ids))
+    remaining = None
+    if ledger is not None:            # Codex Faz 1 2. tur: KALICI rezervasyon çağrıdan ÖNCE
+        remaining = ledger.reserve(kind="profile_compare", ref=ledger_ref,
+                                   caps=resolve_caps(plan))
+    factory = ai_factory or _default_ai_factory(plan, collector, caps_override=remaining)
     totals: Dict[str, Dict[str, Any]] = {}
     ai = None
-    for ws, label in order:
-        provider, model = providers[label]
-        ai = factory(label, provider, model)
-        profile, usage, err = _call_one(ai, collector, frozen[ws])
-        doc["results"].append({"ws": ws, "label": label, "provider": provider, "model": model,
-                               "profile": profile, "prompt_sha": prompt_shas[str(ws)],
-                               "usage": usage, "error": err})
-        t = totals.setdefault(label, {"calls": 0, "errors": 0, "prompt_tokens": 0,
-                                      "candidates_tokens": 0, "latency_ms": 0})
-        t["calls"] += 1
-        t["errors"] += 1 if err else 0
-        for k in ("prompt_tokens", "candidates_tokens", "latency_ms"):
-            t[k] += usage.get(k) or 0
+    try:
+        for ws, label in order:
+            provider, model = providers[label]
+            ai = factory(label, provider, model)
+            profile, usage, err = _call_one(ai, collector, frozen[ws])
+            doc["results"].append({"ws": ws, "label": label, "provider": provider,
+                                   "model": model, "profile": profile,
+                                   "prompt_sha": prompt_shas[str(ws)],
+                                   "usage": usage, "error": err})
+            t = totals.setdefault(label, {"calls": 0, "errors": 0, "prompt_tokens": 0,
+                                          "candidates_tokens": 0, "latency_ms": 0})
+            t["calls"] += 1
+            t["errors"] += 1 if err else 0
+            for k in ("prompt_tokens", "candidates_tokens", "latency_ms"):
+                t[k] += usage.get(k) or 0
+    finally:                          # hata/kesintide de mahsup (yapılmış çağrılar kaybolmaz)
+        summ = getattr(ai, "summary", None)
+        doc["budget_summary"] = summ() if callable(summ) else None
+        if ledger is not None:
+            ledger.settle(ref=ledger_ref, budget_summary=doc["budget_summary"])
     doc["usage_totals"] = totals
-    summ = getattr(ai, "summary", None)
-    doc["budget_summary"] = summ() if callable(summ) else None
-    if ledger is not None and doc["budget_summary"] is not None:
-        ledger.record(kind="profile_compare", ref=",".join(map(str, workspace_ids)),
-                      budget_summary=doc["budget_summary"])
-        ledger.save()
     sealed = seal(doc)
     if out_path:
         p = Path(out_path)

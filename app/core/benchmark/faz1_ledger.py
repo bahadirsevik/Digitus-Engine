@@ -1,9 +1,12 @@
 """Faz 1 deney-geneli sağlayıcı harcama defteri (Codex Faz 1 altyapı #1).
 
 K7 tavanları (Claude 50 / Gemini 20 / DeepSeek 5 $) TEK deneyin toplamıdır,
-komut başına değil. Her ücretli sürücü (hybrid_run, profile_compare, replay)
-tavanı bu defterden KALAN olarak alır ve bitişte taahhüt edilen maliyeti
-(settle edilmemiş tavan yakımları dahil, muhafazakâr) deftere işler.
+komut başına değil. İKİ FAZLI muhasebe (Codex 2. tur): ücretli sürücü çağrıdan
+ÖNCE kalan tavanı `reserve()` ile KALICI olarak ayırır (dosyaya yazılır);
+kapanışta `settle()` ile taahhüt edilen gerçek maliyet (settle edilmemiş tavan
+yakımları dahil, muhafazakâr) işlenir ve rezervasyon kapanır. Süreç ortada
+ölürse rezervasyon AÇIK kalır: sonraki komutlar o tutarı harcanmış sayar ve
+tavan tükenirse fail-closed durur; insan `reconcile()` ile kapatır.
 Dosya mühürlüdür; bozuk mühür fail-closed hatadır.
 """
 from __future__ import annotations
@@ -24,6 +27,9 @@ class Faz1Ledger:
     def __init__(self, path: Path, doc: Dict[str, Any]):
         self.path = Path(path)
         self.doc = doc
+        self.doc.setdefault("spent_usd", {})
+        self.doc.setdefault("pending", {})
+        self.doc.setdefault("runs", [])
 
     @classmethod
     def open(cls, path: Path = LEDGER_PATH) -> "Faz1Ledger":
@@ -32,28 +38,64 @@ class Faz1Ledger:
             doc = json.loads(path.read_text(encoding="utf-8"))
             verify_seal(doc)                       # bozuk defter -> dur
             return cls(path, doc)
-        return cls(path, {"kind": "faz1_budget_ledger", "spent_usd": {},
-                          "runs": [],
+        return cls(path, {"kind": "faz1_budget_ledger",
                           "created_at": datetime.now(timezone.utc).isoformat()})
 
+    # ── okuma ──
     def spent(self, provider: str) -> float:
         return float(self.doc["spent_usd"].get(provider, 0.0))
 
-    def remaining(self, caps: Mapping[str, float]) -> Dict[str, float]:
-        """{provider: cap - harcanan}; biri tükenmişse çağrı YAPILMADAN hata."""
+    def pending_usd(self, provider: str, exclude_ref: Optional[str] = None) -> float:
+        return float(sum(float(p["caps"].get(provider, 0.0))
+                         for ref, p in self.doc["pending"].items()
+                         if ref != exclude_ref))
+
+    def remaining(self, caps: Mapping[str, float],
+                  exclude_ref: Optional[str] = None) -> Dict[str, float]:
+        """{provider: cap - harcanan - açık rezervasyon}; biri tükenmişse hata."""
         out = {}
         for prov, cap in caps.items():
-            rem = float(cap) - self.spent(prov)      # yuvarlama YOK: 1e-9 tavan da gecerli
-            if rem <= 0:
+            rem = float(cap) - self.spent(prov) - self.pending_usd(prov, exclude_ref)
+            if rem <= 0:                           # yuvarlama YOK: 1e-9 tavan gecerli
                 raise CharacterizationError(
                     f"Faz 1 toplam tavanı tükendi: {prov} harcanan "
-                    f"{self.spent(prov):.4f} $ ≥ tavan {cap} $")
+                    f"{self.spent(prov):.4f} $ + açık rezervasyon "
+                    f"{self.pending_usd(prov, exclude_ref):.4f} $ ≥ tavan {cap} $")
             out[prov] = rem
         return out
 
+    # ── iki faz ──
+    def reserve(self, *, kind: str, ref: str,
+                caps: Mapping[str, float]) -> Dict[str, float]:
+        """Çağrıdan ÖNCE: kalan tavan bu `ref` adına KALICI ayrılır (dosyaya yazılır)."""
+        if ref in self.doc["pending"]:
+            raise CharacterizationError(
+                f"'{ref}' için AÇIK rezervasyon var — önce settle/reconcile edilmeli")
+        rem = self.remaining(caps)
+        self.doc["pending"][ref] = {"kind": kind, "caps": dict(rem),
+                                    "at": datetime.now(timezone.utc).isoformat()}
+        self.save()
+        return rem
+
+    def settle(self, *, ref: str,
+               budget_summary: Optional[Mapping[str, Any]]) -> Dict[str, float]:
+        """Kapanışta: rezervasyon düşer, taahhüt edilen maliyet deftere girer, dosya yazılır."""
+        if ref not in self.doc["pending"]:
+            raise CharacterizationError(f"'{ref}' için açık rezervasyon yok")
+        kind = self.doc["pending"][ref]["kind"]
+        added = self.record(kind=kind, ref=ref, budget_summary=budget_summary)
+        del self.doc["pending"][ref]
+        self.save()
+        return added
+
+    def reconcile(self, *, ref: str, actual_usd: Mapping[str, float]) -> Dict[str, float]:
+        """Çökmüş (açık kalan) rezervasyonu insan kararıyla gerçek tutara kapatır."""
+        summary = {p: {"cost_committed_usd": float(v)} for p, v in actual_usd.items()}
+        return self.settle(ref=ref, budget_summary=summary)
+
     def record(self, *, kind: str, ref: str,
                budget_summary: Optional[Mapping[str, Any]]) -> Dict[str, float]:
-        """BudgetGuardedAI.summary() ({provider: {...}}) → taahhüt deftere eklenir."""
+        """BudgetGuardedAI.summary() ({provider: {...}}) → taahhüt deftere eklenir (kaydetmez)."""
         added: Dict[str, float] = {}
         for prov, s in (budget_summary or {}).items():
             if not isinstance(s, Mapping):

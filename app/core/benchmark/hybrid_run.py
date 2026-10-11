@@ -423,8 +423,17 @@ def run_hybrid(db, *, workspace_id: int, config_name: str,
 
     if ledger is None:                # Codex Faz 1 #1: komutlar arası toplam
         ledger = Faz1Ledger.open(LEDGER_PATH)
-    ai = ai or build_benchmark_ai(config_name, plan, collector=collector,
-                                  caps_usd=caps_usd, ledger=ledger)
+    # Codex Faz 1 2. tur: KALICI rezervasyon çağrıdan ÖNCE (çökmede açık kalır,
+    # sonraki komutlar harcanmış sayar); kapanışta settle ile mahsup.
+    ledger_ref = "ws%s:%s" % (workspace_id, config_name)
+    remaining = ledger.reserve(kind="hybrid_run", ref=ledger_ref,
+                               caps=resolve_caps(plan, caps_usd))
+    try:
+        ai = ai or build_benchmark_ai(config_name, plan, collector=collector,
+                                      caps_usd=remaining)
+    except BaseException:
+        ledger.settle(ref=ledger_ref, budget_summary=None)
+        raise
     clock: Dict[str, float] = {}
     errors: Dict[str, str] = {}
     out_content: Dict[str, Any] = {}
@@ -489,12 +498,9 @@ def run_hybrid(db, *, workspace_id: int, config_name: str,
         closer = getattr(ai, "close", None)
         if callable(closer):
             closer()
-        summ = getattr(ai, "summary", None)
-        if callable(summ):                # harcama deftere işlenir (taahhüt, muhafazakâr)
-            ledger.record(kind="hybrid_run",
-                          ref="ws%s:%s" % (workspace_id, config_name),
-                          budget_summary=summ())
-            ledger.save()
+        summ = getattr(ai, "summary", None)   # mahsup: taahhüt (muhafazakâr) deftere
+        ledger.settle(ref=ledger_ref,
+                      budget_summary=summ() if callable(summ) else None)
 
     return seal({
         "kind": "hybrid_run", "workspace_id": workspace_id,

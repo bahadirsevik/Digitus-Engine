@@ -200,11 +200,16 @@ def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
                prompt: str, schema: Mapping[str, Any], max_tokens: int,
                result_key: Optional[str],
                error_cls: type = AiStageError,
-               provider: str = "gemini") -> List[Any]:
-    """ID'siz asama (A1 / A2B): liste dondurur, kirpik cevapta tekrar dener."""
+               provider: str = "gemini",
+               max_attempts: int = MAX_ATTEMPTS) -> List[Any]:
+    """ID'siz asama (A1 / A2B): liste dondurur, kirpik cevapta tekrar dener.
+
+    `max_attempts` yalniz benchmark replay icindir (ilk-deneme simetrisi);
+    uretim varsayilani MAX_ATTEMPTS'tir.
+    """
     scoped = _scoped(ai, stage, model, thinking_level, provider)
     last_error: Optional[BaseException] = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, max_attempts + 1):
         try:
             raw = _complete(scoped, prompt, max_tokens, schema, attempt=attempt,
                             meta=_meta(stage, provider, model, thinking_level,
@@ -213,16 +218,16 @@ def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
             raise
         except Exception as exc:          # saglayici/transport hatasi
             last_error = exc
-            if attempt < MAX_ATTEMPTS:    # son denemeden sonra beklemek anlamsiz
+            if attempt < max_attempts:    # son denemeden sonra beklemek anlamsiz
                 _wait_before_retry(exc)
             continue
         items = _parse(raw, result_key)
         if items is not None:
             return items
-    message = (f"{stage}: cevap {MAX_ATTEMPTS} denemede de kirpik/bozuk "
+    message = (f"{stage}: cevap {max_attempts} denemede de kirpik/bozuk "
                f"('{result_key}' listesi yok) — DEVAM EDILMEDI")
     if last_error is not None:
-        raise error_cls(f"{stage}: saglayici {MAX_ATTEMPTS} denemede de hata "
+        raise error_cls(f"{stage}: saglayici {max_attempts} denemede de hata "
                         "verdi — DEVAM EDILMEDI") from last_error
     raise error_cls(message)
 
@@ -263,7 +268,8 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
               error_cls: type = AiStageError,
               provider: str = "gemini",
               targeted_retries: int = TARGETED_RETRIES,
-              allow_missing: bool = False) -> Dict[int, Dict[str, Any]]:
+              allow_missing: bool = False,
+              max_attempts: int = MAX_ATTEMPTS) -> Dict[int, Dict[str, Any]]:
     """ID bazli asama (A2 / A2C / A3) — eksiksiz kume donmezse HATA.
 
     `targeted_retries` / `allow_missing` yalniz benchmark replay icindir
@@ -284,7 +290,7 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
         last_error: Optional[BaseException] = None
         last_validation: Optional[str] = None
         wanted = {int(row[id_field]) for row in subset}
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for attempt in range(1, max_attempts + 1):
             try:
                 raw = _complete(scoped, build_prompt(subset), max_tokens,
                                 schema, kind, attempt,
@@ -296,7 +302,7 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
                 raise
             except Exception as exc:      # saglayici/transport hatasi
                 last_error = exc
-                if attempt < MAX_ATTEMPTS:
+                if attempt < max_attempts:
                     _wait_before_retry(exc)
                 continue
             if response_parser is None:
@@ -342,14 +348,14 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
         if items is None:
             if last_validation is not None:
                 raise error_cls(
-                    f"{stage}: cevap {MAX_ATTEMPTS} denemede de yapisal "
+                    f"{stage}: cevap {max_attempts} denemede de yapisal "
                     f"dogrulamadan gecmedi ({last_validation}) — DEVAM EDILMEDI")
             if last_error is not None:
                 raise error_cls(
-                    f"{stage}: saglayici {MAX_ATTEMPTS} denemede de hata "
+                    f"{stage}: saglayici {max_attempts} denemede de hata "
                     "verdi — DEVAM EDILMEDI") from last_error
             raise error_cls(
-                f"{stage}: cevap {MAX_ATTEMPTS} denemede de kirpik/bozuk "
+                f"{stage}: cevap {max_attempts} denemede de kirpik/bozuk "
                 f"('{result_key}' listesi yok) — DEVAM EDILMEDI")
 
         # ID'ler dongude `_id_problem` ile dogrulandi: hepsi sayisal, istenen

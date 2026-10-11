@@ -66,7 +66,8 @@ def replay_capture(calls: List[Dict[str, Any]], *, ai: Any, provider: str,
         common = dict(stage=stage, model=model, provider=provider,
                       thinking_level=c["thinking_level"],
                       schema=c["response_schema"], max_tokens=c["max_tokens"],
-                      result_key=c.get("result_key"))
+                      result_key=c.get("result_key"),
+                      max_attempts=1)   # Codex 2. tur: parse/saglayici hatasinda da TEK deneme
         rec: Dict[str, Any] = {"request_index": idx, "source_seq": c.get("seq"),
                                "stage": stage, "provider": provider,
                                "model": model, "ok": False, "error": None,

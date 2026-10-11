@@ -84,7 +84,7 @@ def test_replay_resends_exact_prompt_and_schema_with_candidate_model(tmp_path):
 def test_replay_records_error_without_aborting(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.engine.ai_runner._sleep", lambda s: None)
     col = _collector()
-    ai = Rec(col, [ValueError("bad1"), ValueError("bad2"),     # 1. cagri: 2 deneme
+    ai = Rec(col, [ValueError("bad1"),                       # 1. cagri: TEK deneme
                    _res({"id": 3, "v": "z"})])
     calls = [_call(0, ids=(1, 2)), _call(1, ids=(3,))]
     art = replay_capture(calls, ai=ai, provider="anthropic",
@@ -92,7 +92,7 @@ def test_replay_records_error_without_aborting(tmp_path, monkeypatch):
                          out_path=tmp_path / "r.json")
     assert [c["ok"] for c in art["calls"]] == [False, True]
     assert "AiStageError" in art["calls"][0]["error"]
-    assert art["calls"][0]["usage"]["n_events"] == 2 and art["n_error"] == 1
+    assert art["calls"][0]["usage"]["n_events"] == 1 and art["n_error"] == 1
 
 
 def test_replay_missing_model_fails_closed_and_budget_aborts(tmp_path):
@@ -167,3 +167,17 @@ def test_replay_requires_parser_when_capture_used_one(tmp_path):
                        model_for_stage={"s_a2": "m"}, collector=col,
                        out_path=tmp_path / "r.json")
     assert not (tmp_path / "r.json").exists()
+
+
+def test_replay_parse_failure_is_not_retried(tmp_path, monkeypatch):
+    """Codex 2. tur: ilk cevap bozuksa ikinci deneme YOK (referans da ilk ham cevapla
+    degerlendirilir -> simetri)."""
+    monkeypatch.setattr("app.core.engine.ai_runner._sleep", lambda s: None)
+    col = _collector()
+    ai = Rec(col, ["{bozuk json", _res({"id": 1, "v": "a"})])
+    art = replay_capture([_call(0, ids=(1,)), _call(1, ids=(1,))], ai=ai,
+                         provider="anthropic", model_for_stage={"s_a2": "m"},
+                         collector=col, out_path=tmp_path / "r.json")
+    assert len(ai.seen) == 2                                # cagri basina TEK istek
+    assert [c["ok"] for c in art["calls"]] == [False, True]
+    assert art["calls"][0]["usage"]["n_events"] == 1
