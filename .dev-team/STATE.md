@@ -98,7 +98,7 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
 
 ## Open / next
 
-0. **Faz 1 oncesi kalan:** TAM PAKET yeniden kosusu (kullanici izni); 1A icin referans G/G/G kosusunu
+0. **TAM PAKET 11.10 (izole docker-compose.test.yml, iki parca): unit 2566 passed/38 skipped + integration 2394 passed/74 skipped = 4960 / 0 hata.** Faz 1 oncesi kalan: 1A icin referans G/G/G kosusunu
    `StageCapture` ile sarmalayan sunucu adimi (hybrid_run'a `capture=True`); Faz 1 kosu sirasi/CLI betigi.
 0b. **Eski not — Faz 1 wiring (kod):** bakeoff_comparison provider/model pinleri gemini-3.5/deepseek -> Claude adayi icin sozlesme
    genisletmesi; 1A istek yakalama/replay surucusu (K14) + 1B hibrit kosu CLI'i lean'de YOK (arsivde scripts/); profil
