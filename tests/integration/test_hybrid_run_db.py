@@ -325,7 +325,8 @@ def _unblock(plan, ws_id=None):
     p["spike"]["console_reconciled"] = True
     p["credit"] = {**p.get("credit", {}), "net_available_usd": 80.0}
     # Codex Faz 1 #3: hedef ws planin 1B kapsaminda ONAYLI olmali -> fixture ws'i
-    p["workspaces"]["ids"] = {"GR-7": ws_id if ws_id is not None else 21, "Optimice": 19}
+    names = list(p["workspaces"]["1B"])
+    p["workspaces"]["ids"] = {names[0]: ws_id if ws_id is not None else 21, names[1]: 19}
     p = seal(p)
     assert faz1_blockers(p) == []
     return p

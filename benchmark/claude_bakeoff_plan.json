@@ -16,7 +16,7 @@
       "deepseek": 5.0
     },
     "K8_monthly_volume_p90": null,
-    "K12_document_reference": null,
+    "K12_document_reference": "Patron beyani 11.10.2026: musteri izni SOZLU; sistemde yapay zekaya gonderilmesi sakincali veri yok (yazili belge referansi yok, patron karari)",
     "K16_single_shot_idiomatic": true,
     "K18_holdout_ws": "5. ws (Scento veya Proteinim), Faz 2'de bir kez",
     "K19_task_p95_ratio": 1.25,
@@ -131,7 +131,7 @@
       "high": null
     },
     "allowance_decision": "2000/4000/8000 KORUNDU (n küçük; gerçek benchmark verisiyle bakılır)",
-    "console_reconciled": false
+    "console_reconciled": true
   },
   "gates": {
     "G1_selection": "LB90(Δ recall_havuz) ≥ −0,03 VE fark kümesinde konu-dışı Δ ≤ 0",
@@ -248,10 +248,11 @@
   },
   "credit": {
     "gross_assumed_usd": 100.0,
-    "net_available_usd": null,
-    "expiry": null,
-    "rollover": null,
-    "scope": null
+    "net_available_usd": 99.92,
+    "expiry": "bilinmiyor",
+    "rollover": "bilinmiyor",
+    "scope": "bilinmiyor",
+    "source": "patron beyani 11.10: 100 $ kredi, 8 cent harcanmis"
   },
   "n_max_3_2": {
     "Aday": {
@@ -277,17 +278,44 @@
   },
   "workspaces": {
     "1A": [
-      "Optimice",
-      "GR-7",
-      "Dijital",
-      "Noksel"
+      "Hissefy",
+      "Digitus"
     ],
     "1B": [
-      "GR-7",
-      "Optimice"
+      "Hissefy",
+      "Digitus"
     ],
-    "profile": "10 onaylı ws",
-    "ids": null
+    "profile": [
+      "Hissefy",
+      "Digitus"
+    ],
+    "ids": {
+      "Hissefy": 21,
+      "Digitus": 29
+    },
+    "note": "Patron 11.10: testler Hissefy + Digitus; GR-7/Optimice iptal"
   },
-  "payload_sha256": "aeac074407cac35768e9c9ce37696e2cc66f589d5fd3933d275737999b51c588"
+  "capacities": {
+    "ADS": 60,
+    "SEO": 30,
+    "SOCIAL": 30
+  },
+  "scope_change": {
+    "at": "2026-10-11T20:19:06.363940+00:00",
+    "by": "patron",
+    "text": "Karsilastirma ve dogruluk degerlendirmesi PATRONDA: Claude yalniz sistemleri kosar ve ciktilari teslim eder. DeepSeek hakem, patron kartlari, patron etiket recall ve G1-G7 hukumleri bu turda KOSULMAZ (altyapi hazir, istege bagli). 1A asama replay'i de atlanir; teslim edilen: 1B konfig ciktilari + profil kiyasi.",
+    "deliverables": [
+      "G/G/G",
+      "Aday",
+      "G/G/C",
+      "profile_compare"
+    ]
+  },
+  "amendments": [
+    {
+      "at": "2026-10-11T20:19:06.363940+00:00",
+      "what": "Faz 1 kilidi acildi (K12 sozlu, kredi, ws, kapsam)"
+    }
+  ],
+  "payload_sha256": "d14496c879d79c26bcf6411844e0b76e0366a6bcdba43dcd2d1b3f4324b969e3"
 }

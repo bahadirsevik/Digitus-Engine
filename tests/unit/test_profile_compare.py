@@ -36,7 +36,7 @@ def open_plan():
     p["spike"]["console_reconciled"] = True
     p["credit"] = {**p.get("credit", {}), "net_available_usd": 80.0}
     # profil kapsami: planin id eslemesindeki her ws onaylidir (99 = donmus girdisi yok)
-    p["workspaces"]["ids"] = {"GR-7": 30, "Optimice": 21, "Noksel": 99}
+    p["workspaces"]["ids"] = {"A": 30, "B": 21, "C": 99}
     return seal(p)
 
 
@@ -146,7 +146,9 @@ def test_run_records_per_pair_and_fair_prompt(tmp_path, open_plan):
 
 
 def test_blocked_plan_raises_before_any_call(tmp_path):
-    plan = hr.load_plan(str(PLAN))
+    plan = copy.deepcopy(hr.load_plan(str(PLAN)))
+    plan["decisions"]["K12_document_reference"] = None      # canli plan acik olsa da bloklu kopya
+    plan = seal(plan)
     called = []
     with pytest.raises(hr.Faz1Blocked):
         pc.run_profile_compare(workspace_ids=[1], providers=PROVIDERS, plan=plan, collector=None,

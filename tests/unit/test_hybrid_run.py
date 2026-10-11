@@ -23,6 +23,13 @@ def sealed_plan():
     return hr.load_plan()  # benchmark/claude_bakeoff_plan.json (verify_seal'li)
 
 
+def _names(plan):
+    """Planin 1B firma adlari (test, canli plandaki adlara BAGLI KALMAZ)."""
+    n = list(plan["workspaces"]["1B"])
+    assert len(n) >= 2
+    return n
+
+
 @pytest.fixture
 def open_plan(sealed_plan):
     """Bloklayıcıları kapatılmış YENİDEN MÜHÜRLÜ kopya (gerçek plana dokunmaz)."""
@@ -30,9 +37,23 @@ def open_plan(sealed_plan):
     p["decisions"]["K12_document_reference"] = "belge-ref"
     p["spike"]["console_reconciled"] = True
     p["credit"] = {**p.get("credit", {}), "net_available_usd": 80.0}
-    p["workspaces"]["ids"] = {"GR-7": 21, "Optimice": 19}
+    n = _names(p)
+    p["workspaces"]["ids"] = {n[0]: 21, n[1]: 19}
     p = seal(p)
     assert faz1_blockers(p) == []
+    return p
+
+
+@pytest.fixture
+def blocked_plan(sealed_plan):
+    """Bloklayicilari ACILMIS kopya: K12/konsol/kredi/ws id bos (canli plan acik olsa da)."""
+    p = copy.deepcopy(sealed_plan)
+    p["decisions"]["K12_document_reference"] = None
+    p["spike"]["console_reconciled"] = False
+    p["credit"] = {**p.get("credit", {}), "net_available_usd": None}
+    p["workspaces"]["ids"] = None
+    p = seal(p)
+    assert faz1_blockers(p)
     return p
 
 
@@ -172,15 +193,14 @@ def _no_ai(*a, **k):
     pytest.fail("AI kurulmamalıydı")
 
 
-def test_blocked_plan_stops_before_anything(sealed_plan, monkeypatch):
-    assert faz1_blockers(sealed_plan)  # bugünkü mühürlü plan GERÇEKTEN bloklu
+def test_blocked_plan_stops_before_anything(blocked_plan, monkeypatch):
     monkeypatch.setattr(hr, "build_benchmark_ai", _no_ai)
     before = settings.AI_STAGE_ROUTES
     for dry in (False, True):
         with pytest.raises(hr.Faz1Blocked) as ei:
             hr.run_hybrid(None, workspace_id=21, config_name="Aday",
-                          plan=sealed_plan, collector=None, dry_run=dry)
-        assert ei.value.blockers == faz1_blockers(sealed_plan)
+                          plan=blocked_plan, collector=None, dry_run=dry)
+        assert ei.value.blockers == faz1_blockers(blocked_plan)
     assert settings.AI_STAGE_ROUTES == before
 
 
@@ -244,8 +264,9 @@ def test_run_hybrid_rejects_unapproved_workspace_before_db(open_plan):
     """Codex Faz 1 #3: onayli id listesi dolu ama hedef listede degil -> DB/AI yok."""
     from app.core.benchmark.claude_bakeoff_plan import WorkspaceNotApproved
     from app.core.benchmark.reference_characterization import seal
+    n = _names(open_plan)
     p = dict(open_plan)
-    p["workspaces"] = {**open_plan["workspaces"], "ids": {"GR-7": 30, "Optimice": 21}}
+    p["workspaces"] = {**open_plan["workspaces"], "ids": {n[0]: 30, n[1]: 21}}
     p = seal(p)
     with pytest.raises(WorkspaceNotApproved):
         hr.run_hybrid(None, workspace_id=99, config_name="Aday", plan=p,
