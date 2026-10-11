@@ -1,0 +1,28 @@
+{
+  "21": {
+    "workspace": 21,
+    "mapping": {
+      "G/G/G": "C",
+      "Aday": "B",
+      "G/G/C": "A"
+    },
+    "runs": {
+      "G/G/G": 76,
+      "Aday": 79,
+      "G/G/C": 82
+    }
+  },
+  "29": {
+    "workspace": 29,
+    "mapping": {
+      "G/G/G": "B",
+      "Aday": "A",
+      "G/G/C": "C"
+    },
+    "runs": {
+      "G/G/G": 78,
+      "Aday": 81,
+      "G/G/C": 83
+    }
+  }
+}
