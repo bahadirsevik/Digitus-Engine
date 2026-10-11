@@ -161,7 +161,7 @@ def _reseal_section(db_session, run, **overrides):
 _DROP = object()
 
 
-@pytest.mark.parametrize("version", [3, 99, 0, -1, "2", 2.0, True, None])
+@pytest.mark.parametrize("version", [4, 99, 0, -1, "2", 2.0, True, None])
 def test_unsupported_schema_version_is_refused(
         db_session, make_workspace, make_scoring_run, make_keyword, version):
     """Açık `None` dahil — sürüm anahtarı VARSA değeri geçerli olmalıdır."""

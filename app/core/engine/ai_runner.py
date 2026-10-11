@@ -38,7 +38,8 @@ _RATE_LIMIT_MARKS = ("429", "resource_exhausted", "resourceexhausted",
 # Tekrar denemenin ANLAMSIZ oldugu hatalar: istek/kimlik hatalidir.
 _FATAL_MARKS = ("api key not valid", "permission denied", "permissiondenied",
                 "unauthenticated", "invalid argument", "invalidargument",
-                "400 bad request", "401", "403")
+                "400 bad request", "401", "403",
+                "refusal")      # AnthropicRefusalError: ret tekrar ile degismez
 
 
 def _sleep(seconds: float) -> None:
@@ -91,8 +92,13 @@ class AiStageError(RuntimeError):
     """AI asamasi sozlesmeyi karsilamadi — yarim sonuc YAZILMAZ."""
 
 
-def _scoped(ai: Any, stage: str, model: str, thinking_level: str) -> Any:
+def _scoped(ai: Any, stage: str, model: str, thinking_level: str,
+            provider: str = "gemini") -> Any:
     if hasattr(ai, "for_stage"):
+        if provider != "gemini":     # gemini'de cagri bugunku haliyle BAYT-AYNI
+            return ai.for_stage(stage, model=model,
+                                thinking_level=thinking_level,
+                                provider=provider)
         return ai.for_stage(stage, model=model, thinking_level=thinking_level)
     return ai
 
@@ -156,9 +162,10 @@ def _complete(scoped: Any, prompt: str, max_tokens: int,
 def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
                prompt: str, schema: Mapping[str, Any], max_tokens: int,
                result_key: Optional[str],
-               error_cls: type = AiStageError) -> List[Any]:
+               error_cls: type = AiStageError,
+               provider: str = "gemini") -> List[Any]:
     """ID'siz asama (A1 / A2B): liste dondurur, kirpik cevapta tekrar dener."""
-    scoped = _scoped(ai, stage, model, thinking_level)
+    scoped = _scoped(ai, stage, model, thinking_level, provider)
     last_error: Optional[BaseException] = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
@@ -214,7 +221,8 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
               response_parser: Optional[
                   Callable[[Any, Sequence[int]], Mapping[str, Any]]
               ] = None,
-              error_cls: type = AiStageError) -> Dict[int, Dict[str, Any]]:
+              error_cls: type = AiStageError,
+              provider: str = "gemini") -> Dict[int, Dict[str, Any]]:
     """ID bazli asama (A2 / A2C / A3) — eksiksiz kume donmezse HATA.
 
     Donen sozluk: beklenen HER ID icin bir cevap ogesi. Cagiran taraf bunu
@@ -224,7 +232,7 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
     collected: Dict[int, Dict[str, Any]] = {}
 
     def ask(subset: Sequence[Mapping[str, Any]]) -> None:
-        scoped = _scoped(ai, stage, model, thinking_level)
+        scoped = _scoped(ai, stage, model, thinking_level, provider)
         items: Optional[List[Any]] = None
         last_error: Optional[BaseException] = None
         last_validation: Optional[str] = None

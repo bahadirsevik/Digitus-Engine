@@ -39,6 +39,7 @@ from app.core.engine.family.runner import (
     run_family_stage,
 )
 from app.core.engine.persistence import seal_manifest
+from app.core.engine.routing import resolve_stage_route
 from app.core.engine.policy_gate import finalize_engine_delivery
 from app.core.engine.seo.runner import (
     seo_models,
@@ -135,6 +136,16 @@ def run_v3_orchestration(
     # finalize canlı profille karşılaştırıp fail-closed durur.
     from app.core.policy.location_policy import policy_snapshot
 
+    # Rota (provider+model) MUHURDAN ONCE global AI_STAGE_ROUTES'tan cozulur
+    # ve manifest'e yazilir; sonrasinda runner'lar yalniz muhurden okur.
+    # "deterministic" AI asamasi degildir (provider yok, model ayni kalir).
+    all_providers: Dict[str, str] = {}
+    for stage, default_model in list(all_models.items()):
+        if default_model == "deterministic":
+            continue
+        all_providers[stage], all_models[stage] = resolve_stage_route(
+            stage, default_model)
+
     seal_manifest(
         run,
         firm_block_sha256=firm_sha,
@@ -142,6 +153,7 @@ def run_v3_orchestration(
         models=all_models,
         prompt_shas=all_prompt_shas,
         location_policy=policy_snapshot(profile.profile_data),
+        providers=all_providers,
     )
     db.flush()
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from app.core.constants import (
     BRAND_FILTER_BATCH_SIZE,
@@ -353,30 +353,40 @@ class CharacterizationBudget:
       çağrıdan ÖNCE, kilit altında.
     """
 
-    def __init__(self, max_requests: int, max_cost_usd: float, model: str,
+    def __init__(self, max_requests: int, max_cost_usd: float,
+                 model: Optional[str],
                  thinking_allowance_tokens: int =
-                 THINKING_OUTPUT_ALLOWANCE_TOKENS):
-        from app.core.telemetry.usage import price_for
-
+                 THINKING_OUTPUT_ALLOWANCE_TOKENS,
+                 provider: str = "gemini"):
         self.max_requests = int(max_requests)
         self.max_cost_usd = float(max_cost_usd)
-        self.model = model
+        self.model = model  # None = çağrı başına fiyatla (rates(model))
+        self.provider = provider  # yalnız summary() etiketi
         self.thinking_allowance_tokens = int(thinking_allowance_tokens)
-        price = price_for(model)
-        if not price:
-            raise CharacterizationError(
-                "HARD-CAP kurulamadı: '%s' için fiyat tablosu girdisi yok"
-                % model)
-        self._in_per_m = float(price["input"])
-        self._out_per_m = float(price["output"])
+        if model is not None:
+            self.rates(model)  # fiyatsız model kurulumda reddedilir
         self._lock = threading.Lock()
         self._requests = 0
         self._settled = 0.0
         self._reserved = 0.0
         self._ceiling_charges = 0
 
+    def rates(self, model: Optional[str] = None):
+        """(girdi, çıktı) USD/1M; fiyatsız model reserve'den ÖNCE reddedilir."""
+        from app.core.telemetry.usage import price_for
+
+        m = model or self.model
+        price = price_for(m) if m else None
+        if not price:
+            raise CharacterizationError(
+                "HARD-CAP kurulamadı: '%s' için fiyat tablosu girdisi yok"
+                % m)
+        return float(price["input"]), float(price["output"])
+
     def per_call_ceiling_usd(self, request_input_bytes: int,
-                             max_tokens: int) -> float:
+                             max_tokens: int, *,
+                             model: Optional[str] = None,
+                             allowance_included: bool = False) -> float:
         """Tek çağrının EN KÖTÜ maliyeti.
 
         Girdi: tam request zarfının UTF-8 bayt sayısı token sayısının üst
@@ -384,12 +394,18 @@ class CharacterizationBudget:
         """
         # max_output_tokens thinking DAHİL toplamı sınırlar (spike-kanıtlı,
         # OUTPUT_BOUND_PROOF_ARTIFACT) — allowance varsayılan 0'dır.
-        worst_out = max_tokens + self.thinking_allowance_tokens
-        return (request_input_bytes / 1e6 * self._in_per_m
-                + worst_out / 1e6 * self._out_per_m)
+        in_per_m, out_per_m = self.rates(model)
+        worst_out = max_tokens + (
+            0 if allowance_included else self.thinking_allowance_tokens)
+        return (request_input_bytes / 1e6 * in_per_m
+                + worst_out / 1e6 * out_per_m)
 
-    def reserve(self, request_input_bytes: int, max_tokens: int) -> float:
-        ceiling = self.per_call_ceiling_usd(request_input_bytes, max_tokens)
+    def reserve(self, request_input_bytes: int, max_tokens: int, *,
+                model: Optional[str] = None,
+                allowance_included: bool = False) -> float:
+        ceiling = self.per_call_ceiling_usd(
+            request_input_bytes, max_tokens, model=model,
+            allowance_included=allowance_included)
         with self._lock:
             if self._requests + 1 > self.max_requests:
                 raise CharacterizationError(
@@ -444,6 +460,7 @@ class CharacterizationBudget:
 
     def summary(self) -> Dict[str, Any]:
         return {
+            "provider": self.provider,
             "requests_used": self._requests,
             "max_requests": self.max_requests,
             "cost_settled_usd": self.cost_settled_usd,
@@ -491,7 +508,7 @@ class _GuardedScoped:
 
     def __init__(self, inner, budget, stage, collector=None):
         self._inner = inner
-        self._budget = budget
+        self._budgets = budget  # CharacterizationBudget | {provider: budget}
         self._stage = stage
         self._collector = collector
 
@@ -522,7 +539,39 @@ class _GuardedScoped:
         # tavanı gerçek DeepSeek gövde üreticisinden hesaplanır (Gemini
         # zarfı farklı bir isteğin baytlarıdır)
         provider = getattr(self._inner, "provider", None) or "gemini"
-        if provider == "deepseek":
+        if isinstance(self._budgets, Mapping):
+            budget = self._budgets.get(provider)
+            if budget is None:  # hiçbir çağrı/rezervasyon yapılmadan red
+                raise CharacterizationError(
+                    "'%s' provider'ı için bütçe tanımlı değil — fail-closed"
+                    % provider)
+        else:
+            budget = self._budgets
+        price_model = None  # None = budget.model (tek-model yolu aynen)
+        if provider == "anthropic":
+            from app.generators.anthropic_service import (
+                anthropic_request_envelope,
+                anthropic_request_input_ceiling_bytes,
+            )
+
+            price_model = (call_args.get("model")
+                           or getattr(self._inner, "model", None))
+            if not price_model:
+                raise CharacterizationError(
+                    "anthropic rezervasyon zarfı için model çözülemedi — "
+                    "fail-closed (tahmin yok)")
+            request_input_bytes = anthropic_request_input_ceiling_bytes(
+                str(prompt), json_mode=json_mode,
+                response_schema=response_schema)
+            # Zarf max_tokens'ı thinking payını ZATEN içerir; reserve'de
+            # allowance_included=True ile İKİNCİ KEZ eklenmez.
+            max_tokens = anthropic_request_envelope(
+                str(prompt), model=price_model, max_tokens=max_tokens,
+                json_mode=json_mode, response_schema=response_schema,
+                thinking_level=(call_args.get("thinking_level")
+                                or getattr(self._inner, "thinking_level",
+                                           None)))["max_tokens"]
+        elif provider == "deepseek":
             from app.generators.ai_service import (
                 deepseek_request_input_ceiling_bytes,
             )
@@ -551,9 +600,14 @@ class _GuardedScoped:
                 json_mode=json_mode,
                 response_schema=response_schema,
             )
+        if budget.model is None and price_model is None:
+            price_model = (call_args.get("model")
+                           or getattr(self._inner, "model", None))
         before = (len(self._collector._all_events)
                   if self._collector is not None else None)
-        reservation = self._budget.reserve(request_input_bytes, max_tokens)
+        reservation = budget.reserve(
+            request_input_bytes, max_tokens, model=price_model,
+            allowance_included=(provider == "anthropic"))
         try:
             return method(*args, **kwargs)
         finally:
@@ -561,9 +615,8 @@ class _GuardedScoped:
             if before is not None:
                 new_events = self._collector._all_events[before:]
                 actual = _events_cost_usd(
-                    new_events, self._budget._in_per_m,
-                    self._budget._out_per_m)
-            self._budget.settle(reservation, actual)
+                    new_events, *budget.rates(price_model))
+            budget.settle(reservation, actual)
 
     def complete_json(self, *args, **kwargs):
         return self._guarded(
@@ -586,6 +639,7 @@ class BudgetGuardedAI:
     def __init__(self, pinned, budget, collector=None,
                  thinking_budget=None):
         self._pinned = pinned
+        # tek CharacterizationBudget (eski yol) VEYA {provider: budget}
         self._budget = budget
         self._collector = collector
         self._thinking_budget = thinking_budget
@@ -593,6 +647,11 @@ class BudgetGuardedAI:
     @property
     def collector(self):
         return getattr(self._pinned, "collector", None)
+
+    def summary(self) -> Dict[str, Any]:
+        if isinstance(self._budget, Mapping):
+            return {k: b.summary() for k, b in self._budget.items()}
+        return self._budget.summary()
 
     def for_stage(self, stage, **overrides):
         if (self._thinking_budget is not None

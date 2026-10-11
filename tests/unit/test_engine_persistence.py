@@ -782,3 +782,156 @@ def test_verify_stage_context_unsealed_stage_raises(db_session, make_workspace, 
 
     with pytest.raises(StageContextMismatch):
         verify_stage_context(run, "never_sealed_stage", CTX)
+
+
+# ---------------------------------------------------------------------------
+# T4: provider-farkindali muhur (DB'siz — seal/verify yalniz run.id ve
+# run.execution_manifest'e dokunur)
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402
+import types  # noqa: E402
+
+from app.core.engine.persistence import (  # noqa: E402
+    PROVIDER_MANIFEST_SCHEMA_VERSION,
+    stage_route,
+)
+
+# T4 oncesi `seal_manifest` ciktisinin yakalanmis KANONIK JSON'u (HEAD 4ede981).
+_PRE_T4_SEAL = (
+    '{"engine_v3":{"algorithm_versions":{"ads":"v1","seo":"v2"},'
+    '"firm_block_sha256":"sha-1","location_policy":{"city_lexicon_sha256":'
+    '"5a82a64b7677f7eafc1ba1edf29ae7f595a51fa3d2bea93e1f260c169155401f",'
+    '"city_lexicon_version":"tr-provinces-v1","enforcement_fingerprint":'
+    '"5dc808cc885eaa96b1822f3f61ed3c4205bc29915cb99ddb1896aa6bed29f414",'
+    '"exempt_terms":[],"focus_cities":[],"mode":"none"},'
+    '"manifest_schema_version":2,"models":{"ads_funnel":"gemini-3.8-flash",'
+    '"social_normbounds":"deterministic"},"prompt_shas":{"ads_funnel":"p1",'
+    '"social_normbounds":"p2"}}}'
+)
+_KW = dict(firm_block_sha256="sha-1", algorithm_versions={"ads": "v1", "seo": "v2"},
+           prompt_shas={"ads_funnel": "p1", "social_normbounds": "p2"},
+           location_policy=_loc_snap({}))
+_GEM_MODELS = {"ads_funnel": "gemini-3.8-flash", "social_normbounds": "deterministic"}
+
+
+def _stub_run():
+    return types.SimpleNamespace(id=1, execution_manifest=None)
+
+
+def _canon(obj):
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+@pytest.mark.parametrize("providers", [None, {}, {"ads_funnel": "gemini"}])
+def test_seal_without_non_gemini_provider_is_byte_identical_schema_2(providers):
+    run = _stub_run()
+    manifest = seal_manifest(run, models=_GEM_MODELS, providers=providers, **_KW)
+    assert _canon(manifest) == _PRE_T4_SEAL
+    assert set(manifest[MANIFEST_KEY]) == {
+        "manifest_schema_version", "firm_block_sha256", "algorithm_versions",
+        "models", "prompt_shas", "location_policy"}
+
+
+def _anthropic_seal(run):
+    models = dict(_GEM_MODELS, ads_funnel="claude-haiku-5-5")
+    return seal_manifest(run, models=models,
+                         providers={"ads_funnel": "anthropic"}, **_KW)
+
+
+def test_seal_with_anthropic_route_writes_schema_3_and_four_identity_fields():
+    from app.core.social.anthropic_schema import SCHEMA_TRANSFORMER_VERSION
+    from app.generators.anthropic_service import (
+        ADAPTER_CONTRACT_VERSION, SYSTEM_SHA, THINKING_POLICY_SHA,
+    )
+
+    section = _anthropic_seal(_stub_run())[MANIFEST_KEY]
+    assert section["manifest_schema_version"] == PROVIDER_MANIFEST_SCHEMA_VERSION == 3
+    assert section["providers"] == {"ads_funnel": "anthropic"}
+    assert section["models"]["ads_funnel"] == "claude-haiku-5-5"
+    assert section["adapter_contract_version"] == ADAPTER_CONTRACT_VERSION
+    assert section["system_sha"] == SYSTEM_SHA
+    assert section["schema_transformer_version"] == SCHEMA_TRANSFORMER_VERSION
+    assert section["thinking_policy_sha"] == THINKING_POLICY_SHA
+
+
+def test_seal_with_deepseek_only_route_has_providers_but_no_anthropic_fields():
+    section = seal_manifest(_stub_run(), models=_GEM_MODELS,
+                            providers={"ads_funnel": "deepseek"}, **_KW)[MANIFEST_KEY]
+    assert section["manifest_schema_version"] == 3
+    assert section["providers"] == {"ads_funnel": "deepseek"}
+    assert "system_sha" not in section and "adapter_contract_version" not in section
+
+
+def test_reseal_identical_providers_is_idempotent_and_changed_provider_rejected():
+    run = _stub_run()
+    first = _anthropic_seal(run)
+    assert _canon(_anthropic_seal(run)) == _canon(first)   # birebir ayni: sorun yok
+    with pytest.raises(StageContextMismatch):               # provider degisti
+        seal_manifest(run, models=dict(_GEM_MODELS, ads_funnel="claude-haiku-5-5"),
+                      providers={"ads_funnel": "deepseek"}, **_KW)
+    with pytest.raises(StageContextMismatch):               # provider kalkti
+        seal_manifest(run, models=dict(_GEM_MODELS, ads_funnel="claude-haiku-5-5"),
+                      providers=None, **_KW)
+
+
+def test_verify_stage_context_checks_provider():
+    run = _stub_run()
+    _anthropic_seal(run)
+    ok = StageContext(model="claude-haiku-5-5", prompt_sha="p1",
+                      firm_block_sha256="sha-1", provider="anthropic")
+    verify_stage_context(run, "ads_funnel", ok)
+    gemini_ctx = StageContext(model="claude-haiku-5-5", prompt_sha="p1",
+                              firm_block_sha256="sha-1")
+    with pytest.raises(StageContextMismatch, match="provider"):
+        verify_stage_context(run, "ads_funnel", gemini_ctx)
+    # providers sozlugunde olmayan asama = gemini; anthropic baglami reddedilir
+    bad = StageContext(model="deterministic", prompt_sha="p2",
+                       firm_block_sha256="sha-1", provider="anthropic")
+    with pytest.raises(StageContextMismatch, match="provider"):
+        verify_stage_context(run, "social_normbounds", bad)
+
+
+def test_old_schema_2_manifest_stays_resumable_with_new_code():
+    run = types.SimpleNamespace(id=1, execution_manifest=json.loads(_PRE_T4_SEAL))
+    gem = StageContext(model="gemini-3.8-flash", prompt_sha="p1",
+                       firm_block_sha256="sha-1")
+    verify_stage_context(run, "ads_funnel", gem)
+    assert stage_route(run, "ads_funnel") == ("gemini", "gemini-3.8-flash")
+    with pytest.raises(StageContextMismatch):
+        verify_stage_context(run, "ads_funnel", StageContext(
+            model="gemini-3.8-flash", prompt_sha="p1", firm_block_sha256="sha-1",
+            provider="anthropic"))
+
+
+def test_as_dict_adds_provider_only_when_not_gemini():
+    assert "provider" not in CTX.as_dict()
+    anth = StageContext(model="m", prompt_sha="p", firm_block_sha256="f",
+                        provider="anthropic")
+    assert anth.as_dict()["provider"] == "anthropic"
+
+
+def test_stage_route_reads_sealed_manifest_not_settings(monkeypatch):
+    from app.config import settings
+
+    run = _stub_run()
+    monkeypatch.setattr(settings, "AI_STAGE_ROUTES", {}, raising=False)
+    _anthropic_seal(run)
+    monkeypatch.setattr(settings, "AI_STAGE_ROUTES", {
+        "ads_funnel": {"provider": "deepseek", "model": "deepseek-v4-pro"},
+        "social_normbounds": {"provider": "anthropic", "model": "claude-haiku-5-5"},
+    }, raising=False)
+    assert stage_route(run, "ads_funnel") == ("anthropic", "claude-haiku-5-5")
+    assert stage_route(run, "social_normbounds") == ("gemini", "deterministic")
+    with pytest.raises(StageContextMismatch):
+        stage_route(run, "seo_rel")           # muhurde yok -> fail-closed
+    with pytest.raises(StageContextMismatch):
+        stage_route(_stub_run(), "ads_funnel")  # hic muhurlenmemis run
+
+
+def test_schema_3_location_policy_still_readable():
+    from app.core.engine.persistence import manifest_location_policy
+
+    run = _stub_run()
+    _anthropic_seal(run)
+    assert manifest_location_policy(run)["mode"] == "none"

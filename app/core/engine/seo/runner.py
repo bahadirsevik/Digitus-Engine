@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.engine import ai_runner as AI
 from app.core.engine.context import EngineInputError
 from app.core.engine.persistence import (
-    StageContext, load_stage_results, write_stage_results,
+    StageContext, load_stage_results, stage_route, write_stage_results,
 )
 from app.core.engine.seo import prompts as P
 from app.core.engine.seo.rows import build_rows
@@ -81,9 +81,11 @@ def seo_models() -> Dict[str, str]:
     return {stage: SEO_MODEL for stage in SEO_STAGES}
 
 
-def _context(stage: str, firm_block_sha256: str) -> StageContext:
-    return StageContext(model=SEO_MODEL, prompt_sha=seo_prompt_shas()[stage],
-                        firm_block_sha256=firm_block_sha256)
+def _context(run: ScoringRun, stage: str, firm_block_sha256: str) -> StageContext:
+    # provider+model MUHURLU manifest'ten (global route'tan DEGIL)
+    provider, model = stage_route(run, stage)
+    return StageContext(model=model, prompt_sha=seo_prompt_shas()[stage],
+                        firm_block_sha256=firm_block_sha256, provider=provider)
 
 
 def assert_complete(stage: str, expected_ids: Sequence[Any],
@@ -109,7 +111,7 @@ def _keyword_stage(db: Session, *, run: ScoringRun, stage: str, kind: str,
     (`apply_band`) ve eksik cevap `eksik=True` ile isaretlenir. Eksik satir
     fail-closed: kosu durur.
     """
-    ctx = _context(stage, firm_sha)
+    ctx = _context(run, stage, firm_sha)
     cached = load_stage_results(db, run=run, stage=stage,
                                 scope_type=SCOPE_KEYWORD, context=ctx)
     out: Dict[int, Dict[str, Any]] = {int(k): dict(v) for k, v in cached.items()}
@@ -117,8 +119,8 @@ def _keyword_stage(db: Session, *, run: ScoringRun, stage: str, kind: str,
 
     def _job(batch):
         def run():                       # WORKER: yalniz AI + dogrulama
-            got = AI.run_batch(ai, stage=stage, model=SEO_MODEL,
-                               thinking_level=SEO_THINKING, rows=batch,
+            got = AI.run_batch(ai, stage=stage, model=ctx.model,
+                               provider=ctx.provider, thinking_level=SEO_THINKING, rows=batch,
                                build_prompt=build_prompt, schema=schema,
                                max_tokens=max_tokens, result_key="results",
                                error_cls=SeoStageError)
@@ -167,12 +169,13 @@ def _ids_in_items(items: Sequence[Any], id_field: str) -> List[int]:
     return seen
 
 
-def _ask_unit(ai: Any, *, stage: str, unit: Mapping[str, Any],
+def _ask_unit(ai: Any, *, ctx: StageContext, stage: str,
+              unit: Mapping[str, Any],
               ids: Sequence[int], schema: Mapping[str, Any], max_tokens: int,
               result_key: str, id_field: str) -> List[Any]:
     """Tek birim cagrisi + ID dogrulamasi (checkpoint YAZMADAN)."""
-    items = AI.run_single(ai, stage=stage, model=SEO_MODEL,
-                          thinking_level=SEO_THINKING,
+    items = AI.run_single(ai, stage=stage, model=ctx.model,
+                          provider=ctx.provider, thinking_level=SEO_THINKING,
                           prompt=unit["build_prompt"](list(ids)), schema=schema,
                           max_tokens=max_tokens, result_key=result_key,
                           error_cls=SeoStageError)
@@ -200,7 +203,7 @@ def _unit_stage(db: Session, *, run: ScoringRun, stage: str, scope_type: str,
     Daha once BASARIYLA tamamlanmis birimlerin checkpoint'leri korunur; yalniz
     basarisiz/kismi birim yazilmaz.
     """
-    ctx = _context(stage, firm_sha)
+    ctx = _context(run, stage, firm_sha)
     cached = load_stage_results(db, run=run, stage=stage,
                                 scope_type=scope_type, context=ctx)
     out: Dict[str, Dict[str, Any]] = {str(k): dict(v) for k, v in cached.items()}
@@ -210,7 +213,7 @@ def _unit_stage(db: Session, *, run: ScoringRun, stage: str, scope_type: str,
 
         def run():                       # WORKER: cagri + hedefli tekrar
             expected = [int(k) for k in unit["ids"]]
-            items = _ask_unit(ai, stage=stage, unit=unit, ids=expected,
+            items = _ask_unit(ai, ctx=ctx, stage=stage, unit=unit, ids=expected,
                               schema=schema, max_tokens=max_tokens,
                               result_key=result_key, id_field=id_field)
             missing = [kid for kid in expected
@@ -219,7 +222,7 @@ def _unit_stage(db: Session, *, run: ScoringRun, stage: str, scope_type: str,
                 if not missing:
                     break
                 # YALNIZ eksik kume tekrar sorulur (hedefli tekrar).
-                extra = _ask_unit(ai, stage=stage, unit=unit, ids=missing,
+                extra = _ask_unit(ai, ctx=ctx, stage=stage, unit=unit, ids=missing,
                                   schema=schema, max_tokens=max_tokens,
                                   result_key=result_key, id_field=id_field)
                 items = list(items) + list(extra)
