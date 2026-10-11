@@ -1,0 +1,25 @@
+{
+  "files": {
+    "patron_labels_dijital_v2.json": {
+      "bytes": 13245,
+      "sha256": "bdc249f47ccc9da549c256842be042d426fb0861e68b33441796014be80a7824",
+      "slug": "dijital",
+      "source_workspace_id": 38
+    },
+    "patron_labels_gr7_v2.json": {
+      "bytes": 42744,
+      "sha256": "90b66e56e926b1ff8d101d9f7e64a45f1616f3e0b6ad972ff313d47b76483b39",
+      "slug": "gr7",
+      "source_workspace_id": 39
+    },
+    "patron_labels_optimice_v2.json": {
+      "bytes": 147774,
+      "sha256": "a0d5ccd34e7c5b4b86cfb17f6fcecfe64c055820928f06ff17a1c9364ade7a27",
+      "slug": "optimice",
+      "source_workspace_id": 21
+    }
+  },
+  "kind": "patron_labels_index",
+  "payload_sha256": "26f3d8bc5993a39bfee85befd9a509808be808170245fc02b371749f7d9a83d3",
+  "source": "archive Digitus-Engine-main (byte-identical copies)"
+}

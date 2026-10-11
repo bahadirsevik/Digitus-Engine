@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-11
 Branch: `deploy/lean-taslak`
-Active phase: **Gemini→Claude karsilastirma — FAZ 0 TAMAM (teknik). Faz 1 kapisi: K12 belge ref + konsol mutabakati + ws id muhuru (`faz1_blockers`)**
+Active phase: **Gemini→Claude karsilastirma — FAZ 1 ALTYAPISI KODLANDI (dalga A+B). Ucretli Faz 1 kosusu `faz1_blockers` ile KILITLI: K12 belge ref + konsol mutabakati + net kredi + ws id**
 Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 (konsey 2 tur + Codex 3 inceleme GO).
 
 ## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
@@ -57,9 +57,30 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
   `benchmark/idiomatic_prompts/{seo_generation,ads_rsa,social_brief_contents}.md` + manifest.json muhurlu
   (K16 tek atis; kaynak sablon sha'lari baglandi; is kurallari birebir, yalniz XML yapi). Tam paket **4855 / 112 / 0**.
 
+- **Faz 1 altyapisi (dalga A+B, 11.10, Codex Faz 0 hukmu: altyapi GO / ucretli kosu HENUZ DEGIL):**
+  A1 `stage_capture` (ai_runner CAPTURE_SINK hook'u, kapali iken bayt-ayni) + `stage_replay` (ayni prompt/sema/retry
+  butcesiyle baska saglayiciya replay, `compare_stage_outputs` asama karari uyumu); A2 `hybrid_run` (G/G/G, Aday, G/G/C
+  konfiglari planin K3 modellerinden; `StageRoutePinnedAI` icerik asamalarina provider enjeksiyonu; `GeminiService(
+  retry_attempts=1)` gercekten kullaniliyor; provider basina tavan Claude 50 / Gemini 20 / DeepSeek 5; `faz1_blockers`
+  ILK satirda, dry-run bile kilitli) + `BudgetGuardedAI` settle'i paralellikte `logical_request` ile dogru; A3
+  `claude_gates` (G1-G7 esikleri MUHURLU plandan regex ile, eksik sayi -> hata; kumeli bootstrap, Wilson, kappa, pilot
+  etiketi, rapor) + `patron_labels` (optimice/gr7/dijital v2 etiketleri bayt-ayni, muhurlu index; gr7 SEO 72/14);
+  B1 `content_pairs` (ortak katman, kor A/B kartlari, gizli esleme ayri dosya, sert kurallar gercek validator'larla) +
+  `pairwise_judge` (DeepSeek V4 Pro, pozisyon takasi, S formulu K4, berabere bandi 0,05, `pairwise_judge` asamasi
+  AI_STAGES'e eklendi); B2 `profile_compare` (donmus girdi, 3 saglayici, bloklu-rastgele sira, kor kartlar, G3 girdisi);
+  B3 QA: `tests/integration/test_hybrid_run_db.py` 9 DB'li uctan uca test (Aday/G/G/G/G/G/C, kilit, enjekte hatalar,
+  tavan) ILK KOSUDA YESIL; QA bulgusu: `claim_rewrite`/`micro_shorten` ic ice scoped() guard'i atliyordu -> `_GuardedScoped.for_stage`
+  ebeveynden gecer (KAPANDI). Dalga A tam paket 4906/0; dalga B hedefli 95+23 yesil; **dalga B sonrasi TAM PAKET
+  bellek yetersizligi nedeniyle sistem tarafindan DURDURULDU, yeniden kosulmali** (kullanici izniyle).
+- Bilinen bosluklar: `content_pairs.extract_items` SQL'i gercek DB'de denenmedi; sosyal ciftler pozisyonel eslesir;
+  Optimice "ADS 16" kaynagi belirsiz (artefakt 123); hybrid_run API'nin `require_run_allowed`/deneme-ws kapisini
+  atlar (ws38/39'a yoneltme); `AI_STAGE_ROUTES` global -> ayni process'te es zamanli iki run_hybrid yasak.
+
 ## Open / next
 
-0. **Faz 1 wiring (kod):** bakeoff_comparison provider/model pinleri gemini-3.5/deepseek -> Claude adayi icin sozlesme
+0. **Faz 1 oncesi kalan:** TAM PAKET yeniden kosusu; `extract_items` DB smoke; 1A icin referans G/G/G kosusunu
+   `StageCapture` ile sarmalayan sunucu adimi (hybrid_run'a `capture=True`); Faz 1 kosu sirasi/CLI betigi.
+0b. **Eski not — Faz 1 wiring (kod):** bakeoff_comparison provider/model pinleri gemini-3.5/deepseek -> Claude adayi icin sozlesme
    genisletmesi; 1A istek yakalama/replay surucusu (K14) + 1B hibrit kosu CLI'i lean'de YOK (arsivde scripts/); profil
    kiyasi icin `profile_inputs.freeze` cagrisi; DeepSeek hakem + patron kart uretimi (annotation_io). Idiomatik: SEO
    revision/expansion, CLAIM_REWRITE, social repair prompt'lari Gemini metniyle kalir (karar: Faz 2 oncesi).

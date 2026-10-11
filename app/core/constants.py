@@ -227,6 +227,8 @@ AI_STAGES = (
     "ads_funnel", "ads_intent",
     "seo_rel", "seo_bp", "seo_subintent", "seo_authority", "seo_urlgroup",
     "social_rel", "social_v4", "social_intent", "social_normbounds",
+    # Gemini->Claude kiyasi: DeepSeek ikili hakem (plan K4); uretimde kullanilmaz
+    "pairwise_judge",
 )
 # Prompt/config surumu — run manifest'ine yazilir (plan C)
 # v2.1 Faz D (23.07): SEO strategy_fit sözleşmesi + ADS/SOCIAL v2_1 blokları

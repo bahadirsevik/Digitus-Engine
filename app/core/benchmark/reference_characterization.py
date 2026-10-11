@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from contextlib import contextmanager
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from app.core.constants import (
@@ -502,15 +503,62 @@ def _events_cost_usd(events, in_per_m: float,
     return total if any_usage else None
 
 
+@contextmanager
+def _settle_scope(collector):
+    """Çağrının KENDİ usage event'lerini veren callable (yoksa None).
+
+    `_all_events[before:]` dilimi paralel (ENGINE_AI_CONCURRENCY>1) çağrıda
+    başka thread'in event'lerini de yutar. Event'ler `request_id` ile
+    eşlenir: thread-local logical_request bağlamı varsa (katmanın kendi
+    retry kapsamı) ONUN request_id'si + bu çağrıdan önceki attempt sayacı
+    kullanılır (telemetri gruplaması bozulmaz, iç içe kapsam açılmaz);
+    yoksa çağrı kendi kapsamını açar. logical_request desteklemeyen sahte
+    collector'larda eski dilim yolu aynen sürer. Event bulunamazsa
+    `_events_cost_usd` None döner ve rezervasyon TAVANI yanar (muhafazakâr).
+    """
+    if collector is None:
+        yield None
+        return
+    local = getattr(collector, "_local", None)
+    if not hasattr(collector, "logical_request") or local is None:
+        before = len(collector._all_events)
+        yield lambda: collector._all_events[before:]
+        return
+
+    def events_for(rid, after):
+        return [e for e in list(collector._all_events)
+                if e.get("request_id") == rid
+                and (e.get("attempt") or 0) > after]
+
+    ctx = getattr(local, "ctx", None)
+    if ctx is not None:
+        rid, after = ctx["request_id"], ctx["attempt"]
+        yield lambda: events_for(rid, after)
+        return
+    with collector.logical_request():
+        rid = collector._local.ctx["request_id"]
+        yield lambda: events_for(rid, 0)
+
+
 class _GuardedScoped:
     """Stage-scoped AI servisini sarar: çağrı ÖNCESİ en-kötü rezervasyon,
     çağrı SONRASI gerçek usage ile settle (usage yoksa tavan yanar)."""
 
-    def __init__(self, inner, budget, stage, collector=None):
+    def __init__(self, inner, budget, stage, collector=None, parent=None):
         self._inner = inner
         self._budgets = budget  # CharacterizationBudget | {provider: budget}
         self._stage = stage
         self._collector = collector
+        self._parent = parent
+
+    def for_stage(self, stage, **overrides):
+        """Ic ice `scoped(self.ai_service, ...)` (claim_rewrite, micro_shorten)
+        KORUMASIZ root'a kacmaz: yeniden kapsamlama guard'li ebeveynden gecer
+        (QA B3 bulgusu: hard-cap deligi)."""
+        if self._parent is not None:
+            return self._parent.for_stage(stage, **overrides)
+        return _GuardedScoped(self._inner.for_stage(stage, **overrides),
+                              self._budgets, stage, collector=self._collector)
 
     def __getattr__(self, name):
         return getattr(self._inner, name)
@@ -603,20 +651,18 @@ class _GuardedScoped:
         if budget.model is None and price_model is None:
             price_model = (call_args.get("model")
                            or getattr(self._inner, "model", None))
-        before = (len(self._collector._all_events)
-                  if self._collector is not None else None)
-        reservation = budget.reserve(
-            request_input_bytes, max_tokens, model=price_model,
-            allowance_included=(provider == "anthropic"))
-        try:
-            return method(*args, **kwargs)
-        finally:
-            actual = None
-            if before is not None:
-                new_events = self._collector._all_events[before:]
-                actual = _events_cost_usd(
-                    new_events, *budget.rates(price_model))
-            budget.settle(reservation, actual)
+        with _settle_scope(self._collector) as events_of:
+            reservation = budget.reserve(
+                request_input_bytes, max_tokens, model=price_model,
+                allowance_included=(provider == "anthropic"))
+            try:
+                return method(*args, **kwargs)
+            finally:
+                actual = None
+                if events_of is not None:
+                    actual = _events_cost_usd(
+                        events_of(), *budget.rates(price_model))
+                budget.settle(reservation, actual)
 
     def complete_json(self, *args, **kwargs):
         return self._guarded(
@@ -659,7 +705,7 @@ class BudgetGuardedAI:
             overrides["thinking_budget"] = self._thinking_budget
         return _GuardedScoped(self._pinned.for_stage(stage, **overrides),
                               self._budget, stage,
-                              collector=self._collector)
+                              collector=self._collector, parent=self)
 
     def __getattr__(self, name):
         return getattr(self._pinned, name)

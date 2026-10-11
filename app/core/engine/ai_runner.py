@@ -20,9 +20,14 @@ testler ucretli cagri yapmadan butun tekrar topolojisini kosabilir.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from app.core.telemetry.ai_cost_budget import BudgetExceeded
+
+# Opsiyonel istek yakalama kancasi (benchmark/stage_capture.py). None iken
+# `_complete` yolu degismez; sink hatasi motoru ASLA etkilemez.
+CAPTURE_SINK: Optional[Callable[[dict], None]] = None
 
 MAX_ATTEMPTS = 2          # parse/batch hatasi icin TOPLAM deneme
 TARGETED_RETRIES = 1      # eksik ID kumesi icin hedefli tekrar
@@ -136,7 +141,8 @@ def _parse(raw: Any, result_key: Optional[str]) -> Optional[List[Any]]:
 
 
 def _complete(scoped: Any, prompt: str, max_tokens: int,
-              schema: Mapping[str, Any]) -> Any:
+              schema: Mapping[str, Any], attempt_kind: str = "initial",
+              attempt: int = 1, meta: Optional[dict] = None) -> Any:
     """Tek saglayici cagrisi.
 
     DIKKAT: butce tavani korumasi BURADA OLAMAZ — buradaki bir
@@ -156,7 +162,37 @@ def _complete(scoped: Any, prompt: str, max_tokens: int,
     if (isinstance(scoped, StageScopedAIService)
             and getattr(scoped, "model", None) == "gemini-3.8-flash"):
         kwargs["temperature"] = None
-    return scoped.complete_json(prompt, **kwargs)
+    sink = CAPTURE_SINK
+    if sink is None:
+        return scoped.complete_json(prompt, **kwargs)
+    record = {**(meta or {}), "prompt": prompt,
+              "response_schema": kwargs["response_schema"],
+              "max_tokens": max_tokens, "attempt_kind": attempt_kind,
+              "attempt": attempt}
+    try:
+        raw = scoped.complete_json(prompt, **kwargs)
+    except Exception as exc:
+        _emit(sink, {**record, "raw_text": None, "error": str(exc)[:300]})
+        raise
+    _emit(sink, {**record, "raw_text": raw, "error": None})
+    return raw
+
+
+def _emit(sink: Callable[[dict], None], record: dict) -> None:
+    try:
+        sink(record)
+    except Exception:  # noqa: BLE001 — yakalama motor davranisini DEGISTIRMEZ
+        logging.getLogger(__name__).exception("CAPTURE_SINK hatasi (yutuldu)")
+
+
+def _meta(stage, provider, model, thinking_level, expected_ids, result_key,
+          id_field, response_id_field) -> Optional[dict]:
+    if CAPTURE_SINK is None:
+        return None
+    return {"stage": stage, "provider": provider, "model": model,
+            "thinking_level": thinking_level, "expected_ids": sorted(expected_ids),
+            "result_key": result_key, "id_field": id_field,
+            "response_id_field": response_id_field}
 
 
 def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
@@ -169,7 +205,9 @@ def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
     last_error: Optional[BaseException] = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            raw = _complete(scoped, prompt, max_tokens, schema)
+            raw = _complete(scoped, prompt, max_tokens, schema, attempt=attempt,
+                            meta=_meta(stage, provider, model, thinking_level,
+                                       (), result_key, None, None))
         except BudgetExceeded:            # TAVAN: tekrar YOK, sarmalama YOK
             raise
         except Exception as exc:          # saglayici/transport hatasi
@@ -231,7 +269,8 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
     expected = [int(row[id_field]) for row in rows]
     collected: Dict[int, Dict[str, Any]] = {}
 
-    def ask(subset: Sequence[Mapping[str, Any]]) -> None:
+    def ask(subset: Sequence[Mapping[str, Any]],
+            kind: str = "initial") -> None:
         scoped = _scoped(ai, stage, model, thinking_level, provider)
         items: Optional[List[Any]] = None
         last_error: Optional[BaseException] = None
@@ -240,7 +279,10 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 raw = _complete(scoped, build_prompt(subset), max_tokens,
-                                schema)
+                                schema, kind, attempt,
+                                _meta(stage, provider, model, thinking_level,
+                                      wanted, result_key, id_field,
+                                      response_id_field))
             except BudgetExceeded:        # TAVAN: tekrar YOK, sarmalama YOK
                 raise
             except Exception as exc:      # saglayici/transport hatasi
@@ -314,7 +356,8 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
         if not missing:
             break
         # YALNIZ eksik kumesi tekrar sorulur (hedefli tekrar).
-        ask([row for row in rows if int(row[id_field]) in set(missing)])
+        ask([row for row in rows if int(row[id_field]) in set(missing)],
+            "targeted_retry")
         missing = [ident for ident in expected if ident not in collected]
 
     if missing:
