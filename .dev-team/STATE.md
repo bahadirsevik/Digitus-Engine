@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-11
 Branch: `deploy/lean-taslak`
-Active phase: **Gemini→Claude karsilastirma — Faz 0 tesisat KOD TAMAM (2 commit), spike API anahtari bekliyor**
+Active phase: **Gemini→Claude karsilastirma — Faz 0: kod + SPIKE TAMAM; kalan: butce/kapi muhuru, arsiv benchmark modulleri, idiomatik prompt SHA, Gemini kontrolleri, K12**
 Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 (konsey 2 tur + Codex 3 inceleme GO).
 
 ## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
@@ -37,9 +37,19 @@ Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 
   description'a tasinir (SOCIAL hashtags 5-20 regresyon testi); spike plani gercek SOCIAL semasiyla
   2 cagri ekledi (kuru kosu 0,32 $). Tam paket **4696 / 112 skipped / 0**.
 
+- **SPIKE KOSULDU (11.10 12:52 UTC, `benchmark/claude_spike.json`, muhurlu):** 29 cagri (20 Haiku, 8 Sonnet,
+  1 header probu), settled **0,0837 $** (tavan 0,50, kuru tavan 0,32 -> rezervasyon zarflari gercegin ~3,8 kati,
+  §9 yeniden muhurde daraltilabilir). **14/14 sema KABUL** (optional alan eksik birakilabiliyor, nullable calisiyor,
+  gercek SOCIAL semasi iki modelde de kabul) -> `[T,"null"]` yedegi GEREKMEZ. max_tokens kirpilmasi 0.
+  Dusunme payi kucuk: low p99 489 tok (n=25), medium p99 288 (n=3) -> allowance 2000/4000 cok genis, oneri 500/300
+  (madde 8'de karar; kucultmek yalniz rezervasyonu etkiler, harcamayi degil). Tokenizer ~0,71 tok/bayt (Turkce) ->
+  bayt tabanli girdi tavani ~%40 muhafazakar. Gecikme p50 3,8 s / p90 12 s (uzun ciktilar 14-24 s).
+  Rate limit (tier): 1000 RPM, 2,4M TPM, 2M ITPM, 400K OTPM -> Faz 1 icin bol. anthropic 1.13.0, git a696d50.
+  Konsol faturasi ile 0,08 $ karsilastirmasi KULLANICIDA (fiyat tablosu dogrulamasi).
+
 ## Open / next
 
-1. **Spike (Faz 0 madde 5) ANTHROPIC_API_KEY bekliyor** — `python -m app.core.benchmark.claude_spike
+1. ~~Spike~~ TAMAM (yukarida). **Madde 8 butce yeniden muhuru**: spike p90 zarflari ile §9 hucreleri; allowance karari — `python -m app.core.benchmark.claude_spike
    --out benchmark/claude_spike.json` (tavan 0,50 $; kuru kosu 29 cagri / 0,33 $). Sonra allowance/effort
    kalibrasyonu, optional-alan kabulu, rate-limit basliklari, tokenizer orani muhurlenir.
 2. Faz 0 madde 6 (arsiv benchmark moduller: bakeoff_*/patron_*/annotation_io -> lean), 8 (butce yeniden
