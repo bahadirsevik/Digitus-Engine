@@ -208,7 +208,7 @@ export default function AiCompetitorDiscovery({
   if (!confirmed) {
     return (
       <div className="acd-shell is-disabled">
-        <div className="acd-heading">AI Önerilen Rakipler</div>
+        <div className="acd-heading">AI İle Engellenecek Rakipler</div>
         <p>Rakip keşfi marka profili onaylandıktan sonra kullanılabilir.</p>
       </div>
     )
@@ -234,7 +234,7 @@ export default function AiCompetitorDiscovery({
     >
       <div className="acd-header">
         <div>
-          <div className="acd-heading">AI Önerilen Rakipler</div>
+          <div className="acd-heading">AI İle Engellenecek Rakipler</div>
           <p>Doğrulanmış şirketleri inceleyip engellenecek marka adlarını seçin.</p>
         </div>
         <button
