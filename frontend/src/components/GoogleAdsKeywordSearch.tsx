@@ -86,7 +86,9 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
         const res = await googleAdsApi.listCustomers()
         const ids = (res.data || []).map((item) => item.customer_id)
         setCustomers(ids)
-        if (!customerId && ids.length === 1) setCustomerId(ids[0])
+        // Varsayılan hesap: 956 ile biten; yoksa tek hesap varsa o
+        const preferred = ids.find((id) => id.endsWith('956')) ?? (ids.length === 1 ? ids[0] : '')
+        if (!customerId && preferred) setCustomerId(preferred)
       } catch {
         setCustomers([])
       }
