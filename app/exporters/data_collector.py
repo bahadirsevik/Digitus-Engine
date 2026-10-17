@@ -667,6 +667,7 @@ class ExportDataCollector:
         gruplarını kullanır (ortak active_ad_groups filtresi).
         """
         from app.generators.ads.generation_sets import active_ad_groups
+        from app.generators.ads.validators import build_standard_report
 
         groups = (
             active_ad_groups(self.db, scoring_run_id)
@@ -697,6 +698,14 @@ class ExportDataCollector:
                 group_name=g.group_name,
                 group_theme=g.group_theme,
                 target_keywords=g.target_keywords or [],
+                fill_keyword_ids=g.fill_keyword_ids or [],
+                standard_report=build_standard_report(
+                    g.target_keywords or [],
+                    g.target_keyword_ids or [],
+                    g.fill_keyword_ids,
+                    [h.headline_text for h in headlines],
+                    [d.description_text for d in descriptions],
+                ),
                 headlines=[HeadlineData(
                     headline_text=h.headline_text,
                     headline_type=h.headline_type,

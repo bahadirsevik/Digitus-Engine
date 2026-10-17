@@ -12,6 +12,7 @@ import os
 from typing import List
 from datetime import datetime
 
+from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.seo_checklist_format import (
     CHECK_ROW_HEADERS, check_rows, geo_evaluation_text, review_status_text,
@@ -186,9 +187,11 @@ class CsvExporter(BaseExporter):
         
         # Gruplar
         filepath = os.path.join(temp_dir, 'reklam_gruplari.csv')
-        headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı', 'Negatif Sayısı']
+        headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı',
+                   'Negatif Sayısı'] + STANDARD_HEADERS
         rows = [[g.group_name, ', '.join(g.target_keywords),
-                 len(g.headlines), len(g.descriptions), len(g.negative_keywords)]
+                 len(g.headlines), len(g.descriptions), len(g.negative_keywords),
+                 *standard_cells(g)]
                 for g in ads.ad_groups]
         files.append(self._write_csv(filepath, headers, rows))
 

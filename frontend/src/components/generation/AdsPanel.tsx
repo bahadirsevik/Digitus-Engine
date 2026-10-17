@@ -24,6 +24,7 @@ import {
 import type {
   AdGenerationSetSummary,
   AdGroup,
+  AdGroupStandardReport,
   AdsResult,
   AdsSetListResult,
   ScoringRun,
@@ -163,6 +164,60 @@ function GenToast({ progress, onDismiss }: { progress: number; onDismiss: () => 
   )
 }
 
+// 15 KW teslim standardı özeti — yalnız olgu ve liste (puan/yüzde yok). Rapor yoksa hiçbir şey çizilmez.
+const STANDARD_KW_LISTS: Array<{
+  key: 'keywords_in_headlines' | 'keywords_description_only' | 'keywords_unused' | 'fill_keywords'
+  label: string
+}> = [
+  { key: 'keywords_in_headlines', label: "Başlıklarda kullanılan KW'ler" },
+  { key: 'keywords_description_only', label: "Yalnız açıklamada geçen KW'ler" },
+  { key: 'keywords_unused', label: "Hiç kullanılmayan KW'ler" },
+  { key: 'fill_keywords', label: "15'e tamamlamak için eklenen KW'ler" },
+]
+
+function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
+  if (!report) return null
+  const missing = [
+    report.missing_headlines > 0 ? `${report.missing_headlines} başlık` : '',
+    report.missing_kw_descriptions > 0 ? `${report.missing_kw_descriptions} KW'li açıklama` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  return (
+    <div className="adsx-std">
+      <div className="adsx-std-summary">
+        {report.keyword_count} KW · {report.headline_count} başlık · {report.kw_description_count}{' '}
+        KW'li açıklama
+      </div>
+      {report.below_standard && (
+        <div className="adsx-std-note">
+          <span className="adsx-set-badge is-draft">15 KW teslim standardının altında</span>
+          {missing && <span>Eksik: {missing}</span>}
+        </div>
+      )}
+      {report.pool_below_target && (
+        <div className="adsx-std-note">Bu grupta {report.keyword_count} KW var (standart 15)</div>
+      )}
+      {STANDARD_KW_LISTS.map(({ key, label }) =>
+        report[key].length > 0 ? (
+          <details key={key} className="adsx-std-details">
+            <summary>
+              {label} ({report[key].length})
+            </summary>
+            <div className="adsx-chip-row">
+              {report[key].map((kw) => (
+                <span key={kw} className="adsx-chip">
+                  {kw}
+                </span>
+              ))}
+            </div>
+          </details>
+        ) : null
+      )}
+    </div>
+  )
+}
+
 // Tasarım: reklam grubu kartı — intent kutusu, keyword chip'leri, önizleme,
 // Başlıklar/Açıklama/Negatif sekmeleri
 function AdGroupCard({
@@ -201,6 +256,7 @@ function AdGroupCard({
           </button>
         )}
       </div>
+      <StandardReport report={group.standard_report} />
       {adGroupTheme(group) && <div className="adsx-group-intent">{adGroupTheme(group)}</div>}
       {adGroupKeywords(group).length > 0 && (
         <div className="adsx-chip-row">

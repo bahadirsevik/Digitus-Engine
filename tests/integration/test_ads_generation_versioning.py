@@ -606,6 +606,86 @@ def test_clone_and_regenerate_leaves_source_untouched(
 
 
 # ---------------------------------------------------------------------------
+# fill_keyword_ids: kayıt + klon + grup yeniden üretimi + okuma raporu
+# ---------------------------------------------------------------------------
+
+
+class _FakeRsaAI:
+    """Geçerli, iddiasız RSA cevabı: 15 başlık + 4 KW'li açıklama (tamamlama yok)."""
+
+    def complete_json(self, prompt, max_tokens=None, response_schema=None):
+        return json.dumps({
+            "headlines": [{"text": f"Aday Başlık {c}", "type": "benefit", "position": "any"}
+                          for c in "ABCDEFGHIJKLMNO"],
+            "descriptions": [{"text": t, "type": "value_prop", "position": "any"} for t in (
+                "Laptop uno için hızlı teslimat.", "Laptop uno modellerini karşılaştırın.",
+                "Laptop dos seçeneklerini keşfedin.", "Laptop dos fırsatlarını inceleyin.")],
+            "negative_keywords": [{"keyword": f"neg{c}", "match_type": "phrase",
+                                   "category": "c", "reason": "r"} for c in "abcdefghij"],
+        })
+
+    def complete(self, prompt, max_tokens=None):
+        return ""
+
+
+def test_fill_keyword_ids_survive_save_clone_regenerate_and_read(
+    db_session, make_workspace, make_scoring_run
+):
+    from app.generators.ads.ads_generator import AdsGenerator
+    from app.schemas.ads import AdGroupFullSchema, DescriptionSchema, HeadlineSchema
+
+    ws = make_workspace("Fill WS")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    source = _make_set(db_session, run.id, 1, SET_ACTIVE)
+    _make_group(db_session, source, "Legacy Grup")          # fill_keyword_ids NULL
+    db_session.commit()
+    generator = AdsGenerator(db_session, _FakeRsaAI())
+
+    # 1. ilk kayıt: gruplayıcının taşıdığı id saklanır
+    full = AdGroupFullSchema(
+        name="Yeni Grup", theme="t", keyword_ids=[10, 11],
+        keywords=["laptop uno", "laptop dos"], fill_keyword_ids=[11],
+        headlines=[HeadlineSchema(text=f"Başlık {c}", type="benefit") for c in "ABC"],
+        descriptions=[DescriptionSchema(text="Laptop uno için hızlı teslimat.", type="value_prop")],
+        negative_keywords=[],
+    )
+    saved = generator._save_to_database([full], run.id, generation_set_id=source.id)[0]
+    assert saved.fill_keyword_ids == [11]
+
+    # 2. okuma: yeni grup raporu + legacy (NULL) satır sorunsuz
+    by_name = {g.group_name: g for g in
+               generator.get_ad_groups(run.id, generation_set_id=source.id).ad_groups}
+    new = by_name["Yeni Grup"]
+    assert new.fill_keyword_ids == [11]
+    assert new.standard_report.fill_keywords == ["laptop dos"]
+    assert new.standard_report.keywords_description_only == ["laptop uno"]
+    assert new.standard_report.keywords_unused == ["laptop dos"]
+    assert (new.standard_report.headline_count, new.standard_report.missing_headlines) == (3, 12)
+    assert new.standard_report.below_standard and new.standard_report.pool_below_target
+    legacy = by_name["Legacy Grup"]
+    assert legacy.fill_keyword_ids == [] and legacy.standard_report.fill_keywords == []
+
+    # 3. klon: değer aynen kopyalanır, NULL (bilinmiyor) NULL kalır
+    target = _make_set(db_session, run.id, 2, SET_GENERATING)
+    db_session.commit()
+    generator.clone_groups_to_set(source.id, target.id)
+    db_session.commit()
+    clones = {g.group_name: g for g in
+              db_session.query(AdGroup).filter_by(generation_set_id=target.id)}
+    assert clones["Yeni Grup"].fill_keyword_ids == [11]
+    assert clones["Legacy Grup"].fill_keyword_ids is None
+
+    # 4. grup yeniden üretimi: kaynağın değeri yeni satıra taşınır
+    target2 = _make_set(db_session, run.id, 3, SET_GENERATING)
+    db_session.commit()
+    regenerated = generator.regenerate_group_into_set(saved, target2.id, brand_name="Marka")
+    assert regenerated.fill_keyword_ids == [11]
+    row = db_session.query(AdGroup).filter_by(generation_set_id=target2.id).one()
+    assert row.fill_keyword_ids == [11]
+    assert (regenerated.missing_headlines, regenerated.missing_kw_descriptions) == (0, 0)
+
+
+# ---------------------------------------------------------------------------
 # Migration backfill invariant'ları (boş-DB upgrade YETMEZ)
 # ---------------------------------------------------------------------------
 
@@ -693,3 +773,26 @@ def test_migration_backfill_links_legacy_groups(db_engine):
         if c["name"] == "generation_set_id"
     )
     assert col["nullable"] is False
+
+
+def test_ads_dispatch_without_usp_sends_empty_not_generic_text(
+    client, db_session, make_workspace, make_scoring_run, monkeypatch
+):
+    """Profilde ve istekte USP yoksa görev boş USP alır; jenerik metin sızmaz."""
+    from app.tasks import generation_tasks
+
+    captured = {}
+    monkeypatch.setattr(
+        generation_tasks.generate_ads_task, "apply_async",
+        lambda *a, **k: captured.update(k.get("kwargs") or {}),
+    )
+    ws = make_workspace("USP WS")
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+
+    res = client.post(
+        f"/api/v1/generation/ads/rsa?brand_profile_id={ws.id}",
+        json={"scoring_run_id": run.id, "brand_name": "Marka"},
+    )
+    assert res.status_code == 202, res.text
+    assert captured["brand_usp"] == ""
+    assert "Kaliteli ürün ve hizmet" not in json.dumps(captured, ensure_ascii=False)

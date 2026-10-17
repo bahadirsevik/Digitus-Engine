@@ -210,9 +210,10 @@ class TestPrompts:
             brand_name="M", brand_usp="—", product_facts="—",
         )
 
-    def test_strict_retry_prompt_has_preventive_line(self):
+    def test_candidates_prompt_has_preventive_line(self):
+        # strict retry kalktı (15 KW standardı): aday/tamamlama prompt'u aynı kuralı taşır
         gen = _gen()
-        prompt = gen._build_strict_retry_prompt(GROUP, "Marka", "usp")
+        prompt = gen._build_candidates_prompt(GROUP, "Marka", "usp")
         assert "Hedef anahtar kelimeleri veya bunların parçalarını negatif" in prompt
         assert '"negative_keywords"' in prompt  # JSON şeması korunuyor
 

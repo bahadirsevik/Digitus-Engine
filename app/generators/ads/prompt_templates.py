@@ -14,19 +14,25 @@ ADS_GROUPING_PROMPT = '''
 Sen deneyimli bir Google Ads uzmanısın. Kelimeleri optimize reklam gruplarına ayırma konusunda uzmansın.
 
 # GÖREV
-Aşağıdaki anahtar kelimeleri reklam gruplarına ayır.
+Aşağıdaki {keyword_count} anahtar kelimeyi TAM {group_count} reklam grubuna ayır.
 
 # KURALLAR
-1. Her grupta 3-7 kelime olmalı (çok az = verimsiz, çok fazla = alakasız eşleşme)
-2. Aynı SATIN ALMA NİYETİndeki kelimeler bir grupta olmalı
-3. Farklı niyetler farklı gruplarda:
+1. TAM {group_count} grup oluştur; grupların kelime sayıları tam olarak şunlar olmalı: {group_sizes}
+   Her kelime TAM BİR grupta yer almalı (kelime atlama, tekrar etme).
+2. Önce aynı ÜRÜN ve aynı ARAMA NİYETİndeki kelimeleri bir araya getir; küçük temaları
+   en yakın temayla birleştir, gerekirse grup adını/temasını genişlet
+   Grup adı ve teması gruptaki TÜM kelimeleri kapsamalı: hedef boyuta ulaşmak için farklı
+   hizmetler/ürünler birleştirildiyse adı ve temayı buna göre genişlet
+   (örn: "SEO ve Web Tasarım Hizmetleri"); gruptaki kelimelerin yalnızca bir kısmını
+   anlatan dar bir ad verme
+3. Niyet örnekleri (gruplar bu kadar ayrıntılı bölünemiyorsa en yakın niyette birleştir):
    - Satın alma niyeti (laptop al, notebook satın al)
    - Araştırma niyeti (laptop özellikleri, laptop karşılaştır)
    - Fiyat odaklı (ucuz laptop, laptop fiyatları)
    - Commercial (en iyi laptop)
 4. Her gruba AÇIKLAYICI isim ver (örn: "Laptop Satın Alma - Fiyat Odaklı")
 5. Kötü grup isimleri kullanma: "Grup 1", "Kelimeler A"
-6. Toplam grup sayısı yaklaşık: ceil(kelime sayısı / 5)
+6. Grup sayısını ve boyutlarını yukarıdaki değerlerden değiştirme
 
 # ANAHTAR KELİMELER
 {keywords_json}
@@ -179,6 +185,51 @@ Dynamic başlık yazarken TAM OLARAK bu formatı kullan:
 
 Sadece JSON döndür, açıklama ekleme.
 '''
+
+
+# ==================== RSA CANDIDATES PROMPT (15 KW standardı) ====================
+# Üretimde kullanılan aday prompt'u ADS_RSA_GENERATION_PROMPT'tan TÜRETİLİR:
+# kaynak sabit benchmark/idiomatic_prompts/manifest.json'da SHA ile mühürlü
+# (tests/unit/test_idiomatic_prompts.py) — sabitin kendisi DEĞİŞTİRİLMEZ.
+# Yerleştirme noktası kaybolursa import anında patlar (sessiz kayma olmasın).
+
+_KEYWORD_USE_BLOCK = '''# ANAHTAR KELİME KULLANIMI (ÖNEMLİ)
+- Başlıklar ve açıklamalar AKICI, DOĞAL ve dilbilgisi doğru Türkçe olmalı; arama sorgusu gibi
+  okunan, eksik ekli ya da yalnızca kelimeleri art arda sıralayan metin yazma
+- Grubun anahtar kelimelerinden doğal okunanları başlıklarda ÖNCELİKLE kullan; bir anahtar
+  kelimeyi yalnızca doğal okunduğu yerde, BÜTÜN hâlinde (ek almadan, kelimeleri bölmeden,
+  aynı sırada) kullan
+- Başlıkları ve açıklamaları BU GRUBUN anahtar kelimelerinden ve temasından üret. Marka ve
+  ürün bilgisini yalnızca grubun temasıyla ilgili olduğu ölçüde kullan; markanın bu grupla
+  ilgisi olmayan hizmetlerini başlık veya açıklamaya taşıma
+- Bir anahtar kelime doğal bir başlık oluşturmuyorsa (ör. "... fiyat", "... vermek" gibi arama
+  sorgusu kalıpları, eksik ekli kelimeler, şehir + genel kelime) ZORLAMA; aynı anlamı doğal
+  Türkçeyle anlat. Anahtar kelime sayısını artırmak için dilbilgisini ASLA bozma
+- Her açıklamada, grubun anahtar kelimelerinden cümleye doğal yerleşen EN AZ BİR tanesini
+  BÜTÜN hâlinde kullan; diğer anahtar kelimeleri açıklamalara zorla doldurma
+- 30 karakterden uzun anahtar kelimeler başlığa SIĞMAZ; bunları yalnızca açıklamalarda kullan: {long_keywords}
+{completion_block}
+---
+
+'''
+
+_CANDIDATES_EDITS = (
+    ("- 3-15 adet başlık üret", "- {headline_instruction}"),
+    ("- 2-4 adet açıklama üret", "- {description_instruction}"),
+    ("# NEGATİF ANAHTAR KELİME KURALLARI",
+     _KEYWORD_USE_BLOCK + "# NEGATİF ANAHTAR KELİME KURALLARI"),
+)
+
+
+def _derive_candidates_prompt(base: str) -> str:
+    for old, new in _CANDIDATES_EDITS:
+        if base.count(old) != 1:
+            raise RuntimeError(f"ADS_RSA_GENERATION_PROMPT kaymış, bulunamadı: {old!r}")
+        base = base.replace(old, new)
+    return base
+
+
+ADS_RSA_CANDIDATES_PROMPT = _derive_candidates_prompt(ADS_RSA_GENERATION_PROMPT)
 
 
 # ==================== HEADLINE REGENERATION PROMPT ====================

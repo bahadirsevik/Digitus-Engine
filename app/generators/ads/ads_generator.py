@@ -32,6 +32,7 @@ from app.schemas.ads import (
     DescriptionDBSchema,
     NegativeKeywordDBSchema,
 )
+from app.generators.ads.validators import build_standard_report
 
 
 class AdsGenerator:
@@ -96,17 +97,12 @@ class AdsGenerator:
         
         logger.info(f"Found {len(keywords)} keywords in ADS pool")
         
-        # Apply max_groups limit if specified
-        if request.max_groups:
-            max_keywords = request.max_groups * 5  # Approximate
-            keywords = keywords[:max_keywords]
-        
-        # Step 2: Group keywords
+        # Step 2: Group keywords (max_groups caps the group count; the pool is never cut)
         keyword_inputs = [
             KeywordForGrouping(id=k["id"], keyword=k["keyword"])
             for k in keywords
         ]
-        groups = self.grouper.group_keywords(keyword_inputs)
+        groups = self.grouper.group_keywords(keyword_inputs, max_groups=request.max_groups)
         
         logger.info(f"Created {len(groups)} keyword groups")
         
@@ -316,6 +312,7 @@ class AdsGenerator:
                     group_theme=group.theme,
                     target_keyword_ids=group.keyword_ids,
                     target_keywords=group.keywords,
+                    fill_keyword_ids=group.fill_keyword_ids,
                     headlines_generated=group.headlines_generated,
                     headlines_eliminated=group.headlines_eliminated,
                     dki_converted_count=group.dki_converted_count,
@@ -411,6 +408,7 @@ class AdsGenerator:
                 group_theme=src.group_theme,
                 target_keyword_ids=src.target_keyword_ids,
                 target_keywords=src.target_keywords,
+                fill_keyword_ids=src.fill_keyword_ids,
                 headlines_generated=src.headlines_generated,
                 headlines_eliminated=src.headlines_eliminated,
                 dki_converted_count=src.dki_converted_count,
@@ -460,6 +458,7 @@ class AdsGenerator:
             theme=source_group.group_theme or "",
             keyword_ids=source_group.target_keyword_ids or [],
             keywords=source_group.target_keywords or [],
+            fill_keyword_ids=source_group.fill_keyword_ids or [],
         )
         self.rsa_generator = RSAGenerator(
             ai_service=self.ai_service,
@@ -492,6 +491,14 @@ class AdsGenerator:
             group_theme=group.group_theme,
             target_keyword_ids=group.target_keyword_ids or [],
             target_keywords=group.target_keywords or [],
+            fill_keyword_ids=group.fill_keyword_ids or [],
+            standard_report=build_standard_report(
+                group.target_keywords or [],
+                group.target_keyword_ids or [],
+                group.fill_keyword_ids,
+                [h.headline_text for h in group.headlines],
+                [d.description_text for d in group.descriptions],
+            ),
             headlines=[HeadlineDBSchema(
                 id=h.id,
                 text=h.headline_text,

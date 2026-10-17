@@ -16,6 +16,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+from app.exporters.ads_standard_format import standard_lines
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.safe_text import safe_paragraph_text
 from app.exporters.seo_checklist_format import (
@@ -493,6 +494,8 @@ class PdfExporter(BaseExporter):
                 elements.append(self._p(f'Tema: {g.group_theme}'))
             if g.target_keywords:
                 elements.append(self._p(f'Hedef Kelimeler: {", ".join(g.target_keywords)}'))
+            for line in standard_lines(g):
+                elements.append(self._p(line))
 
             if g.headlines:
                 elements.append(Spacer(1, 0.2*cm))

@@ -11,6 +11,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from datetime import datetime
 
+from app.exporters.ads_standard_format import standard_lines
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.seo_checklist_format import (
     ALT_TEXT_HEADING, FAQ_HEADING, geo_evaluation_text, manual_check_lines,
@@ -457,6 +458,8 @@ class DocxExporter(BaseExporter):
             
             if g.target_keywords:
                 doc.add_paragraph(f'Hedef Kelimeler: {", ".join(g.target_keywords)}')
+            for line in standard_lines(g):
+                doc.add_paragraph(line)
 
             headline_line = ' | '.join([h.headline_text for h in g.headlines[:3]])
             description_text = ' '.join([d.description_text for d in g.descriptions[:2]])

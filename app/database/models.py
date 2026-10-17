@@ -587,6 +587,9 @@ class AdGroup(Base):
     group_theme = Column(Text)
     target_keyword_ids = Column(JSON)  # [1, 5, 12, ...]
     target_keywords = Column(JSON)     # ["kelime1", "kelime2", ...]
+    # 15 KW'ye tamamlamak için gruplayıcının yerleştirdiği/taşıdığı KW id'leri
+    # (target_keyword_ids'in alt kümesi). NULL = bilinmiyor (eski kayıt).
+    fill_keyword_ids = Column(JSON, nullable=True)
     
     # Validation stats
     headlines_generated = Column(Integer, default=0)

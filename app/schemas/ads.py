@@ -40,6 +40,7 @@ class KeywordGroupSchema(BaseModel):
     theme: str = Field(..., description="Grup temasÄ±/ortak Ã¶zellik")
     keyword_ids: List[int]
     keywords: List[str]
+    fill_keyword_ids: List[int] = Field(default_factory=list)  # grouper'in yerlestirdigi/tasidigi kelimeler
 
 
 class GroupingResponse(BaseModel):
@@ -128,6 +129,8 @@ class AdGroupFullSchema(BaseModel):
     theme: str
     keyword_ids: List[int]
     keywords: List[str]
+    # Gruplayıcının 15 KW'ye tamamlamak için yerleştirdiği/taşıdığı id'ler (DB'ye yazılır)
+    fill_keyword_ids: List[int] = Field(default_factory=list)
     
     headlines: List[HeadlineSchema]
     descriptions: List[DescriptionSchema]
@@ -144,6 +147,26 @@ class AdGroupFullSchema(BaseModel):
     # exclude=True: API yanıtına/serileştirmeye ASLA girmez, DB'ye yazılmaz.
     dropped_negatives: List[Dict[str, Any]] = Field(default_factory=list, exclude=True)
 
+    # 15 başlık / 4 KW'li açıklama hedefinden eksik kalan sayı (15 KW standardı) —
+    # dropped_negatives gibi yalnız worker'a taşınır, API'ye/DB'ye girmez.
+    missing_headlines: int = Field(default=0, exclude=True)
+    missing_kw_descriptions: int = Field(default=0, exclude=True)
+
+
+class AdGroupStandardReport(BaseModel):
+    """15 KW teslim standardı raporu — okuma anında hesaplanır, yalnız olgu ve liste."""
+    keyword_count: int
+    headline_count: int
+    kw_description_count: int
+    missing_headlines: int          # max(0, 15 - headline_count)
+    missing_kw_descriptions: int    # max(0, 4 - kw_description_count)
+    below_standard: bool            # eksik başlık/KW'li açıklama var (KW kapsam eksikliği SAYILMAZ, K4)
+    pool_below_target: bool         # keyword_count < ADS_KEYWORDS_PER_GROUP
+    keywords_in_headlines: List[str]
+    keywords_description_only: List[str]
+    keywords_unused: List[str]
+    fill_keywords: List[str]        # fill_keyword_ids'e karşılık gelen hedef KW'ler (girdi sırası)
+
 
 class AdGroupDBSchema(BaseModel):
     """Ad group from database."""
@@ -152,6 +175,8 @@ class AdGroupDBSchema(BaseModel):
     group_theme: Optional[str]
     target_keyword_ids: List[int]
     target_keywords: List[str]
+    fill_keyword_ids: List[int] = Field(default_factory=list)  # NULL -> []
+    standard_report: Optional[AdGroupStandardReport] = None
     
     headlines: List[HeadlineDBSchema]
     descriptions: List[DescriptionDBSchema]

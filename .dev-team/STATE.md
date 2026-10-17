@@ -1,9 +1,97 @@
 # Current Status
 
-Last updated: 2026-10-11
+Last updated: 2026-10-17
 Branch: `deploy/lean-taslak`
-Active phase: **Gemini→Claude karsilastirma — FAZ 1 KOSULARI TAMAM (11-12.10): Hissefy ws21 + Digitus ws29 × {G/G/G, Aday, G/G/C} + profil kiyasi; cikti paketi benchmark/faz1/export/ — degerlendirme PATRONDA**
-Kaynak plan: `../Digitus-Engine-main/plan_claude_gemini_karsilastirma.md` rev.6 (konsey 2 tur + Codex 3 inceleme GO).
+Active phase: **ADS 15 KW teslim standardi — FAZ 1-4 KOD TAMAM + TAM PAKET + TARAYICI KONTROLU TAMAM, commit YOK; CANLI DENEME YAPILDI (17.10, ws29 run 83, set 27 draft) — kullanici sonuclari inceliyor; commit+push ONAY BEKLIYOR; sunucu dagitimi AYRI**
+Kaynak plan: `plan_ads_15kw_standardi.md` rev.2.1 (Codex 3 inceleme, "Faz 1'e baslanabilir").
+Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (17.10, dev-team 1 Backend Dev gorevi Sonnet+high; Architect/Konsey KOSMADI — plan Codex onayli, bilinen kalip)
+
+- ADS gruplama: havuz kirpmasi (`max_groups*5`) silindi, `max_groups` yalniz grup sayisini sinirlar;
+  `G = max(1, n//15)`, dengeli hedef boyutlar; AI'ya tam G grup + boyutlar; deterministik `_repair_groups`
+  (fazla/eksik grup, unutulan/tekrarlanan/bilinmeyen id) her zaman tam G grup x tam boyut, her KW bir kez;
+  tasinan/yerlestirilen KW `KeywordGroupSchema.fill_keyword_ids` (yalniz bellekte; DB Faz 4);
+  "Diger Kelimeler" kaldirildi; fallback ayni boyutlar; Turkce-dogru baslik (`_turkish_title`, İstanbul).
+- Testler (docker-compose.test.yml, hedefli): yeni `tests/unit/test_ads_keyword_grouping.py` (18) +
+  mevcut ADS testleri = 84 passed; grouper'a dokunan test_usage_telemetry + test_ai_parse_hardening = 51 passed.
+  TAM PAKET KOSMADI (commit oncesi Faz 5'te).
+- dev-team `references/model-selection-guide.md` 5.5 nesline guncellendi (Haiku 5.5 1M + $0.10/$0.50;
+  oranlar 100x/40x/20x/1x).
+- Faz 2 (17.10): `validators.keyword_in_text` + `keyword_coverage` (site_analyzer normalize_turkish,
+  kelime sinirli ardisik ifade, DKI varsayilani `DKIValidator.VALID_PATTERN` ile; ek toleransi YOK);
+  `tests/unit/test_ads_keyword_coverage.py` (13). Hedefli ADS paketi 97 passed. Henuz hicbir yere bagli degil (Faz 3).
+- Kullanici duzeltmeleri (17.10): 15 -> `app/core/constants.py` `ADS_KEYWORDS_PER_GROUP`; G==1'de AI cagrisi
+  yok ONAYLANDI; bolunen grubun ikinci yarisi da `fill_keyword_ids`'e yazilir (test eklendi). Hedefli 149 passed.
+- COMMIT AYRIMI (kullanici, Faz 5'te): model rehberi (`.claude/skills/dev-team/references/model-selection-guide.md`)
+  ADS degisikliklerinden AYRI commit. Commit + push yalniz Faz 5'te.
+- Faz 3 (17.10, Backend Dev Sonnet+high): `rsa_generator` aday havuzu (18-20 baslik / 5-6 aciklama), [:15]/[:4] kesmeleri
+  kalkti, grounding SONRASI dedup + KW kontrolu, TEK tamamlama (strict retry'in yerine; yalniz sayi eksikse), acgozlu
+  kapsam secimi, sert minimum fallback degismedi, eksik `missing_headlines`/`missing_kw_descriptions` (exclude=True) +
+  task result_data `standard_shortfalls`. MUHURLU `ADS_RSA_GENERATION_PROMPT` (benchmark/idiomatic_prompts manifest SHA)
+  DOKUNULMADI; uretim turetilmis `ADS_RSA_CANDIDATES_PROMPT` kullanir (import aninda 3 tam-metin degisim, kayarsa RuntimeError).
+  ADS ile ilgili unit+integration (-k) 564 passed / 32 skipped / 0 failed. Degisen eski testler: test_ads_negative_conflict
+  (strict retry prompt testi -> aday prompt), test_claim_grounding CannedAI (2. cagri bos RSA).
+- Maliyet notu: tamamlama artik SIK (temiz baslik<15 veya KW'li aciklama<4); baslik AI yeniden yazimi aday basina sinirsiz
+  (eskisi gibi); task time_limit=900 — Faz 5 canli denemede usage + sure olc. '%30' yalniz primary cikti TAHMINI.
+- Faz 4 (17.10, Backend+Frontend paralel, Sonnet): `AdGroup.fill_keyword_ids` (JSON nullable) + idempotent migration
+  `20261017_001` (down 20261011_001); ilk kayit/klon/regenerate/_model_to_schema/export'ta tasinir; okuma-ani
+  `validators.build_standard_report` -> `AdGroupDBSchema.standard_report`; export 4 formatta yalniz olgu+liste
+  (`app/exporters/ads_standard_format.py`); AdsPanel ozet + standart-alti rozeti + 4 liste. Fallback duzeltmesi `_top_up`:
+  temiz adaylar korunur, eksik tip yalniz sert minimuma kadar tamamlanir (hic temiz yoksa fallback 3/2 verir, eskiden 5 baslik).
+  Testler: ADS/export/migration -k 685 passed / 32 skipped / 0 failed (test DB alembic 20261017_001 uygulandi);
+  frontend lint+format+build OK, vitest 264 passed. TAM PAKET KOSMADI.
+- 17.10 dogrulama: TAM PAKET 5038 passed / 112 skipped / 2 failed — ikisi de test_hybrid_run_db (budget_summary'de
+  'deepseek'/'anthropic' anahtari yok); temiz HEAD worktree'sinde AYNI iki test AYNI KeyError ile dusuyor -> ONCEDEN VAR
+  (Faz 1 karsilastirma isi c1f5a53 civari), ADS'den bagimsiz. Bizim etkimiz: test_aday'daki 'pools[ADS] > 3 -> ads_grouping'
+  kosulu `>= 2*ADS_KEYWORDS_PER_GROUP` yapildi.
+- Tarayici (Playwright, gecici vite :5180, API_KEY container env'den): ws29 /ads 13 grubun 13'unde rapor blogu dogru;
+  mobil 390px yatay kaydirma ONCEDEN VAR (eski kodla da). Docker frontend :3000 HMR tuzagi: eski AdsPanel'i sunuyor ->
+  `docker-compose restart frontend` gerekir (yapilmadi). YEREL DB'ye (kullanici onayi) alembic 20261017_001 UYGULANDI;
+  celery_worker YENIDEN BASLATILMADI (eski kod) -> yerel canli denemeden once restart sart.
+- Model rehberi resmi sayfalarla dogrulandi (models/overview + pricing, 17.10); harness alias cozumu dogrulanmadi. AYRI commit.
+- CANLI DENEME 17.10 (yerel, Gemini 3.8-flash; once task_results/ad_sets/export bos + celery inspect bos, sonra yalniz
+  celery_worker restart): run 83, 60 ADS KW -> 4 grup x 15 KW, her grup 15 baslik + 4 KW'li aciklama, standard_shortfalls=[],
+  fill=[] (AI tam boyut verdi), tamamlama cagrisi GEREKMEDI. AI aday: 20/20/19/19 baslik, 0 elenen. KW baslikta 11/14/13/12
+  (50/60), yalniz aciklamada 5, hic 5 (biri 'en iyi seo ajansi' -> iddia kurali; 'seo ajansi istanbul' ~ 'Istanbul SEO Ajansi'
+  K7 siralama katiligi). Sure 51 sn (eski Gemini 12-13 grup: 113/139 sn). Usage 6 istek (grouping 1, rsa 4, micro_shorten 1),
+  11.570 in / 6.716 out, ~0,034 $. RSA cagri basina in +11%, out +2% (run 78 Gemini ortalamasina gore; '%30' tahmini ASILDI
+  degil, altinda); RSA toplam token ~%67 az (13 yerine 4 cagri). Aktif set 26 (v1) DEGISMEDI; yeni set 27 v2 DRAFT.
+  Gozlem: basliklarin cogu KW-only (CTA/fayda az) — K6 sonucu; SEO grubu web tasarim KW'leriyle genisletilmis.
+- KALITE DUZELTMELERI 17.10 (kullanici onayi 1-4, K6 DEGISMEDI): tum baslik/aciklama position='any' (tek nokta, generate_rsa sonu);
+  prompt 'yazildigi gibi' kalkti -> dogal Turkce oncelikli; `_dedup` DKI-acik `validators.kw_tokens` ile; gruplama prompt'lari
+  ad/tema TUM KW'yi kapsasin. Odakli: 689 passed + bilinen 2 hybrid KeyError. 2. CANLI: set 28 v3 DRAFT, 63 sn, 7 istek,
+  12.484 in / 7.633 out / 765 thought, ~0,041 $; aktif set 26 DEGISMEDI.
+  KARSILASTIRMA 27->28: baslik KW kapsami 50/60 -> 30/60 (katı K7; dogal varyantlar sayilmiyor); konum position_1 32 -> 0;
+  DKI/duz tekrar 2 -> 0; CTA 0 -> 6, keyword-tipi baslik 45 -> 25; sorgu-kalipli basliklar ('...Fiyat', '...Verme(k)',
+  'Ankara Pazarlama') 28'de YOK; ACIKLAMALARDA bozuk KW yerlestirme SURUYOR ('dijital pazarlama ajanslari istanbul
+  cozumlerini', 'dijital reklam ajans desteğiyle'); grup adlari 3/4 genisledi, SEO grubu (6 web KW) HALA yalniz SEO adli;
+  Dijital grubunda tema-disi marka hizmeti basliklari (Web Tasarim, E-Ticaret). n=1 her set; gruplama ikisinde AYNI.
+- PROMPT TUR 3 (17.10, kullanici onayi): turetilmis prompt'ta 'oncelikle kullan' (mutlaka DEGIL), aciklamada 'cumleye dogal
+  yerlesen EN AZ BIR KW, digerlerini zorla doldurma' (yasak listesi YOK), 'basliklar BU GRUBUN KW + temasindan; marka bilgisi
+  yalniz temayla ilgiliyse'; tamamlama aciklama talimati ayni. Muhurlu prompt dokunulmadi. HEDEFLI DENEME (grup 228+229,
+  DB'ye YAZILMADI: collector.flush no-op + rollback; once/sonra sayim ayni): TOPLAM 2 cagri (yalniz ads_rsa; kisaltma/iddia/
+  tamamlama 0), 5.026 in / 2.576 out, ~0,013 $. Aciklamalar 8'de 7 dogal; tema kaymasi yok; baslikta KW 8 ve 6.
+  YENI BULGU: brand_usp bossa `_generate_raw_rsa` 'Kaliteli urun ve hizmet' varsayilanini prompt'a koyuyor -> metne siziyor
+  (2 baslik + 1 aciklama). Onceden var; duzeltme ONAY BEKLIYOR. Odakli 689 passed + bilinen 2 hybrid KeyError.
+  Set 28 (draft) grup 226 adi/temasi SQL ile 'SEO ve Web Tasarim Hizmetleri' yapildi; set 26 aktif DOKUNULMADI.
+  NOT: set 28 metinleri eski prompt'la; yeni prompt yalniz sonraki uretimlerde.
+- USP DUZELTMESI 17.10: bos USP'de jenerik 'Kaliteli urun ve hizmet' kaldirildi (api generation.py iki uc -> trusted or
+  profil USP or ''; rsa_generator prompt '—'; fallback aciklama on eki yalniz USP varsa). Testler: unit 2 + integration 1;
+  odakli 701 passed + bilinen 2 hybrid. Benchmark hybrid_run.py DOKUNULMADI.
+- 3. TAM URETIM (son kod): set 29 v4 DRAFT, 50 sn, 5 istek (grouping 1 + rsa 4), 12.451 in / 6.635 out, ~0,034 $;
+  eksik yok; baslikta KW 28/60; konum hep any; DKI/duz tekrar 0; 'Kaliteli' 0. Aktif 26 + draft 27/28 metinleri DEGISMEDI.
+  BULGU: gercek akista display USP = profil urunleri ('Web Tasarim, Web Yazilim, E-Ticaret Sistemleri -- Dijital Pazarlama
+  ve Yazilim Ajansi') -> her grup prompt'una giriyor -> tema kaymasinin buyuk olasi kaynagi; hedefli deneme USP='—' ile
+  kosulmustu (temsili DEGILDI). SEO grup adi 3 koşuda da dar kaldi. `{KeyWord:Sosyal Medya }` (sonda bosluk) DKI kusuru.
+- DKI BOSLUK DUZELTMESI 17.10: kaynak HeadlineValidator._apply_shortening_rules ('Hizmetleri' -> '' kurali
+  '{KeyWord:Sosyal Medya }' birakiyordu); cift bosluk + '}' onu bosluk temizlenir; test_dki_validator +2 test.
+- SON KONTROLLER: tam paket 5052 passed / 112 skipped / 2 failed (bilinen hybrid KeyError, HEAD'de de);
+  frontend lint+format+build OK, vitest 264. git diff --check temiz, CRLF yok.
+- COMMIT HAZIR (YAPILMADI): 36 dosya (28 M + 8 yeni), mesaj scratchpad ads_commit_msg.txt; HARIC: model rehberi (ayri),
+  benchmark/faz1/export xlsx, ponytail_audit (bizim degil). Commit / push / dagitim AYRI onaylarla.
+- DEPLOY (kullanici: dagitim asamasinda): mevcut DB'ye `alembic upgrade head` + celery_worker restart (once running task kontrolu).
+- Worker restart deploy'da sart.
 
 ## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
 

@@ -11,6 +11,8 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from app.schemas.ads import AdGroupStandardReport
+
 
 # ==================== ENUMS ====================
 
@@ -233,6 +235,9 @@ class AdGroupData(BaseModel):
     group_name: str
     group_theme: Optional[str] = None
     target_keywords: List[str] = []
+    fill_keyword_ids: List[int] = []
+    # 15 KW teslim standardı raporu (yalnız olgu ve liste; yüzde/oran/puan yok)
+    standard_report: Optional[AdGroupStandardReport] = None
     
     headlines: List[HeadlineData] = []
     descriptions: List[DescriptionData] = []

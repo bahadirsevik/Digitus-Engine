@@ -330,6 +330,15 @@ def start_bulk_seo_generation(scoring_run_id: int, keyword_ids: List[int], tone:
 
 # ==================== GOOGLE ADS TASKS ====================
 
+def _standard_shortfalls(groups) -> list:
+    """15 başlık / 4 KW'li açıklama hedefinden eksik kalan gruplar (yalnız sıfırdan farklılar)."""
+    return [
+        {"group": g.name, "missing_headlines": g.missing_headlines,
+         "missing_kw_descriptions": g.missing_kw_descriptions}
+        for g in groups if g.missing_headlines or g.missing_kw_descriptions
+    ]
+
+
 @celery_app.task(bind=True, name="generation.ads_generate", time_limit=900, max_retries=2)
 def generate_ads_task(
     self,
@@ -474,6 +483,7 @@ def generate_ads_task(
             extra = {"operation": "group_regenerate",
                      "source_set_id": source_set_id,
                      "source_group_id": source_group_id,
+                     "standard_shortfalls": _standard_shortfalls([regenerated]),
                      "usage": collector.finalize()}
         else:
             request = AdsGenerateRequest(
@@ -499,6 +509,7 @@ def generate_ads_task(
                 "operation": "full",
                 "headline_count": result.total_headlines,
                 "total_keywords": result.total_keywords,
+                "standard_shortfalls": _standard_shortfalls(result.ad_groups),
                 "usage": collector.finalize(),
             }
 

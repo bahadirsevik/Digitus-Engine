@@ -7,10 +7,17 @@ Contains:
 - DKIValidator: Regex-based DKI format validation
 """
 import re
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from loguru import logger
 
+from app.core.constants import (
+    ADS_DESCRIPTIONS_PER_GROUP,
+    ADS_HEADLINES_PER_GROUP,
+    ADS_KEYWORDS_PER_GROUP,
+)
+from app.core.site_analyzer.turkish_normalizer import normalize_turkish
 from app.generators.ai_service import scoped
+from app.schemas.ads import AdGroupStandardReport
 from app.generators.ads.prompt_templates import (
     HEADLINE_REGENERATION_PROMPT,
     DESCRIPTION_SHORTENING_PROMPT,
@@ -95,6 +102,8 @@ class HeadlineValidator:
         result = text
         for old, new in self.SHORTENING_RULES.items():
             result = result.replace(old, new)
+        # Silinen kelime boşluk bırakır: çift boşluk ve DKI'de "}" önü ("{KeyWord:Sosyal Medya }")
+        result = re.sub(r"\s+\}", "}", re.sub(r"\s{2,}", " ", result))
         return result.strip()
     
     def _regenerate_with_ai(
@@ -604,3 +613,74 @@ def partition_negatives(negatives, targets, group_name: str = ""):
             "rule": rule,
         })
     return kept, dropped
+
+
+# ==================== KW KAPSAM ÖLÇÜMÜ (plan_ads_15kw_standardi §3) ====================
+
+def kw_tokens(text: str) -> List[str]:
+    """DKI varsayılanı açılır, Türkçe katlanır, alfanümerik olmayan her şey sınırdır."""
+    text = re.sub(DKIValidator.VALID_PATTERN, r"\2", text or "")
+    return re.findall(r"[^\W_]+", normalize_turkish(text))
+
+
+def keyword_in_text(keyword: str, text: str) -> bool:
+    """KW metinde bütün, ardışık, kelime sınırlı bir ifade olarak geçiyor mu?
+
+    Bizim deterministik kapsam ölçümümüz — Google'ın Ad Strength hesabı değil.
+    Türkçe ek toleransı bilinçli YOK ("laptop fiyatı" != "Laptop Fiyatları", K7).
+    """
+    kw = kw_tokens(keyword)
+    if not kw:
+        return False
+    toks = kw_tokens(text)
+    n = len(kw)
+    return any(toks[i:i + n] == kw for i in range(len(toks) - n + 1))
+
+
+def keyword_coverage(
+    target_keywords: List[str], headlines: List[str], descriptions: List[str]
+) -> Dict[str, str]:
+    """Her hedef KW için "headline" | "description" | "none" (girdi sırası korunur)."""
+    result: Dict[str, str] = {}
+    for kw in target_keywords:
+        if any(keyword_in_text(kw, h) for h in headlines):
+            result[kw] = "headline"
+        elif any(keyword_in_text(kw, d) for d in descriptions):
+            result[kw] = "description"
+        else:
+            result[kw] = "none"
+    return result
+
+
+def build_standard_report(
+    target_keywords: List[str],
+    target_keyword_ids: List[int],
+    fill_keyword_ids: Optional[List[int]],
+    headlines: List[str],
+    descriptions: List[str],
+) -> AdGroupStandardReport:
+    """15 KW teslim standardı raporu (okuma + export için TEK hesap yeri).
+
+    Yalnız olgu ve liste: eksik başlık / KW'li açıklama "standart altı" yapar;
+    KW kapsam eksikliği yapmaz (K4). NULL/boş fill -> fill_keywords boş.
+    """
+    coverage = keyword_coverage(target_keywords, headlines, descriptions)
+    kw_descriptions = sum(
+        any(keyword_in_text(kw, d) for kw in target_keywords) for d in descriptions
+    )
+    missing_headlines = max(0, ADS_HEADLINES_PER_GROUP - len(headlines))
+    missing_kw_descriptions = max(0, ADS_DESCRIPTIONS_PER_GROUP - kw_descriptions)
+    fill_ids = set(fill_keyword_ids or [])
+    return AdGroupStandardReport(
+        keyword_count=len(target_keywords),
+        headline_count=len(headlines),
+        kw_description_count=kw_descriptions,
+        missing_headlines=missing_headlines,
+        missing_kw_descriptions=missing_kw_descriptions,
+        below_standard=bool(missing_headlines or missing_kw_descriptions),
+        pool_below_target=len(target_keywords) < ADS_KEYWORDS_PER_GROUP,
+        keywords_in_headlines=[k for k in target_keywords if coverage[k] == "headline"],
+        keywords_description_only=[k for k in target_keywords if coverage[k] == "description"],
+        keywords_unused=[k for k in target_keywords if coverage[k] == "none"],
+        fill_keywords=[k for k, i in zip(target_keywords, target_keyword_ids) if i in fill_ids],
+    )

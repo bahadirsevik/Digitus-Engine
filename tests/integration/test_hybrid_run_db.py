@@ -38,6 +38,7 @@ import pytest
 
 import app.core.benchmark.hybrid_run as hr
 from app.config import settings
+from app.core.constants import ADS_KEYWORDS_PER_GROUP
 from app.core.benchmark.claude_bakeoff_plan import (
     CONTENT_STAGES, O_STAGES, Y_STAGES, faz1_blockers,
 )
@@ -440,7 +441,7 @@ def test_aday_end_to_end(db_session, world, open_plan, monkeypatch):
     for stage in ("seo_generation", "ads_rsa", "social_brief_ideas",
                   "social_brief_contents"):
         assert stage in seen and routes[stage] == {("anthropic", k3["content"])}
-    # Gemini'de kalan içerik aşamaları da çalıştı (≤3 kelimede gruplama AI'sız tek grup)
+    # Gemini'de kalan içerik aşamaları da çalıştı (tek grup = gruplama AI'sız; 15 KW standardı)
     assert {"geo_compliance", "social_brief_categories"} <= seen
     # bu çalıştırmada iç içe (guard'sız) mikro aşama beklenmez (bkz. ayrı test)
     assert fake.count("claim_rewrite") == fake.count("micro_shorten") == 0
@@ -448,7 +449,8 @@ def test_aday_end_to_end(db_session, world, open_plan, monkeypatch):
     # -- havuzlar ----------------------------------------------------------
     pools = _pool_counts(db_session, run.id)
     assert {"ADS", "SEO", "SOCIAL"} <= set(pools) and all(pools.values()), pools
-    if pools["ADS"] > 3:
+    # Gruplama AI'ı yalnız ≥2 grup çıkan havuzda çağrılır (G = n // 15)
+    if pools["ADS"] >= 2 * ADS_KEYWORDS_PER_GROUP:
         assert "ads_grouping" in seen
 
     # -- içerik ------------------------------------------------------------

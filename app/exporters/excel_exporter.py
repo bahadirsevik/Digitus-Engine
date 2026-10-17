@@ -16,6 +16,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.safe_text import safe_excel_text as _sx
 from app.exporters.seo_checklist_format import (
@@ -380,7 +381,8 @@ class ExcelExporter(BaseExporter):
 
         # Reklam Grupları
         ws = wb.create_sheet("Reklam Grupları")
-        headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı', 'Negatif Sayısı']
+        headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı',
+                   'Negatif Sayısı'] + STANDARD_HEADERS
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
@@ -390,11 +392,14 @@ class ExcelExporter(BaseExporter):
                 _sx(', '.join(g.target_keywords)),
                 len(g.headlines),
                 len(g.descriptions),
-                len(g.negative_keywords)
+                len(g.negative_keywords),
+                *[_sx(v) if isinstance(v, str) else v for v in standard_cells(g)],
             ])
 
         ws.column_dimensions['A'].width = 30
         ws.column_dimensions['B'].width = 40
+        for col in 'HIJKL':
+            ws.column_dimensions[col].width = 40
 
         # Başlıklar
         ws = wb.create_sheet("Başlıklar")

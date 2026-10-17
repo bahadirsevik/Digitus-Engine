@@ -42,6 +42,12 @@ ADS_FINAL_CAPACITY = 60
 SEO_FINAL_CAPACITY = 30
 SOCIAL_FINAL_CAPACITY = 30
 
+# ADS reklam grubu başına hedef KW sayısı (15 KW teslim standardı, plan_ads_15kw_standardi K2)
+ADS_KEYWORDS_PER_GROUP = 15
+# RSA grup başına hedef metin sayıları (Google üst sınırı: 15 başlık / 4 açıklama)
+ADS_HEADLINES_PER_GROUP = 15
+ADS_DESCRIPTIONS_PER_GROUP = 4
+
 # Havuz çarpanı (testlerde kullanılıyor olabilir)
 POOL_MULTIPLIER = 2.0
 
