@@ -50,3 +50,25 @@ def test_empty_name_uses_fallback_with_extension():
 
 def test_inline_disposition():
     assert content_disposition("a.pdf", "inline").startswith("inline; ")
+
+
+def test_download_filename_uses_profile_company_name():
+    from datetime import date
+    from types import SimpleNamespace
+
+    from app.core.http_headers import download_filename
+
+    ws = SimpleNamespace(profile_data={"company_name": "Uzm. Dr. Şükrü İçli"}, name="x.com")
+    assert (
+        download_filename(ws, "Kelime_Havuzu", ".xlsx", date(2026, 10, 17))
+        == "Optimice_Uzm_Dr_Sukru_Icli_Kelime_Havuzu_2026-10-17.xlsx"
+    )
+    # Firma adi yoksa workspace adi; o da yoksa yer tutucu
+    fallback = SimpleNamespace(profile_data=None, name="hissefy.com")
+    assert download_filename(fallback, "Rapor", ".pdf", date(2026, 1, 2)) == (
+        "Optimice_hissefy_com_Rapor_2026-01-02.pdf"
+    )
+    empty = SimpleNamespace(profile_data={}, name="")
+    assert download_filename(empty, "Rapor", ".pdf", date(2026, 1, 2)) == (
+        "Optimice_Marka_Rapor_2026-01-02.pdf"
+    )

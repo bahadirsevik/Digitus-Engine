@@ -31,7 +31,7 @@ from app.core.workspace import verify_workspace
 from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
 from app.dependencies import get_db
-from app.core.http_headers import content_disposition
+from app.core.http_headers import content_disposition, download_filename
 from app.schemas.keyword import (
     KeywordCreate,
     KeywordImportRequest,
@@ -194,7 +194,7 @@ def export_keyword_pool_xlsx(
 
     from app.exporters.safe_text import safe_excel_text
 
-    verify_workspace(db, brand_profile_id)
+    workspace = verify_workspace(db, brand_profile_id)
 
     rows = (
         db.query(Keyword, WorkspaceKeyword)
@@ -236,7 +236,7 @@ def export_keyword_pool_xlsx(
     wb.save(output)
     output.seek(0)
 
-    filename = f"digitus_kelime_havuzu_{brand_profile_id}.xlsx"
+    filename = download_filename(workspace, "Kelime_Havuzu", ".xlsx")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -13,7 +13,7 @@ from sqlalchemy import asc, desc, func, nullslast
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
-from app.core.http_headers import content_disposition
+from app.core.http_headers import content_disposition, download_filename
 from app.core.scoring.score_engine import ScoreEngine
 from app.core.trial_authorization import (
     authorization_record, lock_workspace, matching_combination,
@@ -1036,7 +1036,9 @@ def export_scoring_xlsx(
     wb.save(output)
     output.seek(0)
 
-    filename = f"scoring_run_{run_id}_{run.run_name or 'export'}.xlsx"
+    filename = download_filename(
+        verify_workspace(db, brand_profile_id), "Skor_Tablosu", ".xlsx"
+    )
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

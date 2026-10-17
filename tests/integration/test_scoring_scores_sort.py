@@ -33,7 +33,7 @@ def _scores(client, run_id, workspace_id, **params):
 def test_xlsx_export_with_non_latin1_run_name_returns_200(
     client, make_workspace, make_scoring_run, make_keyword, make_keyword_score
 ):
-    ws = make_workspace(name="A", status="confirmed")
+    ws = make_workspace(name='Şişli İçerik "test"', status="confirmed")
     run = make_scoring_run(
         brand_profile_id=ws.id,
         name='Şişli İçerik "test"',
@@ -49,9 +49,11 @@ def test_xlsx_export_with_non_latin1_run_name_returns_200(
 
     assert response.status_code == 200
     disposition = response.headers["content-disposition"]
-    assert disposition.startswith("attachment; filename=\"")
+    # Marka adi (workspace adi) ASCII'ye katlanir, tirnaklar duser
+    assert disposition.startswith(
+        "attachment; filename=\"Optimice_Sisli_Icerik_test_Skor_Tablosu_"
+    )
     assert "filename*=UTF-8''" in disposition
-    assert "%C5%9E" in disposition  # Ş
     assert disposition.count('"') == 2  # kullanici tirnaklari header'i bozmaz
 
 
