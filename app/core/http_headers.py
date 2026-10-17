@@ -8,6 +8,8 @@ uclari bu yardimciyi kullanmalidir.
 
 import os
 import re
+from datetime import date
+from typing import Optional
 from urllib.parse import quote
 
 _TR_FOLD = str.maketrans({
@@ -39,3 +41,14 @@ def content_disposition(filename: str, disposition: str = "attachment") -> str:
 
     encoded = quote(cleaned or fallback, safe="")
     return f"{disposition}; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+
+
+def download_filename(workspace, label: str, ext: str, day: Optional[date] = None) -> str:
+    """Kullaniciya inen dosya adi: ``Optimice_<Marka>_<Icerik>_<YYYY-AA-GG><ext>``.
+
+    Marka = profildeki "Firma adi" (company_name), yoksa workspace adi; ASCII'ye
+    katlanir, harf/rakam disi her sey ``_`` olur.
+    """
+    brand = (workspace.profile_data or {}).get("company_name") or workspace.name or ""
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", str(brand).translate(_TR_FOLD)).strip("_")
+    return f"Optimice_{slug or 'Marka'}_{label}_{(day or date.today()).isoformat()}{ext}"

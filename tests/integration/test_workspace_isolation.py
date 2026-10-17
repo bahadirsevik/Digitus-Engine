@@ -655,7 +655,7 @@ def test_export_task_updates_export_job_status_and_filepath(
     updated = db_session.query(ExportJob).filter(ExportJob.id == export_id).one()
     assert updated.status == "completed"
     assert updated.progress == 100
-    assert updated.file_name
+    assert updated.file_name.startswith("Optimice_")
     assert updated.filepath
     assert Path(updated.filepath).exists()
 
