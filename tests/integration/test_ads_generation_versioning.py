@@ -611,12 +611,13 @@ def test_clone_and_regenerate_leaves_source_untouched(
 
 
 class _FakeRsaAI:
-    """Geçerli, iddiasız RSA cevabı: 15 başlık + 4 KW'li açıklama (tamamlama yok)."""
+    """Geçerli, iddiasız RSA cevabı: 15 başlık (3 CTA) + 4 KW'li açıklama (tamamlama yok)."""
 
     def complete_json(self, prompt, max_tokens=None, response_schema=None):
         return json.dumps({
-            "headlines": [{"text": f"Aday Başlık {c}", "type": "benefit", "position": "any"}
-                          for c in "ABCDEFGHIJKLMNO"],
+            "headlines": [{"text": t, "type": "benefit", "position": "any"} for t in
+                          [f"Aday Başlık {c}" for c in "ABCDEFGHIJKL"]
+                          + ["Hemen Arayın", "Teklif Alın", "Bize Ulaşın"]],
             "descriptions": [{"text": t, "type": "value_prop", "position": "any"} for t in (
                 "Laptop uno için hızlı teslimat.", "Laptop uno modellerini karşılaştırın.",
                 "Laptop dos seçeneklerini keşfedin.", "Laptop dos fırsatlarını inceleyin.")],
@@ -682,7 +683,8 @@ def test_fill_keyword_ids_survive_save_clone_regenerate_and_read(
     assert regenerated.fill_keyword_ids == [11]
     row = db_session.query(AdGroup).filter_by(generation_set_id=target2.id).one()
     assert row.fill_keyword_ids == [11]
-    assert (regenerated.missing_headlines, regenerated.missing_kw_descriptions) == (0, 0)
+    assert (regenerated.missing_headlines, regenerated.missing_kw_descriptions,
+            regenerated.missing_cta) == (0, 0, 0)
 
 
 # ---------------------------------------------------------------------------

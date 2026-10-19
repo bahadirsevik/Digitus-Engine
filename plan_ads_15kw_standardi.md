@@ -202,3 +202,33 @@ Bilinen sınırlamalar:
    "Sosyal Medya Danışmanlık", "E Ticaret Ajansı" gibi dilbilgisi kusurları görülebilir.
 5. Gözlemler tek koşuya dayanır; oran olarak genelleştirilemez.
 6. Taslak setler ajans incelemesi olmadan aktif yapılmamalı.
+
+## 10. Ajans geri bildirimi: KW kapsamı + en az 3 CTA (19.10.2026, kullanıcı + Codex mutabık)
+
+Kararlar (K4 ve K6'nın yerini alır):
+- **K6' — teslim şartı:** son seçilen 15 başlığın **en az 3'ü CTA** (`ADS_MIN_CTA_HEADLINES = 3`).
+  Sağlanamazsa grup "standart altı" (`missing_cta`). Sabitleme (pin) yok; 3 CTA her gösterimi garanti etmez.
+- **K4' — optimizasyon hedefi:** gruptaki tüm KW'leri kullanmayı hedefle; doğal Türkçe, anlam, 30 karakter ve mesaj
+  çeşitliliği içinde mümkün olan en yüksek **birebir** kapsam. Zorunlu değil; uyarlanmış kullanım bu sürümde raporlanmaz.
+- **Seçim önceliği:** temiz/geçerli metin → en az 3 CTA → bu koşulda en yüksek birebir KW kapsamı. CTA'yı 3'ün üstüne
+  çıkarmak için kapsam feda edilmez. CTA + KW birleşik başlıklar ("SEO Ajansı İçin Teklif Alın") tercih edilir.
+- **CTA tespiti kodda:** Türkçe emir kalıbı, kelime sınırlı, başlık sonunda (ör. "Teklif Alın" CTA, "Teklif Alma Süreci"
+  değil). AI'ın `type` etiketine güvenilmez. CTA'nın hizmete uygunluğu prompt kuralıdır (kod yargılamaz).
+- **Tamamlama (tek çağrı/grup, değişmedi):** tetik = başlık < 15 VEYA KW'li açıklama < 4 VEYA son seçimde CTA < 3.
+  Yalnız KW eksiği çağrı açmaz; çağrı açılırsa eksik KW'ler aynı çağrıda istenir. Başlık sayısı tamken de eksik CTA
+  kadar (+yedek) yeni CTA adayı istenir; seçim bunların mevcut başlıkların yerine geçmesine izin verir.
+  Yeni sete yalnız yukarıdaki öncelik sırasında daha iyiyse geçilir.
+- **Rapor:** grup başına CTA sayısı + `missing_cta` (task `standard_shortfalls`, `standard_report`, panel, export).
+- Maliyet: tamamlama çağrısı ≈ 0,006–0,007 $ (set 29 ölçümünden yaklaşık tahmin; sabit değil).
+- Odaklı testler: "15 başlık var, CTA eksik" ve "3 CTA'ya ulaşmak için küçük kapsam kaybı gerekiyor" zorunlu.
+
+### 10.1 Uygulama sonucu (19.10.2026)
+- CTA = **kural tabanlı sayım** (`validators.is_cta`): sabit eylem kalıbı ile bitiş, ya da kibar emir fiili +
+  izinli önceki kelime (bağlam: hemen/şimdi/bize/iletişime/için/ile…, nesne kökü: hizmet/çözüm/teklif/bilgi…);
+  "için/ile" öncesi mastar reddedilir. Hizmete uygunluğu yargılamaz; tüm çoğul emirleri CTA saymaz.
+- Kelime başına değerlendirme (`keyword_headlines`) var, kelime başına baskı YOK; AI'ın "atladım" gerekçeleri
+  **doğrulanmamış öz-bildirimdir** (task result `keyword_decisions.source = ai_self_report_unverified`);
+  uzunluk/iddia/kapsam için kodun raporu esastır (`unused_keyword_reasons`: too_long / claim / not_used).
+- Canlı set 34 (ws29, taslak): CTA 4/4/5/4, birebir başlık kapsamı 33/60 (30 karakter altı 33/56), standart altı
+  yok, 10 çağrı 0,0671 $. Bilinen açık: AI bazı doğal KW'leri ("internet site tasarımı", "sosyal medya reklam
+  ajansları") gereksiz atlıyor; ek kontrol / KW tamamlama çağrısı bilinçli olarak EKLENMEDİ (kullanıcı kararı).

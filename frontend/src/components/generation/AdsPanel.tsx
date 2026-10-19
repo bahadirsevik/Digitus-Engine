@@ -180,6 +180,7 @@ function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
   const missing = [
     report.missing_headlines > 0 ? `${report.missing_headlines} başlık` : '',
     report.missing_kw_descriptions > 0 ? `${report.missing_kw_descriptions} KW'li açıklama` : '',
+    report.missing_cta > 0 ? `${report.missing_cta} CTA` : '',
   ]
     .filter(Boolean)
     .join(', ')
@@ -187,7 +188,14 @@ function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
     <div className="adsx-std">
       <div className="adsx-std-summary">
         {report.keyword_count} KW · {report.headline_count} başlık · {report.kw_description_count}{' '}
-        KW'li açıklama
+        KW'li açıklama ·{' '}
+        <span title="Kural tabanlı sayım: başlık bilinen bir eylem kalıbıyla bitiyorsa CTA sayılır">
+          {report.cta_count} CTA
+        </span>
+      </div>
+      <div className="adsx-std-note">
+        Başlıkta birebir: {report.keywords_in_headlines.length}/{report.keyword_count} · 30 karakter
+        altı: {report.short_keywords_in_headlines ?? 0}/{report.short_keyword_count ?? 0}
       </div>
       {report.below_standard && (
         <div className="adsx-std-note">

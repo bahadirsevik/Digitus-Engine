@@ -151,6 +151,10 @@ class AdGroupFullSchema(BaseModel):
     # dropped_negatives gibi yalnız worker'a taşınır, API'ye/DB'ye girmez.
     missing_headlines: int = Field(default=0, exclude=True)
     missing_kw_descriptions: int = Field(default=0, exclude=True)
+    missing_cta: int = Field(default=0, exclude=True)  # max(0, 3 - CTA başlık sayısı)
+    # KW başına AI değerlendirmesi [{keyword, status: headline|declined|invalid, reason}] —
+    # yalnız bu üretim için bilgi; worker result_data'ya taşınır, API/DB'ye girmez.
+    keyword_decisions: List[Dict[str, str]] = Field(default_factory=list, exclude=True)
 
 
 class AdGroupStandardReport(BaseModel):
@@ -160,11 +164,16 @@ class AdGroupStandardReport(BaseModel):
     kw_description_count: int
     missing_headlines: int          # max(0, 15 - headline_count)
     missing_kw_descriptions: int    # max(0, 4 - kw_description_count)
-    below_standard: bool            # eksik başlık/KW'li açıklama var (KW kapsam eksikliği SAYILMAZ, K4)
+    cta_count: int                  # is_cta ile sayılan başlık
+    missing_cta: int                # max(0, 3 - cta_count)
+    below_standard: bool            # eksik başlık/KW'li açıklama/CTA var (KW kapsam eksikliği SAYILMAZ, K4)
     pool_below_target: bool         # keyword_count < ADS_KEYWORDS_PER_GROUP
     keywords_in_headlines: List[str]
     keywords_description_only: List[str]
     keywords_unused: List[str]
+    short_keyword_count: int = 0                 # 30 karakter ve altı KW sayısı
+    short_keywords_in_headlines: int = 0         # bunlardan başlıkta birebir geçenler
+    unused_keyword_reasons: Dict[str, str] = Field(default_factory=dict)  # too_long|claim|not_used
     fill_keywords: List[str]        # fill_keyword_ids'e karşılık gelen hedef KW'ler (girdi sırası)
 
 

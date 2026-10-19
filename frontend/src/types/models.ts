@@ -57,11 +57,16 @@ export interface AdGroupStandardReport {
   kw_description_count: number
   missing_headlines: number
   missing_kw_descriptions: number
+  cta_count: number
+  missing_cta: number
   below_standard: boolean
   pool_below_target: boolean
   keywords_in_headlines: string[]
   keywords_description_only: string[]
   keywords_unused: string[]
+  short_keyword_count?: number
+  short_keywords_in_headlines?: number
+  unused_keyword_reasons?: Record<string, string>
   fill_keywords: string[]
 }
 

@@ -103,13 +103,14 @@ def test_csv_and_excel_carry_standard_report_columns(tmp_path):
     assert rows[0] == sheet[0]
     assert rows[0][5:] == STANDARD_HEADERS
     cells = dict(zip(rows[0], rows[1]))
+    assert cells['CTA Sayısı'] == '0'
     assert cells['KW Sayısı'] == '3' and cells["KW'li Açıklama Sayısı"] == '1'
     assert cells['Standart Durumu'] == (
-        "Standart altı: 13 başlık eksik, 3 KW'li açıklama eksik; Havuz 15 KW'den az (3 KW)")
+        "Standart altı: 13 başlık eksik, 3 KW'li açıklama eksik, CTA eksik: 3; Havuz 15 KW'den az (3 KW)")
     assert cells['Başlıkta Kullanılan KW'] == 'a1' and cells['Yalnız Açıklamada KW'] == 'a2'
     assert cells['Hiç Kullanılmayan KW'] == 'a3'
     assert cells["15'e Tamamlamak İçin Eklenen KW"] == 'a3'
-    assert sheet[1][5:] == [3, 1, cells['Standart Durumu'], 'a1', 'a2', 'a3', 'a3']
+    assert sheet[1][5:] == [3, 1, 0, cells['Standart Durumu'], 'a1', 'a2', 'a3', 'a3']
     # raporsuz (eski) grup: sütunlar boş, satır bozulmaz
     assert rows[2][5:] == [''] * len(STANDARD_HEADERS)
     # yüzde/oran/puan yok
@@ -118,7 +119,8 @@ def test_csv_and_excel_carry_standard_report_columns(tmp_path):
 
 def test_standard_lines_are_facts_only():
     lines = standard_lines(_ads_with_report().ad_groups[0])
-    assert lines[0] == "15 KW teslim standardı: 3 KW, 2 başlık, 1 KW'li açıklama"
+    assert lines[0] == "15 KW teslim standardı: 3 KW, 2 başlık, 1 KW'li açıklama, 0 CTA (kural tabanlı sayım)"
+    assert "Standart altı: 13 başlık eksik, 3 KW'li açıklama eksik, CTA eksik: 3" in lines
     assert "Başlıkta kullanılan KW: a1" in lines
     assert "15'e tamamlamak için eklenen KW: a3" in lines
     assert not any('%' in line or 'zorunlu' in line.lower() for line in lines)

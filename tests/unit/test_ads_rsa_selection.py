@@ -11,10 +11,12 @@ from app.generators.ads.prompt_templates import (
     ADS_RSA_GENERATION_PROMPT,
 )
 from app.generators.ads.rsa_generator import RSAGenerator
+from app.generators.ads.validators import build_standard_report, is_cta
 from app.schemas.ads import AdGroupFullSchema, DescriptionSchema, HeadlineSchema, KeywordGroupSchema
 
 LETTERS = "ABCDEFGHIJKLMNOPQRST"
-GENERIC = [f"Aday Başlık {c}" for c in LETTERS]          # 20 jenerik, KW içermez
+# 20 jenerik, KW içermez; 0/2/3/5. indeksler CTA ("... Teklif Alın"): erken testler 3 CTA şartını kendiliğinden sağlar
+GENERIC = [f"Aday Başlık {c}" + (" Teklif Alın" if i in (0, 2, 3, 5) else "") for i, c in enumerate(LETTERS)]
 KW_DESCS = [
     "Ucuz laptop seçeneklerini hemen keşfedin.",
     "Ucuz laptop modellerini karşılaştırın.",
@@ -212,7 +214,7 @@ def test_completion_not_called_when_counts_full_even_if_coverage_incomplete():
     result = _gen(ai).generate_rsa(_group(*kws), brand_name="Marka")
 
     assert ai.calls["completion"] == 0
-    assert (result.missing_headlines, result.missing_kw_descriptions) == (0, 0)
+    assert (result.missing_headlines, result.missing_kw_descriptions, result.missing_cta) == (0, 0, 0)
 
 
 def test_completion_not_called_when_regeneration_disabled():
@@ -221,7 +223,7 @@ def test_completion_not_called_when_regeneration_disabled():
 
     assert ai.calls["completion"] == 0
     assert len(result.headlines) == 10
-    assert (result.missing_headlines, result.missing_kw_descriptions) == (5, 2)
+    assert (result.missing_headlines, result.missing_kw_descriptions, result.missing_cta) == (5, 2, 0)
 
 
 def test_shortfall_reported_without_generic_padding():
@@ -418,15 +420,167 @@ def test_dki_twin_collapses_to_one_headline_end_to_end():
     assert result.headlines[0].is_dki is True
 
 
+# ==================== CTA (plan §10): is_cta + seçim + tamamlama ====================
+
+@pytest.mark.parametrize("text,expected", [
+    ("SEO Ajansı İçin Teklif Alın", True),
+    ("Hemen Teklif Alın", True),
+    ("Reklam Ajansı Teklifi Alın", True),
+    ("Bize Ulaşın", True),
+    ("Hemen İletişime Geçin", True),
+    ("Dijital Çözümleri İnceleyin", True),
+    ("Ajans Hizmetlerini Keşfedin", True),
+    ("B2B Çözümlerini İnceleyin", True),
+    ("Çözümlerimizi Keşfedin", True),
+    ("Meta Reklamlarını Keşfedin", True),
+    ("Detaylı Bilgi İçin Ulaşın", True),
+    ("Digitus Ajans ile Tanışın", True),
+    ("Medya Planı İçin Başvurun", True),
+    ("Hizmetleri Şimdi İnceleyin", True),
+    ("Hizmetleri Hemen İnceleyin", True),
+    ("Detaylı Bilgi Edinin", True),
+    ("SEO Danışmanlığı Alın", True),
+    ("Çözümleri Şimdi Keşfedin", True),
+    ("Ads Danışmanlığı İçin Başvur", True),
+    ("Hemen Arayın", True),
+    ("Teklif Alın", True),
+    ("Hemen Ara", True),
+    ("{KeyWord:SEO Ajansı} İçin Teklif Alın!", True),
+    ("Hemen Göz Atın", True),
+    ("İletişime Geçin", True),
+    ("Hizmetleri İnceleyin", True),
+    ("Instagram Reklam Verme İncele", False),
+    ("Instagram Reklam Verme İnceleyin", False),
+    ("TikTok Reklam Verme Başlat", False),
+    ("TikTok Reklam Verme Başlatın", False),
+    ("Facebook Reklam Vermek İçin", False),
+    ("Facebook Reklam Vermek İçin Başvurun", False),
+    ("Sosyal Medya Danışmanlık Al", False),
+    ("Sosyal Medya Danışmanlık Alın", False),
+    ("Sosyal Medya Hizmetleri Al", False),
+    ("Dijital Görünürlük Kazanın", False),
+    ("Digitus ile Büyüyün", False),
+    ("Arama Motorunda Yükselin", False),
+    ("Web Ajansı Çözümlerini Görün", False),
+    ("Google Ads Ajansı Seçin", False),
+    ("Dijital Reklam Ajansı Seçin", False),
+    ("Teklif Alma Süreci", False),
+    ("Organik Görünürlük Kazanın", False),
+    ("Performansınızı Artırın", False),
+    ("Ara Dönem Fırsatı", False),
+    ("Ajansın Farkı", False),
+    ("Atın Gücü", False),
+    ("", False),
+])
+def test_is_cta(text, expected):
+    assert is_cta(text) is expected
+
+
+def _model_kws(n):
+    return [f"model {c}" for c in "abcdefghijklmno"[:n]]
+
+
+MODEL_DESCS = ["Model A seçeneklerini inceleyin.", "Model B modellerini karşılaştırın.",
+               "Model C fırsatlarını görün.", "Model D için hızlı teslimat."]
+
+
+def test_full_headlines_but_short_cta_triggers_completion_and_cta_replaces_non_cta():
+    plain = [f"Düz Başlık {c}" for c in "ABCDEFGHIJKLMN"]       # 14 CTA'sız
+    primary = _rsa(plain + ["Hemen Arayın"], KW_DESCS[:4])
+    comp_h = ["Ucuz Laptop İçin Teklif Alın", "Hemen Teklif Alın", "Bize Ulaşın", "Hemen Başlayın"]
+    ai = _FakeAI(primary, completion=_rsa(comp_h, []))
+    result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
+
+    assert ai.calls["completion"] == 1                  # 15 başlık dolu olsa da CTA 1 < 3
+    prompt = ai.json_prompts["completion"][0]
+    assert "başlık ÜRETME" not in prompt
+    assert "4 aday başlık üret; bunların EN AZ 4 tanesi CTA" in prompt     # eksik 2 + 2 yedek
+    assert "Randevu Alın" in prompt and "uydurma" in prompt
+    texts = _texts(result.headlines)
+    assert len(texts) == 15
+    assert sum(is_cta(t) for t in texts) >= 3 and result.missing_cta == 0
+    assert "Ucuz Laptop İçin Teklif Alın" in texts           # KW'li CTA önde tutuldu
+    assert len([t for t in texts if t in plain]) < 14   # CTA adayları sıradan başlıkların yerine geçti
+
+
+def test_reaching_three_cta_costs_a_little_coverage():
+    kws = _model_kws(15)
+    covering = [f"Model {c} Fırsatı" for c in "ABCDEFGHIJKLMNO"]
+    covering[0] = "Model A Teklif Alın"                  # tek CTA, bir KW kapsıyor
+    primary = _rsa(covering, MODEL_DESCS)
+    ai = _FakeAI(primary, completion=_rsa(["Hemen Arayın", "Bize Ulaşın", "Hemen Başlayın"], []))
+    result = _gen(ai).generate_rsa(_group(*kws), brand_name="Marka")
+
+    texts = _texts(result.headlines)
+    assert ai.calls["completion"] == 1 and len(texts) == 15
+    assert sum(is_cta(t) for t in texts) >= 3 and result.missing_cta == 0
+    covered = sum(any(k in t.lower() for t in texts) for k in kws)
+    assert covered == 13                                 # saf kapsam 15'ti; 2 CTA yeri için 2 KW feda
+
+
+def test_completion_without_cta_reports_missing_cta_and_group_still_saved():
+    ai = _FakeAI(_rsa([f"Düz Başlık {c}" for c in "ABCDEFGHIJKLMNO"], KW_DESCS[:4]), completion=EMPTY)
+    result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
+
+    assert ai.calls["completion"] == 1
+    assert len(result.headlines) == 15 and result.missing_cta == 3
+    r = build_standard_report(["ucuz laptop"], [1], None, _texts(result.headlines), _texts(result.descriptions))
+    assert (r.cta_count, r.missing_cta, r.below_standard) == (0, 3, True)
+
+
+def test_keyword_gap_alone_does_not_trigger_completion_when_cta_is_met():
+    kws = ["ucuz laptop", "oyuncu laptop", "ofis laptop"]
+    ai = _FakeAI(_rsa(GENERIC[:15], KW_DESCS[:4]))
+    result = _gen(ai).generate_rsa(_group(*kws), brand_name="Marka")
+    assert ai.calls["completion"] == 0 and result.missing_cta == 0
+
+
+def test_completion_that_does_not_improve_selection_is_rejected():
+    # 15 başlık, 3 CTA, KW'li açıklama eksik -> çağrı açılır; ama dönen başlıklar seçimi iyileştirmez
+    primary = _rsa(GENERIC[:15], KW_DESCS[:2])
+    comp = _rsa(["Yeni Başlık A", "Yeni Başlık B", "Hemen Arayın"], KW_DESCS[2:4])
+    ai = _FakeAI(primary, completion=comp)
+    result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
+
+    assert ai.calls["completion"] == 1
+    assert _texts(result.headlines) == GENERIC[:15]       # önceki seçim aynen
+    assert _texts(result.descriptions) == KW_DESCS[:4]    # açıklama tamamlaması yine alındı
+
+
+def test_selection_key_orders_cta_before_coverage():
+    gen = _gen(_FakeAI(EMPTY))
+    kws = _model_kws(4)
+    h = lambda texts: [HeadlineSchema(text=t, type="keyword") for t in texts]   # noqa: E731
+    four_kw_one_cta = h(["Model A Teklif Alın", "Model B Fırsatı", "Model C Fırsatı", "Model D Fırsatı"])
+    three_kw_three_cta = h(["Model A Teklif Alın", "Model B Hemen Arayın", "Model C Bize Ulaşın", "Hızlı Teslimat"])
+    assert gen._selection_key(four_kw_one_cta, kws) == (False, 4, 4)
+    assert gen._selection_key(three_kw_three_cta, kws) == (True, 3, 4)
+    assert gen._selection_key(three_kw_three_cta, kws) > gen._selection_key(four_kw_one_cta, kws)
+
+
+def test_coverage_is_not_traded_for_a_fourth_cta():
+    kws = _model_kws(12)
+    ctas = ["Hemen Arayın", "Teklif Alın", "Bize Ulaşın", "Hemen Başlayın"]    # KW kapsamaz
+    covering = [f"Model {c} Fırsatı" for c in "ABCDEFGHIJKL"]
+    ai = _FakeAI(_rsa(ctas + covering, MODEL_DESCS))
+    result = _gen(ai).generate_rsa(_group(*kws), brand_name="Marka")
+
+    texts = _texts(result.headlines)
+    assert ai.calls["completion"] == 0 and len(texts) == 15
+    assert sum(any(k in t.lower() for t in texts) for k in kws) == 12     # kapsam tam
+    assert sum(is_cta(t) for t in texts) == 3                              # 4. CTA yer bulamadı
+    assert "Hemen Başlayın" not in texts
+
+
 # ==================== ŞEMA + PROMPT ====================
 
 def test_shortfall_fields_not_serialized():
     g = AdGroupFullSchema(name="a", theme="t", keyword_ids=[], keywords=[], headlines=[],
                           descriptions=[], negative_keywords=[],
-                          missing_headlines=3, missing_kw_descriptions=1)
-    assert (g.missing_headlines, g.missing_kw_descriptions) == (3, 1)
+                          missing_headlines=3, missing_kw_descriptions=1, missing_cta=2)
+    assert (g.missing_headlines, g.missing_kw_descriptions, g.missing_cta) == (3, 1, 2)
     dumped = g.model_dump()
-    assert "missing_headlines" not in dumped and "missing_kw_descriptions" not in dumped
+    assert not {"missing_headlines", "missing_kw_descriptions", "missing_cta"} & set(dumped)
 
 
 def test_candidates_prompt_formats_and_lists_long_keywords():
@@ -446,10 +600,18 @@ def test_candidates_prompt_asks_for_natural_turkish_not_forced_keywords():
     prompt = _gen(_FakeAI(EMPTY))._build_candidates_prompt(_group("ucuz laptop"), "Marka", "usp")
     assert "yazıldığı gibi" not in prompt                    # zorlayıcı eski ifade kalktı
     assert "AKICI, DOĞAL ve dilbilgisi doğru Türkçe" in prompt
-    assert "doğal okunduğu yerde" in prompt
-    assert "ZORLAMA" in prompt and "dilbilgisini ASLA bozma" in prompt
-    assert "ÖNCELİKLE kullan" in prompt                      # "mutlaka" değil: zorlamayı geri getirmez
-    assert "cümleye doğal yerleşen EN AZ BİR" in prompt      # açıklamada doğal yerleşen ≥1 KW
+    assert "yalnızca başlık AKICI, DOĞAL Türkçe olduğunda" in prompt
+    assert "YAZMA; bu kabul edilen bir sonuçtur" in prompt   # atlamak kabul
+    assert "dilbilgisini ASLA bozma" in prompt
+    assert "TÜM anahtar kelimelerini" not in prompt and "bulunsun" not in prompt  # kelime başına baskı yok
+    for bad in ("Instagram Reklam Verme İncele", "TikTok Reklam Verme Başlat", "Facebook Reklam Vermek İçin",
+                "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al", "Web Sitesi Tasarimi",
+                "B2B Odaklı Web Ajans", "SEO Ajansı İstanbul", "Facebook'ta Reklam Verin"):
+        assert bad in prompt
+    assert "TAŞIMA" in prompt                                  # bozuk KW açıklamaya taşınmaz
+    assert "ÖNCELİKLE" not in prompt
+    assert "EN AZ 5'i hizmete uygun CTA" in prompt and "SEO Ajansı İçin Teklif Alın" in prompt
+    assert "yerleşen yoksa kelime kullanma" in prompt   # açıklamada da doğallık
     assert "zorla doldurma" in prompt                        # diğer KW'ler açıklamaya doldurulmaz
     assert "BU GRUBUN anahtar kelimelerinden ve temasından" in prompt   # tema uyumu
     assert "yalnızca açıklamalarda kullan" in prompt         # >30 karakter KW -> açıklama kuralı duruyor
@@ -461,7 +623,7 @@ def test_completion_block_asks_uncovered_keywords_only_where_natural():
             [DescriptionSchema(text="Hemen keşfedin.", type="cta")])
     prompt = gen._build_candidates_prompt(_group("ucuz laptop"), "Marka", "usp", kept)
     line = prompt.split("Henüz hiçbir başlıkta geçmeyen")[1].split("\n")[0]
-    assert "doğal okunduğu yerde" in line and "zorlama" in line and "ucuz laptop" in line
+    assert "YAZMA" in line and "kabul edilir" in line and "ucuz laptop" in line
     assert "cümleye doğal yerleşen en az bir anahtar kelime" in prompt   # açıklama talimatı
 
 
@@ -471,3 +633,82 @@ def test_source_prompt_is_untouched():
     assert "{headline_instruction}" in ADS_RSA_CANDIDATES_PROMPT
     assert "3-15 adet başlık üret" not in ADS_RSA_CANDIDATES_PROMPT
     assert "ANAHTAR KELİME KULLANIMI" not in ADS_RSA_GENERATION_PROMPT   # yeni kural yalnız türetilende
+
+
+def test_outcome_imperatives_only_pool_reports_missing_cta():
+    outcome = ["Dijital Görünürlük Kazanın", "Digitus ile Büyüyün", "Arama Motorunda Yükselin",
+               "Web Ajansı Çözümlerini Görün"] + [f"Düz Başlık {c}" for c in "ABCDEFGHIJK"]
+    result = _gen(_FakeAI(_rsa(outcome, KW_DESCS[:4]))).generate_rsa(_group(), brand_name="Marka")
+    assert result.missing_cta == 3
+
+
+# ==================== keyword_headlines (KW başına değerlendirme) ====================
+
+def _rsa_kh(headlines, descriptions, entries):
+    data = json.loads(_rsa(headlines, descriptions))
+    data["keyword_headlines"] = [
+        {"keyword_id": i, "headline": h, "reason": r} for i, h, r in entries]
+    return json.dumps(data)
+
+
+def _dec(result):
+    return {d["keyword"]: (d["status"], d["reason"]) for d in result.keyword_decisions}
+
+
+def test_keyword_headline_valid_is_added_and_improves_coverage():
+    kws = ["ucuz laptop", "oyuncu laptop"]
+    ai = _FakeAI(_rsa_kh(GENERIC[:15], KW_DESCS[:4], [
+        (1, "Ucuz Laptop Fırsatı", ""), (2, "Oyuncu Laptop Seç", "")]))
+    result = _gen(ai).generate_rsa(_group(*kws), brand_name="Marka")
+    texts = _texts(result.headlines)
+    assert "Ucuz Laptop Fırsatı" in texts and "Oyuncu Laptop Seç" in texts
+    assert _dec(result) == {"ucuz laptop": ("headline", ""), "oyuncu laptop": ("headline", "")}
+
+
+def test_keyword_headline_without_the_keyword_is_dropped_as_invalid():
+    ai = _FakeAI(_rsa_kh(GENERIC[:15], KW_DESCS[:4], [(1, "Harika Bilgisayar Fırsatı", "")]))
+    result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
+    assert "Harika Bilgisayar Fırsatı" not in _texts(result.headlines)
+    assert _dec(result)["ucuz laptop"][0] == "invalid"
+
+
+def test_declined_keyword_is_informational_and_asked_again_next_generation():
+    ai = _FakeAI(_rsa_kh(GENERIC[:15], KW_DESCS[:4], [
+        (1, "", "doğal Türkçe başlık olmuyor"), (99, "Bilinmeyen Başlık", "")]))
+    gen = _gen(ai)
+    group = _group()
+    result = gen.generate_rsa(group, brand_name="Marka")
+    assert _dec(result) == {"ucuz laptop": ("declined", "doğal Türkçe başlık olmuyor")}
+    assert "Bilinmeyen Başlık" not in _texts(result.headlines)       # bilinmeyen id yok sayıldı
+    gen.generate_rsa(group, brand_name="Marka")                       # ikinci üretim: KW yine istenir
+    assert "- 1: ucuz laptop" in ai.json_prompts["primary"][1]
+
+
+def test_broken_only_ctas_report_missing_cta_and_request_completion():
+    broken = ["Instagram Reklam Verme İncele", "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al",
+              "TikTok Reklam Verme Başlat", "Facebook Reklam Vermek İçin"]
+    ai = _FakeAI(_rsa(broken + [f"Düz Başlık {c}" for c in "ABCDEFGHIJ"], KW_DESCS[:4]), completion=EMPTY)
+    result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
+    assert ai.calls["completion"] == 1 and result.missing_cta == 3
+
+
+def test_response_without_keyword_headlines_still_works():
+    result = _gen(_FakeAI(_rsa(GENERIC[:15], KW_DESCS[:4]))).generate_rsa(_group(), brand_name="Marka")
+    assert len(result.headlines) == 15 and result.keyword_decisions == []
+
+
+def test_keyword_decisions_not_serialized():
+    g = AdGroupFullSchema(name="a", theme="t", keyword_ids=[], keywords=[], headlines=[],
+                          descriptions=[], negative_keywords=[],
+                          keyword_decisions=[{"keyword": "x", "status": "declined", "reason": "r"}])
+    assert "keyword_decisions" not in g.model_dump()
+
+
+def test_derived_prompt_lists_keyword_ids_and_keyword_headlines():
+    prompt = _gen(_FakeAI(EMPTY))._build_candidates_prompt(_group("ucuz laptop", "oyuncu laptop"), "Marka", "usp")
+    assert "keyword_headlines" in prompt and "- 1: ucuz laptop" in prompt and "- 2: oyuncu laptop" in prompt
+    assert "keyword_headlines" not in ADS_RSA_GENERATION_PROMPT
+    assert "keyword_headlines" in RSAGenerator.RSA_RESPONSE_SCHEMA["required"]
+    kept = ([HeadlineSchema(text="Ucuz Laptop Fırsatı", type="benefit")], [])
+    completion = _gen(_FakeAI(EMPTY))._build_candidates_prompt(_group("ucuz laptop", "oyuncu laptop"), "Marka", "usp", kept)
+    assert "- 2: oyuncu laptop" in completion and "- 1: ucuz laptop" not in completion

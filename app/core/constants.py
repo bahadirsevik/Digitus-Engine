@@ -47,6 +47,7 @@ ADS_KEYWORDS_PER_GROUP = 15
 # RSA grup başına hedef metin sayıları (Google üst sınırı: 15 başlık / 4 açıklama)
 ADS_HEADLINES_PER_GROUP = 15
 ADS_DESCRIPTIONS_PER_GROUP = 4
+ADS_MIN_CTA_HEADLINES = 3  # teslim şartı: seçilen 15 başlığın en az 3'ü CTA (plan_ads_15kw_standardi §10)
 
 # Havuz çarpanı (testlerde kullanılıyor olabilir)
 POOL_MULTIPLIER = 2.0

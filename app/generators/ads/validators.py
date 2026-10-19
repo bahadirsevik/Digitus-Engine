@@ -14,6 +14,7 @@ from app.core.constants import (
     ADS_DESCRIPTIONS_PER_GROUP,
     ADS_HEADLINES_PER_GROUP,
     ADS_KEYWORDS_PER_GROUP,
+    ADS_MIN_CTA_HEADLINES,
 )
 from app.core.site_analyzer.turkish_normalizer import normalize_turkish
 from app.generators.ai_service import scoped
@@ -637,6 +638,47 @@ def keyword_in_text(keyword: str, text: str) -> bool:
     return any(toks[i:i + n] == kw for i in range(len(toks) - n + 1))
 
 
+# Başlık yalnızca bilinen bir EYLEM KALIBIYLA bitiyorsa CTA (sondaki 1-3 kelime; yalnız emir
+# kipi yetmez: "Sosyal Medya Danışmanlık Al", "Reklam Verme Başlat" bozuk Türkçedir, CTA DEĞİL).
+# shortcut: açık liste, hizmet uygunluğunu yargılamaz; yeni kalıp gerekirse buraya eklenir.
+_CTA_PHRASES = tuple(" ".join(kw_tokens(p)) for p in (
+    "teklif al", "teklif alın", "teklif isteyin", "bilgi alın", "bilgi edinin", "randevu alın",
+    "fiyat alın", "hemen ara", "hemen arayın", "bizi arayın", "bize ulaşın", "iletişime geçin",
+    "hemen başvurun", "başvurun", "ücretsiz deneyin", "hemen başlayın", "kayıt olun", "kaydolun",
+    "hemen inceleyin", "hizmetleri inceleyin", "çözümleri inceleyin", "detayları inceleyin",
+    "paketleri inceleyin", "hemen keşfedin", "çözümleri keşfedin", "hizmetleri keşfedin",
+    "sipariş verin", "demo isteyin", "danışmanlığı alın", "göz atın", "hemen indirin",
+    # iyelikli ve "şimdi/için" kalıpları: "Ajans Teklifi Alın", "Şimdi Keşfedin", "… İçin Başvurun"
+    "teklifi alın", "teklifi isteyin", "şimdi keşfedin", "şimdi inceleyin", "şimdi başvurun",
+    "için başvurun", "için başvur"))
+
+
+# Kibar çoğul emir fiili + izinli önceki kelime (bağlam kelimesi / nesne kökü): "Verme İnceleyin" gibi
+# bozuk Türkçeyi geçirmeden "Çözümleri Şimdi Keşfedin" türü canlı CTA'ları yakalar (kullanıcı kararı).
+_CTA_VERBS = frozenset(kw_tokens(
+    "keşfedin inceleyin ulaşın başvurun alın isteyin edinin geçin tanışın arayın deneyin "
+    "başlayın indirin kaydolun"))
+_CTA_CONTEXT = frozenset(kw_tokens("hemen şimdi bize bizi bizimle iletişime için ile ücretsiz detaylı"))
+_CTA_OBJECT_STEMS = tuple(kw_tokens(
+    "hizmet çözüm paket detay teklif bilgi randevu fiyat danışmanlığ reklamlar fırsat kampanya örnek referans proje"))
+
+
+def is_cta(text: str) -> bool:
+    """Başlık bilinen bir eylem kalıbıyla ya da "<izinli kelime> + kibar emir fiili" ile mi bitiyor?"""
+    t = kw_tokens(text)
+    s = " ".join(t)
+    # "için/ile" öncesi mastar ("Reklam Vermek İçin Başvurun") CTA değil — yalnız is_cta içinde.
+    if len(t) >= 3 and t[-2] in ("icin", "ile") and t[-3].endswith(("mek", "mak")):
+        return False
+    for p in _CTA_PHRASES:
+        if s == p or s.endswith(" " + p):
+            return True
+    if len(t) < 2 or t[-1] not in _CTA_VERBS:
+        return False
+    prev = t[-2]
+    return prev in _CTA_CONTEXT or prev.startswith(_CTA_OBJECT_STEMS)
+
+
 def keyword_coverage(
     target_keywords: List[str], headlines: List[str], descriptions: List[str]
 ) -> Dict[str, str]:
@@ -661,7 +703,7 @@ def build_standard_report(
 ) -> AdGroupStandardReport:
     """15 KW teslim standardı raporu (okuma + export için TEK hesap yeri).
 
-    Yalnız olgu ve liste: eksik başlık / KW'li açıklama "standart altı" yapar;
+    Yalnız olgu ve liste: eksik başlık / KW'li açıklama / CTA "standart altı" yapar;
     KW kapsam eksikliği yapmaz (K4). NULL/boş fill -> fill_keywords boş.
     """
     coverage = keyword_coverage(target_keywords, headlines, descriptions)
@@ -670,17 +712,28 @@ def build_standard_report(
     )
     missing_headlines = max(0, ADS_HEADLINES_PER_GROUP - len(headlines))
     missing_kw_descriptions = max(0, ADS_DESCRIPTIONS_PER_GROUP - kw_descriptions)
+    cta_count = sum(is_cta(h) for h in headlines)
+    missing_cta = max(0, ADS_MIN_CTA_HEADLINES - cta_count)
     fill_ids = set(fill_keyword_ids or [])
+    short = [k for k in target_keywords if len(k) <= 30]
     return AdGroupStandardReport(
         keyword_count=len(target_keywords),
         headline_count=len(headlines),
         kw_description_count=kw_descriptions,
         missing_headlines=missing_headlines,
         missing_kw_descriptions=missing_kw_descriptions,
-        below_standard=bool(missing_headlines or missing_kw_descriptions),
+        cta_count=cta_count,
+        missing_cta=missing_cta,
+        below_standard=bool(missing_headlines or missing_kw_descriptions or missing_cta),
         pool_below_target=len(target_keywords) < ADS_KEYWORDS_PER_GROUP,
         keywords_in_headlines=[k for k in target_keywords if coverage[k] == "headline"],
         keywords_description_only=[k for k in target_keywords if coverage[k] == "description"],
         keywords_unused=[k for k in target_keywords if coverage[k] == "none"],
+        short_keyword_count=len(short),
+        short_keywords_in_headlines=sum(coverage[k] == "headline" for k in short),
+        unused_keyword_reasons={
+            k: ("too_long" if len(k) > 30 else "claim" if find_ungrounded_claims(k, "") else "not_used")
+            for k in target_keywords if coverage[k] != "headline"
+        },
         fill_keywords=[k for k, i in zip(target_keywords, target_keyword_ids) if i in fill_ids],
     )

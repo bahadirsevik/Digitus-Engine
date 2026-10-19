@@ -5,7 +5,7 @@
  * gerçekten dolduğunu kilitler.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import AdsPanel from './AdsPanel'
 import { useBrandStore } from '../../stores/brandStore'
 
@@ -127,6 +127,8 @@ describe('AdsPanel standart raporu', () => {
     kw_description_count: 4,
     missing_headlines: 0,
     missing_kw_descriptions: 0,
+    cta_count: 3,
+    missing_cta: 0,
     below_standard: false,
     pool_below_target: false,
     keywords_in_headlines: [],
@@ -168,7 +170,12 @@ describe('AdsPanel standart raporu', () => {
 
   it('özet satırı sayıları gösterir; standart altı rozeti ve boş listeler yok', async () => {
     showGroup(baseReport)
-    expect(await screen.findByText("15 KW · 15 başlık · 4 KW'li açıklama")).toBeTruthy()
+    await waitFor(() =>
+      expect(document.querySelector('.adsx-std-summary')?.textContent).toBe(
+        "15 KW · 15 başlık · 4 KW'li açıklama · 3 CTA"
+      )
+    )
+    expect(screen.getByTitle(/Kural tabanlı sayım/)).toBeTruthy()
     expect(screen.queryByText(/teslim standardının altında/)).toBeNull()
     expect(screen.queryByText(/standart 15/)).toBeNull()
     expect(screen.queryByText(/Başlıklarda kullanılan KW/)).toBeNull()
@@ -194,6 +201,17 @@ describe('AdsPanel standart raporu', () => {
       below_standard: true,
     })
     expect(await screen.findByText("Eksik: 3 başlık, 1 KW'li açıklama")).toBeTruthy()
+  })
+
+  it('eksik CTA sayısını yazar', async () => {
+    showGroup({ ...baseReport, cta_count: 1, missing_cta: 2, below_standard: true })
+    await waitFor(() =>
+      expect(document.querySelector('.adsx-std-summary')?.textContent).toBe(
+        "15 KW · 15 başlık · 4 KW'li açıklama · 1 CTA"
+      )
+    )
+    expect(screen.getByTitle(/Kural tabanlı sayım/)).toBeTruthy()
+    expect(screen.getByText('Eksik: 2 CTA')).toBeTruthy()
   })
 
   it('havuz hedefin altındaysa KW sayısını yazar', async () => {

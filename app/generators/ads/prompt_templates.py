@@ -196,18 +196,27 @@ Sadece JSON döndür, açıklama ekleme.
 _KEYWORD_USE_BLOCK = '''# ANAHTAR KELİME KULLANIMI (ÖNEMLİ)
 - Başlıklar ve açıklamalar AKICI, DOĞAL ve dilbilgisi doğru Türkçe olmalı; arama sorgusu gibi
   okunan, eksik ekli ya da yalnızca kelimeleri art arda sıralayan metin yazma
-- Grubun anahtar kelimelerinden doğal okunanları başlıklarda ÖNCELİKLE kullan; bir anahtar
-  kelimeyi yalnızca doğal okunduğu yerde, BÜTÜN hâlinde (ek almadan, kelimeleri bölmeden,
-  aynı sırada) kullan
+- Bir anahtar kelimeyi yalnızca başlık AKICI, DOĞAL Türkçe olduğunda, BÜTÜN hâlinde (ek
+  almadan, kelimeleri bölmeden, aynı sırada) kullan. Doğal olmuyorsa o kelime için başlık
+  YAZMA; bu kabul edilen bir sonuçtur. Kapsam sayısı için dilbilgisini ASLA bozma
 - Başlıkları ve açıklamaları BU GRUBUN anahtar kelimelerinden ve temasından üret. Marka ve
   ürün bilgisini yalnızca grubun temasıyla ilgili olduğu ölçüde kullan; markanın bu grupla
   ilgisi olmayan hizmetlerini başlık veya açıklamaya taşıma
-- Bir anahtar kelime doğal bir başlık oluşturmuyorsa (ör. "... fiyat", "... vermek" gibi arama
-  sorgusu kalıpları, eksik ekli kelimeler, şehir + genel kelime) ZORLAMA; aynı anlamı doğal
-  Türkçeyle anlat. Anahtar kelime sayısını artırmak için dilbilgisini ASLA bozma
-- Her açıklamada, grubun anahtar kelimelerinden cümleye doğal yerleşen EN AZ BİR tanesini
-  BÜTÜN hâlinde kullan; diğer anahtar kelimeleri açıklamalara zorla doldurma
-- 30 karakterden uzun anahtar kelimeler başlığa SIĞMAZ; bunları yalnızca açıklamalarda kullan: {long_keywords}
+- BOZUK örnekler (YAZMA): "Instagram Reklam Verme İncele", "TikTok Reklam Verme Başlat",
+  "Facebook Reklam Vermek İçin", "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al",
+  "Web Sitesi Tasarimi" (ASCII, Türkçe karaktersiz), "B2B Odaklı Web Ajans", "SEO Ajansı İstanbul".
+  Bunun yerine aynı anlamı doğal Türkçeyle yaz, ör. "Facebook'ta Reklam Verin" (kullanılabilir
+  reklam metnidir, tam kelime kapsamı sayılmaz)
+- Açıklamalarda da aynı doğallık kuralı geçerli; bozuk kalıpları başlıktan açıklamaya TAŞIMA
+- Açıklamalarda, anahtar kelimelerden cümleye doğal yerleşenleri BÜTÜN hâlinde kullan; doğal
+  yerleşen yoksa kelime kullanma, diğer anahtar kelimeleri açıklamalara zorla doldurma
+- 30 karakterden uzun anahtar kelimeler başlığa SIĞMAZ; bunları yalnızca açıklamalarda kullan: {long_keywords}{cta_instruction}
+- "keyword_headlines" dizisine aşağıdaki HER anahtar kelime için bir kayıt yaz:
+  {{"keyword_id": <kimlik>, "headline": "<headlines içindeki o başlığın BİREBİR aynısı>", "reason": ""}}.
+  Doğal başlık olmuyorsa headline "" bırak, reason'a kısa neden yaz (ör. "30 karakteri aşıyor",
+  "doğal Türkçe başlık olmuyor", "iddia kuralı"); bu kabul edilen bir sonuçtur. Kayıtta yazdığın başlık "headlines" içinde de olmalı
+Anahtar kelime kimlikleri (keyword_headlines için):
+{keyword_ids_block}
 {completion_block}
 ---
 
