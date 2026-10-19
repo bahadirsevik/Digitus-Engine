@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import logoFull from '../assets/optimice-logo.png'
 import logoIcon from '../assets/optimice-icon.png'
+import GlobalAnalysisToast from './GlobalAnalysisToast'
 import './Layout.css'
 
 interface LayoutProps {
@@ -60,6 +61,7 @@ export default function Layout({ children }: LayoutProps) {
       </aside>
 
       <main className="main-content">{children}</main>
+      <GlobalAnalysisToast />
     </div>
   )
 }

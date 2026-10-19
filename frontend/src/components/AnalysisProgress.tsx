@@ -27,10 +27,21 @@ interface StepDef {
 }
 
 const CHANNEL_LINKS = [
-  { path: '/ads', label: 'ADS', icon: DollarSign },
-  { path: '/seo-geo', label: 'SEO+GEO', icon: Search },
-  { path: '/social', label: 'Social', icon: Share2 },
-]
+  { key: 'ads', path: '/ads', label: 'ADS', icon: DollarSign },
+  { key: 'seo', path: '/seo-geo', label: 'SEO+GEO', icon: Search },
+  { key: 'social', path: '/social', label: 'Social', icon: Share2 },
+] as const
+
+/** Açık kanal bağlantıları (undefined = açık, buildSteps ile aynı anlam). */
+function enabledLinks(channels?: AnalysisChannels) {
+  return CHANNEL_LINKS.filter(({ key }) => channels?.[key] !== false)
+}
+
+function pageList(channels?: AnalysisChannels) {
+  const labels = enabledLinks(channels).map((l) => l.label)
+  if (labels.length <= 1) return labels[0] ?? ''
+  return `${labels.slice(0, -1).join(', ')} ve ${labels[labels.length - 1]}`
+}
 
 function buildSteps(channels?: AnalysisChannels): StepDef[] {
   const ads = channels?.ads !== false
@@ -58,11 +69,17 @@ function stageInfo(stage: ChainStage, taskProgress: number, steps: StepDef[]) {
   return { active: steps.length, pct: 100 }
 }
 
-export function ChannelNav({ compact }: { compact?: boolean }) {
+export function ChannelNav({
+  compact,
+  channels,
+}: {
+  compact?: boolean
+  channels?: AnalysisChannels
+}) {
   const navigate = useNavigate()
   return (
     <div className="kwx-channel-nav">
-      {CHANNEL_LINKS.map(({ path, label, icon: Icon }) => (
+      {enabledLinks(channels).map(({ path, label, icon: Icon }) => (
         <button
           key={path}
           type="button"
@@ -122,7 +139,7 @@ export function AnalysisBanner({
             </div>
             <div className="kwx-banner-sub">
               {done ? (
-                'Skorlama tablosu aşağıda. İçerik üretimini ADS, SEO+GEO ve Social sayfalarından yapabilirsiniz.'
+                `Skorlama tablosu aşağıda. İçerik üretimini ${pageList(channels)} ${enabledLinks(channels).length > 1 ? 'sayfalarından' : 'sayfasından'} yapabilirsiniz.`
               ) : failed ? (
                 errorMessage ||
                 'Görevler sayfasından ayrıntıya bakabilir, analizi yeniden başlatabilirsiniz.'
@@ -181,7 +198,7 @@ export function AnalysisBanner({
         {done && (
           <div className="kwx-banner-links">
             <div className="hint">Kanal çıktılarına git:</div>
-            <ChannelNav />
+            <ChannelNav channels={channels} />
           </div>
         )}
       </div>
@@ -264,7 +281,7 @@ export function AnalysisToast({
         {done && (
           <div className="kwx-toast-links">
             <div className="hint">Kanal çıktılarına git:</div>
-            <ChannelNav compact />
+            <ChannelNav compact channels={channels} />
           </div>
         )}
       </div>
