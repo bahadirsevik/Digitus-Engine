@@ -638,45 +638,21 @@ def keyword_in_text(keyword: str, text: str) -> bool:
     return any(toks[i:i + n] == kw for i in range(len(toks) - n + 1))
 
 
-# Başlık yalnızca bilinen bir EYLEM KALIBIYLA bitiyorsa CTA (sondaki 1-3 kelime; yalnız emir
-# kipi yetmez: "Sosyal Medya Danışmanlık Al", "Reklam Verme Başlat" bozuk Türkçedir, CTA DEĞİL).
-# shortcut: açık liste, hizmet uygunluğunu yargılamaz; yeni kalıp gerekirse buraya eklenir.
-_CTA_PHRASES = tuple(" ".join(kw_tokens(p)) for p in (
-    "teklif al", "teklif alın", "teklif isteyin", "bilgi alın", "bilgi edinin", "randevu alın",
-    "fiyat alın", "hemen ara", "hemen arayın", "bizi arayın", "bize ulaşın", "iletişime geçin",
-    "hemen başvurun", "başvurun", "ücretsiz deneyin", "hemen başlayın", "kayıt olun", "kaydolun",
-    "hemen inceleyin", "hizmetleri inceleyin", "çözümleri inceleyin", "detayları inceleyin",
-    "paketleri inceleyin", "hemen keşfedin", "çözümleri keşfedin", "hizmetleri keşfedin",
-    "sipariş verin", "demo isteyin", "danışmanlığı alın", "göz atın", "hemen indirin",
-    # iyelikli ve "şimdi/için" kalıpları: "Ajans Teklifi Alın", "Şimdi Keşfedin", "… İçin Başvurun"
-    "teklifi alın", "teklifi isteyin", "şimdi keşfedin", "şimdi inceleyin", "şimdi başvurun",
-    "için başvurun", "için başvur"))
-
-
-# Kibar çoğul emir fiili + izinli önceki kelime (bağlam kelimesi / nesne kökü): "Verme İnceleyin" gibi
-# bozuk Türkçeyi geçirmeden "Çözümleri Şimdi Keşfedin" türü canlı CTA'ları yakalar (kullanıcı kararı).
+# CTA = başlığın SON kelimesi bir eylem fiili (sektörden bağımsız; diş kliniğinde "İçin Danışın",
+# "Planını İnceleyin" de CTA). Yalnız açık sonuç vaatleri dışlanır (Büyüyün, Yükselin, Kazanın).
+# CTA olmak teslim edilebilir Türkçe demek DEĞİL: "Danışmanlık Al" CTA sayılır, dil kalitesi ayrı konu.
+# shortcut: açık fiil listesi; ek/dilbilgisi filtresi bilinçli yok (iletişime/inceleme kırılıyordu).
 _CTA_VERBS = frozenset(kw_tokens(
-    "keşfedin inceleyin ulaşın başvurun alın isteyin edinin geçin tanışın arayın deneyin "
-    "başlayın indirin kaydolun"))
-_CTA_CONTEXT = frozenset(kw_tokens("hemen şimdi bize bizi bizimle iletişime için ile ücretsiz detaylı"))
-_CTA_OBJECT_STEMS = tuple(kw_tokens(
-    "hizmet çözüm paket detay teklif bilgi randevu fiyat danışmanlığ reklamlar fırsat kampanya örnek referans proje"))
+    "al alın ara arayın ulaşın geçin ver verin incele inceleyin keşfet keşfedin başvur başvurun "
+    "başlayın başla deneyin dene isteyin iste edin edinin oluşturun planlayın öğrenin öğren "
+    "tıklayın tıkla yakalayın seçin seç bulun karşılaştırın hesaplayın danışın indirin görün "
+    "yararlanın faydalanın yaptırın kaydolun görüntüleyin tanışın"))
 
 
 def is_cta(text: str) -> bool:
-    """Başlık bilinen bir eylem kalıbıyla ya da "<izinli kelime> + kibar emir fiili" ile mi bitiyor?"""
+    """Başlığın son kelimesi eylem fiili mi (ya da "Göz Atın" ile mi bitiyor)?"""
     t = kw_tokens(text)
-    s = " ".join(t)
-    # "için/ile" öncesi mastar ("Reklam Vermek İçin Başvurun") CTA değil — yalnız is_cta içinde.
-    if len(t) >= 3 and t[-2] in ("icin", "ile") and t[-3].endswith(("mek", "mak")):
-        return False
-    for p in _CTA_PHRASES:
-        if s == p or s.endswith(" " + p):
-            return True
-    if len(t) < 2 or t[-1] not in _CTA_VERBS:
-        return False
-    prev = t[-2]
-    return prev in _CTA_CONTEXT or prev.startswith(_CTA_OBJECT_STEMS)
+    return bool(t) and (t[-1] in _CTA_VERBS or t[-2:] == ["goz", "atin"])
 
 
 def keyword_coverage(

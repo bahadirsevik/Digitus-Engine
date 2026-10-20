@@ -449,21 +449,27 @@ def test_dki_twin_collapses_to_one_headline_end_to_end():
     ("Hemen Göz Atın", True),
     ("İletişime Geçin", True),
     ("Hizmetleri İnceleyin", True),
-    ("Instagram Reklam Verme İncele", False),
-    ("Instagram Reklam Verme İnceleyin", False),
+    # diş kliniği (sektörden bağımsızlık)
+    ("Gülüş Tasarımı İçin Danışın", True), ("Şeffaf Plakları Keşfedin", True),
+    ("Tedavi Planını İnceleyin", True), ("Şeffaf Plak İçin Randevu Al", True),
+    ("Randevunuzu Oluşturun", True), ("Kliniğimizi Keşfedin", True), ("Çekim İçin Danışın", True),
+    ("Tedavi Detaylarını Görün", True), ("Digitus Ajans ile Tanışın", True),
+    # CTA != teslim kalitesi: bozuk Türkçe emirler de CTA sayılır (dil kalitesi ayrı konu)
+    ("Instagram Reklam Verme İncele", True),
+    ("Instagram Reklam Verme İnceleyin", True),
     ("TikTok Reklam Verme Başlat", False),
     ("TikTok Reklam Verme Başlatın", False),
     ("Facebook Reklam Vermek İçin", False),
-    ("Facebook Reklam Vermek İçin Başvurun", False),
-    ("Sosyal Medya Danışmanlık Al", False),
-    ("Sosyal Medya Danışmanlık Alın", False),
-    ("Sosyal Medya Hizmetleri Al", False),
+    ("Facebook Reklam Vermek İçin Başvurun", True),
+    ("Sosyal Medya Danışmanlık Al", True),
+    ("Sosyal Medya Danışmanlık Alın", True),
+    ("Sosyal Medya Hizmetleri Al", True),
     ("Dijital Görünürlük Kazanın", False),
     ("Digitus ile Büyüyün", False),
     ("Arama Motorunda Yükselin", False),
-    ("Web Ajansı Çözümlerini Görün", False),
-    ("Google Ads Ajansı Seçin", False),
-    ("Dijital Reklam Ajansı Seçin", False),
+    ("Web Ajansı Çözümlerini Görün", True),
+    ("Google Ads Ajansı Seçin", True),
+    ("Dijital Reklam Ajansı Seçin", True),
     ("Teklif Alma Süreci", False),
     ("Organik Görünürlük Kazanın", False),
     ("Performansınızı Artırın", False),
@@ -637,7 +643,7 @@ def test_source_prompt_is_untouched():
 
 def test_outcome_imperatives_only_pool_reports_missing_cta():
     outcome = ["Dijital Görünürlük Kazanın", "Digitus ile Büyüyün", "Arama Motorunda Yükselin",
-               "Web Ajansı Çözümlerini Görün"] + [f"Düz Başlık {c}" for c in "ABCDEFGHIJK"]
+               "Organik Görünürlük Kazanın"] + [f"Düz Başlık {c}" for c in "ABCDEFGHIJK"]
     result = _gen(_FakeAI(_rsa(outcome, KW_DESCS[:4]))).generate_rsa(_group(), brand_name="Marka")
     assert result.missing_cta == 3
 
@@ -684,12 +690,12 @@ def test_declined_keyword_is_informational_and_asked_again_next_generation():
     assert "- 1: ucuz laptop" in ai.json_prompts["primary"][1]
 
 
-def test_broken_only_ctas_report_missing_cta_and_request_completion():
-    broken = ["Instagram Reklam Verme İncele", "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al",
-              "TikTok Reklam Verme Başlat", "Facebook Reklam Vermek İçin"]
-    ai = _FakeAI(_rsa(broken + [f"Düz Başlık {c}" for c in "ABCDEFGHIJ"], KW_DESCS[:4]), completion=EMPTY)
+def test_broken_turkish_imperatives_still_count_as_cta():
+    # CTA tespiti dil kalitesini YARGILAMAZ: bozuk ama eylem çağıran başlıklar CTA sayılır
+    broken = ["Instagram Reklam Verme İncele", "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al"]
+    ai = _FakeAI(_rsa(broken + [f"Düz Başlık {c}" for c in "ABCDEFGHIJKL"], KW_DESCS[:4]), completion=EMPTY)
     result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
-    assert ai.calls["completion"] == 1 and result.missing_cta == 3
+    assert result.missing_cta == 0 and ai.calls["completion"] == 0
 
 
 def test_response_without_keyword_headlines_still_works():
