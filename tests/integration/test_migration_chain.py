@@ -330,13 +330,14 @@ def _run_alembic(*args):
     return result.stdout + result.stderr
 
 
-def test_single_head_is_user_session_version(fresh_schema):
-    """Merge sonrasi tek head 20261010_003 olmali (iki head upgrade'i durdurur)."""
+def test_single_head_after_lean_ads_merge(fresh_schema):
+    """Merge sonrasi tek head 20261020_001 olmali (auth 20261010_003 + lean 20261017_001
+    birlesimi; iki head kalirsa uygulama acilisindaki upgrade durur)."""
     heads = [
         line for line in _run_alembic("heads").splitlines() if "(head)" in line
     ]
     assert len(heads) == 1, heads
-    assert heads[0].startswith("20261010_003"), heads
+    assert heads[0].startswith("20261020_001"), heads
 
 
 def test_user_session_version_column_and_idempotent_migration(fresh_schema, db_engine):
@@ -416,8 +417,28 @@ def test_upgrade_from_server_revision_20261006_002_to_head(fresh_schema, db_engi
             row = conn.execute(text(
                 "SELECT session_version FROM users WHERE email = 'server@example.test'"
             )).scalar()
-        assert version == "20261010_003"
+        assert version == "20261020_001"
         assert row == 0
     finally:
         with db_engine.begin() as conn:
             conn.execute(text("DELETE FROM users WHERE email = 'server@example.test'"))
+
+
+def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schema, db_engine):
+    """Sunucunun 20.10 itibariyla revizyonu 20261010_003 (auth-lean-merge 13c636d).
+
+    Lean kolonlari yokken bu revizyondan head'e yukseltme ai_usage_events.provider ve
+    ad_groups.fill_keyword_ids'i eklemeli ve tek head 20261020_001'de bitmeli.
+    """
+    with db_engine.begin() as conn:
+        conn.execute(text("ALTER TABLE ad_groups DROP COLUMN IF EXISTS fill_keyword_ids"))
+        conn.execute(text("ALTER TABLE ai_usage_events DROP COLUMN IF EXISTS provider"))
+    _run_alembic("stamp", "20261010_003")
+    _run_alembic("upgrade", "head")
+
+    inspector = inspect(db_engine)
+    assert "fill_keyword_ids" in {c["name"] for c in inspector.get_columns("ad_groups")}
+    assert "provider" in {c["name"] for c in inspector.get_columns("ai_usage_events")}
+    with db_engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    assert version == "20261020_001"
