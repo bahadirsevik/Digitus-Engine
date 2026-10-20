@@ -1,0 +1,603 @@
+{
+  "kind": "patron_label_evaluation_set",
+  "contract_version": "PATRON-LABEL-RECONCILIATION-2026-08-06-v2",
+  "version": 2,
+  "slug": "dijital",
+  "workspace_id": 38,
+  "reference_run_id": 42,
+  "algorithm_authority": "v2_1",
+  "supersedes": {
+    "artifact": "benchmark/trial_workspaces/patron_labels_dijital.json",
+    "seal_sha256": "68028c511582c07ded30ff1289f75f1d48971e3433f35a43efa99cb07eae055c",
+    "contract_version": "DEEPSEEK-V21-TRIAL-SETUP-2026-08-05-v1",
+    "reason": "v1 etiketleri benchmark veri setinin ESKI keyword etiketlerinden uretildi; muhurlu label_authority_precedence UYGULANMADI",
+    "byte_preserved": true
+  },
+  "authority": null,
+  "authority_absent_rule": "Bu workspace icin MUHURLU karar otoritesi YOK. Hicbir etiket otomatik negatif YAPILMADI; yalnizca uretim marka-dislama filtresinin eledigi satirlar flagged_for_review olarak isaretlendi (insan karari gerekir).",
+  "denominators": {
+    "current_positive": {
+      "count": 53,
+      "by_channel": {
+        "ADS": 17,
+        "SEO": 33,
+        "SOCIAL": 20
+      },
+      "definition": "Guncel pozitifler — recall paydasi BUDUR"
+    },
+    "policy_negative": {
+      "count": 0,
+      "by_channel": {},
+      "definition": "Yeni acik patron politikasiyla negatif; NEGATIF KONTROL olarak kullanilir"
+    },
+    "awaiting_human": {
+      "count": 0,
+      "by_channel": {},
+      "definition": "Celiski insan kararina gitti; HICBIR paydaya girmez"
+    }
+  },
+  "flagged_for_review_count": 0,
+  "isolation": {
+    "written_to_profile": false,
+    "written_to_prompts": false,
+    "readable_by_models": false,
+    "rule": "Bu artifact YALNIZ kosu SONRASI basari olcumu icindir; Gemini/DeepSeek/relevance/siralama kodu OKUMAZ."
+  },
+  "current_positive": [
+    {
+      "canonical_keyword": "dijital medya ajansi",
+      "source_keywords": [
+        "dijital medya ajansı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11864
+    },
+    {
+      "canonical_keyword": "dijital pazarlama araclari",
+      "source_keywords": [
+        "dijital pazarlama araçları"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12212
+    },
+    {
+      "canonical_keyword": "dijital pazarlama danismanlik",
+      "source_keywords": [
+        "dijital pazarlama danışmanlık",
+        "dijital pazarlama danışmanlığı"
+      ],
+      "labels": [
+        "ADS",
+        "SEO"
+      ],
+      "trial_keyword_id": 11919
+    },
+    {
+      "canonical_keyword": "dijital pazarlama stratejileri",
+      "source_keywords": [
+        "dijital pazarlama stratejileri"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11977
+    },
+    {
+      "canonical_keyword": "dijital pazarlama stratejisi",
+      "source_keywords": [
+        "dijital pazarlama stratejisi"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11873
+    },
+    {
+      "canonical_keyword": "dijital pr",
+      "source_keywords": [
+        "dijital pr"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11996
+    },
+    {
+      "canonical_keyword": "dijital reklam ajansi istanbul",
+      "source_keywords": [
+        "dijital reklam ajansı istanbul"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 12232
+    },
+    {
+      "canonical_keyword": "donusum optimizasyonu",
+      "source_keywords": [
+        "dönüşüm optimizasyonu"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11930
+    },
+    {
+      "canonical_keyword": "donusum orani optimizasyonu",
+      "source_keywords": [
+        "dönüşüm oranı optimizasyonu"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12062
+    },
+    {
+      "canonical_keyword": "e ticaret ve dijital pazarlama",
+      "source_keywords": [
+        "e ticaret ve dijital pazarlama"
+      ],
+      "labels": [
+        "ADS",
+        "SEO"
+      ],
+      "trial_keyword_id": 12223
+    },
+    {
+      "canonical_keyword": "google ads reklam ajansi",
+      "source_keywords": [
+        "google ads reklam ajansı",
+        "google ads reklam ajansları"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11948
+    },
+    {
+      "canonical_keyword": "google ads reklam yonetimi",
+      "source_keywords": [
+        "google ads reklam yönetimi"
+      ],
+      "labels": [
+        "ADS",
+        "SEO"
+      ],
+      "trial_keyword_id": 11950
+    },
+    {
+      "canonical_keyword": "google site analiz",
+      "source_keywords": [
+        "google site analiz"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11897
+    },
+    {
+      "canonical_keyword": "google site ekleme",
+      "source_keywords": [
+        "google site ekleme"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11834
+    },
+    {
+      "canonical_keyword": "google web yoneticisi araclari",
+      "source_keywords": [
+        "google web yöneticisi araçları"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12073
+    },
+    {
+      "canonical_keyword": "hizmet pazarlamasi",
+      "source_keywords": [
+        "hizmet pazarlaması"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12007
+    },
+    {
+      "canonical_keyword": "icerik pazarlamasi",
+      "source_keywords": [
+        "içerik pazarlaması",
+        "içerik pazarlama"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11954
+    },
+    {
+      "canonical_keyword": "istanbul dijital pazarlama ajansi",
+      "source_keywords": [
+        "istanbul dijital pazarlama ajansı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 13526
+    },
+    {
+      "canonical_keyword": "istanbul en iyi reklam ajanslari",
+      "source_keywords": [
+        "istanbul en iyi reklam ajansları"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11789
+    },
+    {
+      "canonical_keyword": "istanbul medya ajanslari",
+      "source_keywords": [
+        "istanbul medya ajansları"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11956
+    },
+    {
+      "canonical_keyword": "istanbul reklam ajanslari",
+      "source_keywords": [
+        "istanbul reklam ajansları",
+        "istanbul reklam ajansi"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11745
+    },
+    {
+      "canonical_keyword": "istanbul reklamci",
+      "source_keywords": [
+        "istanbul reklamcı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11773
+    },
+    {
+      "canonical_keyword": "istanbul seo ajansi",
+      "source_keywords": [
+        "istanbul seo ajansı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11763
+    },
+    {
+      "canonical_keyword": "kampanya ornekleri",
+      "source_keywords": [
+        "kampanya örnekleri"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12119
+    },
+    {
+      "canonical_keyword": "linkedin reklam",
+      "source_keywords": [
+        "linkedin reklam"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11960
+    },
+    {
+      "canonical_keyword": "marka ajanslari",
+      "source_keywords": [
+        "marka ajansları"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11827
+    },
+    {
+      "canonical_keyword": "marka bilinirligi",
+      "source_keywords": [
+        "marka bilinirliği"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12182
+    },
+    {
+      "canonical_keyword": "marka reklamlari",
+      "source_keywords": [
+        "marka reklamları"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11856
+    },
+    {
+      "canonical_keyword": "medya planlama",
+      "source_keywords": [
+        "medya planlama"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12052
+    },
+    {
+      "canonical_keyword": "pazarlama karmasi",
+      "source_keywords": [
+        "pazarlama karmasi"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11830
+    },
+    {
+      "canonical_keyword": "pazarlama nedir",
+      "source_keywords": [
+        "pazarlama nedır"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11755
+    },
+    {
+      "canonical_keyword": "pazarlama ornekleri",
+      "source_keywords": [
+        "pazarlama örnekleri"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12111
+    },
+    {
+      "canonical_keyword": "pazarlama plani",
+      "source_keywords": [
+        "pazarlama planı"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12048
+    },
+    {
+      "canonical_keyword": "pazarlama turleri",
+      "source_keywords": [
+        "pazarlama türleri"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12041
+    },
+    {
+      "canonical_keyword": "pazarlama uzmani",
+      "source_keywords": [
+        "pazarlama uzmanı"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11903
+    },
+    {
+      "canonical_keyword": "pazarlama yonetimi",
+      "source_keywords": [
+        "pazarlama yönetimi",
+        "pazarlama yonetimi"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11858
+    },
+    {
+      "canonical_keyword": "pazarlama yontemleri",
+      "source_keywords": [
+        "pazarlama yontemleri"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12110
+    },
+    {
+      "canonical_keyword": "performans reklamciligi",
+      "source_keywords": [
+        "performans reklamcılığı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 12218
+    },
+    {
+      "canonical_keyword": "reklam kanallari",
+      "source_keywords": [
+        "reklam kanalları"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11828
+    },
+    {
+      "canonical_keyword": "reklam modelleri",
+      "source_keywords": [
+        "reklam modelleri"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12107
+    },
+    {
+      "canonical_keyword": "reklam tasarimlari",
+      "source_keywords": [
+        "reklam tasarımları"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11815
+    },
+    {
+      "canonical_keyword": "reklam ve pazarlama",
+      "source_keywords": [
+        "reklam ve pazarlama"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11995
+    },
+    {
+      "canonical_keyword": "reklamcilik turleri",
+      "source_keywords": [
+        "reklam turleri"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11925
+    },
+    {
+      "canonical_keyword": "satis ve pazarlama",
+      "source_keywords": [
+        "satis ve pazarlama"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11877
+    },
+    {
+      "canonical_keyword": "seo ajansi",
+      "source_keywords": [
+        "seo ajansı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 11749
+    },
+    {
+      "canonical_keyword": "seo nedemek",
+      "source_keywords": [
+        "seo nedemek"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 11769
+    },
+    {
+      "canonical_keyword": "seo nedir",
+      "source_keywords": [
+        "seo nedır"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11750
+    },
+    {
+      "canonical_keyword": "site hizini test et",
+      "source_keywords": [
+        "site hızını test et"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12145
+    },
+    {
+      "canonical_keyword": "sosyal medya ornekleri",
+      "source_keywords": [
+        "sosyal medya ornekleri"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12207
+    },
+    {
+      "canonical_keyword": "sosyal medya reklam uzmani",
+      "source_keywords": [
+        "sosyal medya reklam uzmanı"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 12328
+    },
+    {
+      "canonical_keyword": "sosyal medyacilar",
+      "source_keywords": [
+        "sosyal medyacılar"
+      ],
+      "labels": [
+        "ADS",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11743
+    },
+    {
+      "canonical_keyword": "tanitim ve pazarlama",
+      "source_keywords": [
+        "tanitim ve pazarlama"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 11889
+    },
+    {
+      "canonical_keyword": "web sitesi seo",
+      "source_keywords": [
+        "web sitesi seo"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12078
+    }
+  ],
+  "policy_negative": [],
+  "awaiting_human": [],
+  "seal_sha256": "830939416bd30e40d721d7ae2b382953c79dc0d4437a1ebc3e130a3ebbbf5b99"
+}

@@ -1,0 +1,105 @@
+{
+  "kind": "faz1_budget_ledger",
+  "created_at": "2026-10-11T20:22:10.878266+00:00",
+  "spent_usd": {
+    "anthropic": 19.179531,
+    "gemini": 10.211494,
+    "deepseek": 0.0
+  },
+  "pending": {},
+  "runs": [
+    {
+      "kind": "hybrid_run",
+      "ref": "ws21:G/G/G",
+      "added_usd": {
+        "anthropic": 0.0,
+        "gemini": 0.0,
+        "deepseek": 0.0
+      },
+      "at": "2026-10-11T20:22:10.988891+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws21:G/G/G",
+      "added_usd": {
+        "anthropic": 0.0,
+        "gemini": 2.276594,
+        "deepseek": 0.0
+      },
+      "at": "2026-10-11T20:52:56.869414+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws29:G/G/G",
+      "added_usd": {
+        "anthropic": 0.0,
+        "gemini": 0.944689,
+        "deepseek": 0.0
+      },
+      "at": "2026-10-11T20:57:00.817999+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws29:G/G/G",
+      "added_usd": {
+        "gemini": 2.813712
+      },
+      "at": "2026-10-11T21:36:28.128189+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws29:Aday",
+      "added_usd": {
+        "anthropic": 0.035082,
+        "gemini": 0.022829
+      },
+      "at": "2026-10-11T21:43:26.565106+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws21:Aday",
+      "added_usd": {
+        "anthropic": 5.708248,
+        "gemini": 0.408689
+      },
+      "at": "2026-10-11T21:50:04.696715+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws21:G/G/C",
+      "added_usd": {
+        "anthropic": 3.267828,
+        "gemini": 1.449274
+      },
+      "at": "2026-10-11T22:33:17.709702+00:00"
+    },
+    {
+      "kind": "profile_compare",
+      "ref": "profile:21,29",
+      "added_usd": {
+        "anthropic": 0.055437,
+        "gemini": 0.011831
+      },
+      "at": "2026-10-11T22:42:12.617240+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws29:Aday",
+      "added_usd": {
+        "anthropic": 6.69427,
+        "gemini": 0.457744
+      },
+      "at": "2026-10-11T22:46:07.079793+00:00"
+    },
+    {
+      "kind": "hybrid_run",
+      "ref": "ws29:G/G/C",
+      "added_usd": {
+        "anthropic": 3.418666,
+        "gemini": 1.826132
+      },
+      "at": "2026-10-11T23:19:13.532733+00:00"
+    }
+  ],
+  "payload_sha256": "82b6305f011f75e1ab93c3b91e480ea520f94d12feb7b7b136eeb006ee6d927e"
+}

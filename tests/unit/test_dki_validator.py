@@ -84,3 +84,26 @@ class TestRegenerationBraceGuard:
         )
         assert action == "eliminated"
         assert text is None
+
+
+class TestShorteningRuleSpacing:
+    """Kural tabanlı kısaltma kelime silince boşluk bırakmamalı (set 29:
+    '{KeyWord:Sosyal Medya Hizmetleri}' -> '{KeyWord:Sosyal Medya }')."""
+
+    def _shorten(self, headline):
+        from app.generators.ads.validators import HeadlineValidator
+
+        return HeadlineValidator().validate(
+            headline, keyword="sosyal medya", ai_service=None, enable_regeneration=False,
+        )
+
+    def test_dki_default_has_no_trailing_space_after_rule(self):
+        text, action, _ = self._shorten("{KeyWord:Sosyal Medya Hizmetleri}")  # 33 karakter
+        assert action == "shortened"
+        assert text == "{KeyWord:Sosyal Medya}"
+        assert validator.validate(text)[1] is True            # hâlâ geçerli DKI
+
+    def test_removed_word_mid_text_leaves_single_space(self):
+        text, action, _ = self._shorten("Kurumsal Hizmetleri Seçin Bugün Burada")  # 38 karakter
+        assert action == "shortened"
+        assert "  " not in text and text == "Kurumsal Seçin Bugün Burada"

@@ -1,0 +1,7378 @@
+{
+ "version": "optimice_v3",
+ "imported_at": "2026-07-17T07:31:48.798203+00:00",
+ "source_final_xlsx_sha256": "48b58fac52cda723fbc179eff860429d88a72b08a7af918237ce63f3a38ee575",
+ "source_raw_xlsx_sha256": "c0127d26e91685872a00b6140911f833eb662cad5be46c5dc257318eec6d6987",
+ "workspace_id": 21,
+ "counts": {
+  "ads": 123,
+  "seo": 52,
+  "social": 64,
+  "empty": 81,
+  "raw_labeled_rows": 242,
+  "group_labels": 234,
+  "clean_universe_units": 540,
+  "clean_source_rows": 570,
+  "negatives_not_selected": 306
+ },
+ "label_regime": "capacity_bounded_preference",
+ "label_regime_note": "İKİ AŞAMALI, GEREKÇESİZ ELEME. Patron 540 kanonik birimlik evreni GÖRDÜ; (1) 306 birimi temiz listeye ALMADI, (2) kalan 234 birimi inceleyip 153'üne kanal verdi, 81'ini BOŞ bıraktı. Hiçbir aşamada seçmeme GEREKÇESİ kaydedilmedi. Seçilmeyen kelime 'kötü' DEĞİLDİR; seçilenler daha uygun bulunduğu için seçilmiştir (patron beyanı 2026-08-13/15). Bu veri setiyle precision / F1 / false_positive / leak cezası / ECE / Brier / AURC HESAPLANAMAZ. Hesaplanabilir: hits@K, kayıtlı-pozitif recall@K, preference_overlap@K, aynı evren+aynı K'da eşleştirilmiş ΔTP, reachability/funnel, PU-enrichment (tie_fraction ile). Dijital (ws29) ve GR7 (ws30) ile AYNI rejimdedir.",
+ "label_regime_errata": "benchmark/errata_optimice_label_regime_20260815.json",
+ "decisions": {
+  "negatives": "GERİ ÇEKİLDİ (2026-08-15). Önceki metin: 'Patron tam temiz listeyi inceleyip 242'yi seçti — seçilmemiş temiz kelimeler ÜÇ kanal için NEGATİF (Codex v17-1 + kullanıcı onayı, 17.07)'. Bu beyan YANLIŞTIR: seçilmeme bir negatif yargı değildir, gerekçesi kayıtsız bir elemedir. Doğrusu için label_regime_note ve label_regime_errata alanlarına bakınız.",
+  "negatives_superseded_by": "benchmark/errata_optimice_label_regime_20260815.json",
+  "stage_1_not_shortlisted": "negatives_not_selected alanındaki 306 birim = evren taranırken temiz listeye ALINMAYANLAR. Gerekçe kayıtlı değil (konu dışı / tekrar / düşük hacim ayrımı YAPILMAMIŞTIR). Alan adı tarihsel nedenle korunmuştur; anlamı NEGATİF DEĞİL 'aşama-1 elenen'dir.",
+  "stage_2_blank": "counts.empty = 81 birim = temiz listeye alınıp incelenen ama hiçbir kanal işaretlenmeyen satırlar. Bunlar aşama-1 elenenlerden AYRI bir karardır ve ayrı sorulmalıdır (bkz. benchmark/patron_inceleme_k0a.md). Ham satır düzeyinde 86; 2 kelime hem boş hem işaretli ham satırda geçtiği için grup düzeyinde OR ile işaretliye gider.",
+  "group_label_naming": "OR-birleşik değerler 'normalize-grup etiketi'dir; ham patron satırları raw_labels bloğunda AYNEN durur"
+ },
+ "raw_labels": [
+  {
+   "source_row": 2,
+   "clean_row_no": 469,
+   "keyword": "hisse destek direnç",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 3,
+   "clean_row_no": 287,
+   "keyword": "hisse bilanço",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 4,
+   "clean_row_no": 414,
+   "keyword": "gelecegin hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 5,
+   "clean_row_no": 64,
+   "keyword": "yapay zeka hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 6,
+   "clean_row_no": 293,
+   "keyword": "sektörlere göre hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 7,
+   "clean_row_no": 405,
+   "keyword": "hisse analiz siteleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 8,
+   "clean_row_no": 192,
+   "keyword": "borsa istanbul hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 9,
+   "clean_row_no": 243,
+   "keyword": "piyasa takip",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 10,
+   "clean_row_no": 204,
+   "keyword": "borsa hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 11,
+   "clean_row_no": 220,
+   "keyword": "en cok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 12,
+   "clean_row_no": 257,
+   "keyword": "bilanço analizi",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 13,
+   "clean_row_no": 253,
+   "keyword": "en dusuk hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 14,
+   "clean_row_no": 341,
+   "keyword": "borsa anlık takip",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 15,
+   "clean_row_no": 380,
+   "keyword": "borsa destek direnç seviyeleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 16,
+   "clean_row_no": 468,
+   "keyword": "hisse önerileri günlük",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 17,
+   "clean_row_no": 494,
+   "keyword": "yatırımlık hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 18,
+   "clean_row_no": 505,
+   "keyword": "hisse önerisi günlük",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 19,
+   "clean_row_no": 549,
+   "keyword": "borsada en dusuk hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 20,
+   "clean_row_no": 171,
+   "keyword": "borsa hisse listesi",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 21,
+   "clean_row_no": 516,
+   "keyword": "fk en düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 22,
+   "clean_row_no": 67,
+   "keyword": "hisse senedi önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 23,
+   "clean_row_no": 374,
+   "keyword": "hisse yatırım tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 24,
+   "clean_row_no": 399,
+   "keyword": "fk dusuk hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 25,
+   "clean_row_no": 286,
+   "keyword": "en çok kazandıran yatırım aracı",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 26,
+   "clean_row_no": 318,
+   "keyword": "en dusuk fiyatli hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 27,
+   "clean_row_no": 320,
+   "keyword": "en yüksek fiyatlı hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 28,
+   "clean_row_no": 524,
+   "keyword": "borsa izleme",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 29,
+   "clean_row_no": 562,
+   "keyword": "hisse tüyoları",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 30,
+   "clean_row_no": 231,
+   "keyword": "hisse haberleri",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 31,
+   "clean_row_no": 233,
+   "keyword": "bist 100 hisse listesi",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 32,
+   "clean_row_no": 263,
+   "keyword": "ucuz hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 33,
+   "clean_row_no": 29,
+   "keyword": "hisse takip",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 34,
+   "clean_row_no": 93,
+   "keyword": "en düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 35,
+   "clean_row_no": 99,
+   "keyword": "en düsük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 36,
+   "clean_row_no": 110,
+   "keyword": "yükselebilecek hisseler",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 37,
+   "clean_row_no": 111,
+   "keyword": "yukselecek hisseler",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 38,
+   "clean_row_no": 394,
+   "keyword": "yeni hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 39,
+   "clean_row_no": 221,
+   "keyword": "en düsuk hisse",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 40,
+   "clean_row_no": 223,
+   "keyword": "en duşuk hisse",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 41,
+   "clean_row_no": 307,
+   "keyword": "hisse filtreleme",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 42,
+   "clean_row_no": 112,
+   "keyword": "en çok kazandıran hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 43,
+   "clean_row_no": 16,
+   "keyword": "borsa endeksi",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 44,
+   "clean_row_no": 17,
+   "keyword": "borsa hisseler",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 45,
+   "clean_row_no": 20,
+   "keyword": "hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 46,
+   "clean_row_no": 31,
+   "keyword": "hisse senedi takip",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 47,
+   "clean_row_no": 36,
+   "keyword": "hisse senetleri takip",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 48,
+   "clean_row_no": 49,
+   "keyword": "borsa nedır",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 49,
+   "clean_row_no": 53,
+   "keyword": "günlük hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 50,
+   "clean_row_no": 62,
+   "keyword": "borsa bügün",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 51,
+   "clean_row_no": 74,
+   "keyword": "hisse analiz",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 52,
+   "clean_row_no": 80,
+   "keyword": "haftalık hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 53,
+   "clean_row_no": 82,
+   "keyword": "haftalik hisse onerileri",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 54,
+   "clean_row_no": 85,
+   "keyword": "haftalık hisse öneri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 55,
+   "clean_row_no": 96,
+   "keyword": "borsa tüm hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 56,
+   "clean_row_no": 97,
+   "keyword": "borsa hisseler canlı",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 57,
+   "clean_row_no": 115,
+   "keyword": "hisse tavsiyesi",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 58,
+   "clean_row_no": 122,
+   "keyword": "hisse tavsiyeleri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 59,
+   "clean_row_no": 143,
+   "keyword": "aracı kurumlar hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 60,
+   "clean_row_no": 167,
+   "keyword": "borsa istanbul tüm hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 61,
+   "clean_row_no": 183,
+   "keyword": "borsada en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 62,
+   "clean_row_no": 197,
+   "keyword": "yatırım hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 63,
+   "clean_row_no": 203,
+   "keyword": "yatırım uygulamaları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 64,
+   "clean_row_no": 205,
+   "keyword": "borsa öğrenmek",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 65,
+   "clean_row_no": 209,
+   "keyword": "kısa vadeli hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 66,
+   "clean_row_no": 230,
+   "keyword": "borsa teknik analiz",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 67,
+   "clean_row_no": 236,
+   "keyword": "hisse karşılaştırma",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 68,
+   "clean_row_no": 239,
+   "keyword": "hisse senedi yorumları",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 69,
+   "clean_row_no": 240,
+   "keyword": "borsa tahminleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 70,
+   "clean_row_no": 245,
+   "keyword": "borsada yatırım tavsiyesi",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 71,
+   "clean_row_no": 272,
+   "keyword": "günlük borsa yorumları",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 72,
+   "clean_row_no": 288,
+   "keyword": "en iyi borsa analiz sitesi",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 73,
+   "clean_row_no": 309,
+   "keyword": "alinacak hisse senedi",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 74,
+   "clean_row_no": 319,
+   "keyword": "en karli hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 75,
+   "clean_row_no": 324,
+   "keyword": "uzun vade hisse",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 76,
+   "clean_row_no": 328,
+   "keyword": "uzun vadede hisse",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 77,
+   "clean_row_no": 330,
+   "keyword": "borsa çıkan hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 78,
+   "clean_row_no": 331,
+   "keyword": "hisse tahminleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 79,
+   "clean_row_no": 335,
+   "keyword": "tüm bist hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 80,
+   "clean_row_no": 357,
+   "keyword": "dusuk fiyatli hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 81,
+   "clean_row_no": 361,
+   "keyword": "borsada beklenti",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 82,
+   "clean_row_no": 366,
+   "keyword": "hisse senedi tarama",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 83,
+   "clean_row_no": 371,
+   "keyword": "yatırım borsa",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 84,
+   "clean_row_no": 376,
+   "keyword": "hisse uygulamaları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 85,
+   "clean_row_no": 393,
+   "keyword": "uygun hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 86,
+   "clean_row_no": 408,
+   "keyword": "borsa hisse senedi fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 87,
+   "clean_row_no": 413,
+   "keyword": "hisse fikirleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 88,
+   "clean_row_no": 433,
+   "keyword": "en güvenilir hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 89,
+   "clean_row_no": 445,
+   "keyword": "sektör analiz",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 90,
+   "clean_row_no": 453,
+   "keyword": "fk oranı düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 91,
+   "clean_row_no": 456,
+   "keyword": "hisse senedi yatırım",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 92,
+   "clean_row_no": 457,
+   "keyword": "hisse senedi uygulamaları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 93,
+   "clean_row_no": 496,
+   "keyword": "fk sı düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 94,
+   "clean_row_no": 501,
+   "keyword": "düşük hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 95,
+   "clean_row_no": 504,
+   "keyword": "yükselecek hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 96,
+   "clean_row_no": 508,
+   "keyword": "yükselebilecek hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 97,
+   "clean_row_no": 514,
+   "keyword": "sektör raporları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 98,
+   "clean_row_no": 518,
+   "keyword": "hisse senedi yatırım tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 99,
+   "clean_row_no": 551,
+   "keyword": "bist en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 100,
+   "clean_row_no": 552,
+   "keyword": "en karli hisse",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 101,
+   "clean_row_no": 553,
+   "keyword": "kar getirecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 102,
+   "clean_row_no": 554,
+   "keyword": "yüksek hacimli hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 103,
+   "clean_row_no": 556,
+   "keyword": "bankalar hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 104,
+   "clean_row_no": 563,
+   "keyword": "yeni çıkan hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 105,
+   "clean_row_no": 564,
+   "keyword": "güncel hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 106,
+   "clean_row_no": 566,
+   "keyword": "en çok kazandıracak hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 107,
+   "clean_row_no": 568,
+   "keyword": "hisse portföyü",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 108,
+   "clean_row_no": 571,
+   "keyword": "yükselecek olan hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 109,
+   "clean_row_no": 90,
+   "keyword": "anlık borsa takip",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 110,
+   "clean_row_no": 94,
+   "keyword": "model portföy",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 111,
+   "clean_row_no": 95,
+   "keyword": "bist 30 şirketleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 112,
+   "clean_row_no": 126,
+   "keyword": "hisse senetleri listesi",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 113,
+   "clean_row_no": 2,
+   "keyword": "canlı borsa",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 114,
+   "clean_row_no": 5,
+   "keyword": "bist 30",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 115,
+   "clean_row_no": 7,
+   "keyword": "hisse senedi",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 116,
+   "clean_row_no": 9,
+   "keyword": "bist 100 endeks",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 117,
+   "clean_row_no": 14,
+   "keyword": "bist 100 grafik",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 118,
+   "clean_row_no": 15,
+   "keyword": "bıst 100 hısselerı",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 119,
+   "clean_row_no": 18,
+   "keyword": "bıst 30 hısselerı",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 120,
+   "clean_row_no": 42,
+   "keyword": "borsa grafik",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 121,
+   "clean_row_no": 70,
+   "keyword": "borsa yatırım fonları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 122,
+   "clean_row_no": 92,
+   "keyword": "canlı borsa verileri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 123,
+   "clean_row_no": 104,
+   "keyword": "borsa uygulamaları",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 124,
+   "clean_row_no": 105,
+   "keyword": "hisse grafik",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 125,
+   "clean_row_no": 117,
+   "keyword": "borsa takip ekranı",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 126,
+   "clean_row_no": 125,
+   "keyword": "canlı hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 127,
+   "clean_row_no": 128,
+   "keyword": "anlık hisse senedi",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 128,
+   "clean_row_no": 131,
+   "keyword": "fk nedemek",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 129,
+   "clean_row_no": 137,
+   "keyword": "borsa hisse yorumları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 130,
+   "clean_row_no": 147,
+   "keyword": "borsa hisse yorum",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 131,
+   "clean_row_no": 149,
+   "keyword": "imkb hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 132,
+   "clean_row_no": 151,
+   "keyword": "bist 100 geçmiş veriler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 133,
+   "clean_row_no": 177,
+   "keyword": "anlık borsa verileri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 134,
+   "clean_row_no": 227,
+   "keyword": "finans hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 135,
+   "clean_row_no": 289,
+   "keyword": "türkiye hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 136,
+   "clean_row_no": 322,
+   "keyword": "kısa vadeli yatırım tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 137,
+   "clean_row_no": 362,
+   "keyword": "portföy takibi",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 138,
+   "clean_row_no": 479,
+   "keyword": "aylık hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 139,
+   "clean_row_no": 25,
+   "keyword": "bakir hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 140,
+   "clean_row_no": 41,
+   "keyword": "hisse fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 141,
+   "clean_row_no": 44,
+   "keyword": "en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 142,
+   "clean_row_no": 47,
+   "keyword": "hisse fiyat",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 143,
+   "clean_row_no": 71,
+   "keyword": "borsa hisse senedi",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 144,
+   "clean_row_no": 134,
+   "keyword": "hisse senedi tavsiye",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 145,
+   "clean_row_no": 136,
+   "keyword": "borsa hisse fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 146,
+   "clean_row_no": 146,
+   "keyword": "yükselen hisse senedi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 147,
+   "clean_row_no": 168,
+   "keyword": "bist 100 hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 148,
+   "clean_row_no": 170,
+   "keyword": "borsa istanbul bugun",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 149,
+   "clean_row_no": 179,
+   "keyword": "borsada işlem gören şirketler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 150,
+   "clean_row_no": 187,
+   "keyword": "bist endeks yorum",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 151,
+   "clean_row_no": 195,
+   "keyword": "finans analiz",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 152,
+   "clean_row_no": 196,
+   "keyword": "temel analiz",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 153,
+   "clean_row_no": 232,
+   "keyword": "bist 100 yorumları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 154,
+   "clean_row_no": 237,
+   "keyword": "fk orani",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 155,
+   "clean_row_no": 242,
+   "keyword": "borsa ve yatırım",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 156,
+   "clean_row_no": 258,
+   "keyword": "yatırım yapılacak hisseler",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 157,
+   "clean_row_no": 262,
+   "keyword": "yatirim yapilacak hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 158,
+   "clean_row_no": 271,
+   "keyword": "yapay zeka borsa",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 159,
+   "clean_row_no": 290,
+   "keyword": "borsa istanbul haberleri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 160,
+   "clean_row_no": 294,
+   "keyword": "borsada yukselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 161,
+   "clean_row_no": 306,
+   "keyword": "borsa yapay zeka",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 162,
+   "clean_row_no": 402,
+   "keyword": "yatırım hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 163,
+   "clean_row_no": 454,
+   "keyword": "hisse senedi değerleme",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 164,
+   "clean_row_no": 471,
+   "keyword": "uzun vadeli hisse senedi",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 165,
+   "clean_row_no": 529,
+   "keyword": "borsa yorumcusu",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 166,
+   "clean_row_no": 560,
+   "keyword": "en iyi borsa takip sitesi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 167,
+   "clean_row_no": 561,
+   "keyword": "en iyi yatırım hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 168,
+   "clean_row_no": 565,
+   "keyword": "popüler hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 169,
+   "clean_row_no": 567,
+   "keyword": "hisse öneri listesi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 170,
+   "clean_row_no": 570,
+   "keyword": "bu hafta yükselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 171,
+   "clean_row_no": 58,
+   "keyword": "bist tüm hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 172,
+   "clean_row_no": 254,
+   "keyword": "bugün en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 173,
+   "clean_row_no": 282,
+   "keyword": "bist işlem hacimleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 174,
+   "clean_row_no": 359,
+   "keyword": "çok yükselen hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 175,
+   "clean_row_no": 364,
+   "keyword": "yatirim haberleri",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 176,
+   "clean_row_no": 333,
+   "keyword": "coın yorumları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 177,
+   "clean_row_no": 372,
+   "keyword": "borsa hisse takip",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 178,
+   "clean_row_no": 383,
+   "keyword": "borsa programi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 179,
+   "clean_row_no": 407,
+   "keyword": "uzun vadeli yatırım",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 180,
+   "clean_row_no": 440,
+   "keyword": "güncel borsa yorumları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 181,
+   "clean_row_no": 498,
+   "keyword": "çok kazandıran hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 182,
+   "clean_row_no": 502,
+   "keyword": "çok kazandıracak hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 183,
+   "clean_row_no": 506,
+   "keyword": "bugün yükselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 184,
+   "clean_row_no": 507,
+   "keyword": "en çok yükselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 185,
+   "clean_row_no": 75,
+   "keyword": "hisse yorumları",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 186,
+   "clean_row_no": 76,
+   "keyword": "hisse yorumlama",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 187,
+   "clean_row_no": 78,
+   "keyword": "borsa fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 188,
+   "clean_row_no": 84,
+   "keyword": "hisse yorum",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 189,
+   "clean_row_no": 107,
+   "keyword": "endeks yorum",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 190,
+   "clean_row_no": 124,
+   "keyword": "şirket bilanço",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 191,
+   "clean_row_no": 317,
+   "keyword": "borsada en düşük hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 192,
+   "clean_row_no": 462,
+   "keyword": "anlık borsa ekranı",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 193,
+   "clean_row_no": 497,
+   "keyword": "hisse senedi takip ve öneri listesi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 194,
+   "clean_row_no": 500,
+   "keyword": "en sağlam hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 195,
+   "clean_row_no": 503,
+   "keyword": "en iyi hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 196,
+   "clean_row_no": 535,
+   "keyword": "şu an alınacak hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 197,
+   "clean_row_no": 4,
+   "keyword": "borsa canlı",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 198,
+   "clean_row_no": 6,
+   "keyword": "bist 100 hisse",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 199,
+   "clean_row_no": 10,
+   "keyword": "bist 100 yorum",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 200,
+   "clean_row_no": 12,
+   "keyword": "borsa yorum",
+   "ads": false,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 201,
+   "clean_row_no": 22,
+   "keyword": "canlı borsa takip",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 202,
+   "clean_row_no": 32,
+   "keyword": "hisse senedi fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 203,
+   "clean_row_no": 50,
+   "keyword": "bist 50",
+   "ads": false,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 204,
+   "clean_row_no": 109,
+   "keyword": "en cok yükselen hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 205,
+   "clean_row_no": 119,
+   "keyword": "borsa verileri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 206,
+   "clean_row_no": 141,
+   "keyword": "bist hisse yorum",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 207,
+   "clean_row_no": 174,
+   "keyword": "fintables pro",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 208,
+   "clean_row_no": 182,
+   "keyword": "borsa tavsiyesi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 209,
+   "clean_row_no": 191,
+   "keyword": "borsa tavsiye",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 210,
+   "clean_row_no": 194,
+   "keyword": "en çok işlem gören hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 211,
+   "clean_row_no": 217,
+   "keyword": "borsa uzmani",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 212,
+   "clean_row_no": 312,
+   "keyword": "destek direnç",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 213,
+   "clean_row_no": 326,
+   "keyword": "borsada en iyi hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 214,
+   "clean_row_no": 43,
+   "keyword": "yatirim tavsiyesi",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 215,
+   "clean_row_no": 45,
+   "keyword": "yatirim tavsiyeleri",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 216,
+   "clean_row_no": 284,
+   "keyword": "piyasa yorumlari",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 217,
+   "clean_row_no": 315,
+   "keyword": "borsa sektörler",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 218,
+   "clean_row_no": 358,
+   "keyword": "bist sektörel endeksler",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 219,
+   "clean_row_no": 384,
+   "keyword": "borsa hisse tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 220,
+   "clean_row_no": 389,
+   "keyword": "borsa indikatörleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 221,
+   "clean_row_no": 392,
+   "keyword": "borsa hisse tavsiye",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 222,
+   "clean_row_no": 415,
+   "keyword": "borsada yapay zeka algoritmaları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 223,
+   "clean_row_no": 370,
+   "keyword": "borsa takip sitesi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 224,
+   "clean_row_no": 323,
+   "keyword": "yapay zeka hisse analizi",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 225,
+   "clean_row_no": 499,
+   "keyword": "hisse senedi en çok kazandıran",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 226,
+   "clean_row_no": 557,
+   "keyword": "en mantıklı hisse",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 227,
+   "clean_row_no": 24,
+   "keyword": "bist yorum",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 228,
+   "clean_row_no": 65,
+   "keyword": "bist en çok yükselen",
+   "ads": false,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 229,
+   "clean_row_no": 127,
+   "keyword": "finans ve borsa",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 230,
+   "clean_row_no": 212,
+   "keyword": "bist yorumlari",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 231,
+   "clean_row_no": 373,
+   "keyword": "hisse senedi anlık takip",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 232,
+   "clean_row_no": 559,
+   "keyword": "en iyi temel analiz programı",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 233,
+   "clean_row_no": 569,
+   "keyword": "uzun vade yatırım tavsiyesi",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 234,
+   "clean_row_no": 325,
+   "keyword": "hisse teknik analiz",
+   "ads": true,
+   "seo": false,
+   "social": true
+  },
+  {
+   "source_row": 235,
+   "clean_row_no": 395,
+   "keyword": "hisse hedefleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 236,
+   "clean_row_no": 555,
+   "keyword": "günlük al sat hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 237,
+   "clean_row_no": 534,
+   "keyword": "uzun vadeli yatırım hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 238,
+   "clean_row_no": 558,
+   "keyword": "uzun vade yatırım hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 239,
+   "clean_row_no": 37,
+   "keyword": "coin yorumlari",
+   "ads": true,
+   "seo": true,
+   "social": true
+  },
+  {
+   "source_row": 240,
+   "clean_row_no": 525,
+   "keyword": "borsa platformları",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 241,
+   "clean_row_no": 546,
+   "keyword": "yapay zeka borsa programı",
+   "ads": true,
+   "seo": true,
+   "social": false
+  },
+  {
+   "source_row": 242,
+   "clean_row_no": 444,
+   "keyword": "uzun vadeli en iyi yatırım",
+   "ads": true,
+   "seo": false,
+   "social": false
+  },
+  {
+   "source_row": 243,
+   "clean_row_no": 26,
+   "keyword": "teknik analiz",
+   "ads": false,
+   "seo": false,
+   "social": true
+  }
+ ],
+ "group_labels": {
+  "alinacak hisse senedi": {
+   "representative": "alinacak hisse senedi",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    73
+   ]
+  },
+  "anlik borsa ekrani": {
+   "representative": "anlık borsa ekranı",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    192
+   ]
+  },
+  "anlik borsa takip": {
+   "representative": "anlık borsa takip",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    109
+   ]
+  },
+  "anlik borsa verileri": {
+   "representative": "anlık borsa verileri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    133
+   ]
+  },
+  "anlik hisse senedi": {
+   "representative": "anlık hisse senedi",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    127
+   ]
+  },
+  "araci kurumlar hisse onerileri": {
+   "representative": "aracı kurumlar hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    59
+   ]
+  },
+  "aylik hisse onerileri": {
+   "representative": "aylık hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    138
+   ]
+  },
+  "bakir hisseleri": {
+   "representative": "bakir hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    139
+   ]
+  },
+  "bankalar hisse onerileri": {
+   "representative": "bankalar hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    103
+   ]
+  },
+  "bilanco analizi": {
+   "representative": "bilanço analizi",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    12
+   ]
+  },
+  "bist 100 endeks": {
+   "representative": "bist 100 endeks",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    116
+   ]
+  },
+  "bist 100 gecmis veriler": {
+   "representative": "bist 100 geçmiş veriler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    132
+   ]
+  },
+  "bist 100 grafik": {
+   "representative": "bist 100 grafik",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    117
+   ]
+  },
+  "bist 100 hisse": {
+   "representative": "bist 100 hisse",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    198
+   ]
+  },
+  "bist 100 hisse listesi": {
+   "representative": "bist 100 hisse listesi",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    31
+   ]
+  },
+  "bist 100 hisseler": {
+   "representative": "bist 100 hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    147
+   ]
+  },
+  "bist 100 hisseleri": {
+   "representative": "bıst 100 hısselerı",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    118
+   ]
+  },
+  "bist 100 yorum": {
+   "representative": "bist 100 yorum",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    199
+   ]
+  },
+  "bist 100 yorumlari": {
+   "representative": "bist 100 yorumları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    153
+   ]
+  },
+  "bist 30": {
+   "representative": "bist 30",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    114
+   ]
+  },
+  "bist 30 hisseleri": {
+   "representative": "bıst 30 hısselerı",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    119
+   ]
+  },
+  "bist 30 sirketleri": {
+   "representative": "bist 30 şirketleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    111
+   ]
+  },
+  "bist 50": {
+   "representative": "bist 50",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    203
+   ]
+  },
+  "bist en cok islem goren hisseler": {
+   "representative": "bist en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    99
+   ]
+  },
+  "bist en cok yukselen": {
+   "representative": "bist en çok yükselen",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    228
+   ]
+  },
+  "bist endeks yorum": {
+   "representative": "bist endeks yorum",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    150
+   ]
+  },
+  "bist hisse yorum": {
+   "representative": "bist hisse yorum",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    206
+   ]
+  },
+  "bist islem hacimleri": {
+   "representative": "bist işlem hacimleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    173
+   ]
+  },
+  "bist sektorel endeksler": {
+   "representative": "bist sektörel endeksler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    218
+   ]
+  },
+  "bist tum hisseler": {
+   "representative": "bist tüm hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    171
+   ]
+  },
+  "bist yorum": {
+   "representative": "bist yorum",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    227
+   ]
+  },
+  "bist yorumlari": {
+   "representative": "bist yorumlari",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    230
+   ]
+  },
+  "borsa anlik takip": {
+   "representative": "borsa anlık takip",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    14
+   ]
+  },
+  "borsa bugun": {
+   "representative": "borsa bügün",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    50
+   ]
+  },
+  "borsa canli": {
+   "representative": "borsa canlı",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    197
+   ]
+  },
+  "borsa cikan hisseler": {
+   "representative": "borsa çıkan hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    77
+   ]
+  },
+  "borsa destek direnc seviyeleri": {
+   "representative": "borsa destek direnç seviyeleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    15
+   ]
+  },
+  "borsa endeksi": {
+   "representative": "borsa endeksi",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    43
+   ]
+  },
+  "borsa fiyatlari": {
+   "representative": "borsa fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    187
+   ]
+  },
+  "borsa grafik": {
+   "representative": "borsa grafik",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    120
+   ]
+  },
+  "borsa hisse fiyatlari": {
+   "representative": "borsa hisse fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    145
+   ]
+  },
+  "borsa hisse listesi": {
+   "representative": "borsa hisse listesi",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    20
+   ]
+  },
+  "borsa hisse onerileri": {
+   "representative": "borsa hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    10
+   ]
+  },
+  "borsa hisse senedi": {
+   "representative": "borsa hisse senedi",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    143
+   ]
+  },
+  "borsa hisse senedi fiyatlari": {
+   "representative": "borsa hisse senedi fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    86
+   ]
+  },
+  "borsa hisse takip": {
+   "representative": "borsa hisse takip",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    177
+   ]
+  },
+  "borsa hisse tavsiye": {
+   "representative": "borsa hisse tavsiye",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    221
+   ]
+  },
+  "borsa hisse tavsiyeleri": {
+   "representative": "borsa hisse tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    219
+   ]
+  },
+  "borsa hisse yorum": {
+   "representative": "borsa hisse yorum",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    130
+   ]
+  },
+  "borsa hisse yorumlari": {
+   "representative": "borsa hisse yorumları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    129
+   ]
+  },
+  "borsa hisseler": {
+   "representative": "borsa hisseler",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    44
+   ]
+  },
+  "borsa hisseler canli": {
+   "representative": "borsa hisseler canlı",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    56
+   ]
+  },
+  "borsa indikatorleri": {
+   "representative": "borsa indikatörleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    220
+   ]
+  },
+  "borsa istanbul bugun": {
+   "representative": "borsa istanbul bugun",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    148
+   ]
+  },
+  "borsa istanbul haberleri": {
+   "representative": "borsa istanbul haberleri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    159
+   ]
+  },
+  "borsa istanbul hisse senetleri": {
+   "representative": "borsa istanbul hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    8
+   ]
+  },
+  "borsa istanbul tum hisseler": {
+   "representative": "borsa istanbul tüm hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    60
+   ]
+  },
+  "borsa izleme": {
+   "representative": "borsa izleme",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    28
+   ]
+  },
+  "borsa nedir": {
+   "representative": "borsa nedır",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    48
+   ]
+  },
+  "borsa ogrenmek": {
+   "representative": "borsa öğrenmek",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    64
+   ]
+  },
+  "borsa platformlari": {
+   "representative": "borsa platformları",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    240
+   ]
+  },
+  "borsa programi": {
+   "representative": "borsa programi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    178
+   ]
+  },
+  "borsa sektorler": {
+   "representative": "borsa sektörler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    217
+   ]
+  },
+  "borsa tahminleri": {
+   "representative": "borsa tahminleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    69
+   ]
+  },
+  "borsa takip ekrani": {
+   "representative": "borsa takip ekranı",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    125
+   ]
+  },
+  "borsa takip sitesi": {
+   "representative": "borsa takip sitesi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    223
+   ]
+  },
+  "borsa tavsiye": {
+   "representative": "borsa tavsiye",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    209
+   ]
+  },
+  "borsa tavsiyesi": {
+   "representative": "borsa tavsiyesi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    208
+   ]
+  },
+  "borsa teknik analiz": {
+   "representative": "borsa teknik analiz",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    66
+   ]
+  },
+  "borsa tum hisseler": {
+   "representative": "borsa tüm hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    55
+   ]
+  },
+  "borsa uygulamalari": {
+   "representative": "borsa uygulamaları",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    123
+   ]
+  },
+  "borsa uzmani": {
+   "representative": "borsa uzmani",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    211
+   ]
+  },
+  "borsa ve yatirim": {
+   "representative": "borsa ve yatırım",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    155
+   ]
+  },
+  "borsa verileri": {
+   "representative": "borsa verileri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    205
+   ]
+  },
+  "borsa yapay zeka": {
+   "representative": "borsa yapay zeka",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    161
+   ]
+  },
+  "borsa yatirim fonlari": {
+   "representative": "borsa yatırım fonları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    121
+   ]
+  },
+  "borsa yorum": {
+   "representative": "borsa yorum",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    200
+   ]
+  },
+  "borsa yorumcusu": {
+   "representative": "borsa yorumcusu",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    165
+   ]
+  },
+  "borsada beklenti": {
+   "representative": "borsada beklenti",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    81
+   ]
+  },
+  "borsada en cok islem goren hisseler": {
+   "representative": "borsada en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    61
+   ]
+  },
+  "borsada en dusuk hisseler": {
+   "representative": "borsada en dusuk hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    19,
+    191
+   ]
+  },
+  "borsada en iyi hisseler": {
+   "representative": "borsada en iyi hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    213
+   ]
+  },
+  "borsada islem goren sirketler": {
+   "representative": "borsada işlem gören şirketler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    149
+   ]
+  },
+  "borsada yapay zeka algoritmalari": {
+   "representative": "borsada yapay zeka algoritmaları",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    222
+   ]
+  },
+  "borsada yatirim tavsiyesi": {
+   "representative": "borsada yatırım tavsiyesi",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    70
+   ]
+  },
+  "borsada yukselecek hisseler": {
+   "representative": "borsada yukselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    160
+   ]
+  },
+  "bu hafta yukselecek hisseler": {
+   "representative": "bu hafta yükselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    170
+   ]
+  },
+  "bugun en cok islem goren hisseler": {
+   "representative": "bugün en çok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    172
+   ]
+  },
+  "bugun yukselecek hisseler": {
+   "representative": "bugün yükselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    183
+   ]
+  },
+  "canli borsa": {
+   "representative": "canlı borsa",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    113
+   ]
+  },
+  "canli borsa takip": {
+   "representative": "canlı borsa takip",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    201
+   ]
+  },
+  "canli borsa verileri": {
+   "representative": "canlı borsa verileri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    122
+   ]
+  },
+  "canli hisse senetleri": {
+   "representative": "canlı hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    126
+   ]
+  },
+  "coin yorumlari": {
+   "representative": "coın yorumları",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    176,
+    239
+   ]
+  },
+  "cok kazandiracak hisseler": {
+   "representative": "çok kazandıracak hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    182
+   ]
+  },
+  "cok kazandiran hisseler": {
+   "representative": "çok kazandıran hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    181
+   ]
+  },
+  "cok yukselen hisseler": {
+   "representative": "çok yükselen hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    174
+   ]
+  },
+  "destek direnc": {
+   "representative": "destek direnç",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    212
+   ]
+  },
+  "dusuk fiyatli hisseler": {
+   "representative": "dusuk fiyatli hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    80
+   ]
+  },
+  "dusuk hisse senetleri": {
+   "representative": "düşük hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    94
+   ]
+  },
+  "en cok islem goren hisse senetleri": {
+   "representative": "en çok işlem gören hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    210
+   ]
+  },
+  "en cok islem goren hisseler": {
+   "representative": "en cok işlem gören hisseler",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    11,
+    141
+   ]
+  },
+  "en cok kazandiracak hisseler": {
+   "representative": "en çok kazandıracak hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    106
+   ]
+  },
+  "en cok kazandiran hisse senetleri": {
+   "representative": "en çok kazandıran hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    42
+   ]
+  },
+  "en cok kazandiran yatirim araci": {
+   "representative": "en çok kazandıran yatırım aracı",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    25
+   ]
+  },
+  "en cok yukselecek hisseler": {
+   "representative": "en çok yükselecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    184
+   ]
+  },
+  "en cok yukselen hisseler": {
+   "representative": "en cok yükselen hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    204
+   ]
+  },
+  "en dusuk fiyatli hisseler": {
+   "representative": "en dusuk fiyatli hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    26
+   ]
+  },
+  "en dusuk hisse": {
+   "representative": "en düsuk hisse",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    39,
+    40
+   ]
+  },
+  "en dusuk hisseler": {
+   "representative": "en dusuk hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    13,
+    34,
+    35
+   ]
+  },
+  "en guvenilir hisse senetleri": {
+   "representative": "en güvenilir hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    88
+   ]
+  },
+  "en iyi borsa analiz sitesi": {
+   "representative": "en iyi borsa analiz sitesi",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    72
+   ]
+  },
+  "en iyi borsa takip sitesi": {
+   "representative": "en iyi borsa takip sitesi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    166
+   ]
+  },
+  "en iyi hisse onerileri": {
+   "representative": "en iyi hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    195
+   ]
+  },
+  "en iyi temel analiz programi": {
+   "representative": "en iyi temel analiz programı",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    232
+   ]
+  },
+  "en iyi yatirim hisseleri": {
+   "representative": "en iyi yatırım hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    167
+   ]
+  },
+  "en karli hisse": {
+   "representative": "en karli hisse",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    100
+   ]
+  },
+  "en karli hisseler": {
+   "representative": "en karli hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    74
+   ]
+  },
+  "en mantikli hisse": {
+   "representative": "en mantıklı hisse",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    226
+   ]
+  },
+  "en saglam hisse senetleri": {
+   "representative": "en sağlam hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    194
+   ]
+  },
+  "en yuksek fiyatli hisseler": {
+   "representative": "en yüksek fiyatlı hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    27
+   ]
+  },
+  "endeks yorum": {
+   "representative": "endeks yorum",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    189
+   ]
+  },
+  "finans analiz": {
+   "representative": "finans analiz",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    151
+   ]
+  },
+  "finans hisseleri": {
+   "representative": "finans hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    134
+   ]
+  },
+  "finans ve borsa": {
+   "representative": "finans ve borsa",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    229
+   ]
+  },
+  "fintables pro": {
+   "representative": "fintables pro",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    207
+   ]
+  },
+  "fk dusuk hisseler": {
+   "representative": "fk dusuk hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    24
+   ]
+  },
+  "fk en dusuk hisseler": {
+   "representative": "fk en düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    21
+   ]
+  },
+  "fk nedemek": {
+   "representative": "fk nedemek",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    128
+   ]
+  },
+  "fk orani": {
+   "representative": "fk orani",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    154
+   ]
+  },
+  "fk orani dusuk hisseler": {
+   "representative": "fk oranı düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    90
+   ]
+  },
+  "fk si dusuk hisseler": {
+   "representative": "fk sı düşük hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    93
+   ]
+  },
+  "gelecegin hisseleri": {
+   "representative": "gelecegin hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    4
+   ]
+  },
+  "guncel borsa yorumlari": {
+   "representative": "güncel borsa yorumları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    180
+   ]
+  },
+  "guncel hisse onerileri": {
+   "representative": "güncel hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    105
+   ]
+  },
+  "gunluk al sat hisse onerileri": {
+   "representative": "günlük al sat hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    236
+   ]
+  },
+  "gunluk borsa yorumlari": {
+   "representative": "günlük borsa yorumları",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    71
+   ]
+  },
+  "gunluk hisse onerileri": {
+   "representative": "günlük hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    49
+   ]
+  },
+  "haftalik hisse oneri": {
+   "representative": "haftalık hisse öneri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    54
+   ]
+  },
+  "haftalik hisse onerileri": {
+   "representative": "haftalık hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    52,
+    53
+   ]
+  },
+  "hisse analiz": {
+   "representative": "hisse analiz",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    51
+   ]
+  },
+  "hisse analiz siteleri": {
+   "representative": "hisse analiz siteleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    7
+   ]
+  },
+  "hisse bilanco": {
+   "representative": "hisse bilanço",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    3
+   ]
+  },
+  "hisse destek direnc": {
+   "representative": "hisse destek direnç",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    2
+   ]
+  },
+  "hisse fikirleri": {
+   "representative": "hisse fikirleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    87
+   ]
+  },
+  "hisse filtreleme": {
+   "representative": "hisse filtreleme",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    41
+   ]
+  },
+  "hisse fiyat": {
+   "representative": "hisse fiyat",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    142
+   ]
+  },
+  "hisse fiyatlari": {
+   "representative": "hisse fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    140
+   ]
+  },
+  "hisse grafik": {
+   "representative": "hisse grafik",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    124
+   ]
+  },
+  "hisse haberleri": {
+   "representative": "hisse haberleri",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    30
+   ]
+  },
+  "hisse hedefleri": {
+   "representative": "hisse hedefleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    235
+   ]
+  },
+  "hisse karsilastirma": {
+   "representative": "hisse karşılaştırma",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    67
+   ]
+  },
+  "hisse oneri listesi": {
+   "representative": "hisse öneri listesi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    169
+   ]
+  },
+  "hisse onerileri": {
+   "representative": "hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    45
+   ]
+  },
+  "hisse onerileri gunluk": {
+   "representative": "hisse önerileri günlük",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    16
+   ]
+  },
+  "hisse onerisi gunluk": {
+   "representative": "hisse önerisi günlük",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    18
+   ]
+  },
+  "hisse portfoyu": {
+   "representative": "hisse portföyü",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    107
+   ]
+  },
+  "hisse senedi": {
+   "representative": "hisse senedi",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    115
+   ]
+  },
+  "hisse senedi anlik takip": {
+   "representative": "hisse senedi anlık takip",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    231
+   ]
+  },
+  "hisse senedi degerleme": {
+   "representative": "hisse senedi değerleme",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    163
+   ]
+  },
+  "hisse senedi en cok kazandiran": {
+   "representative": "hisse senedi en çok kazandıran",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    225
+   ]
+  },
+  "hisse senedi fiyatlari": {
+   "representative": "hisse senedi fiyatları",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    202
+   ]
+  },
+  "hisse senedi onerileri": {
+   "representative": "hisse senedi önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    22
+   ]
+  },
+  "hisse senedi takip": {
+   "representative": "hisse senedi takip",
+   "ads": false,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    46
+   ]
+  },
+  "hisse senedi takip ve oneri listesi": {
+   "representative": "hisse senedi takip ve öneri listesi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    193
+   ]
+  },
+  "hisse senedi tarama": {
+   "representative": "hisse senedi tarama",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    82
+   ]
+  },
+  "hisse senedi tavsiye": {
+   "representative": "hisse senedi tavsiye",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    144
+   ]
+  },
+  "hisse senedi uygulamalari": {
+   "representative": "hisse senedi uygulamaları",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    92
+   ]
+  },
+  "hisse senedi yatirim": {
+   "representative": "hisse senedi yatırım",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    91
+   ]
+  },
+  "hisse senedi yatirim tavsiyeleri": {
+   "representative": "hisse senedi yatırım tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    98
+   ]
+  },
+  "hisse senedi yorumlari": {
+   "representative": "hisse senedi yorumları",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    68
+   ]
+  },
+  "hisse senetleri listesi": {
+   "representative": "hisse senetleri listesi",
+   "ads": false,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    112
+   ]
+  },
+  "hisse senetleri takip": {
+   "representative": "hisse senetleri takip",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    47
+   ]
+  },
+  "hisse tahminleri": {
+   "representative": "hisse tahminleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    78
+   ]
+  },
+  "hisse takip": {
+   "representative": "hisse takip",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    33
+   ]
+  },
+  "hisse tavsiyeleri": {
+   "representative": "hisse tavsiyeleri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    58
+   ]
+  },
+  "hisse tavsiyesi": {
+   "representative": "hisse tavsiyesi",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    57
+   ]
+  },
+  "hisse teknik analiz": {
+   "representative": "hisse teknik analiz",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    234
+   ]
+  },
+  "hisse tuyolari": {
+   "representative": "hisse tüyoları",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    29
+   ]
+  },
+  "hisse uygulamalari": {
+   "representative": "hisse uygulamaları",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    84
+   ]
+  },
+  "hisse yatirim tavsiyeleri": {
+   "representative": "hisse yatırım tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    23
+   ]
+  },
+  "hisse yorum": {
+   "representative": "hisse yorum",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    188
+   ]
+  },
+  "hisse yorumlama": {
+   "representative": "hisse yorumlama",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    186
+   ]
+  },
+  "hisse yorumlari": {
+   "representative": "hisse yorumları",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    185
+   ]
+  },
+  "imkb hisse senetleri": {
+   "representative": "imkb hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    131
+   ]
+  },
+  "kar getirecek hisseler": {
+   "representative": "kar getirecek hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    101
+   ]
+  },
+  "kisa vadeli hisse onerileri": {
+   "representative": "kısa vadeli hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    65
+   ]
+  },
+  "kisa vadeli yatirim tavsiyeleri": {
+   "representative": "kısa vadeli yatırım tavsiyeleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    136
+   ]
+  },
+  "model portfoy": {
+   "representative": "model portföy",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    110
+   ]
+  },
+  "piyasa takip": {
+   "representative": "piyasa takip",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    9
+   ]
+  },
+  "piyasa yorumlari": {
+   "representative": "piyasa yorumlari",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    216
+   ]
+  },
+  "populer hisse senetleri": {
+   "representative": "popüler hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    168
+   ]
+  },
+  "portfoy takibi": {
+   "representative": "portföy takibi",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    137
+   ]
+  },
+  "sektor analiz": {
+   "representative": "sektör analiz",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    89
+   ]
+  },
+  "sektor raporlari": {
+   "representative": "sektör raporları",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    97
+   ]
+  },
+  "sektorlere gore hisseler": {
+   "representative": "sektörlere göre hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    6
+   ]
+  },
+  "sirket bilanco": {
+   "representative": "şirket bilanço",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    190
+   ]
+  },
+  "su an alinacak hisseler": {
+   "representative": "şu an alınacak hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    196
+   ]
+  },
+  "teknik analiz": {
+   "representative": "teknik analiz",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    243
+   ]
+  },
+  "temel analiz": {
+   "representative": "temel analiz",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    152
+   ]
+  },
+  "tum bist hisseleri": {
+   "representative": "tüm bist hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    79
+   ]
+  },
+  "turkiye hisse senetleri": {
+   "representative": "türkiye hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    135
+   ]
+  },
+  "ucuz hisse onerileri": {
+   "representative": "ucuz hisse önerileri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    32
+   ]
+  },
+  "uygun hisseler": {
+   "representative": "uygun hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    85
+   ]
+  },
+  "uzun vade hisse": {
+   "representative": "uzun vade hisse",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    75
+   ]
+  },
+  "uzun vade yatirim hisseleri": {
+   "representative": "uzun vade yatırım hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    238
+   ]
+  },
+  "uzun vade yatirim tavsiyesi": {
+   "representative": "uzun vade yatırım tavsiyesi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    233
+   ]
+  },
+  "uzun vadede hisse": {
+   "representative": "uzun vadede hisse",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    76
+   ]
+  },
+  "uzun vadeli en iyi yatirim": {
+   "representative": "uzun vadeli en iyi yatırım",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    242
+   ]
+  },
+  "uzun vadeli hisse senedi": {
+   "representative": "uzun vadeli hisse senedi",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    164
+   ]
+  },
+  "uzun vadeli yatirim": {
+   "representative": "uzun vadeli yatırım",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    179
+   ]
+  },
+  "uzun vadeli yatirim hisseleri": {
+   "representative": "uzun vadeli yatırım hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    237
+   ]
+  },
+  "yapay zeka borsa": {
+   "representative": "yapay zeka borsa",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    158
+   ]
+  },
+  "yapay zeka borsa programi": {
+   "representative": "yapay zeka borsa programı",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    241
+   ]
+  },
+  "yapay zeka hisse analizi": {
+   "representative": "yapay zeka hisse analizi",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    224
+   ]
+  },
+  "yapay zeka hisseleri": {
+   "representative": "yapay zeka hisseleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    5
+   ]
+  },
+  "yatirim borsa": {
+   "representative": "yatırım borsa",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    83
+   ]
+  },
+  "yatirim haberleri": {
+   "representative": "yatirim haberleri",
+   "ads": false,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    175
+   ]
+  },
+  "yatirim hisse onerileri": {
+   "representative": "yatırım hisse önerileri",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    162
+   ]
+  },
+  "yatirim hisseleri": {
+   "representative": "yatırım hisseleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    62
+   ]
+  },
+  "yatirim tavsiyeleri": {
+   "representative": "yatirim tavsiyeleri",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    215
+   ]
+  },
+  "yatirim tavsiyesi": {
+   "representative": "yatirim tavsiyesi",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    214
+   ]
+  },
+  "yatirim uygulamalari": {
+   "representative": "yatırım uygulamaları",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    63
+   ]
+  },
+  "yatirim yapilacak hisseler": {
+   "representative": "yatırım yapılacak hisseler",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    156,
+    157
+   ]
+  },
+  "yatirimlik hisseler": {
+   "representative": "yatırımlık hisseler",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    17
+   ]
+  },
+  "yeni cikan hisse senetleri": {
+   "representative": "yeni çıkan hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    104
+   ]
+  },
+  "yeni hisse senetleri": {
+   "representative": "yeni hisse senetleri",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    38
+   ]
+  },
+  "yuksek hacimli hisseler": {
+   "representative": "yüksek hacimli hisseler",
+   "ads": false,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    102
+   ]
+  },
+  "yukselebilecek hisse senetleri": {
+   "representative": "yükselebilecek hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    96
+   ]
+  },
+  "yukselebilecek hisseler": {
+   "representative": "yükselebilecek hisseler",
+   "ads": true,
+   "seo": true,
+   "social": true,
+   "source_rows": [
+    36
+   ]
+  },
+  "yukselecek hisse senetleri": {
+   "representative": "yükselecek hisse senetleri",
+   "ads": true,
+   "seo": false,
+   "social": true,
+   "source_rows": [
+    95
+   ]
+  },
+  "yukselecek hisseler": {
+   "representative": "yukselecek hisseler",
+   "ads": true,
+   "seo": true,
+   "social": false,
+   "source_rows": [
+    37
+   ]
+  },
+  "yukselecek olan hisseler": {
+   "representative": "yükselecek olan hisseler",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    108
+   ]
+  },
+  "yukselen hisse senedi": {
+   "representative": "yükselen hisse senedi",
+   "ads": true,
+   "seo": false,
+   "social": false,
+   "source_rows": [
+    146
+   ]
+  }
+ },
+ "negatives_not_selected": [
+  "alinacak hisse",
+  "alinacak hisseler",
+  "aluminyum hisse",
+  "anlik borsa",
+  "anlik borsa canli",
+  "anlik borsa takibi ucretsiz",
+  "anlik canli borsa",
+  "anlik fiyat",
+  "anlik hisse fiyatlari",
+  "anlik hisse takibi",
+  "araci sozlesmesi",
+  "arsan",
+  "baticim cimento",
+  "bist 00",
+  "bist 100 borsa",
+  "bist 100 endeks grafigi",
+  "bist 100 hisse canli",
+  "bist 100 investing",
+  "bist 30 canli",
+  "bist 30 endeks",
+  "bist 30 firmalari",
+  "bist 30 hisse fiyatlari",
+  "bist 30 hisse grafik",
+  "bist 30 hisseleri canli",
+  "bist 50 sirketleri",
+  "bist anlik",
+  "bist borsa",
+  "bist bugun",
+  "bist canli",
+  "bist canli borsa",
+  "bist canli takip",
+  "bist canli tum hisseler",
+  "bist canli veri",
+  "bist degeri",
+  "bist en dusuk hisseler",
+  "bist endeks",
+  "bist endeks canli",
+  "bist endeks grafik",
+  "bist endeksi",
+  "bist endeksler",
+  "bist endeksleri",
+  "bist fiyat",
+  "bist fiyatlari",
+  "bist grafik",
+  "bist haberler",
+  "bist hacim",
+  "bist hisse fiyatlari",
+  "bist invest",
+  "bist islem saatleri",
+  "bist mali",
+  "bist piyasa degeri",
+  "bist sektor endeksleri",
+  "bist sektorler",
+  "bist sirketleri",
+  "bist takip",
+  "bist tum endeksi",
+  "bist tum hisseler canli",
+  "bist tum hisseleri",
+  "bist veri",
+  "bist veriler",
+  "bist verileri",
+  "bist100 endex",
+  "bjkas yorum",
+  "borsa 30",
+  "borsa acilis",
+  "borsa alim satim",
+  "borsa analiz",
+  "borsa analizi",
+  "borsa anlik",
+  "borsa anlik veri",
+  "borsa anlik veri ucretsiz",
+  "borsa bist",
+  "borsa bist 30",
+  "borsa canli grafik",
+  "borsa canli hisse",
+  "borsa canli izleme",
+  "borsa canli takip",
+  "borsa canli takip ucretsiz",
+  "borsa canli veri",
+  "borsa canli veri ucretsiz",
+  "borsa canli yorum",
+  "borsa durumu",
+  "borsa dustu",
+  "borsa dususu",
+  "borsa egitimi",
+  "borsa egitimi ucretsiz",
+  "borsa ekrani",
+  "borsa ekrani canli",
+  "borsa en cok islem gorenler",
+  "borsa endeks yorum",
+  "borsa endeksi canli",
+  "borsa endeksi grafik",
+  "borsa fiyat",
+  "borsa giris",
+  "borsa grafik analizi",
+  "borsa gruplari",
+  "borsa gunluk bulten",
+  "borsa gunluk grafik",
+  "borsa haberi",
+  "borsa hacmi",
+  "borsa hareketleri",
+  "borsa hesaplari",
+  "borsa hisse analiz",
+  "borsa hisse grafikleri",
+  "borsa invest",
+  "borsa investing yorum",
+  "borsa islem goren sirketler",
+  "borsa islem hacmi",
+  "borsa islem platformlari",
+  "borsa islemleri",
+  "borsa istanbul canli",
+  "borsa istanbul canli endeks",
+  "borsa istanbul fiyatlari",
+  "borsa istanbul grafik",
+  "borsa istanbul hisse listesi",
+  "borsa istanbul hisse senedi fiyatlari",
+  "borsa istanbul sirketler",
+  "borsa istatistikleri",
+  "borsa kurslari",
+  "borsa my",
+  "borsa ogreniyorum",
+  "borsa onerileri",
+  "borsa para yatirma",
+  "borsa piyasalar",
+  "borsa piyasasi",
+  "borsa program",
+  "borsa puani",
+  "borsa resmi",
+  "borsa seans",
+  "borsa sektorleri",
+  "borsa sirketleri",
+  "borsa sirketleri haberleri",
+  "borsa sitesi",
+  "borsa tablosu",
+  "borsa takip",
+  "borsa takip uygulamalari",
+  "borsa teknik",
+  "borsa temel analiz",
+  "borsa temel analiz egitimi",
+  "borsa veriler",
+  "borsa verisi",
+  "borsa yatirim",
+  "borsa yatirim fonu",
+  "borsa yatirim tavsiye",
+  "borsa yatirim tavsiyeleri",
+  "borsa yo",
+  "borsada bu hafta",
+  "borsada emir saatleri",
+  "borsada hisseler",
+  "borsada islem goren hisse senetleri",
+  "borsada islem goren hisseler",
+  "borsada islem goren tum hisseler",
+  "borsada yatirim sirketleri",
+  "butun hisse senetleri",
+  "canli anlik borsa",
+  "canli anlik borsa ucretsiz",
+  "canli b",
+  "canli bist",
+  "canli bo",
+  "canli borsa alim satim",
+  "canli borsa anlik",
+  "canli borsa canli borsa",
+  "canli borsa ekrani",
+  "canli borsa ekrani anlik borsa izle",
+  "canli borsa ekrani ucretsiz",
+  "canli borsa fiyatlari",
+  "canli borsa grafik",
+  "canli borsa hisse",
+  "canli borsa izleme",
+  "canli borsa takip ekrani",
+  "canli borsa takip programi ucretsiz",
+  "canli borsa tum hisseler",
+  "canli borsa uzman",
+  "canli borsa yorumlari",
+  "canli endeks",
+  "canli grafik",
+  "canli hisse fiyatlari",
+  "canli hisse grafikleri",
+  "canli hisse takip",
+  "canli veri borsa",
+  "canli veriler",
+  "demo hesap",
+  "derim",
+  "destek ve direnc",
+  "dgate",
+  "dogub",
+  "dogusan",
+  "duran dogan basim",
+  "e borsa",
+  "emlak konut yatirim ortakligi",
+  "en dusuk hisse fiyatlari",
+  "en dusuk hisse senetleri",
+  "en karli borsa hisseleri",
+  "en karli hisse senedi",
+  "en pahali hisse senedi turkiye",
+  "en uygun hisseler",
+  "en yuksek hisse",
+  "en yuksek hisse senedi",
+  "endeks bist",
+  "endeks borsa",
+  "endeks canli",
+  "endeks fonu",
+  "endeks grafik",
+  "endeks hisseleri",
+  "fintables indir",
+  "fintables ucretsiz",
+  "fk oranlari",
+  "global borsa",
+  "global yatirim",
+  "global yatirim holding",
+  "grafik analiz",
+  "grafik borsa",
+  "grafik yorum",
+  "guncel hisse fiyatlari",
+  "gunluk borsa",
+  "gunluk borsa fiyatlari",
+  "gunluk borsa takip",
+  "haberler borsa",
+  "hisse alim",
+  "hisse alim satim",
+  "hisse alim satim saatleri",
+  "hisse almak",
+  "hisse analizleri",
+  "hisse borsa",
+  "hisse canli",
+  "hisse canli veri",
+  "hisse degerleri",
+  "hisse fiyatlari anlik",
+  "hisse fiyatlari canli",
+  "hisse grafik analiz",
+  "hisse gunluk",
+  "hisse hacim",
+  "hisse oneri com",
+  "hisse satin al",
+  "hisse satin almak",
+  "hisse satislari",
+  "hisse senedi alim",
+  "hisse senedi alim satim",
+  "hisse senedi almak",
+  "hisse senedi analiz",
+  "hisse senedi anlik veri",
+  "hisse senedi canli takip",
+  "hisse senedi fiyatlari canli",
+  "hisse senedi grafik",
+  "hisse senedi kodu",
+  "hisse senedi piyasalari",
+  "hisse senedi yatirim fonlari",
+  "hisse senedi yatirim fonu",
+  "hisse senet fiyatlari",
+  "hisse senetleri",
+  "hisse senetleri fiyatlari",
+  "hisse tarama",
+  "hisse tavsiye",
+  "hisse yatirim",
+  "hisseler borsa",
+  "hisseler canli",
+  "hisseler grafik",
+  "iletisim hisseleri",
+  "imkb endeksi",
+  "imkb hisse senedi fiyatlari",
+  "invest bist",
+  "invest grafik",
+  "invest yorum",
+  "islem hacmi",
+  "istanbul borsa endeksi",
+  "karlilik",
+  "kisa vadeli",
+  "komisyonsuz borsa uygulamalari",
+  "kripto analiz",
+  "kripto analizi",
+  "lojistik hisse",
+  "model portfoyler",
+  "mondi tire kutsan yorumlari",
+  "onerilen hisseler",
+  "online borsa",
+  "online yatirim",
+  "ozerden plastik",
+  "para borsa",
+  "piyasa analizi",
+  "piyasa degeri en yuksek hisseler",
+  "polyester hisse",
+  "rta laboratuvarlari",
+  "sektor analizleri",
+  "sifirdan borsa egitimi",
+  "silverline endustri",
+  "sirket hisseleri",
+  "sirketlerin piyasa degerleri",
+  "teknik analiz egitimi",
+  "temel analiz egitimi",
+  "tire hisse yorumlar",
+  "tr borsa",
+  "trading borsa",
+  "tum hisse senetleri",
+  "uzman borsa",
+  "uzman borsa canli",
+  "uzman canli borsa",
+  "uzun vadeli hisse onerileri",
+  "yabanci hisse senedi",
+  "yatirim araci",
+  "yatirim holding",
+  "yatirim onerileri",
+  "yatirim platformlari",
+  "yesil yatirim",
+  "yesil yatirim holding",
+  "yukselen borsa",
+  "yuz endeksi"
+ ],
+ "clean_universe": {
+  "alinacak hisse": "alınacak hisse",
+  "alinacak hisse senedi": "alinacak hisse senedi",
+  "alinacak hisseler": "alinacak hisseler",
+  "aluminyum hisse": "alüminyum hisse",
+  "anlik borsa": "anlık borsa",
+  "anlik borsa canli": "anlık borsa canlı",
+  "anlik borsa ekrani": "anlık borsa ekranı",
+  "anlik borsa takibi ucretsiz": "anlık borsa takibi ücretsiz",
+  "anlik borsa takip": "anlık borsa takip",
+  "anlik borsa verileri": "anlık borsa verileri",
+  "anlik canli borsa": "anlık canlı borsa",
+  "anlik fiyat": "anlik fiyat",
+  "anlik hisse fiyatlari": "anlık hisse fiyatları",
+  "anlik hisse senedi": "anlık hisse senedi",
+  "anlik hisse takibi": "anlık hisse takibi",
+  "araci kurumlar hisse onerileri": "aracı kurumlar hisse önerileri",
+  "araci sozlesmesi": "aracı sözleşmesi",
+  "arsan": "arsan",
+  "aylik hisse onerileri": "aylık hisse önerileri",
+  "bakir hisseleri": "bakir hisseleri",
+  "bankalar hisse onerileri": "bankalar hisse önerileri",
+  "baticim cimento": "batıçim çimento",
+  "bilanco analizi": "bilanço analizi",
+  "bist 00": "bist 00",
+  "bist 100 borsa": "bist 100 borsa",
+  "bist 100 endeks": "bist 100 endeks",
+  "bist 100 endeks grafigi": "bist 100 endeks grafiği",
+  "bist 100 gecmis veriler": "bist 100 geçmiş veriler",
+  "bist 100 grafik": "bist 100 grafik",
+  "bist 100 hisse": "bist 100 hisse",
+  "bist 100 hisse canli": "bist 100 hisse canlı",
+  "bist 100 hisse listesi": "bist 100 hisse listesi",
+  "bist 100 hisseler": "bist 100 hisseler",
+  "bist 100 hisseleri": "bıst 100 hısselerı",
+  "bist 100 investing": "bist 100 investing",
+  "bist 100 yorum": "bist 100 yorum",
+  "bist 100 yorumlari": "bist 100 yorumları",
+  "bist 30": "bist 30",
+  "bist 30 canli": "bist 30 canli",
+  "bist 30 endeks": "bıst 30 endeks",
+  "bist 30 firmalari": "bıst 30 firmaları",
+  "bist 30 hisse fiyatlari": "bist 30 hisse fiyatları",
+  "bist 30 hisse grafik": "bist 30 hisse grafik",
+  "bist 30 hisseleri": "bıst 30 hısselerı",
+  "bist 30 hisseleri canli": "bist 30 hisseleri canlı",
+  "bist 30 sirketleri": "bist 30 şirketleri",
+  "bist 50": "bist 50",
+  "bist 50 sirketleri": "bist 50 şirketleri",
+  "bist anlik": "bist anlık",
+  "bist borsa": "bist borsa",
+  "bist bugun": "bist bugun",
+  "bist canli": "bist canlı",
+  "bist canli borsa": "bist canlı borsa",
+  "bist canli takip": "bist canlı takip",
+  "bist canli tum hisseler": "bist canlı tüm hisseler",
+  "bist canli veri": "bist canlı veri",
+  "bist degeri": "bist degeri",
+  "bist en cok islem goren hisseler": "bist en çok işlem gören hisseler",
+  "bist en cok yukselen": "bist en çok yükselen",
+  "bist en dusuk hisseler": "bist en düşük hisseler",
+  "bist endeks": "bist endeks",
+  "bist endeks canli": "bist endeks canlı",
+  "bist endeks grafik": "bist endeks grafik",
+  "bist endeks yorum": "bist endeks yorum",
+  "bist endeksi": "bist endeksi",
+  "bist endeksler": "bist endeksler",
+  "bist endeksleri": "bist endeksleri",
+  "bist fiyat": "bist fiyat",
+  "bist fiyatlari": "bist fiyatları",
+  "bist grafik": "bist grafik",
+  "bist haberler": "bist haberler",
+  "bist hacim": "bist hacim",
+  "bist hisse fiyatlari": "bist hisse fiyatları",
+  "bist hisse yorum": "bist hisse yorum",
+  "bist invest": "bist invest",
+  "bist islem hacimleri": "bist işlem hacimleri",
+  "bist islem saatleri": "bıst işlem saatleri",
+  "bist mali": "bist mali",
+  "bist piyasa degeri": "bist piyasa değeri",
+  "bist sektor endeksleri": "bist sektör endeksleri",
+  "bist sektorel endeksler": "bist sektörel endeksler",
+  "bist sektorler": "bist sektörler",
+  "bist sirketleri": "bist şirketleri",
+  "bist takip": "bist takip",
+  "bist tum endeksi": "bist tüm endeksi",
+  "bist tum hisseler": "bist tüm hisseler",
+  "bist tum hisseler canli": "bist tüm hisseler canlı",
+  "bist tum hisseleri": "bist tüm hisseleri",
+  "bist veri": "bist veri",
+  "bist veriler": "bist veriler",
+  "bist verileri": "bist verileri",
+  "bist yorum": "bist yorum",
+  "bist yorumlari": "bist yorumlari",
+  "bist100 endex": "bist100 endex",
+  "bjkas yorum": "bjkas yorum",
+  "borsa 30": "borsa 30",
+  "borsa acilis": "borsa açılış",
+  "borsa alim satim": "borsa alım satım",
+  "borsa analiz": "borsa analiz",
+  "borsa analizi": "borsa analizi",
+  "borsa anlik": "borsa anlık",
+  "borsa anlik takip": "borsa anlık takip",
+  "borsa anlik veri": "borsa anlık veri",
+  "borsa anlik veri ucretsiz": "borsa anlık veri ücretsiz",
+  "borsa bist": "borsa bist",
+  "borsa bist 30": "borsa bist 30",
+  "borsa bugun": "borsa bügün",
+  "borsa canli": "borsa canlı",
+  "borsa canli grafik": "borsa canlı grafik",
+  "borsa canli hisse": "borsa canlı hisse",
+  "borsa canli izleme": "borsa canlı izleme",
+  "borsa canli takip": "borsa canlı takip",
+  "borsa canli takip ucretsiz": "borsa canlı takip ücretsiz",
+  "borsa canli veri": "borsa canlı veri",
+  "borsa canli veri ucretsiz": "borsa canlı veri ücretsiz",
+  "borsa canli yorum": "borsa canlı yorum",
+  "borsa cikan hisseler": "borsa çıkan hisseler",
+  "borsa destek direnc seviyeleri": "borsa destek direnç seviyeleri",
+  "borsa durumu": "borsa durumu",
+  "borsa dustu": "borsa dustu",
+  "borsa dususu": "borsa düşüşü",
+  "borsa egitimi": "borsa eğitimi",
+  "borsa egitimi ucretsiz": "borsa eğitimi ücretsiz",
+  "borsa ekrani": "borsa ekranı",
+  "borsa ekrani canli": "borsa ekranı canlı",
+  "borsa en cok islem gorenler": "borsa en cok islem gorenler",
+  "borsa endeks yorum": "borsa endeks yorum",
+  "borsa endeksi": "borsa endeksi",
+  "borsa endeksi canli": "borsa endeksi canlı",
+  "borsa endeksi grafik": "borsa endeksi grafik",
+  "borsa fiyat": "borsa fiyat",
+  "borsa fiyatlari": "borsa fiyatları",
+  "borsa giris": "borsa giriş",
+  "borsa grafik": "borsa grafik",
+  "borsa grafik analizi": "borsa grafik analizi",
+  "borsa gruplari": "borsa grupları",
+  "borsa gunluk bulten": "borsa günlük bülten",
+  "borsa gunluk grafik": "borsa günlük grafik",
+  "borsa haberi": "borsa haberi",
+  "borsa hacmi": "borsa hacmi",
+  "borsa hareketleri": "borsa hareketleri",
+  "borsa hesaplari": "borsa hesapları",
+  "borsa hisse analiz": "borsa hisse analiz",
+  "borsa hisse fiyatlari": "borsa hisse fiyatları",
+  "borsa hisse grafikleri": "borsa hisse grafikleri",
+  "borsa hisse listesi": "borsa hisse listesi",
+  "borsa hisse onerileri": "borsa hisse önerileri",
+  "borsa hisse senedi": "borsa hisse senedi",
+  "borsa hisse senedi fiyatlari": "borsa hisse senedi fiyatları",
+  "borsa hisse takip": "borsa hisse takip",
+  "borsa hisse tavsiye": "borsa hisse tavsiye",
+  "borsa hisse tavsiyeleri": "borsa hisse tavsiyeleri",
+  "borsa hisse yorum": "borsa hisse yorum",
+  "borsa hisse yorumlari": "borsa hisse yorumları",
+  "borsa hisseler": "borsa hisseler",
+  "borsa hisseler canli": "borsa hisseler canlı",
+  "borsa indikatorleri": "borsa indikatörleri",
+  "borsa invest": "borsa invest",
+  "borsa investing yorum": "borsa investing yorum",
+  "borsa islem goren sirketler": "borsa işlem gören şirketler",
+  "borsa islem hacmi": "borsa işlem hacmi",
+  "borsa islem platformlari": "borsa işlem platformları",
+  "borsa islemleri": "borsa işlemleri",
+  "borsa istanbul bugun": "borsa istanbul bugun",
+  "borsa istanbul canli": "borsa istanbul canlı",
+  "borsa istanbul canli endeks": "borsa istanbul canlı endeks",
+  "borsa istanbul fiyatlari": "borsa istanbul fiyatları",
+  "borsa istanbul grafik": "borsa istanbul grafik",
+  "borsa istanbul haberleri": "borsa istanbul haberleri",
+  "borsa istanbul hisse listesi": "borsa istanbul hisse listesi",
+  "borsa istanbul hisse senedi fiyatlari": "borsa istanbul hisse senedi fiyatları",
+  "borsa istanbul hisse senetleri": "borsa istanbul hisse senetleri",
+  "borsa istanbul sirketler": "borsa istanbul şirketler",
+  "borsa istanbul tum hisseler": "borsa istanbul tüm hisseler",
+  "borsa istatistikleri": "borsa istatistikleri",
+  "borsa izleme": "borsa izleme",
+  "borsa kurslari": "borsa kursları",
+  "borsa my": "borsa my",
+  "borsa nedir": "borsa nedır",
+  "borsa ogreniyorum": "borsa öğreniyorum",
+  "borsa ogrenmek": "borsa öğrenmek",
+  "borsa onerileri": "borsa önerileri",
+  "borsa para yatirma": "borsa para yatırma",
+  "borsa piyasalar": "borsa piyasalar",
+  "borsa piyasasi": "borsa piyasasi",
+  "borsa platformlari": "borsa platformları",
+  "borsa program": "borsa program",
+  "borsa programi": "borsa programi",
+  "borsa puani": "borsa puanı",
+  "borsa resmi": "borsa resmi",
+  "borsa seans": "borsa seans",
+  "borsa sektorler": "borsa sektörler",
+  "borsa sektorleri": "borsa sektörleri",
+  "borsa sirketleri": "borsa şirketleri",
+  "borsa sirketleri haberleri": "borsa şirketleri haberleri",
+  "borsa sitesi": "borsa sitesi",
+  "borsa tablosu": "borsa tablosu",
+  "borsa tahminleri": "borsa tahminleri",
+  "borsa takip": "borsa takip",
+  "borsa takip ekrani": "borsa takip ekranı",
+  "borsa takip sitesi": "borsa takip sitesi",
+  "borsa takip uygulamalari": "borsa takip uygulamaları",
+  "borsa tavsiye": "borsa tavsiye",
+  "borsa tavsiyesi": "borsa tavsiyesi",
+  "borsa teknik": "borsa teknik",
+  "borsa teknik analiz": "borsa teknik analiz",
+  "borsa temel analiz": "borsa temel analiz",
+  "borsa temel analiz egitimi": "borsa temel analiz eğitimi",
+  "borsa tum hisseler": "borsa tüm hisseler",
+  "borsa uygulamalari": "borsa uygulamaları",
+  "borsa uzmani": "borsa uzmani",
+  "borsa ve yatirim": "borsa ve yatırım",
+  "borsa veriler": "borsa veriler",
+  "borsa verileri": "borsa verileri",
+  "borsa verisi": "borsa verisi",
+  "borsa yapay zeka": "borsa yapay zeka",
+  "borsa yatirim": "borsa yatırım",
+  "borsa yatirim fonlari": "borsa yatırım fonları",
+  "borsa yatirim fonu": "borsa yatirim fonu",
+  "borsa yatirim tavsiye": "borsa yatırım tavsiye",
+  "borsa yatirim tavsiyeleri": "borsa yatırım tavsiyeleri",
+  "borsa yo": "borsa yo",
+  "borsa yorum": "borsa yorum",
+  "borsa yorumcusu": "borsa yorumcusu",
+  "borsada beklenti": "borsada beklenti",
+  "borsada bu hafta": "borsada bu hafta",
+  "borsada emir saatleri": "borsada emir saatleri",
+  "borsada en cok islem goren hisseler": "borsada en çok işlem gören hisseler",
+  "borsada en dusuk hisseler": "borsada en düşük hisseler",
+  "borsada en iyi hisseler": "borsada en iyi hisseler",
+  "borsada hisseler": "borsada hisseler",
+  "borsada islem goren hisse senetleri": "borsada işlem gören hisse senetleri",
+  "borsada islem goren hisseler": "borsada işlem gören hisseler",
+  "borsada islem goren sirketler": "borsada işlem gören şirketler",
+  "borsada islem goren tum hisseler": "borsada işlem gören tüm hisseler",
+  "borsada yapay zeka algoritmalari": "borsada yapay zeka algoritmaları",
+  "borsada yatirim sirketleri": "borsada yatırım şirketleri",
+  "borsada yatirim tavsiyesi": "borsada yatırım tavsiyesi",
+  "borsada yukselecek hisseler": "borsada yukselecek hisseler",
+  "bu hafta yukselecek hisseler": "bu hafta yükselecek hisseler",
+  "bugun en cok islem goren hisseler": "bugün en çok işlem gören hisseler",
+  "bugun yukselecek hisseler": "bugün yükselecek hisseler",
+  "butun hisse senetleri": "bütün hisse senetleri",
+  "canli anlik borsa": "canlı anlık borsa",
+  "canli anlik borsa ucretsiz": "canlı anlık borsa ücretsiz",
+  "canli b": "canlı b",
+  "canli bist": "canli bist",
+  "canli bo": "canli bo",
+  "canli borsa": "canlı borsa",
+  "canli borsa alim satim": "canlı borsa alım satım",
+  "canli borsa anlik": "canlı borsa anlık",
+  "canli borsa canli borsa": "canlı borsa canlı borsa",
+  "canli borsa ekrani": "canlı borsa ekranı",
+  "canli borsa ekrani anlik borsa izle": "canlı borsa ekranı anlık borsa izle",
+  "canli borsa ekrani ucretsiz": "canlı borsa ekranı ücretsiz",
+  "canli borsa fiyatlari": "canlı borsa fiyatları",
+  "canli borsa grafik": "canlı borsa grafik",
+  "canli borsa hisse": "canli borsa hisse",
+  "canli borsa izleme": "canlı borsa izleme",
+  "canli borsa takip": "canlı borsa takip",
+  "canli borsa takip ekrani": "canlı borsa takip ekranı",
+  "canli borsa takip programi ucretsiz": "canlı borsa takip programı ücretsiz",
+  "canli borsa tum hisseler": "canlı borsa tüm hisseler",
+  "canli borsa uzman": "canlı borsa uzman",
+  "canli borsa verileri": "canlı borsa verileri",
+  "canli borsa yorumlari": "canlı borsa yorumları",
+  "canli endeks": "canlı endeks",
+  "canli grafik": "canli grafik",
+  "canli hisse fiyatlari": "canlı hisse fiyatları",
+  "canli hisse grafikleri": "canlı hisse grafikleri",
+  "canli hisse senetleri": "canlı hisse senetleri",
+  "canli hisse takip": "canlı hisse takip",
+  "canli veri borsa": "canlı veri borsa",
+  "canli veriler": "canlı veriler",
+  "coin yorumlari": "coin yorumlari",
+  "cok kazandiracak hisseler": "çok kazandıracak hisseler",
+  "cok kazandiran hisseler": "çok kazandıran hisseler",
+  "cok yukselen hisseler": "çok yükselen hisseler",
+  "demo hesap": "demo hesap",
+  "derim": "derım",
+  "destek direnc": "destek direnç",
+  "destek ve direnc": "destek ve direnç",
+  "dgate": "dgate",
+  "dogub": "doğub",
+  "dogusan": "dogusan",
+  "duran dogan basim": "duran doğan basim",
+  "dusuk fiyatli hisseler": "dusuk fiyatli hisseler",
+  "dusuk hisse senetleri": "düşük hisse senetleri",
+  "e borsa": "e borsa",
+  "emlak konut yatirim ortakligi": "emlak konut yatırım ortaklığı",
+  "en cok islem goren hisse senetleri": "en çok işlem gören hisse senetleri",
+  "en cok islem goren hisseler": "en çok işlem gören hisseler",
+  "en cok kazandiracak hisseler": "en çok kazandıracak hisseler",
+  "en cok kazandiran hisse senetleri": "en çok kazandıran hisse senetleri",
+  "en cok kazandiran yatirim araci": "en çok kazandıran yatırım aracı",
+  "en cok yukselecek hisseler": "en çok yükselecek hisseler",
+  "en cok yukselen hisseler": "en cok yükselen hisseler",
+  "en dusuk fiyatli hisseler": "en dusuk fiyatli hisseler",
+  "en dusuk hisse": "en düsuk hisse",
+  "en dusuk hisse fiyatlari": "en düşük hisse fiyatları",
+  "en dusuk hisse senetleri": "en düşük hisse senetleri",
+  "en dusuk hisseler": "en düşük hisseler",
+  "en guvenilir hisse senetleri": "en güvenilir hisse senetleri",
+  "en iyi borsa analiz sitesi": "en iyi borsa analiz sitesi",
+  "en iyi borsa takip sitesi": "en iyi borsa takip sitesi",
+  "en iyi hisse onerileri": "en iyi hisse önerileri",
+  "en iyi temel analiz programi": "en iyi temel analiz programı",
+  "en iyi yatirim hisseleri": "en iyi yatırım hisseleri",
+  "en karli borsa hisseleri": "en karlı borsa hisseleri",
+  "en karli hisse": "en karli hisse",
+  "en karli hisse senedi": "en karlı hisse senedi",
+  "en karli hisseler": "en karli hisseler",
+  "en mantikli hisse": "en mantıklı hisse",
+  "en pahali hisse senedi turkiye": "en pahalı hisse senedi türkiye",
+  "en saglam hisse senetleri": "en sağlam hisse senetleri",
+  "en uygun hisseler": "en uygun hisseler",
+  "en yuksek fiyatli hisseler": "en yüksek fiyatlı hisseler",
+  "en yuksek hisse": "en yuksek hisse",
+  "en yuksek hisse senedi": "en yüksek hisse senedi",
+  "endeks bist": "endeks bist",
+  "endeks borsa": "endeks borsa",
+  "endeks canli": "endeks canlı",
+  "endeks fonu": "endeks fonu",
+  "endeks grafik": "endeks grafik",
+  "endeks hisseleri": "endeks hisseleri",
+  "endeks yorum": "endeks yorum",
+  "finans analiz": "finans analiz",
+  "finans hisseleri": "finans hisseleri",
+  "finans ve borsa": "finans ve borsa",
+  "fintables indir": "fintables indir",
+  "fintables pro": "fintables pro",
+  "fintables ucretsiz": "fintables ücretsiz",
+  "fk dusuk hisseler": "fk dusuk hisseler",
+  "fk en dusuk hisseler": "fk en düşük hisseler",
+  "fk nedemek": "fk nedemek",
+  "fk orani": "fk orani",
+  "fk orani dusuk hisseler": "fk oranı düşük hisseler",
+  "fk oranlari": "fk oranları",
+  "fk si dusuk hisseler": "fk si dusuk hisseler",
+  "gelecegin hisseleri": "gelecegin hisseleri",
+  "global borsa": "global borsa",
+  "global yatirim": "global yatırım",
+  "global yatirim holding": "global yatirim holding",
+  "grafik analiz": "grafik analiz",
+  "grafik borsa": "grafik borsa",
+  "grafik yorum": "grafik yorum",
+  "guncel borsa yorumlari": "güncel borsa yorumları",
+  "guncel hisse fiyatlari": "güncel hisse fiyatları",
+  "guncel hisse onerileri": "güncel hisse önerileri",
+  "gunluk al sat hisse onerileri": "günlük al sat hisse önerileri",
+  "gunluk borsa": "günlük borsa",
+  "gunluk borsa fiyatlari": "günlük borsa fiyatları",
+  "gunluk borsa takip": "günlük borsa takip",
+  "gunluk borsa yorumlari": "günlük borsa yorumları",
+  "gunluk hisse onerileri": "günlük hisse önerileri",
+  "haberler borsa": "haberler borsa",
+  "haftalik hisse oneri": "haftalık hisse öneri",
+  "haftalik hisse onerileri": "haftalık hisse önerileri",
+  "hisse alim": "hisse alım",
+  "hisse alim satim": "hisse alım satım",
+  "hisse alim satim saatleri": "hisse alim satim saatleri",
+  "hisse almak": "hisse almak",
+  "hisse analiz": "hisse analiz",
+  "hisse analiz siteleri": "hisse analiz siteleri",
+  "hisse analizleri": "hisse analizleri",
+  "hisse bilanco": "hisse bilanço",
+  "hisse borsa": "hisse borsa",
+  "hisse canli": "hisse canli",
+  "hisse canli veri": "hisse canlı veri",
+  "hisse degerleri": "hisse değerleri",
+  "hisse destek direnc": "hisse destek direnç",
+  "hisse fikirleri": "hisse fikirleri",
+  "hisse filtreleme": "hisse filtreleme",
+  "hisse fiyat": "hisse fiyat",
+  "hisse fiyatlari": "hisse fiyatları",
+  "hisse fiyatlari anlik": "hisse fiyatları anlık",
+  "hisse fiyatlari canli": "hisse fiyatları canlı",
+  "hisse grafik": "hisse grafik",
+  "hisse grafik analiz": "hisse grafik analiz",
+  "hisse gunluk": "hisse günlük",
+  "hisse haberleri": "hisse haberleri",
+  "hisse hacim": "hisse hacim",
+  "hisse hedefleri": "hisse hedefleri",
+  "hisse karsilastirma": "hisse karşılaştırma",
+  "hisse oneri com": "hisse öneri com",
+  "hisse oneri listesi": "hisse öneri listesi",
+  "hisse onerileri": "hisse önerileri",
+  "hisse onerileri gunluk": "hisse önerileri günlük",
+  "hisse onerisi gunluk": "hisse önerisi günlük",
+  "hisse portfoyu": "hisse portföyü",
+  "hisse satin al": "hisse satin al",
+  "hisse satin almak": "hisse satın almak",
+  "hisse satislari": "hisse satışları",
+  "hisse senedi": "hisse senedi",
+  "hisse senedi alim": "hisse senedi alım",
+  "hisse senedi alim satim": "hisse senedi alım satım",
+  "hisse senedi almak": "hisse senedi almak",
+  "hisse senedi analiz": "hisse senedi analiz",
+  "hisse senedi anlik takip": "hisse senedi anlık takip",
+  "hisse senedi anlik veri": "hisse senedi anlık veri",
+  "hisse senedi canli takip": "hisse senedi canlı takip",
+  "hisse senedi degerleme": "hisse senedi değerleme",
+  "hisse senedi en cok kazandiran": "hisse senedi en çok kazandıran",
+  "hisse senedi fiyatlari": "hisse senedi fiyatları",
+  "hisse senedi fiyatlari canli": "hisse senedi fiyatları canlı",
+  "hisse senedi grafik": "hisse senedi grafik",
+  "hisse senedi kodu": "hisse senedi kodu",
+  "hisse senedi onerileri": "hisse senedi önerileri",
+  "hisse senedi piyasalari": "hisse senedi piyasaları",
+  "hisse senedi takip": "hisse senedi takip",
+  "hisse senedi takip ve oneri listesi": "hisse senedi takip ve öneri listesi",
+  "hisse senedi tarama": "hisse senedi tarama",
+  "hisse senedi tavsiye": "hisse senedi tavsiye",
+  "hisse senedi uygulamalari": "hisse senedi uygulamaları",
+  "hisse senedi yatirim": "hisse senedi yatırım",
+  "hisse senedi yatirim fonlari": "hisse senedi yatırım fonları",
+  "hisse senedi yatirim fonu": "hisse senedi yatırım fonu",
+  "hisse senedi yatirim tavsiyeleri": "hisse senedi yatırım tavsiyeleri",
+  "hisse senedi yorumlari": "hisse senedi yorumları",
+  "hisse senet fiyatlari": "hisse senet fiyatları",
+  "hisse senetleri": "hisse senetleri",
+  "hisse senetleri fiyatlari": "hisse senetleri fiyatları",
+  "hisse senetleri listesi": "hisse senetleri listesi",
+  "hisse senetleri takip": "hisse senetleri takip",
+  "hisse tahminleri": "hisse tahminleri",
+  "hisse takip": "hisse takip",
+  "hisse tarama": "hisse tarama",
+  "hisse tavsiye": "hisse tavsiye",
+  "hisse tavsiyeleri": "hisse tavsiyeleri",
+  "hisse tavsiyesi": "hisse tavsiyesi",
+  "hisse teknik analiz": "hisse teknik analiz",
+  "hisse tuyolari": "hisse tüyoları",
+  "hisse uygulamalari": "hisse uygulamaları",
+  "hisse yatirim": "hisse yatırım",
+  "hisse yatirim tavsiyeleri": "hisse yatırım tavsiyeleri",
+  "hisse yorum": "hisse yorum",
+  "hisse yorumlama": "hisse yorumlama",
+  "hisse yorumlari": "hisse yorumları",
+  "hisseler borsa": "hisseler borsa",
+  "hisseler canli": "hisseler canlı",
+  "hisseler grafik": "hisseler grafik",
+  "iletisim hisseleri": "iletişim hisseleri",
+  "imkb endeksi": "imkb endeksi",
+  "imkb hisse senedi fiyatlari": "imkb hisse senedi fiyatları",
+  "imkb hisse senetleri": "imkb hisse senetleri",
+  "invest bist": "invest bist",
+  "invest grafik": "invest grafik",
+  "invest yorum": "invest yorum",
+  "islem hacmi": "islem hacmi",
+  "istanbul borsa endeksi": "istanbul borsa endeksi",
+  "kar getirecek hisseler": "kar getirecek hisseler",
+  "karlilik": "karlilik",
+  "kisa vadeli": "kısa vadeli",
+  "kisa vadeli hisse onerileri": "kısa vadeli hisse önerileri",
+  "kisa vadeli yatirim tavsiyeleri": "kısa vadeli yatırım tavsiyeleri",
+  "komisyonsuz borsa uygulamalari": "komisyonsuz borsa uygulamaları",
+  "kripto analiz": "kripto analiz",
+  "kripto analizi": "kripto analizi",
+  "lojistik hisse": "lojistik hisse",
+  "model portfoy": "model portföy",
+  "model portfoyler": "model portföyler",
+  "mondi tire kutsan yorumlari": "mondi tire kutsan yorumları",
+  "onerilen hisseler": "onerilen hisseler",
+  "online borsa": "online borsa",
+  "online yatirim": "online yatırım",
+  "ozerden plastik": "ozerden plastik",
+  "para borsa": "para borsa",
+  "piyasa analizi": "piyasa analizi",
+  "piyasa degeri en yuksek hisseler": "piyasa değeri en yüksek hisseler",
+  "piyasa takip": "piyasa takip",
+  "piyasa yorumlari": "piyasa yorumlari",
+  "polyester hisse": "polyester hisse",
+  "populer hisse senetleri": "popüler hisse senetleri",
+  "portfoy takibi": "portföy takibi",
+  "rta laboratuvarlari": "rta laboratuvarlari",
+  "sektor analiz": "sektör analiz",
+  "sektor analizleri": "sektör analizleri",
+  "sektor raporlari": "sektör raporları",
+  "sektorlere gore hisseler": "sektörlere göre hisseler",
+  "sifirdan borsa egitimi": "sıfırdan borsa eğitimi",
+  "silverline endustri": "silverline endüstri",
+  "sirket bilanco": "şirket bilanço",
+  "sirket hisseleri": "şirket hisseleri",
+  "sirketlerin piyasa degerleri": "şirketlerin piyasa değerleri",
+  "su an alinacak hisseler": "şu an alınacak hisseler",
+  "teknik analiz": "teknik analiz",
+  "teknik analiz egitimi": "teknik analiz eğitimi",
+  "temel analiz": "temel analiz",
+  "temel analiz egitimi": "temel analiz eğitimi",
+  "tire hisse yorumlar": "tire hisse yorumlar",
+  "tr borsa": "tr borsa",
+  "trading borsa": "trading borsa",
+  "tum bist hisseleri": "tüm bist hisseleri",
+  "tum hisse senetleri": "tüm hisse senetleri",
+  "turkiye hisse senetleri": "türkiye hisse senetleri",
+  "ucuz hisse onerileri": "ucuz hisse önerileri",
+  "uygun hisseler": "uygun hisseler",
+  "uzman borsa": "uzman borsa",
+  "uzman borsa canli": "uzman borsa canlı",
+  "uzman canli borsa": "uzman canlı borsa",
+  "uzun vade hisse": "uzun vade hisse",
+  "uzun vade yatirim hisseleri": "uzun vade yatırım hisseleri",
+  "uzun vade yatirim tavsiyesi": "uzun vade yatırım tavsiyesi",
+  "uzun vadede hisse": "uzun vadede hisse",
+  "uzun vadeli en iyi yatirim": "uzun vadeli en iyi yatırım",
+  "uzun vadeli hisse onerileri": "uzun vadeli hisse önerileri",
+  "uzun vadeli hisse senedi": "uzun vadeli hisse senedi",
+  "uzun vadeli yatirim": "uzun vadeli yatırım",
+  "uzun vadeli yatirim hisseleri": "uzun vadeli yatırım hisseleri",
+  "yabanci hisse senedi": "yabanci hisse senedi",
+  "yapay zeka borsa": "yapay zeka borsa",
+  "yapay zeka borsa programi": "yapay zeka borsa programı",
+  "yapay zeka hisse analizi": "yapay zeka hisse analizi",
+  "yapay zeka hisseleri": "yapay zeka hisseleri",
+  "yatirim araci": "yatırım aracı",
+  "yatirim borsa": "yatırım borsa",
+  "yatirim haberleri": "yatirim haberleri",
+  "yatirim hisse onerileri": "yatırım hisse önerileri",
+  "yatirim hisseleri": "yatırım hisseleri",
+  "yatirim holding": "yatirim holding",
+  "yatirim onerileri": "yatırım önerileri",
+  "yatirim platformlari": "yatırım platformları",
+  "yatirim tavsiyeleri": "yatirim tavsiyeleri",
+  "yatirim tavsiyesi": "yatirim tavsiyesi",
+  "yatirim uygulamalari": "yatırım uygulamaları",
+  "yatirim yapilacak hisseler": "yatırım yapılacak hisseler",
+  "yatirimlik hisseler": "yatırımlık hisseler",
+  "yeni cikan hisse senetleri": "yeni çıkan hisse senetleri",
+  "yeni hisse senetleri": "yeni hisse senetleri",
+  "yesil yatirim": "yeşil yatirim",
+  "yesil yatirim holding": "yesil yatirim holding",
+  "yuksek hacimli hisseler": "yüksek hacimli hisseler",
+  "yukselebilecek hisse senetleri": "yükselebilecek hisse senetleri",
+  "yukselebilecek hisseler": "yükselebilecek hisseler",
+  "yukselecek hisse senetleri": "yükselecek hisse senetleri",
+  "yukselecek hisseler": "yukselecek hisseler",
+  "yukselecek olan hisseler": "yükselecek olan hisseler",
+  "yukselen borsa": "yükselen borsa",
+  "yukselen hisse senedi": "yükselen hisse senedi",
+  "yuz endeksi": "yüz endeksi"
+ },
+ "clean_source_rows": [
+  {
+   "row_no": 2,
+   "keyword": "canlı borsa"
+  },
+  {
+   "row_no": 3,
+   "keyword": "canli borsa"
+  },
+  {
+   "row_no": 4,
+   "keyword": "borsa canlı"
+  },
+  {
+   "row_no": 5,
+   "keyword": "bist 30"
+  },
+  {
+   "row_no": 6,
+   "keyword": "bist 100 hisse"
+  },
+  {
+   "row_no": 7,
+   "keyword": "hisse senedi"
+  },
+  {
+   "row_no": 8,
+   "keyword": "hisse senetleri"
+  },
+  {
+   "row_no": 9,
+   "keyword": "bist 100 endeks"
+  },
+  {
+   "row_no": 10,
+   "keyword": "bist 100 yorum"
+  },
+  {
+   "row_no": 11,
+   "keyword": "canlı borsa ekranı"
+  },
+  {
+   "row_no": 12,
+   "keyword": "borsa yorum"
+  },
+  {
+   "row_no": 13,
+   "keyword": "borsa yo"
+  },
+  {
+   "row_no": 14,
+   "keyword": "bist 100 grafik"
+  },
+  {
+   "row_no": 15,
+   "keyword": "bıst 100 hısselerı"
+  },
+  {
+   "row_no": 16,
+   "keyword": "borsa endeksi"
+  },
+  {
+   "row_no": 17,
+   "keyword": "borsa hisseler"
+  },
+  {
+   "row_no": 18,
+   "keyword": "bıst 30 hısselerı"
+  },
+  {
+   "row_no": 19,
+   "keyword": "borsa istanbul canlı"
+  },
+  {
+   "row_no": 20,
+   "keyword": "hisse önerileri"
+  },
+  {
+   "row_no": 21,
+   "keyword": "hisse onerileri"
+  },
+  {
+   "row_no": 22,
+   "keyword": "canlı borsa takip"
+  },
+  {
+   "row_no": 23,
+   "keyword": "bist endeks"
+  },
+  {
+   "row_no": 24,
+   "keyword": "bist yorum"
+  },
+  {
+   "row_no": 25,
+   "keyword": "bakir hisseleri"
+  },
+  {
+   "row_no": 26,
+   "keyword": "teknik analiz"
+  },
+  {
+   "row_no": 27,
+   "keyword": "borsa takip"
+  },
+  {
+   "row_no": 28,
+   "keyword": "anlık borsa"
+  },
+  {
+   "row_no": 29,
+   "keyword": "hisse takip"
+  },
+  {
+   "row_no": 30,
+   "keyword": "borsa haberi"
+  },
+  {
+   "row_no": 31,
+   "keyword": "hisse senedi takip"
+  },
+  {
+   "row_no": 32,
+   "keyword": "hisse senedi fiyatları"
+  },
+  {
+   "row_no": 33,
+   "keyword": "hisse senetleri fiyatları"
+  },
+  {
+   "row_no": 34,
+   "keyword": "bist 100 investing"
+  },
+  {
+   "row_no": 35,
+   "keyword": "hisse senet fiyatları"
+  },
+  {
+   "row_no": 36,
+   "keyword": "hisse senetleri takip"
+  },
+  {
+   "row_no": 37,
+   "keyword": "coin yorumlari"
+  },
+  {
+   "row_no": 38,
+   "keyword": "global yatırım"
+  },
+  {
+   "row_no": 39,
+   "keyword": "global yatirim"
+  },
+  {
+   "row_no": 40,
+   "keyword": "global yatirim holding"
+  },
+  {
+   "row_no": 41,
+   "keyword": "hisse fiyatları"
+  },
+  {
+   "row_no": 42,
+   "keyword": "borsa grafik"
+  },
+  {
+   "row_no": 43,
+   "keyword": "yatirim tavsiyesi"
+  },
+  {
+   "row_no": 44,
+   "keyword": "en çok işlem gören hisseler"
+  },
+  {
+   "row_no": 45,
+   "keyword": "yatirim tavsiyeleri"
+  },
+  {
+   "row_no": 46,
+   "keyword": "canlı borsa izleme"
+  },
+  {
+   "row_no": 47,
+   "keyword": "hisse fiyat"
+  },
+  {
+   "row_no": 48,
+   "keyword": "bist endeksi"
+  },
+  {
+   "row_no": 49,
+   "keyword": "borsa nedır"
+  },
+  {
+   "row_no": 50,
+   "keyword": "bist 50"
+  },
+  {
+   "row_no": 51,
+   "keyword": "yatırım tavsiyeleri"
+  },
+  {
+   "row_no": 52,
+   "keyword": "borsa canlı takip"
+  },
+  {
+   "row_no": 53,
+   "keyword": "günlük hisse önerileri"
+  },
+  {
+   "row_no": 54,
+   "keyword": "bist canlı"
+  },
+  {
+   "row_no": 55,
+   "keyword": "uzman borsa"
+  },
+  {
+   "row_no": 56,
+   "keyword": "borsa invest"
+  },
+  {
+   "row_no": 57,
+   "keyword": "arsan"
+  },
+  {
+   "row_no": 58,
+   "keyword": "bist tüm hisseler"
+  },
+  {
+   "row_no": 59,
+   "keyword": "imkb endeksi"
+  },
+  {
+   "row_no": 60,
+   "keyword": "para borsa"
+  },
+  {
+   "row_no": 61,
+   "keyword": "bist grafik"
+  },
+  {
+   "row_no": 62,
+   "keyword": "borsa bügün"
+  },
+  {
+   "row_no": 63,
+   "keyword": "canlı borsa ekranı ücretsiz"
+  },
+  {
+   "row_no": 64,
+   "keyword": "yapay zeka hisseleri"
+  },
+  {
+   "row_no": 65,
+   "keyword": "bist en çok yükselen"
+  },
+  {
+   "row_no": 66,
+   "keyword": "bist invest"
+  },
+  {
+   "row_no": 67,
+   "keyword": "hisse senedi önerileri"
+  },
+  {
+   "row_no": 68,
+   "keyword": "borsa eğitimi"
+  },
+  {
+   "row_no": 69,
+   "keyword": "borsa anlık"
+  },
+  {
+   "row_no": 70,
+   "keyword": "borsa yatırım fonları"
+  },
+  {
+   "row_no": 71,
+   "keyword": "borsa hisse senedi"
+  },
+  {
+   "row_no": 72,
+   "keyword": "borsa yatirim fonu"
+  },
+  {
+   "row_no": 73,
+   "keyword": "bist endeks grafik"
+  },
+  {
+   "row_no": 74,
+   "keyword": "hisse analiz"
+  },
+  {
+   "row_no": 75,
+   "keyword": "hisse yorumları"
+  },
+  {
+   "row_no": 76,
+   "keyword": "hisse yorumlama"
+  },
+  {
+   "row_no": 77,
+   "keyword": "derım"
+  },
+  {
+   "row_no": 78,
+   "keyword": "borsa fiyatları"
+  },
+  {
+   "row_no": 79,
+   "keyword": "borsa ekranı"
+  },
+  {
+   "row_no": 80,
+   "keyword": "haftalık hisse önerileri"
+  },
+  {
+   "row_no": 81,
+   "keyword": "borsa fiyat"
+  },
+  {
+   "row_no": 82,
+   "keyword": "haftalik hisse onerileri"
+  },
+  {
+   "row_no": 83,
+   "keyword": "hisse analizleri"
+  },
+  {
+   "row_no": 84,
+   "keyword": "hisse yorum"
+  },
+  {
+   "row_no": 85,
+   "keyword": "haftalık hisse öneri"
+  },
+  {
+   "row_no": 86,
+   "keyword": "hisse tarama"
+  },
+  {
+   "row_no": 87,
+   "keyword": "alüminyum hisse"
+  },
+  {
+   "row_no": 88,
+   "keyword": "yesil yatirim holding"
+  },
+  {
+   "row_no": 89,
+   "keyword": "borsa analiz"
+  },
+  {
+   "row_no": 90,
+   "keyword": "anlık borsa takip"
+  },
+  {
+   "row_no": 91,
+   "keyword": "borsa canlı veri"
+  },
+  {
+   "row_no": 92,
+   "keyword": "canlı borsa verileri"
+  },
+  {
+   "row_no": 93,
+   "keyword": "en düşük hisseler"
+  },
+  {
+   "row_no": 94,
+   "keyword": "model portföy"
+  },
+  {
+   "row_no": 95,
+   "keyword": "bist 30 şirketleri"
+  },
+  {
+   "row_no": 96,
+   "keyword": "borsa tüm hisseler"
+  },
+  {
+   "row_no": 97,
+   "keyword": "borsa hisseler canlı"
+  },
+  {
+   "row_no": 98,
+   "keyword": "model portföyler"
+  },
+  {
+   "row_no": 99,
+   "keyword": "en düsük hisseler"
+  },
+  {
+   "row_no": 100,
+   "keyword": "borsa istanbul grafik"
+  },
+  {
+   "row_no": 101,
+   "keyword": "borsa analizi"
+  },
+  {
+   "row_no": 102,
+   "keyword": "invest yorum"
+  },
+  {
+   "row_no": 103,
+   "keyword": "dgate"
+  },
+  {
+   "row_no": 104,
+   "keyword": "borsa uygulamaları"
+  },
+  {
+   "row_no": 105,
+   "keyword": "hisse grafik"
+  },
+  {
+   "row_no": 106,
+   "keyword": "hisseler grafik"
+  },
+  {
+   "row_no": 107,
+   "keyword": "endeks yorum"
+  },
+  {
+   "row_no": 108,
+   "keyword": "borsa my"
+  },
+  {
+   "row_no": 109,
+   "keyword": "en cok yükselen hisseler"
+  },
+  {
+   "row_no": 110,
+   "keyword": "yükselebilecek hisseler"
+  },
+  {
+   "row_no": 111,
+   "keyword": "yukselecek hisseler"
+  },
+  {
+   "row_no": 112,
+   "keyword": "en çok kazandıran hisse senetleri"
+  },
+  {
+   "row_no": 113,
+   "keyword": "tüm hisse senetleri"
+  },
+  {
+   "row_no": 114,
+   "keyword": "yükselecek hisseler"
+  },
+  {
+   "row_no": 115,
+   "keyword": "hisse tavsiyesi"
+  },
+  {
+   "row_no": 116,
+   "keyword": "rta laboratuvarlari"
+  },
+  {
+   "row_no": 117,
+   "keyword": "borsa takip ekranı"
+  },
+  {
+   "row_no": 118,
+   "keyword": "canlı borsa takip ekranı"
+  },
+  {
+   "row_no": 119,
+   "keyword": "borsa verileri"
+  },
+  {
+   "row_no": 120,
+   "keyword": "borsa verisi"
+  },
+  {
+   "row_no": 121,
+   "keyword": "borsa veriler"
+  },
+  {
+   "row_no": 122,
+   "keyword": "hisse tavsiyeleri"
+  },
+  {
+   "row_no": 123,
+   "keyword": "hisse tavsiye"
+  },
+  {
+   "row_no": 124,
+   "keyword": "şirket bilanço"
+  },
+  {
+   "row_no": 125,
+   "keyword": "canlı hisse senetleri"
+  },
+  {
+   "row_no": 126,
+   "keyword": "hisse senetleri listesi"
+  },
+  {
+   "row_no": 127,
+   "keyword": "finans ve borsa"
+  },
+  {
+   "row_no": 128,
+   "keyword": "anlık hisse senedi"
+  },
+  {
+   "row_no": 129,
+   "keyword": "hisse alım"
+  },
+  {
+   "row_no": 130,
+   "keyword": "yatırım aracı"
+  },
+  {
+   "row_no": 131,
+   "keyword": "fk nedemek"
+  },
+  {
+   "row_no": 132,
+   "keyword": "hisse satın almak"
+  },
+  {
+   "row_no": 133,
+   "keyword": "canlı borsa grafik"
+  },
+  {
+   "row_no": 134,
+   "keyword": "hisse senedi tavsiye"
+  },
+  {
+   "row_no": 135,
+   "keyword": "hisse satin almak"
+  },
+  {
+   "row_no": 136,
+   "keyword": "borsa hisse fiyatları"
+  },
+  {
+   "row_no": 137,
+   "keyword": "borsa hisse yorumları"
+  },
+  {
+   "row_no": 138,
+   "keyword": "hisse satin al"
+  },
+  {
+   "row_no": 139,
+   "keyword": "borsa durumu"
+  },
+  {
+   "row_no": 140,
+   "keyword": "en yüksek hisse senedi"
+  },
+  {
+   "row_no": 141,
+   "keyword": "bist hisse yorum"
+  },
+  {
+   "row_no": 142,
+   "keyword": "alinacak hisseler"
+  },
+  {
+   "row_no": 143,
+   "keyword": "aracı kurumlar hisse önerileri"
+  },
+  {
+   "row_no": 144,
+   "keyword": "canlı borsa uzman"
+  },
+  {
+   "row_no": 145,
+   "keyword": "borsa seans"
+  },
+  {
+   "row_no": 146,
+   "keyword": "yükselen hisse senedi"
+  },
+  {
+   "row_no": 147,
+   "keyword": "borsa hisse yorum"
+  },
+  {
+   "row_no": 148,
+   "keyword": "en düşük hisse senetleri"
+  },
+  {
+   "row_no": 149,
+   "keyword": "imkb hisse senetleri"
+  },
+  {
+   "row_no": 150,
+   "keyword": "borsa investing yorum"
+  },
+  {
+   "row_no": 151,
+   "keyword": "bist 100 geçmiş veriler"
+  },
+  {
+   "row_no": 152,
+   "keyword": "borsa şirketleri haberleri"
+  },
+  {
+   "row_no": 153,
+   "keyword": "canli bist"
+  },
+  {
+   "row_no": 154,
+   "keyword": "borsa yatırım"
+  },
+  {
+   "row_no": 155,
+   "keyword": "canlı borsa anlık"
+  },
+  {
+   "row_no": 156,
+   "keyword": "canlı bist"
+  },
+  {
+   "row_no": 157,
+   "keyword": "borsa piyasalar"
+  },
+  {
+   "row_no": 158,
+   "keyword": "borsa piyasasi"
+  },
+  {
+   "row_no": 159,
+   "keyword": "canli borsa hisse"
+  },
+  {
+   "row_no": 160,
+   "keyword": "borsa hacmi"
+  },
+  {
+   "row_no": 161,
+   "keyword": "bist 30 canli"
+  },
+  {
+   "row_no": 162,
+   "keyword": "bıst 30 endeks"
+  },
+  {
+   "row_no": 163,
+   "keyword": "bist 30 endeks"
+  },
+  {
+   "row_no": 164,
+   "keyword": "endeks fonu"
+  },
+  {
+   "row_no": 165,
+   "keyword": "teknik analiz eğitimi"
+  },
+  {
+   "row_no": 166,
+   "keyword": "istanbul borsa endeksi"
+  },
+  {
+   "row_no": 167,
+   "keyword": "borsa istanbul tüm hisseler"
+  },
+  {
+   "row_no": 168,
+   "keyword": "bist 100 hisseler"
+  },
+  {
+   "row_no": 169,
+   "keyword": "bist 100 hisse canlı"
+  },
+  {
+   "row_no": 170,
+   "keyword": "borsa istanbul bugun"
+  },
+  {
+   "row_no": 171,
+   "keyword": "borsa hisse listesi"
+  },
+  {
+   "row_no": 172,
+   "keyword": "anlik fiyat"
+  },
+  {
+   "row_no": 173,
+   "keyword": "hisse canli"
+  },
+  {
+   "row_no": 174,
+   "keyword": "fintables pro"
+  },
+  {
+   "row_no": 175,
+   "keyword": "yeşil yatirim"
+  },
+  {
+   "row_no": 176,
+   "keyword": "hisse alım satım"
+  },
+  {
+   "row_no": 177,
+   "keyword": "anlık borsa verileri"
+  },
+  {
+   "row_no": 178,
+   "keyword": "canlı hisse takip"
+  },
+  {
+   "row_no": 179,
+   "keyword": "borsada işlem gören şirketler"
+  },
+  {
+   "row_no": 180,
+   "keyword": "hisse canlı"
+  },
+  {
+   "row_no": 181,
+   "keyword": "uzun vadeli hisse önerileri"
+  },
+  {
+   "row_no": 182,
+   "keyword": "borsa tavsiyesi"
+  },
+  {
+   "row_no": 183,
+   "keyword": "borsada en çok işlem gören hisseler"
+  },
+  {
+   "row_no": 184,
+   "keyword": "hisse senedi piyasaları"
+  },
+  {
+   "row_no": 185,
+   "keyword": "borsada hisseler"
+  },
+  {
+   "row_no": 186,
+   "keyword": "borsa canlı izleme"
+  },
+  {
+   "row_no": 187,
+   "keyword": "bist endeks yorum"
+  },
+  {
+   "row_no": 188,
+   "keyword": "uzman borsa canlı"
+  },
+  {
+   "row_no": 189,
+   "keyword": "borsa işlem gören şirketler"
+  },
+  {
+   "row_no": 190,
+   "keyword": "bıst işlem saatleri"
+  },
+  {
+   "row_no": 191,
+   "keyword": "borsa tavsiye"
+  },
+  {
+   "row_no": 192,
+   "keyword": "borsa istanbul hisse senetleri"
+  },
+  {
+   "row_no": 193,
+   "keyword": "en pahalı hisse senedi türkiye"
+  },
+  {
+   "row_no": 194,
+   "keyword": "en çok işlem gören hisse senetleri"
+  },
+  {
+   "row_no": 195,
+   "keyword": "finans analiz"
+  },
+  {
+   "row_no": 196,
+   "keyword": "temel analiz"
+  },
+  {
+   "row_no": 197,
+   "keyword": "yatırım hisseleri"
+  },
+  {
+   "row_no": 198,
+   "keyword": "yatirim holding"
+  },
+  {
+   "row_no": 199,
+   "keyword": "silverline endüstri"
+  },
+  {
+   "row_no": 200,
+   "keyword": "doğub"
+  },
+  {
+   "row_no": 201,
+   "keyword": "yatırım holding"
+  },
+  {
+   "row_no": 202,
+   "keyword": "hisse almak"
+  },
+  {
+   "row_no": 203,
+   "keyword": "yatırım uygulamaları"
+  },
+  {
+   "row_no": 204,
+   "keyword": "borsa hisse önerileri"
+  },
+  {
+   "row_no": 205,
+   "keyword": "borsa öğrenmek"
+  },
+  {
+   "row_no": 206,
+   "keyword": "hisse senedi grafik"
+  },
+  {
+   "row_no": 207,
+   "keyword": "bist canlı veri"
+  },
+  {
+   "row_no": 208,
+   "keyword": "borsa şirketleri"
+  },
+  {
+   "row_no": 209,
+   "keyword": "kısa vadeli hisse önerileri"
+  },
+  {
+   "row_no": 210,
+   "keyword": "bist borsa"
+  },
+  {
+   "row_no": 211,
+   "keyword": "borsa açılış"
+  },
+  {
+   "row_no": 212,
+   "keyword": "bist yorumlari"
+  },
+  {
+   "row_no": 213,
+   "keyword": "borsa endeksi grafik"
+  },
+  {
+   "row_no": 214,
+   "keyword": "borsa bist"
+  },
+  {
+   "row_no": 215,
+   "keyword": "borsa endeksi canlı"
+  },
+  {
+   "row_no": 216,
+   "keyword": "endeks borsa"
+  },
+  {
+   "row_no": 217,
+   "keyword": "borsa uzmani"
+  },
+  {
+   "row_no": 218,
+   "keyword": "invest grafik"
+  },
+  {
+   "row_no": 219,
+   "keyword": "borsa sirketleri"
+  },
+  {
+   "row_no": 220,
+   "keyword": "en cok işlem gören hisseler"
+  },
+  {
+   "row_no": 221,
+   "keyword": "en düsuk hisse"
+  },
+  {
+   "row_no": 222,
+   "keyword": "grafik yorum"
+  },
+  {
+   "row_no": 223,
+   "keyword": "en duşuk hisse"
+  },
+  {
+   "row_no": 224,
+   "keyword": "bist mali"
+  },
+  {
+   "row_no": 225,
+   "keyword": "borsada emir saatleri"
+  },
+  {
+   "row_no": 226,
+   "keyword": "kripto analiz"
+  },
+  {
+   "row_no": 227,
+   "keyword": "finans hisseleri"
+  },
+  {
+   "row_no": 228,
+   "keyword": "kripto analizi"
+  },
+  {
+   "row_no": 229,
+   "keyword": "anlık hisse takibi"
+  },
+  {
+   "row_no": 230,
+   "keyword": "borsa teknik analiz"
+  },
+  {
+   "row_no": 231,
+   "keyword": "hisse haberleri"
+  },
+  {
+   "row_no": 232,
+   "keyword": "bist 100 yorumları"
+  },
+  {
+   "row_no": 233,
+   "keyword": "bist 100 hisse listesi"
+  },
+  {
+   "row_no": 234,
+   "keyword": "bist 100 endeks grafiği"
+  },
+  {
+   "row_no": 235,
+   "keyword": "yabanci hisse senedi"
+  },
+  {
+   "row_no": 236,
+   "keyword": "hisse karşılaştırma"
+  },
+  {
+   "row_no": 237,
+   "keyword": "fk orani"
+  },
+  {
+   "row_no": 238,
+   "keyword": "fk oranları"
+  },
+  {
+   "row_no": 239,
+   "keyword": "hisse senedi yorumları"
+  },
+  {
+   "row_no": 240,
+   "keyword": "borsa tahminleri"
+  },
+  {
+   "row_no": 241,
+   "keyword": "anlık canlı borsa"
+  },
+  {
+   "row_no": 242,
+   "keyword": "borsa ve yatırım"
+  },
+  {
+   "row_no": 243,
+   "keyword": "piyasa takip"
+  },
+  {
+   "row_no": 244,
+   "keyword": "borsa hesapları"
+  },
+  {
+   "row_no": 245,
+   "keyword": "borsada yatırım tavsiyesi"
+  },
+  {
+   "row_no": 246,
+   "keyword": "canlı hisse fiyatları"
+  },
+  {
+   "row_no": 247,
+   "keyword": "endeks canlı"
+  },
+  {
+   "row_no": 248,
+   "keyword": "canlı borsa tüm hisseler"
+  },
+  {
+   "row_no": 249,
+   "keyword": "bist şirketleri"
+  },
+  {
+   "row_no": 250,
+   "keyword": "bist endeksler"
+  },
+  {
+   "row_no": 251,
+   "keyword": "borsa düşüşü"
+  },
+  {
+   "row_no": 252,
+   "keyword": "uzman canlı borsa"
+  },
+  {
+   "row_no": 253,
+   "keyword": "en dusuk hisseler"
+  },
+  {
+   "row_no": 254,
+   "keyword": "bugün en çok işlem gören hisseler"
+  },
+  {
+   "row_no": 255,
+   "keyword": "borsa yatırım tavsiyeleri"
+  },
+  {
+   "row_no": 256,
+   "keyword": "borsa yatırım tavsiye"
+  },
+  {
+   "row_no": 257,
+   "keyword": "bilanço analizi"
+  },
+  {
+   "row_no": 258,
+   "keyword": "yatırım yapılacak hisseler"
+  },
+  {
+   "row_no": 259,
+   "keyword": "tum hisse senetleri"
+  },
+  {
+   "row_no": 260,
+   "keyword": "borsa istanbul fiyatları"
+  },
+  {
+   "row_no": 261,
+   "keyword": "borsa istanbul canlı endeks"
+  },
+  {
+   "row_no": 262,
+   "keyword": "yatirim yapilacak hisseler"
+  },
+  {
+   "row_no": 263,
+   "keyword": "ucuz hisse önerileri"
+  },
+  {
+   "row_no": 264,
+   "keyword": "en yuksek hisse"
+  },
+  {
+   "row_no": 265,
+   "keyword": "borsa giriş"
+  },
+  {
+   "row_no": 266,
+   "keyword": "borsa sitesi"
+  },
+  {
+   "row_no": 267,
+   "keyword": "borsa önerileri"
+  },
+  {
+   "row_no": 268,
+   "keyword": "yatırım önerileri"
+  },
+  {
+   "row_no": 269,
+   "keyword": "hisse senedi analiz"
+  },
+  {
+   "row_no": 270,
+   "keyword": "canli borsa takip"
+  },
+  {
+   "row_no": 271,
+   "keyword": "yapay zeka borsa"
+  },
+  {
+   "row_no": 272,
+   "keyword": "günlük borsa yorumları"
+  },
+  {
+   "row_no": 273,
+   "keyword": "borsa canlı hisse"
+  },
+  {
+   "row_no": 274,
+   "keyword": "imkb hisse senedi fiyatları"
+  },
+  {
+   "row_no": 275,
+   "keyword": "borsa tum hisseler"
+  },
+  {
+   "row_no": 276,
+   "keyword": "e borsa"
+  },
+  {
+   "row_no": 277,
+   "keyword": "alınacak hisse"
+  },
+  {
+   "row_no": 278,
+   "keyword": "borsada işlem gören tüm hisseler"
+  },
+  {
+   "row_no": 279,
+   "keyword": "bist100 endex"
+  },
+  {
+   "row_no": 280,
+   "keyword": "canlı endeks"
+  },
+  {
+   "row_no": 281,
+   "keyword": "canlı borsa canlı borsa"
+  },
+  {
+   "row_no": 282,
+   "keyword": "bist işlem hacimleri"
+  },
+  {
+   "row_no": 283,
+   "keyword": "bist sektörler"
+  },
+  {
+   "row_no": 284,
+   "keyword": "piyasa yorumlari"
+  },
+  {
+   "row_no": 285,
+   "keyword": "bist endeksleri"
+  },
+  {
+   "row_no": 286,
+   "keyword": "en çok kazandıran yatırım aracı"
+  },
+  {
+   "row_no": 287,
+   "keyword": "hisse bilanço"
+  },
+  {
+   "row_no": 288,
+   "keyword": "en iyi borsa analiz sitesi"
+  },
+  {
+   "row_no": 289,
+   "keyword": "türkiye hisse senetleri"
+  },
+  {
+   "row_no": 290,
+   "keyword": "borsa istanbul haberleri"
+  },
+  {
+   "row_no": 291,
+   "keyword": "anlık hisse fiyatları"
+  },
+  {
+   "row_no": 292,
+   "keyword": "bist 100 borsa"
+  },
+  {
+   "row_no": 293,
+   "keyword": "sektörlere göre hisseler"
+  },
+  {
+   "row_no": 294,
+   "keyword": "borsada yukselecek hisseler"
+  },
+  {
+   "row_no": 295,
+   "keyword": "borsada yükselecek hisseler"
+  },
+  {
+   "row_no": 296,
+   "keyword": "bist tüm hisseleri"
+  },
+  {
+   "row_no": 297,
+   "keyword": "bist veri"
+  },
+  {
+   "row_no": 298,
+   "keyword": "bist veriler"
+  },
+  {
+   "row_no": 299,
+   "keyword": "bist verileri"
+  },
+  {
+   "row_no": 300,
+   "keyword": "fintables ücretsiz"
+  },
+  {
+   "row_no": 301,
+   "keyword": "karlilik"
+  },
+  {
+   "row_no": 302,
+   "keyword": "ozerden plastik"
+  },
+  {
+   "row_no": 303,
+   "keyword": "borsa alım satım"
+  },
+  {
+   "row_no": 304,
+   "keyword": "hisse borsa"
+  },
+  {
+   "row_no": 305,
+   "keyword": "bist canlı borsa"
+  },
+  {
+   "row_no": 306,
+   "keyword": "borsa yapay zeka"
+  },
+  {
+   "row_no": 307,
+   "keyword": "hisse filtreleme"
+  },
+  {
+   "row_no": 308,
+   "keyword": "borsa program"
+  },
+  {
+   "row_no": 309,
+   "keyword": "alinacak hisse senedi"
+  },
+  {
+   "row_no": 310,
+   "keyword": "bist bugun"
+  },
+  {
+   "row_no": 311,
+   "keyword": "endeks bist"
+  },
+  {
+   "row_no": 312,
+   "keyword": "destek direnç"
+  },
+  {
+   "row_no": 313,
+   "keyword": "canlı b"
+  },
+  {
+   "row_no": 314,
+   "keyword": "borsa sektörleri"
+  },
+  {
+   "row_no": 315,
+   "keyword": "borsa sektörler"
+  },
+  {
+   "row_no": 316,
+   "keyword": "canli grafik"
+  },
+  {
+   "row_no": 317,
+   "keyword": "borsada en düşük hisseler"
+  },
+  {
+   "row_no": 318,
+   "keyword": "en dusuk fiyatli hisseler"
+  },
+  {
+   "row_no": 319,
+   "keyword": "en karli hisseler"
+  },
+  {
+   "row_no": 320,
+   "keyword": "en yüksek fiyatlı hisseler"
+  },
+  {
+   "row_no": 321,
+   "keyword": "borsa dustu"
+  },
+  {
+   "row_no": 322,
+   "keyword": "kısa vadeli yatırım tavsiyeleri"
+  },
+  {
+   "row_no": 323,
+   "keyword": "yapay zeka hisse analizi"
+  },
+  {
+   "row_no": 324,
+   "keyword": "uzun vade hisse"
+  },
+  {
+   "row_no": 325,
+   "keyword": "hisse teknik analiz"
+  },
+  {
+   "row_no": 326,
+   "keyword": "borsada en iyi hisseler"
+  },
+  {
+   "row_no": 327,
+   "keyword": "piyasa analizi"
+  },
+  {
+   "row_no": 328,
+   "keyword": "uzun vadede hisse"
+  },
+  {
+   "row_no": 329,
+   "keyword": "bist haberler"
+  },
+  {
+   "row_no": 330,
+   "keyword": "borsa çıkan hisseler"
+  },
+  {
+   "row_no": 331,
+   "keyword": "hisse tahminleri"
+  },
+  {
+   "row_no": 332,
+   "keyword": "bist anlık"
+  },
+  {
+   "row_no": 333,
+   "keyword": "coın yorumları"
+  },
+  {
+   "row_no": 334,
+   "keyword": "invest bist"
+  },
+  {
+   "row_no": 335,
+   "keyword": "tüm bist hisseleri"
+  },
+  {
+   "row_no": 336,
+   "keyword": "batıçim çimento"
+  },
+  {
+   "row_no": 337,
+   "keyword": "polyester hisse"
+  },
+  {
+   "row_no": 338,
+   "keyword": "hisse senedi almak"
+  },
+  {
+   "row_no": 339,
+   "keyword": "borsa anlık veri"
+  },
+  {
+   "row_no": 340,
+   "keyword": "borsa işlemleri"
+  },
+  {
+   "row_no": 341,
+   "keyword": "borsa anlık takip"
+  },
+  {
+   "row_no": 342,
+   "keyword": "temel analiz eğitimi"
+  },
+  {
+   "row_no": 343,
+   "keyword": "borsa para yatırma"
+  },
+  {
+   "row_no": 344,
+   "keyword": "günlük borsa"
+  },
+  {
+   "row_no": 345,
+   "keyword": "hisse senedi fiyatları canlı"
+  },
+  {
+   "row_no": 346,
+   "keyword": "global borsa"
+  },
+  {
+   "row_no": 347,
+   "keyword": "en karlı hisse senedi"
+  },
+  {
+   "row_no": 348,
+   "keyword": "hisse satışları"
+  },
+  {
+   "row_no": 349,
+   "keyword": "hisseler borsa"
+  },
+  {
+   "row_no": 350,
+   "keyword": "bist fiyatları"
+  },
+  {
+   "row_no": 351,
+   "keyword": "bist fiyat"
+  },
+  {
+   "row_no": 352,
+   "keyword": "bist hacim"
+  },
+  {
+   "row_no": 353,
+   "keyword": "canlı borsa fiyatları"
+  },
+  {
+   "row_no": 354,
+   "keyword": "bist sektör endeksleri"
+  },
+  {
+   "row_no": 355,
+   "keyword": "grafik analiz"
+  },
+  {
+   "row_no": 356,
+   "keyword": "endeks grafik"
+  },
+  {
+   "row_no": 357,
+   "keyword": "dusuk fiyatli hisseler"
+  },
+  {
+   "row_no": 358,
+   "keyword": "bist sektörel endeksler"
+  },
+  {
+   "row_no": 359,
+   "keyword": "çok yükselen hisseler"
+  },
+  {
+   "row_no": 360,
+   "keyword": "anlık borsa takibi ücretsiz"
+  },
+  {
+   "row_no": 361,
+   "keyword": "borsada beklenti"
+  },
+  {
+   "row_no": 362,
+   "keyword": "portföy takibi"
+  },
+  {
+   "row_no": 363,
+   "keyword": "borsa istanbul şirketler"
+  },
+  {
+   "row_no": 364,
+   "keyword": "yatirim haberleri"
+  },
+  {
+   "row_no": 365,
+   "keyword": "haberler borsa"
+  },
+  {
+   "row_no": 366,
+   "keyword": "hisse senedi tarama"
+  },
+  {
+   "row_no": 367,
+   "keyword": "hisse yatırım"
+  },
+  {
+   "row_no": 368,
+   "keyword": "dogusan"
+  },
+  {
+   "row_no": 369,
+   "keyword": "lojistik hisse"
+  },
+  {
+   "row_no": 370,
+   "keyword": "borsa takip sitesi"
+  },
+  {
+   "row_no": 371,
+   "keyword": "yatırım borsa"
+  },
+  {
+   "row_no": 372,
+   "keyword": "borsa hisse takip"
+  },
+  {
+   "row_no": 373,
+   "keyword": "hisse senedi anlık takip"
+  },
+  {
+   "row_no": 374,
+   "keyword": "hisse yatırım tavsiyeleri"
+  },
+  {
+   "row_no": 375,
+   "keyword": "borsa canlı takip ücretsiz"
+  },
+  {
+   "row_no": 376,
+   "keyword": "hisse uygulamaları"
+  },
+  {
+   "row_no": 377,
+   "keyword": "borsa işlem hacmi"
+  },
+  {
+   "row_no": 378,
+   "keyword": "tr borsa"
+  },
+  {
+   "row_no": 379,
+   "keyword": "canlı hisse grafikleri"
+  },
+  {
+   "row_no": 380,
+   "keyword": "borsa destek direnç seviyeleri"
+  },
+  {
+   "row_no": 381,
+   "keyword": "borsa kursları"
+  },
+  {
+   "row_no": 382,
+   "keyword": "hisse senedi canlı takip"
+  },
+  {
+   "row_no": 383,
+   "keyword": "borsa programi"
+  },
+  {
+   "row_no": 384,
+   "keyword": "borsa hisse tavsiyeleri"
+  },
+  {
+   "row_no": 385,
+   "keyword": "bist hisse fiyatları"
+  },
+  {
+   "row_no": 386,
+   "keyword": "borsa hisse grafikleri"
+  },
+  {
+   "row_no": 387,
+   "keyword": "hisse senedi anlık veri"
+  },
+  {
+   "row_no": 388,
+   "keyword": "canli bo"
+  },
+  {
+   "row_no": 389,
+   "keyword": "borsa indikatörleri"
+  },
+  {
+   "row_no": 390,
+   "keyword": "hisse alim satim saatleri"
+  },
+  {
+   "row_no": 391,
+   "keyword": "yükselen borsa"
+  },
+  {
+   "row_no": 392,
+   "keyword": "borsa hisse tavsiye"
+  },
+  {
+   "row_no": 393,
+   "keyword": "uygun hisseler"
+  },
+  {
+   "row_no": 394,
+   "keyword": "yeni hisse senetleri"
+  },
+  {
+   "row_no": 395,
+   "keyword": "hisse hedefleri"
+  },
+  {
+   "row_no": 396,
+   "keyword": "hisse değerleri"
+  },
+  {
+   "row_no": 397,
+   "keyword": "hisse degerleri"
+  },
+  {
+   "row_no": 398,
+   "keyword": "kısa vadeli"
+  },
+  {
+   "row_no": 399,
+   "keyword": "fk dusuk hisseler"
+  },
+  {
+   "row_no": 400,
+   "keyword": "fk düşük hisseler"
+  },
+  {
+   "row_no": 401,
+   "keyword": "tire hisse yorumlar"
+  },
+  {
+   "row_no": 402,
+   "keyword": "yatırım hisse önerileri"
+  },
+  {
+   "row_no": 403,
+   "keyword": "canlı borsa takip programı ücretsiz"
+  },
+  {
+   "row_no": 404,
+   "keyword": "şirket hisseleri"
+  },
+  {
+   "row_no": 405,
+   "keyword": "hisse analiz siteleri"
+  },
+  {
+   "row_no": 406,
+   "keyword": "hisse canlı veri"
+  },
+  {
+   "row_no": 407,
+   "keyword": "uzun vadeli yatırım"
+  },
+  {
+   "row_no": 408,
+   "keyword": "borsa hisse senedi fiyatları"
+  },
+  {
+   "row_no": 409,
+   "keyword": "hisse fiyatları canlı"
+  },
+  {
+   "row_no": 410,
+   "keyword": "borsa tablosu"
+  },
+  {
+   "row_no": 411,
+   "keyword": "borsada işlem gören hisseler"
+  },
+  {
+   "row_no": 412,
+   "keyword": "borsa grupları"
+  },
+  {
+   "row_no": 413,
+   "keyword": "hisse fikirleri"
+  },
+  {
+   "row_no": 414,
+   "keyword": "gelecegin hisseleri"
+  },
+  {
+   "row_no": 415,
+   "keyword": "borsada yapay zeka algoritmaları"
+  },
+  {
+   "row_no": 416,
+   "keyword": "bist piyasa değeri"
+  },
+  {
+   "row_no": 417,
+   "keyword": "endeks hisseleri"
+  },
+  {
+   "row_no": 418,
+   "keyword": "canlı borsa yorumları"
+  },
+  {
+   "row_no": 419,
+   "keyword": "bist tüm hisseler canlı"
+  },
+  {
+   "row_no": 420,
+   "keyword": "borsa istatistikleri"
+  },
+  {
+   "row_no": 421,
+   "keyword": "bist 00"
+  },
+  {
+   "row_no": 422,
+   "keyword": "borsada yatırım şirketleri"
+  },
+  {
+   "row_no": 423,
+   "keyword": "bist tüm endeksi"
+  },
+  {
+   "row_no": 424,
+   "keyword": "yüz endeksi"
+  },
+  {
+   "row_no": 425,
+   "keyword": "bist 50 şirketleri"
+  },
+  {
+   "row_no": 426,
+   "keyword": "bist en düşük hisseler"
+  },
+  {
+   "row_no": 427,
+   "keyword": "borsa bist 30"
+  },
+  {
+   "row_no": 428,
+   "keyword": "destek ve direnç"
+  },
+  {
+   "row_no": 429,
+   "keyword": "şirketlerin piyasa değerleri"
+  },
+  {
+   "row_no": 430,
+   "keyword": "borsa 30"
+  },
+  {
+   "row_no": 431,
+   "keyword": "piyasa değeri en yüksek hisseler"
+  },
+  {
+   "row_no": 432,
+   "keyword": "hisse öneri com"
+  },
+  {
+   "row_no": 433,
+   "keyword": "en güvenilir hisse senetleri"
+  },
+  {
+   "row_no": 434,
+   "keyword": "güncel hisse fiyatları"
+  },
+  {
+   "row_no": 435,
+   "keyword": "borsa grafik analizi"
+  },
+  {
+   "row_no": 436,
+   "keyword": "borsa teknik"
+  },
+  {
+   "row_no": 437,
+   "keyword": "en uygun hisseler"
+  },
+  {
+   "row_no": 438,
+   "keyword": "borsada işlem gören hisse senetleri"
+  },
+  {
+   "row_no": 439,
+   "keyword": "borsa istanbul hisse senedi fiyatları"
+  },
+  {
+   "row_no": 440,
+   "keyword": "güncel borsa yorumları"
+  },
+  {
+   "row_no": 441,
+   "keyword": "borsa istanbul hisse listesi"
+  },
+  {
+   "row_no": 442,
+   "keyword": "bütün hisse senetleri"
+  },
+  {
+   "row_no": 443,
+   "keyword": "onerilen hisseler"
+  },
+  {
+   "row_no": 444,
+   "keyword": "uzun vadeli en iyi yatırım"
+  },
+  {
+   "row_no": 445,
+   "keyword": "sektör analiz"
+  },
+  {
+   "row_no": 446,
+   "keyword": "hisseler canlı"
+  },
+  {
+   "row_no": 447,
+   "keyword": "aracı sözleşmesi"
+  },
+  {
+   "row_no": 448,
+   "keyword": "bist tum hisseler"
+  },
+  {
+   "row_no": 449,
+   "keyword": "borsa temel analiz"
+  },
+  {
+   "row_no": 450,
+   "keyword": "bjkas yorum"
+  },
+  {
+   "row_no": 451,
+   "keyword": "duran doğan basim"
+  },
+  {
+   "row_no": 452,
+   "keyword": "fintables indir"
+  },
+  {
+   "row_no": 453,
+   "keyword": "fk oranı düşük hisseler"
+  },
+  {
+   "row_no": 454,
+   "keyword": "hisse senedi değerleme"
+  },
+  {
+   "row_no": 455,
+   "keyword": "mondi tire kutsan yorumları"
+  },
+  {
+   "row_no": 456,
+   "keyword": "hisse senedi yatırım"
+  },
+  {
+   "row_no": 457,
+   "keyword": "hisse senedi uygulamaları"
+  },
+  {
+   "row_no": 458,
+   "keyword": "borsa eğitimi ücretsiz"
+  },
+  {
+   "row_no": 459,
+   "keyword": "online borsa"
+  },
+  {
+   "row_no": 460,
+   "keyword": "trading borsa"
+  },
+  {
+   "row_no": 461,
+   "keyword": "sıfırdan borsa eğitimi"
+  },
+  {
+   "row_no": 462,
+   "keyword": "anlık borsa ekranı"
+  },
+  {
+   "row_no": 463,
+   "keyword": "yatırım platformları"
+  },
+  {
+   "row_no": 464,
+   "keyword": "canlı borsa alım satım"
+  },
+  {
+   "row_no": 465,
+   "keyword": "borsa canlı grafik"
+  },
+  {
+   "row_no": 466,
+   "keyword": "anlık borsa canlı"
+  },
+  {
+   "row_no": 467,
+   "keyword": "canlı anlık borsa"
+  },
+  {
+   "row_no": 468,
+   "keyword": "hisse önerileri günlük"
+  },
+  {
+   "row_no": 469,
+   "keyword": "hisse destek direnç"
+  },
+  {
+   "row_no": 470,
+   "keyword": "borsada bu hafta"
+  },
+  {
+   "row_no": 471,
+   "keyword": "uzun vadeli hisse senedi"
+  },
+  {
+   "row_no": 472,
+   "keyword": "hisse hacim"
+  },
+  {
+   "row_no": 473,
+   "keyword": "hisse fiyatları anlık"
+  },
+  {
+   "row_no": 474,
+   "keyword": "hisse senedi kodu"
+  },
+  {
+   "row_no": 475,
+   "keyword": "borsa puanı"
+  },
+  {
+   "row_no": 476,
+   "keyword": "bist canlı tüm hisseler"
+  },
+  {
+   "row_no": 477,
+   "keyword": "borsa günlük grafik"
+  },
+  {
+   "row_no": 478,
+   "keyword": "günlük borsa fiyatları"
+  },
+  {
+   "row_no": 479,
+   "keyword": "aylık hisse önerileri"
+  },
+  {
+   "row_no": 480,
+   "keyword": "borsa endeks yorum"
+  },
+  {
+   "row_no": 481,
+   "keyword": "borsa işlem platformları"
+  },
+  {
+   "row_no": 482,
+   "keyword": "canlı borsa ekranı anlık borsa izle"
+  },
+  {
+   "row_no": 483,
+   "keyword": "islem hacmi"
+  },
+  {
+   "row_no": 484,
+   "keyword": "bist 30 hisse fiyatları"
+  },
+  {
+   "row_no": 485,
+   "keyword": "günlük borsa takip"
+  },
+  {
+   "row_no": 486,
+   "keyword": "borsa resmi"
+  },
+  {
+   "row_no": 487,
+   "keyword": "bist 30 hisseleri canlı"
+  },
+  {
+   "row_no": 488,
+   "keyword": "borsa günlük bülten"
+  },
+  {
+   "row_no": 489,
+   "keyword": "bist 30 hisse grafik"
+  },
+  {
+   "row_no": 490,
+   "keyword": "borsa en cok islem gorenler"
+  },
+  {
+   "row_no": 491,
+   "keyword": "bıst 30 şirketleri"
+  },
+  {
+   "row_no": 492,
+   "keyword": "bıst 30 firmaları"
+  },
+  {
+   "row_no": 493,
+   "keyword": "sektör analizleri"
+  },
+  {
+   "row_no": 494,
+   "keyword": "yatırımlık hisseler"
+  },
+  {
+   "row_no": 495,
+   "keyword": "fk si dusuk hisseler"
+  },
+  {
+   "row_no": 496,
+   "keyword": "fk sı düşük hisseler"
+  },
+  {
+   "row_no": 497,
+   "keyword": "hisse senedi takip ve öneri listesi"
+  },
+  {
+   "row_no": 498,
+   "keyword": "çok kazandıran hisseler"
+  },
+  {
+   "row_no": 499,
+   "keyword": "hisse senedi en çok kazandıran"
+  },
+  {
+   "row_no": 500,
+   "keyword": "en sağlam hisse senetleri"
+  },
+  {
+   "row_no": 501,
+   "keyword": "düşük hisse senetleri"
+  },
+  {
+   "row_no": 502,
+   "keyword": "çok kazandıracak hisseler"
+  },
+  {
+   "row_no": 503,
+   "keyword": "en iyi hisse önerileri"
+  },
+  {
+   "row_no": 504,
+   "keyword": "yükselecek hisse senetleri"
+  },
+  {
+   "row_no": 505,
+   "keyword": "hisse önerisi günlük"
+  },
+  {
+   "row_no": 506,
+   "keyword": "bugün yükselecek hisseler"
+  },
+  {
+   "row_no": 507,
+   "keyword": "en çok yükselecek hisseler"
+  },
+  {
+   "row_no": 508,
+   "keyword": "yükselebilecek hisse senetleri"
+  },
+  {
+   "row_no": 509,
+   "keyword": "online yatırım"
+  },
+  {
+   "row_no": 510,
+   "keyword": "demo hesap"
+  },
+  {
+   "row_no": 511,
+   "keyword": "yatirim araci"
+  },
+  {
+   "row_no": 512,
+   "keyword": "canlı veriler"
+  },
+  {
+   "row_no": 513,
+   "keyword": "iletişim hisseleri"
+  },
+  {
+   "row_no": 514,
+   "keyword": "sektör raporları"
+  },
+  {
+   "row_no": 515,
+   "keyword": "emlak konut yatırım ortaklığı"
+  },
+  {
+   "row_no": 516,
+   "keyword": "fk en düşük hisseler"
+  },
+  {
+   "row_no": 517,
+   "keyword": "hisse senedi alım satım"
+  },
+  {
+   "row_no": 518,
+   "keyword": "hisse senedi yatırım tavsiyeleri"
+  },
+  {
+   "row_no": 519,
+   "keyword": "borsa temel analiz eğitimi"
+  },
+  {
+   "row_no": 520,
+   "keyword": "borsa takip uygulamaları"
+  },
+  {
+   "row_no": 521,
+   "keyword": "komisyonsuz borsa uygulamaları"
+  },
+  {
+   "row_no": 522,
+   "keyword": "borsa hareketleri"
+  },
+  {
+   "row_no": 523,
+   "keyword": "hisse senedi alım"
+  },
+  {
+   "row_no": 524,
+   "keyword": "borsa izleme"
+  },
+  {
+   "row_no": 525,
+   "keyword": "borsa platformları"
+  },
+  {
+   "row_no": 526,
+   "keyword": "borsa öğreniyorum"
+  },
+  {
+   "row_no": 527,
+   "keyword": "borsa anlık veri ücretsiz"
+  },
+  {
+   "row_no": 528,
+   "keyword": "canlı veri borsa"
+  },
+  {
+   "row_no": 529,
+   "keyword": "borsa yorumcusu"
+  },
+  {
+   "row_no": 530,
+   "keyword": "bist takip"
+  },
+  {
+   "row_no": 531,
+   "keyword": "borsa canlı veri ücretsiz"
+  },
+  {
+   "row_no": 532,
+   "keyword": "borsa hisse analiz"
+  },
+  {
+   "row_no": 533,
+   "keyword": "en karlı borsa hisseleri"
+  },
+  {
+   "row_no": 534,
+   "keyword": "uzun vadeli yatırım hisseleri"
+  },
+  {
+   "row_no": 535,
+   "keyword": "şu an alınacak hisseler"
+  },
+  {
+   "row_no": 536,
+   "keyword": "hisse grafik analiz"
+  },
+  {
+   "row_no": 537,
+   "keyword": "grafik borsa"
+  },
+  {
+   "row_no": 538,
+   "keyword": "bist degeri"
+  },
+  {
+   "row_no": 539,
+   "keyword": "bist değeri"
+  },
+  {
+   "row_no": 540,
+   "keyword": "hisse günlük"
+  },
+  {
+   "row_no": 541,
+   "keyword": "borsa ekranı canlı"
+  },
+  {
+   "row_no": 542,
+   "keyword": "bist endeks canlı"
+  },
+  {
+   "row_no": 543,
+   "keyword": "borsa canlı yorum"
+  },
+  {
+   "row_no": 544,
+   "keyword": "bist canlı takip"
+  },
+  {
+   "row_no": 545,
+   "keyword": "canlı anlık borsa ücretsiz"
+  },
+  {
+   "row_no": 546,
+   "keyword": "yapay zeka borsa programı"
+  },
+  {
+   "row_no": 547,
+   "keyword": "hisse senedi yatırım fonu"
+  },
+  {
+   "row_no": 548,
+   "keyword": "en düşük hisse fiyatları"
+  },
+  {
+   "row_no": 549,
+   "keyword": "borsada en dusuk hisseler"
+  },
+  {
+   "row_no": 550,
+   "keyword": "hisse senedi yatırım fonları"
+  },
+  {
+   "row_no": 551,
+   "keyword": "bist en çok işlem gören hisseler"
+  },
+  {
+   "row_no": 552,
+   "keyword": "en karli hisse"
+  },
+  {
+   "row_no": 553,
+   "keyword": "kar getirecek hisseler"
+  },
+  {
+   "row_no": 554,
+   "keyword": "yüksek hacimli hisseler"
+  },
+  {
+   "row_no": 555,
+   "keyword": "günlük al sat hisse önerileri"
+  },
+  {
+   "row_no": 556,
+   "keyword": "bankalar hisse önerileri"
+  },
+  {
+   "row_no": 557,
+   "keyword": "en mantıklı hisse"
+  },
+  {
+   "row_no": 558,
+   "keyword": "uzun vade yatırım hisseleri"
+  },
+  {
+   "row_no": 559,
+   "keyword": "en iyi temel analiz programı"
+  },
+  {
+   "row_no": 560,
+   "keyword": "en iyi borsa takip sitesi"
+  },
+  {
+   "row_no": 561,
+   "keyword": "en iyi yatırım hisseleri"
+  },
+  {
+   "row_no": 562,
+   "keyword": "hisse tüyoları"
+  },
+  {
+   "row_no": 563,
+   "keyword": "yeni çıkan hisse senetleri"
+  },
+  {
+   "row_no": 564,
+   "keyword": "güncel hisse önerileri"
+  },
+  {
+   "row_no": 565,
+   "keyword": "popüler hisse senetleri"
+  },
+  {
+   "row_no": 566,
+   "keyword": "en çok kazandıracak hisseler"
+  },
+  {
+   "row_no": 567,
+   "keyword": "hisse öneri listesi"
+  },
+  {
+   "row_no": 568,
+   "keyword": "hisse portföyü"
+  },
+  {
+   "row_no": 569,
+   "keyword": "uzun vade yatırım tavsiyesi"
+  },
+  {
+   "row_no": 570,
+   "keyword": "bu hafta yükselecek hisseler"
+  },
+  {
+   "row_no": 571,
+   "keyword": "yükselecek olan hisseler"
+  }
+ ],
+ "merged_twins": [
+  {
+   "norm": "en dusuk hisseler",
+   "kept": "en dusuk hisseler",
+   "merged_from": "en düşük hisseler"
+  },
+  {
+   "norm": "en dusuk hisseler",
+   "kept": "en dusuk hisseler",
+   "merged_from": "en düsük hisseler"
+  },
+  {
+   "norm": "en dusuk hisse",
+   "kept": "en düsuk hisse",
+   "merged_from": "en duşuk hisse"
+  },
+  {
+   "norm": "haftalik hisse onerileri",
+   "kept": "haftalık hisse önerileri",
+   "merged_from": "haftalik hisse onerileri"
+  },
+  {
+   "norm": "en cok islem goren hisseler",
+   "kept": "en cok işlem gören hisseler",
+   "merged_from": "en çok işlem gören hisseler"
+  },
+  {
+   "norm": "yatirim yapilacak hisseler",
+   "kept": "yatırım yapılacak hisseler",
+   "merged_from": "yatirim yapilacak hisseler"
+  },
+  {
+   "norm": "borsada en dusuk hisseler",
+   "kept": "borsada en dusuk hisseler",
+   "merged_from": "borsada en düşük hisseler"
+  },
+  {
+   "norm": "coin yorumlari",
+   "kept": "coın yorumları",
+   "merged_from": "coin yorumlari"
+  }
+ ],
+ "collapsed_clean_rows": [
+  {
+   "dropped": "canli borsa",
+   "kept": "canlı borsa"
+  },
+  {
+   "dropped": "hisse onerileri",
+   "kept": "hisse önerileri"
+  },
+  {
+   "dropped": "global yatirim",
+   "kept": "global yatırım"
+  },
+  {
+   "dropped": "yatırım tavsiyeleri",
+   "kept": "yatirim tavsiyeleri"
+  },
+  {
+   "dropped": "haftalik hisse onerileri",
+   "kept": "haftalık hisse önerileri"
+  },
+  {
+   "dropped": "en düsük hisseler",
+   "kept": "en düşük hisseler"
+  },
+  {
+   "dropped": "yükselecek hisseler",
+   "kept": "yukselecek hisseler"
+  },
+  {
+   "dropped": "hisse satin almak",
+   "kept": "hisse satın almak"
+  },
+  {
+   "dropped": "canlı bist",
+   "kept": "canli bist"
+  },
+  {
+   "dropped": "bist 30 endeks",
+   "kept": "bıst 30 endeks"
+  },
+  {
+   "dropped": "hisse canlı",
+   "kept": "hisse canli"
+  },
+  {
+   "dropped": "yatırım holding",
+   "kept": "yatirim holding"
+  },
+  {
+   "dropped": "borsa sirketleri",
+   "kept": "borsa şirketleri"
+  },
+  {
+   "dropped": "en cok işlem gören hisseler",
+   "kept": "en çok işlem gören hisseler"
+  },
+  {
+   "dropped": "en duşuk hisse",
+   "kept": "en düsuk hisse"
+  },
+  {
+   "dropped": "en dusuk hisseler",
+   "kept": "en düşük hisseler"
+  },
+  {
+   "dropped": "tum hisse senetleri",
+   "kept": "tüm hisse senetleri"
+  },
+  {
+   "dropped": "yatirim yapilacak hisseler",
+   "kept": "yatırım yapılacak hisseler"
+  },
+  {
+   "dropped": "canli borsa takip",
+   "kept": "canlı borsa takip"
+  },
+  {
+   "dropped": "borsa tum hisseler",
+   "kept": "borsa tüm hisseler"
+  },
+  {
+   "dropped": "borsada yükselecek hisseler",
+   "kept": "borsada yukselecek hisseler"
+  },
+  {
+   "dropped": "coın yorumları",
+   "kept": "coin yorumlari"
+  },
+  {
+   "dropped": "hisse degerleri",
+   "kept": "hisse değerleri"
+  },
+  {
+   "dropped": "fk düşük hisseler",
+   "kept": "fk dusuk hisseler"
+  },
+  {
+   "dropped": "bist tum hisseler",
+   "kept": "bist tüm hisseler"
+  },
+  {
+   "dropped": "bıst 30 şirketleri",
+   "kept": "bist 30 şirketleri"
+  },
+  {
+   "dropped": "fk sı düşük hisseler",
+   "kept": "fk si dusuk hisseler"
+  },
+  {
+   "dropped": "yatirim araci",
+   "kept": "yatırım aracı"
+  },
+  {
+   "dropped": "bist değeri",
+   "kept": "bist degeri"
+  },
+  {
+   "dropped": "borsada en dusuk hisseler",
+   "kept": "borsada en düşük hisseler"
+  }
+ ]
+}

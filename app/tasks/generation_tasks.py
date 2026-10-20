@@ -330,6 +330,26 @@ def start_bulk_seo_generation(scoring_run_id: int, keyword_ids: List[int], tone:
 
 # ==================== GOOGLE ADS TASKS ====================
 
+def _standard_shortfalls(groups) -> list:
+    """15 başlık / 4 KW'li açıklama / 3 CTA hedefinden eksik kalan gruplar (yalnız sıfırdan farklılar)."""
+    return [
+        {"group": g.name, "missing_headlines": g.missing_headlines,
+         "missing_kw_descriptions": g.missing_kw_descriptions,
+         "missing_cta": g.missing_cta}
+        for g in groups if g.missing_headlines or g.missing_kw_descriptions or g.missing_cta
+    ]
+
+
+def _keyword_decisions(groups) -> list:
+    """KW başına AI kararları (yalnız bu üretim için bilgi; DB'ye yazılmaz).
+
+    `reason` AI'ın öz-bildirimidir, doğrulanmış neden DEĞİLDİR (canlıda 26 karakterlik
+    KW'ye "30 karakteri aşıyor" dedi); uzunluk/kapsam için kodun raporu esastır.
+    """
+    return [{"group": g.name, "source": "ai_self_report_unverified",
+             "decisions": g.keyword_decisions} for g in groups if g.keyword_decisions]
+
+
 @celery_app.task(bind=True, name="generation.ads_generate", time_limit=900, max_retries=2)
 def generate_ads_task(
     self,
@@ -474,6 +494,8 @@ def generate_ads_task(
             extra = {"operation": "group_regenerate",
                      "source_set_id": source_set_id,
                      "source_group_id": source_group_id,
+                     "standard_shortfalls": _standard_shortfalls([regenerated]),
+                     "keyword_decisions": _keyword_decisions([regenerated]),
                      "usage": collector.finalize()}
         else:
             request = AdsGenerateRequest(
@@ -499,6 +521,8 @@ def generate_ads_task(
                 "operation": "full",
                 "headline_count": result.total_headlines,
                 "total_keywords": result.total_keywords,
+                "standard_shortfalls": _standard_shortfalls(result.ad_groups),
+                "keyword_decisions": _keyword_decisions(result.ad_groups),
                 "usage": collector.finalize(),
             }
 

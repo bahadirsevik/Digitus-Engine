@@ -240,6 +240,51 @@ def test_profile_attempt_id_column_and_idempotent_migration(fresh_schema, db_eng
     }
 
 
+def test_ad_group_fill_keyword_ids_column_and_idempotent_migration(fresh_schema, db_engine):
+    """20261017_001: ad_groups.fill_keyword_ids (JSON, nullable, backfill yok).
+
+    create_all kolonu head'de zaten olusturur; migration tekrar upgrade
+    edildiginde no-op, downgrade kolonu dusurur, yeniden upgrade geri ekler.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("ad_groups")}
+    assert "fill_keyword_ids" in columns
+    assert columns["fill_keyword_ids"]["nullable"] is True
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261017_001_add_ad_group_fill_keyword_ids.py")
+    spec = importlib.util.spec_from_file_location("mig_20261017_001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261017_001" and module.down_revision == "20261011_001"
+
+    def present(conn) -> bool:
+        return "fill_keyword_ids" in {
+            c["name"] for c in inspect(conn).get_columns("ad_groups")
+        }
+
+    with db_engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # kolon zaten var -> no-op, hata yok
+            module.upgrade()
+            assert present(conn)
+            module.downgrade()          # kolon var -> duser
+            assert not present(conn)
+            module.downgrade()          # kolon yok -> no-op, hata yok
+            module.upgrade()            # geri ekler
+            assert present(conn)
+
+    assert "fill_keyword_ids" in {
+        c["name"] for c in inspect(db_engine).get_columns("ad_groups")
+    }
+
+
 def test_partial_unique_indexes_have_predicates(fresh_schema, db_engine):
     """Reuse/aktiflik kisitlari PARTIAL unique olmali (tam unique degil):
     ayni kimlikte failed/fallback kayitlari birikebilmeli."""

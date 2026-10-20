@@ -11,6 +11,7 @@ import os
 from loguru import logger
 
 from app.core.error_responses import safe_500_detail
+from app.core.http_headers import download_filename
 from app.database.connection import SessionLocal
 from app.database.models import ExportJob
 from app.exporters import CsvExporter, DocxExporter, ExcelExporter, PdfExporter
@@ -35,6 +36,22 @@ def _file_extension(format_enum: ExportFormatEnum) -> str:
         ExportFormatEnum.EXCEL: ".xlsx",
         ExportFormatEnum.CSV: ".zip",
     }.get(format_enum, ".bin")
+
+
+# frontend exportLabels.ts SECTION_LABEL ile ayni secim: 'all' oncelikli, sonra ilk eslesen
+_REPORT_LABELS = {
+    "all": "Tam_Rapor",
+    "ads": "ADS_Icerikleri",
+    "seo_content": "SEO_GEO_Icerikleri",
+    "social": "Sosyal_Icerikler",
+}
+
+
+def _report_label(sections) -> str:
+    sections = sections or []
+    if "all" in sections:
+        return _REPORT_LABELS["all"]
+    return next((_REPORT_LABELS[s] for s in sections if s in _REPORT_LABELS), "Rapor")
 
 
 def _export_output_dir() -> str:
@@ -194,7 +211,13 @@ def execute_export_job(export_job_id: str) -> None:
 
         job.status = "completed"
         job.progress = 100
-        job.file_name = filename
+        # Disk adi benzersiz kalir; kullaniciya inen ad marka + icerik + tarih
+        job.file_name = download_filename(
+            job.brand_profile,
+            _report_label(job.sections),
+            ext,
+            job.created_at.date() if job.created_at else None,
+        )
         job.filepath = filepath
         db.commit()
         logger.info("run_export_task: job {} completed → {}", export_job_id, filename)

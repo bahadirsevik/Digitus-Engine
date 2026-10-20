@@ -587,6 +587,9 @@ class AdGroup(Base):
     group_theme = Column(Text)
     target_keyword_ids = Column(JSON)  # [1, 5, 12, ...]
     target_keywords = Column(JSON)     # ["kelime1", "kelime2", ...]
+    # 15 KW'ye tamamlamak için gruplayıcının yerleştirdiği/taşıdığı KW id'leri
+    # (target_keyword_ids'in alt kümesi). NULL = bilinmiyor (eski kayıt).
+    fill_keyword_ids = Column(JSON, nullable=True)
     
     # Validation stats
     headlines_generated = Column(Integer, default=0)
@@ -975,6 +978,12 @@ class AiUsageEvent(Base):
     retry_reason = Column(String(255), nullable=True)
     cache_status = Column(String(20), nullable=True)
     price_snapshot = Column(JSON, nullable=True)
+    # Saglayici-bagimsiz telemetri (Claude karsilastirmasi); eski satirlarda NULL
+    provider = Column(String(20), nullable=True)
+    cache_read_tokens = Column(Integer, nullable=True)
+    cache_creation_tokens = Column(Integer, nullable=True)
+    queue_wait_ms = Column(Integer, nullable=True)
+    http_attempts = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -1534,7 +1543,7 @@ class CorpusScreeningJob(Base):
             "status IN ('pending', 'running', 'completed', 'failed', "
             "'fallback', 'not_needed')",
             name="ck_screening_job_status"),
-        CheckConstraint("provider IN ('gemini', 'deepseek')",
+        CheckConstraint("provider IN ('gemini', 'deepseek', 'anthropic')",
                         name="ck_screening_job_provider"),
         CheckConstraint("batch_size >= 1",
                         name="ck_screening_job_batch_size"),

@@ -165,8 +165,14 @@ class CannedAI:
         self.json_response = json_response
         self.rewrite_response = rewrite_response
         self.rewrite_prompts = []
+        self.json_calls = 0
 
     def complete_json(self, prompt, max_tokens=None, response_schema=None):
+        # 15 KW standardı: <15 başlıkta ikinci (tamamlama) çağrı yapılır; sabit cevap
+        # tekrarlanırsa iddialı aday ikinci kez gelip rewrite sayısını bozar -> boş dön
+        self.json_calls += 1
+        if self.json_calls > 1:
+            return json.dumps({"headlines": [], "descriptions": [], "negative_keywords": []})
         return self.json_response
 
     def complete(self, prompt, max_tokens=None):

@@ -39,12 +39,13 @@ import KeywordImportResult from '../components/KeywordImportResult'
 import StartAnalysisModal from '../components/StartAnalysisModal'
 import { runResultBadge } from '../components/startAnalysis'
 import ScoreResults from '../components/ScoreResults'
-import { AnalysisBanner, AnalysisToast, ChainStage } from '../components/AnalysisProgress'
+import { AnalysisBanner, ChainStage } from '../components/AnalysisProgress'
 import { UrlSeedIdea } from '../services/api'
 import { WORKSPACE_KEYWORD_LIMIT } from '../constants'
 import { Users, X } from 'lucide-react'
 import type { ScoringRun } from '../types/models'
 import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
+import { useAnalysisToastStore } from '../stores/analysisToastStore'
 import './Keywords.css'
 
 type TabId = 'csv' | 'manual' | 'google-ads' | 'url' | 'competitor'
@@ -241,8 +242,8 @@ export default function Keywords() {
   const [taskDiscoveryActive, setTaskDiscoveryActive] = useState(false)
   // Analiz zinciri banner/toast durumu.
   const [chainActive, setChainActive] = useState(false)
+  const [chainRunId, setChainRunId] = useState<number | null>(null)
   const [chainDismissed, setChainDismissed] = useState(false)
-  const [toastOpen, setToastOpen] = useState(false)
   const [chainRunStatus, setChainRunStatus] = useState<string | null>(null)
   const assignTaskStorageKey = getWorkspaceTaskKey(
     'channel_assign',
@@ -447,6 +448,31 @@ export default function Keywords() {
     seo: chainRun?.enable_seo,
     social: chainRun?.enable_social,
   }
+  // Global toast için çalışan/başlatılan görevi paylaşılan store'a yaz
+  const trackAnalysisTask = useAnalysisToastStore((st) => st.track)
+  useEffect(() => {
+    if (!assignTaskId || !selectedScoreRunId || !activeWorkspace?.id) return
+    // Bitmiş görev yalnız analizin başlatıldığı run'da izlenir: çalışan A sürerken
+    // listeden seçilen tamamlanmış B run'ı takibi devralmasın
+    if (!assignPolling.isActive && !(chainActive && selectedScoreRunId === chainRunId)) return
+    trackAnalysisTask({
+      taskId: assignTaskId,
+      runId: selectedScoreRunId,
+      workspaceId: activeWorkspace.id,
+      channels: chainChannels,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    assignTaskId,
+    selectedScoreRunId,
+    activeWorkspace?.id,
+    assignPolling.isActive,
+    chainActive,
+    chainRunId,
+    chainRun?.enable_ads,
+    chainRun?.enable_seo,
+    chainRun?.enable_social,
+  ])
   const chainMessage =
     typeof assignPolling.resultData?.current_message === 'string'
       ? assignPolling.resultData.current_message
@@ -454,7 +480,6 @@ export default function Keywords() {
 
   const dismissChain = () => {
     setChainDismissed(true)
-    setToastOpen(false)
     setChainActive(false)
   }
 
@@ -1142,7 +1167,11 @@ export default function Keywords() {
             </button>
           </div>
 
-          <ScoreResults runId={selectedScoreRunId} workspaceId={activeWorkspace?.id} />
+          <ScoreResults
+            runId={selectedScoreRunId}
+            workspaceId={activeWorkspace?.id}
+            channels={chainChannels}
+          />
         </div>
       ) : (
         /* Havuz listesi (tasarım: başlık + pill + araç çubuğu + tablo) */
@@ -1284,19 +1313,6 @@ export default function Keywords() {
         </div>
       )}
 
-      {/* Sağ-üst kalıcı ilerleme toast'ı (banner'ın küçük aynası) */}
-      {chainStage && toastOpen && (
-        <AnalysisToast
-          stage={chainStage}
-          taskProgress={assignPolling.progress || 0}
-          channels={chainChannels}
-          message={chainMessage}
-          errorMessage={assignPolling.errorMessage}
-          onDismiss={() => setToastOpen(false)}
-          onOpen={() => setKeywordView('scores', selectedScoreRunId)}
-        />
-      )}
-
       {activeWorkspace && (
         <StartAnalysisModal
           open={showStartModal}
@@ -1309,8 +1325,8 @@ export default function Keywords() {
             setKeywordView('scores', runId)
             setTaskDiscoveryActive(true)
             setChainActive(true)
+            setChainRunId(runId)
             setChainDismissed(false)
-            setToastOpen(true)
             setChainRunStatus(null)
             void fetchScoreRuns()
           }}

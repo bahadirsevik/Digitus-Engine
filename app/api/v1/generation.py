@@ -606,11 +606,8 @@ def generate_ads_rsa(
         # trusted: YALNIZ kullanıcının istekte açıkça verdiği değer —
         # grounding whitelist'i yalnız trusted'ı kullanır (Faz F).
         trusted_brand_usp = resolver.safe_str(request.brand_usp) or ""
-        effective_brand_usp = (
-            trusted_brand_usp
-            or defaults.get("brand_usp", "")
-            or "Kaliteli ürün ve hizmet"
-        )
+        # USP yoksa boş kalır: jenerik metin reklam metnine sızıyordu
+        effective_brand_usp = trusted_brand_usp or defaults.get("brand_usp", "")
 
         return _dispatch_ads(
             db,
@@ -844,11 +841,7 @@ def regenerate_ads_group(
         trusted_brand_usp = resolver.safe_str(
             request.brand_usp if request else None
         ) or ""
-        effective_brand_usp = (
-            trusted_brand_usp
-            or defaults.get("brand_usp", "")
-            or "Kaliteli ürün ve hizmet"
-        )
+        effective_brand_usp = trusted_brand_usp or defaults.get("brand_usp", "")
 
         return _dispatch_ads(
             db,

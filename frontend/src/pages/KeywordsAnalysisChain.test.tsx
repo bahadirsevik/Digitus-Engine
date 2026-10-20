@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Keywords from './Keywords'
 import { channelsApi, scoringApi, tasksApi } from '../services/api'
+import { useAnalysisToastStore } from '../stores/analysisToastStore'
 import { useBrandStore } from '../stores/brandStore'
 
 vi.mock('../components/StartAnalysisModal', () => ({
@@ -129,9 +130,45 @@ describe('Keywords V3 analysis chain', () => {
     await startAnalysis()
 
     expect(await screen.findByText('Analiz sırasında hata oluştu')).toBeInTheDocument()
-    // Hata hem ana bantta hem sağ üst bildirimde görünür; bildirim "çalışıyor" demez
-    await waitFor(() => expect(screen.getAllByText('motor çöktü')).toHaveLength(2))
-    expect(screen.getByText('Analiz başarısız oldu')).toBeInTheDocument()
+    // Toast artık Layout'ta (GlobalAnalysisToast); sayfa yalnız ana bandı çizer
+    await waitFor(() => expect(screen.getAllByText('motor çöktü')).toHaveLength(1))
+    expect(screen.queryByText('Analiz başarısız oldu')).not.toBeInTheDocument()
     expect(screen.queryByText('Yapay zekâ analizi çalışıyor')).not.toBeInTheDocument()
+  })
+
+  it('çalışan A takipteyken tamamlanmış B runı seçmek takibi devralmaz', async () => {
+    useAnalysisToastStore.setState({ task: null, dismissedTaskId: null })
+    const RUN_B = { ...RUN, id: 25, run_name: 'Eski', status: 'channel_assigned' }
+    vi.mocked(scoringApi.listRuns).mockResolvedValue({ data: [RUN, RUN_B] } as never)
+    vi.mocked(tasksApi.listByRun).mockImplementation(((runId: number) =>
+      Promise.resolve({
+        data: {
+          tasks: [
+            runId === 24
+              ? { task_id: 'tA', task_type: 'channel_assignment', status: 'running' }
+              : { task_id: 'tB', task_type: 'channel_assignment', status: 'completed' },
+          ],
+          total: 1,
+        },
+      })) as never)
+    vi.mocked(tasksApi.getStatus).mockImplementation(((taskId: string) =>
+      Promise.resolve({
+        data:
+          taskId === 'tA'
+            ? { task_id: 'tA', status: 'running', progress: 40, scoring_run_id: 24 }
+            : { task_id: 'tB', status: 'completed', progress: 100, scoring_run_id: 25 },
+      })) as never)
+
+    await startAnalysis()
+    await waitFor(() => expect(useAnalysisToastStore.getState().task?.taskId).toBe('tA'))
+
+    const select = (await screen.findAllByRole('combobox')).find((el) =>
+      Array.from((el as HTMLSelectElement).options).some((o) => o.value === '25')
+    ) as HTMLSelectElement
+    fireEvent.change(select, { target: { value: '25' } })
+    await waitFor(() => expect(tasksApi.listByRun).toHaveBeenCalledWith(25, 29))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(useAnalysisToastStore.getState().task?.taskId).toBe('tA')
+    expect(useAnalysisToastStore.getState().task?.runId).toBe(24)
   })
 })

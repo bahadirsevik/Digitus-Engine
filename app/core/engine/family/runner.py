@@ -34,7 +34,7 @@ from app.core.engine import ai_runner as AI
 from app.core.engine.family import prompts as P
 from app.core.engine.family import rules as R
 from app.core.engine.persistence import (
-    StageContext, load_stage_results, write_stage_results,
+    StageContext, load_stage_results, stage_route, write_stage_results,
 )
 from app.database.models import ScoringRun
 
@@ -80,9 +80,11 @@ def family_models() -> Dict[str, str]:
 
 
 def _context(run: ScoringRun, stage: str, firm_block_sha256: str) -> StageContext:
-    return StageContext(model=FAMILY_MODEL,
+    # provider+model MUHURLU manifest'ten (global route'tan DEGIL)
+    provider, model = stage_route(run, stage)
+    return StageContext(model=model,
                         prompt_sha=family_prompt_shas()[stage],
-                        firm_block_sha256=firm_block_sha256)
+                        firm_block_sha256=firm_block_sha256, provider=provider)
 
 
 def _rows_payload(rows: Sequence[Any]) -> List[Dict[str, Any]]:
@@ -159,7 +161,8 @@ def _stage_a1(db, run, profile, universe, ai, firm_sha, say) -> List[Dict[str, A
         return [dict(f) for f in families]
 
     families = AI.run_single(
-        ai, stage=STAGE_A1, model=FAMILY_MODEL, thinking_level=FAMILY_THINKING,
+        ai, stage=STAGE_A1, model=ctx.model, provider=ctx.provider,
+        thinking_level=FAMILY_THINKING,
         prompt=P.build_stage1(profile, universe), schema=P.STAGE1_SCHEMA,
         max_tokens=R.STAGE1_MAX_TOKENS, result_key="families",
         error_cls=R.FamilyStageError)
@@ -197,7 +200,7 @@ def _assign_batches(db, run, profile, families, rows, ai, firm_sha, stage,
     def _job(batch):
         def run():                       # WORKER: yalniz AI + dogrulama
             got = AI.run_batch(
-                ai, stage=stage, model=FAMILY_MODEL,
+                ai, stage=stage, model=ctx.model, provider=ctx.provider,
                 thinking_level=FAMILY_THINKING, rows=batch,
                 build_prompt=lambda subset: P.build_stage2(profile, families,
                                                            subset),
@@ -254,7 +257,7 @@ def _stage_a2b(db, run, profile, families, unmatched, ai, firm_sha, say):
                 payload)
 
     proposed = AI.run_single(
-        ai, stage=STAGE_A2B, model=FAMILY_MODEL,
+        ai, stage=STAGE_A2B, model=ctx.model, provider=ctx.provider,
         thinking_level=FAMILY_THINKING,
         prompt=P.build_stage2b(profile, families, unmatched),
         schema=P.STAGE2B_SCHEMA, max_tokens=R.STAGE2B_MAX_TOKENS,
@@ -331,7 +334,7 @@ def _stage_a3(db, run, profile, families, low, assigned, ai, firm_sha, say):
     def _job(batch):
         def run():                       # WORKER: yalniz AI + dogrulama
             got = AI.run_batch(
-                ai, stage=STAGE_A3, model=FAMILY_MODEL,
+                ai, stage=STAGE_A3, model=ctx.model, provider=ctx.provider,
                 thinking_level=FAMILY_THINKING, rows=batch,
                 build_prompt=_build_for(batch),
                 schema=P.STAGE3_SCHEMA, max_tokens=R.STAGE3_MAX_TOKENS,

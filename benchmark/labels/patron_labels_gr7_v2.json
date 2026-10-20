@@ -1,0 +1,1832 @@
+{
+  "kind": "patron_label_evaluation_set",
+  "contract_version": "PATRON-LABEL-RECONCILIATION-2026-08-06-v2",
+  "version": 2,
+  "slug": "gr7",
+  "workspace_id": 39,
+  "reference_run_id": 43,
+  "algorithm_authority": "v2_1",
+  "supersedes": {
+    "artifact": "benchmark/trial_workspaces/patron_labels_gr7.json",
+    "seal_sha256": "3b4a7c524785809c470e693dc42873e684ff790bf0983058a59efa7dabcdaa53",
+    "contract_version": "DEEPSEEK-V21-TRIAL-SETUP-2026-08-05-v1",
+    "reason": "v1 etiketleri benchmark veri setinin ESKI keyword etiketlerinden uretildi; muhurlu label_authority_precedence UYGULANMADI",
+    "byte_preserved": true
+  },
+  "authority": {
+    "source": "benchmark/faz_e_profile/gr7_holdout_v5.json",
+    "source_seal_sha256": "bd411ec23585ee8cb50d6d89f113a5c3fc1844fc04b79862e9abde7ab0a60220",
+    "precedence": [
+      "1 newer_explicit_patron_policy",
+      "2 prior_keyword_label",
+      "3 implicit_not_selected",
+      "4 heuristics (yalniz mekanik kanit; KARAR OTORITESI DEGIL)"
+    ],
+    "adjudication_version": "gr7-label-authority-v2"
+  },
+  "authority_absent_rule": null,
+  "denominators": {
+    "current_positive": {
+      "count": 96,
+      "by_channel": {
+        "ADS": 50,
+        "SEO": 72,
+        "SOCIAL": 85
+      },
+      "definition": "Guncel pozitifler — recall paydasi BUDUR"
+    },
+    "policy_negative": {
+      "count": 25,
+      "by_channel": {
+        "ADS": 12,
+        "SEO": 14,
+        "SOCIAL": 24
+      },
+      "definition": "Yeni acik patron politikasiyla negatif; NEGATIF KONTROL olarak kullanilir"
+    },
+    "awaiting_human": {
+      "count": 1,
+      "by_channel": {
+        "ADS": 1,
+        "SEO": 1,
+        "SOCIAL": 1
+      },
+      "definition": "Celiski insan kararina gitti; HICBIR paydaya girmez"
+    }
+  },
+  "flagged_for_review_count": 20,
+  "isolation": {
+    "written_to_profile": false,
+    "written_to_prompts": false,
+    "readable_by_models": false,
+    "rule": "Bu artifact YALNIZ kosu SONRASI basari olcumu icindir; Gemini/DeepSeek/relevance/siralama kodu OKUMAZ."
+  },
+  "current_positive": [
+    {
+      "canonical_keyword": "25 yasinda sac beyazlamasi",
+      "source_keywords": [
+        "25 yaşında saç beyazlaması"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12654
+    },
+    {
+      "canonical_keyword": "beyaz boya sac",
+      "source_keywords": [
+        "beyaz boya sac"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12821
+    },
+    {
+      "canonical_keyword": "beyaz erkek sac",
+      "source_keywords": [
+        "beyaz erkek saç"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12875
+    },
+    {
+      "canonical_keyword": "beyaz kapatici",
+      "source_keywords": [
+        "beyaz kapatıcı"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12637,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz kapatici sac boyasi",
+      "source_keywords": [
+        "beyaz kapatıcı saç boyası"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12756
+    },
+    {
+      "canonical_keyword": "beyaz kapatici sampuan",
+      "source_keywords": [
+        "beyaz kapatıcı şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12554,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac boyama",
+      "source_keywords": [
+        "beyaz sac boyama"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12698,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac boyasi",
+      "source_keywords": [
+        "beyaz saç boyası"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12553,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac boyasi erkek",
+      "source_keywords": [
+        "beyaz saç boyası erkek"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12758
+    },
+    {
+      "canonical_keyword": "beyaz sac cozumu",
+      "source_keywords": [
+        "beyaz saç çözümü"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12866
+    },
+    {
+      "canonical_keyword": "beyaz sac giderici",
+      "source_keywords": [
+        "beyaz saç giderici"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12982
+    },
+    {
+      "canonical_keyword": "beyaz sac icin cozum",
+      "source_keywords": [
+        "beyaz saç için çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12789
+    },
+    {
+      "canonical_keyword": "beyaz sac kapatici",
+      "source_keywords": [
+        "beyaz saç kapatıcı",
+        "beyaz saç kapatici"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12587
+    },
+    {
+      "canonical_keyword": "beyaz sac kapatici boya",
+      "source_keywords": [
+        "beyaz saç kapatıcı boya"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12919,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac kapatici erkek",
+      "source_keywords": [
+        "beyaz saç kapatıcı erkek"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12912
+    },
+    {
+      "canonical_keyword": "beyaz sac kapatici sampuan",
+      "source_keywords": [
+        "beyaz saç kapatıcı şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12665,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac kapatma",
+      "source_keywords": [
+        "beyaz sac kapatma"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12910
+    },
+    {
+      "canonical_keyword": "beyaz sac rengi",
+      "source_keywords": [
+        "beyaz sac rengi"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12696
+    },
+    {
+      "canonical_keyword": "beyaz saca cozum",
+      "source_keywords": [
+        "beyaz saca cozum"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12697
+    },
+    {
+      "canonical_keyword": "beyaz saclar icin",
+      "source_keywords": [
+        "beyaz saçlar için"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12863
+    },
+    {
+      "canonical_keyword": "beyaz saclar icin boya",
+      "source_keywords": [
+        "beyaz saçlar için boya"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12909,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "beyaz saclar icin dogal cozum",
+      "source_keywords": [
+        "beyaz saçlar için doğal çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12862
+    },
+    {
+      "canonical_keyword": "beyaz saclara",
+      "source_keywords": [
+        "beyaz saclara"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12542
+    },
+    {
+      "canonical_keyword": "beyaz saclara bitkisel cozum",
+      "source_keywords": [
+        "beyaz saçlara bitkisel çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12981
+    },
+    {
+      "canonical_keyword": "beyaz saclara boya",
+      "source_keywords": [
+        "beyaz saçlara boya"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12983
+    },
+    {
+      "canonical_keyword": "beyaz saclara cozum",
+      "source_keywords": [
+        "beyaz saçlara çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12541
+    },
+    {
+      "canonical_keyword": "beyaz saclara cozum bulundu",
+      "source_keywords": [
+        "beyaz saçlara çözüm bulundu"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12643
+    },
+    {
+      "canonical_keyword": "beyaz saclara dogal cozum",
+      "source_keywords": [
+        "beyaz saçlara doğal çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12659
+    },
+    {
+      "canonical_keyword": "beyaz saclari eski rengine dondurme",
+      "source_keywords": [
+        "beyaz saçları eski rengine döndürme"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12790
+    },
+    {
+      "canonical_keyword": "beyaz saclari kendi rengine dondurme",
+      "source_keywords": [
+        "beyaz saçları kendi rengine döndürme"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12864
+    },
+    {
+      "canonical_keyword": "beyaz saclari siyahlastirma",
+      "source_keywords": [
+        "beyaz saçları siyahlaştırma"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12820
+    },
+    {
+      "canonical_keyword": "beyaz saclarim eski rengine dondu",
+      "source_keywords": [
+        "beyaz saçlarım eski rengine döndü"
+      ],
+      "labels": [
+        "ADS",
+        "SEO"
+      ],
+      "trial_keyword_id": 12544
+    },
+    {
+      "canonical_keyword": "beyaz saclarim eski rengine dondu kadinlar kulubu",
+      "source_keywords": [
+        "beyaz saçlarım eski rengine döndü kadınlar kulübü"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12589
+    },
+    {
+      "canonical_keyword": "beyaz saclarim siyahlasti",
+      "source_keywords": [
+        "beyaz saçlarım siyahlaştı"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12601
+    },
+    {
+      "canonical_keyword": "beyazlayan saclara cozum varmi",
+      "source_keywords": [
+        "beyazlayan saclara cozum varmi"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12868
+    },
+    {
+      "canonical_keyword": "beyazlayan saclari dogal rengine dondurme",
+      "source_keywords": [
+        "beyazlayan saçları doğal rengine döndürme"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12755
+    },
+    {
+      "canonical_keyword": "boyasiz beyaz kapatma",
+      "source_keywords": [
+        "boyasız beyaz kapatma"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12618
+    },
+    {
+      "canonical_keyword": "dogal beyaz sac boyasi",
+      "source_keywords": [
+        "doğal beyaz saç boyası"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12642
+    },
+    {
+      "canonical_keyword": "dogal beyaz sac kapatici",
+      "source_keywords": [
+        "doğal beyaz saç kapatıcı"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12791
+    },
+    {
+      "canonical_keyword": "dogal beyaz saclar",
+      "source_keywords": [
+        "doğal beyaz saçlar"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12722
+    },
+    {
+      "canonical_keyword": "dogal beyaz sacli kadinlar",
+      "source_keywords": [
+        "doğal beyaz saçlı kadınlar"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12920
+    },
+    {
+      "canonical_keyword": "dogal sac boyalari",
+      "source_keywords": [
+        "dogal sac boyaları"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 13162
+    },
+    {
+      "canonical_keyword": "dogal sac boyasi",
+      "source_keywords": [
+        "doğal saç boyası",
+        "dogal sac boyasi"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12533
+    },
+    {
+      "canonical_keyword": "dogal sac rengi",
+      "source_keywords": [
+        "doğal saç rengi"
+      ],
+      "labels": [
+        "ADS",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12577
+    },
+    {
+      "canonical_keyword": "eczanelerde satilan beyaz sac giderici",
+      "source_keywords": [
+        "eczanelerde satilan beyaz saç giderici"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12588
+    },
+    {
+      "canonical_keyword": "en guzel sac boya rengi",
+      "source_keywords": [
+        "en güzel saç boya renkleri"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12827
+    },
+    {
+      "canonical_keyword": "en iyi beyaz kapatici sac boyasi",
+      "source_keywords": [
+        "en iyi beyaz kapatıcı saç boyası"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 13527
+    },
+    {
+      "canonical_keyword": "en iyi sac boyasi kadinlar kulubu",
+      "source_keywords": [
+        "en iyi saç boyası kadınlar kulübü"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12669
+    },
+    {
+      "canonical_keyword": "erkek beyaz kapatici",
+      "source_keywords": [
+        "erkek beyaz kapatıcı"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12871
+    },
+    {
+      "canonical_keyword": "erkek beyaz sac boyama",
+      "source_keywords": [
+        "erkek beyaz saç boyama"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12870
+    },
+    {
+      "canonical_keyword": "erkek beyaz sac boyasi",
+      "source_keywords": [
+        "erkek beyaz saç boyası"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12759
+    },
+    {
+      "canonical_keyword": "erkek beyaz sac kapatici",
+      "source_keywords": [
+        "erkek beyaz saç kapatıcı"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12700,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "erkek beyaz sac kapatici tavsiye",
+      "source_keywords": [
+        "erkek beyaz saç kapatıcı tavsiye"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12825
+    },
+    {
+      "canonical_keyword": "erkek gri sac boyasi",
+      "source_keywords": [
+        "erkek gri saç boyası"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12689,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "erkek sac beyaz kapatici",
+      "source_keywords": [
+        "erkek saç beyaz kapatıcı"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12823
+    },
+    {
+      "canonical_keyword": "erkek sac beyazlamasina cozum",
+      "source_keywords": [
+        "erkek saç beyazlamasına çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12915
+    },
+    {
+      "canonical_keyword": "erkek sac boyasi",
+      "source_keywords": [
+        "erkek saç boyası"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12519,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "erkeklerde sac boyama",
+      "source_keywords": [
+        "erkeklerde sac boyama"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 13528,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "erken sac beyazlamasi",
+      "source_keywords": [
+        "erken saç beyazlaması"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12748
+    },
+    {
+      "canonical_keyword": "erken yasta sac beyazlamasi",
+      "source_keywords": [
+        "erken yaşta saç beyazlaması"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12624
+    },
+    {
+      "canonical_keyword": "erken yasta sac beyazlamasi cozum",
+      "source_keywords": [
+        "erken yaşta saç beyazlaması çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12674
+    },
+    {
+      "canonical_keyword": "genc yasta saclarin beyazlamasi",
+      "source_keywords": [
+        "genç yaşta saçların beyazlaması"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12693
+    },
+    {
+      "canonical_keyword": "gri beyaz sac boyasi",
+      "source_keywords": [
+        "gri beyaz saç boyası"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 12710,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "gri beyaz sac rengi",
+      "source_keywords": [
+        "gri beyaz saç rengi"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12872
+    },
+    {
+      "canonical_keyword": "gri rengi sac boyasi",
+      "source_keywords": [
+        "gri rengi saç boyası"
+      ],
+      "labels": [
+        "ADS"
+      ],
+      "trial_keyword_id": 12711
+    },
+    {
+      "canonical_keyword": "gri sampuan",
+      "source_keywords": [
+        "gri şampuan"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12655,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "kalici sac boyasi",
+      "source_keywords": [
+        "kalıcı saç boyası"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12646
+    },
+    {
+      "canonical_keyword": "sac beyaz giderici",
+      "source_keywords": [
+        "saç beyaz giderici"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12822
+    },
+    {
+      "canonical_keyword": "sac beyaz kapatici sampuan",
+      "source_keywords": [
+        "saç beyaz kapatıcı şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12728,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "sac beyazlamasi",
+      "source_keywords": [
+        "sac beyazlaması"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 13008
+    },
+    {
+      "canonical_keyword": "sac beyazlamasi dogal cozum",
+      "source_keywords": [
+        "saç beyazlaması doğal çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12725
+    },
+    {
+      "canonical_keyword": "sac beyazlamasi icin",
+      "source_keywords": [
+        "saç beyazlaması için"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12824
+    },
+    {
+      "canonical_keyword": "sac beyazlamasi nedenleri",
+      "source_keywords": [
+        "saç beyazlaması nedenleri"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12714
+    },
+    {
+      "canonical_keyword": "sac beyazlamasina",
+      "source_keywords": [
+        "saç beyazlamasına"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12559
+    },
+    {
+      "canonical_keyword": "sac beyazlamasina cozum",
+      "source_keywords": [
+        "saç beyazlamasına çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12576
+    },
+    {
+      "canonical_keyword": "sac beyazlamasina kesin cozum",
+      "source_keywords": [
+        "saç beyazlamasına kesin çözüm"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12760
+    },
+    {
+      "canonical_keyword": "sac beyazlamasini onleyen",
+      "source_keywords": [
+        "saç beyazlamasını önleyen"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12761
+    },
+    {
+      "canonical_keyword": "sac beyazlamasini onleyen vitaminler",
+      "source_keywords": [
+        "saç beyazlamasını önleyen vitaminler"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12713
+    },
+    {
+      "canonical_keyword": "sac beyazlamasinin sebepleri",
+      "source_keywords": [
+        "saç beyazlamasının sebepleri"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12897
+    },
+    {
+      "canonical_keyword": "sac beyazlari kapatici",
+      "source_keywords": [
+        "saç beyazları kapatıcı"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12603
+    },
+    {
+      "canonical_keyword": "sac boyasi",
+      "source_keywords": [
+        "saç boyası"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12504,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "sac boyasi beyaz",
+      "source_keywords": [
+        "saç boyası beyaz"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12867
+    },
+    {
+      "canonical_keyword": "sac boyasi dogal",
+      "source_keywords": [
+        "saç boyası doğal"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12792
+    },
+    {
+      "canonical_keyword": "sac boyasi onerileri",
+      "source_keywords": [
+        "saç boyası önerileri"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12829
+    },
+    {
+      "canonical_keyword": "sac boyasi zararlimi",
+      "source_keywords": [
+        "saç boyası zararlımı"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12734
+    },
+    {
+      "canonical_keyword": "sac kapatici",
+      "source_keywords": [
+        "saç kapatıcı"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12556,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "sac kapatici boya",
+      "source_keywords": [
+        "saç kapatıcı boya"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12877,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "sac rengi",
+      "source_keywords": [
+        "saç rengi"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12511
+    },
+    {
+      "canonical_keyword": "sac rengi erkek",
+      "source_keywords": [
+        "saç rengi erkek"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12708
+    },
+    {
+      "canonical_keyword": "sac rengini degistirme",
+      "source_keywords": [
+        "saç rengini değiştirme"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12667,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "sac serumu",
+      "source_keywords": [
+        "saç serumu"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12517,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "ADS",
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "sac siyahlatma",
+      "source_keywords": [
+        "sac siyahlatma"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12680
+    },
+    {
+      "canonical_keyword": "saca iyi gelen vitaminler",
+      "source_keywords": [
+        "saça iyi gelen vitaminler"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12586,
+      "flagged_for_review": {
+        "reason": "uretim marka-dislama filtresi eledi",
+        "channels": [
+          "SEO"
+        ],
+        "filter_reason": "Marka dışlama temasına uyuyor",
+        "auto_negative": false
+      }
+    },
+    {
+      "canonical_keyword": "saci eski rengine dondurme",
+      "source_keywords": [
+        "saçı eski rengine döndürme"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12865
+    },
+    {
+      "canonical_keyword": "sacin erken beyazlamasi",
+      "source_keywords": [
+        "saçın erken beyazlaması"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12895
+    },
+    {
+      "canonical_keyword": "saclari siyahlastirma",
+      "source_keywords": [
+        "saçları siyahlaştırma",
+        "saçı siyahlaştırma"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12911
+    }
+  ],
+  "policy_negative": [
+    {
+      "canonical_keyword": "beyaz kapatici sampuan yorumlari",
+      "source_keywords": [
+        "beyaz kapatıcı şampuan yorumları"
+      ],
+      "labels": [
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12927,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac giderici sampuan",
+      "source_keywords": [
+        "beyaz saç giderici şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12826,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "beyaz sac sampuani",
+      "source_keywords": [
+        "beyaz saç şampuanı",
+        "beyaz saclara sampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12615,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "beyaz saclar icin sampuan",
+      "source_keywords": [
+        "beyaz saçlar için şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12575,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "beyaz saclar icin sampuan kullananlar",
+      "source_keywords": [
+        "beyaz saçlar için şampuan kullananlar"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12645,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "beyaz saclara son sampuan",
+      "source_keywords": [
+        "beyaz saçlara son şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12921,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "beyazlik giderici sampuan",
+      "source_keywords": [
+        "beyazlik giderici şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12663,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "en iyi beyaz sac giderici sampuan",
+      "source_keywords": [
+        "en iyi beyaz saç giderici şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12724,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "en iyi sac bakim urunleri",
+      "source_keywords": [
+        "en iyi saç bakım ürünleri"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12627,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "genel_bakim"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "erkek beyaz kapatici sampuan",
+      "source_keywords": [
+        "erkek beyaz kapatıcı şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12990,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "erkek sac bakim urunleri",
+      "source_keywords": [
+        "erkek sac bakim urunleri"
+      ],
+      "labels": [
+        "SEO"
+      ],
+      "trial_keyword_id": 12583,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "seo",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "genel_bakim"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "erkek sac boyama sampuani",
+      "source_keywords": [
+        "erkek saç boyama şampuanı"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12612,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac bakim onerileri",
+      "source_keywords": [
+        "sac bakim onerileri"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12845,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "genel_bakim"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac bakim serumu",
+      "source_keywords": [
+        "saç bakım serumu"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12600,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "genel_bakim"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac bakim yaglari",
+      "source_keywords": [
+        "sac bakım yağları"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12598,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "genel_bakim"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac beyaz giderici sampuan",
+      "source_keywords": [
+        "saç beyaz giderici şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12917,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac boyasi sampuan",
+      "source_keywords": [
+        "saç boyası şampuan"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12526,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac boyayan sampuan",
+      "source_keywords": [
+        "sac boyayan sampuan"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12555,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "sac sampuani boya",
+      "source_keywords": [
+        "saç şampuanı boya"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12611,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "saca en iyi gelen sampuan",
+      "source_keywords": [
+        "saça en iyi gelen şampuan"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12681,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "saci eski rengine donduren sampuan",
+      "source_keywords": [
+        "saçı eski rengine döndüren şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12918,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "saci kendi rengine donduren sampuan",
+      "source_keywords": [
+        "saçı kendi rengine döndüren şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 13529,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "saclarin beyazini gideren sampuan",
+      "source_keywords": [
+        "saçların beyazını gideren şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12794,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "ads+seo+social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "yipranmis sac icin sampuan",
+      "source_keywords": [
+        "yıpranmış saç için şampuan"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12656,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "sampuan_sorgusu"
+        ]
+      }
+    },
+    {
+      "canonical_keyword": "yipranmis saclar icin bakim urunleri",
+      "source_keywords": [
+        "yıpranmış saçlar için bakım ürünleri"
+      ],
+      "labels": [
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12873,
+      "authority": {
+        "decided_by": "newer_explicit_patron_policy",
+        "prior_keyword_label": "social",
+        "policy_version": 2,
+        "policy_approved_on": "2026-08-03",
+        "matched_policy_cores": [
+          "genel_bakim"
+        ]
+      }
+    }
+  ],
+  "awaiting_human": [
+    {
+      "canonical_keyword": "saclari dogal rengine donduren sampuan",
+      "source_keywords": [
+        "saçları doğal rengine döndüren şampuan"
+      ],
+      "labels": [
+        "ADS",
+        "SEO",
+        "SOCIAL"
+      ],
+      "trial_keyword_id": 12874,
+      "authority": {
+        "reason": "Yuksek ozgullukluu dislama cekirdegi eslesiyor AMA satir markanin OZ URUN alanina degiyor; lexical kural bu satiri cozemez. Hicbir havuza ALINMADI.",
+        "decided_by": "requires_human_adjudication",
+        "prior_keyword_label": "ads+seo+social"
+      }
+    }
+  ],
+  "seal_sha256": "15affc9e73ba6af85bb05ec8fae9f5c9dac1c31246ce143d33df998f74a7101f"
+}

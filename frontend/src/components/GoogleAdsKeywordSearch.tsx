@@ -32,6 +32,7 @@ const ideaVolume = (idea: EnrichedKeywordOut) => idea.avg_monthly_searches || 0
 
 export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForceInclude }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
+  const setSeedDraft = useBrandStore((s) => s.setSeedDraft)
 
   const [customerId, setCustomerId] = useState('')
   const [customers, setCustomers] = useState<string[]>([])
@@ -86,7 +87,9 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
         const res = await googleAdsApi.listCustomers()
         const ids = (res.data || []).map((item) => item.customer_id)
         setCustomers(ids)
-        if (!customerId && ids.length === 1) setCustomerId(ids[0])
+        // Varsayılan hesap: 956 ile biten; yoksa tek hesap varsa o
+        const preferred = ids.find((id) => id.endsWith('956')) ?? (ids.length === 1 ? ids[0] : '')
+        if (!customerId && preferred) setCustomerId(preferred)
       } catch {
         setCustomers([])
       }
@@ -98,7 +101,16 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
   useEffect(() => {
     setLanguageId(normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id))
     setGeoId(activeWorkspace?.default_geo_target_id || '2792')
-    setWords(suggestedSeedText ? suggestedSeedText.split('\n') : [])
+    // Kullanıcının düzenlediği liste sekme değişimi/remount'ta kaybolmasın
+    const workspaceId = activeWorkspace?.id
+    const saved = workspaceId ? useBrandStore.getState().seedDrafts[workspaceId] : undefined
+    setWords(
+      saved?.base === suggestedSeedText
+        ? saved.words
+        : suggestedSeedText
+          ? suggestedSeedText.split('\n')
+          : []
+    )
     setAdding(false)
     setDraft('')
     setIdeas([])
@@ -111,14 +123,19 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
     suggestedSeedText,
   ])
 
+  const saveWords = (next: string[]) => {
+    setWords(next)
+    if (activeWorkspace) setSeedDraft(activeWorkspace.id, { base: suggestedSeedText, words: next })
+  }
+
   const addDraftWord = () => {
     const v = draft.trim()
-    if (v && !words.includes(v)) setWords((w) => [...w, v])
+    if (v && !words.includes(v)) saveWords([...words, v])
     setDraft('')
     draftInputRef.current?.focus()
   }
 
-  const removeWord = (w: string) => setWords((list) => list.filter((x) => x !== w))
+  const removeWord = (w: string) => saveWords(words.filter((x) => x !== w))
 
   useEffect(() => {
     if (adding) draftInputRef.current?.focus()

@@ -5,7 +5,7 @@
  * gerçekten dolduğunu kilitler.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import AdsPanel from './AdsPanel'
 import { useBrandStore } from '../../stores/brandStore'
 
@@ -31,7 +31,7 @@ vi.mock('../../services/api', () => ({
     ),
   },
   generationApi: {
-    getAdsRsa: vi.fn(() => Promise.resolve({ data: { total_groups: 0 } })),
+    getAdsRsa: vi.fn(() => Promise.resolve({ data: mockAdsResult })),
     createAdsRsa: vi.fn(() => Promise.resolve({ data: { task_id: 't1', generation_set_id: 5 } })),
     getAdsSets: vi.fn(() =>
       Promise.resolve({ data: { scoring_run_id: 1, sets: mockSets, active_set_id: null } })
@@ -43,6 +43,7 @@ vi.mock('../../services/api', () => ({
 
 // Faz E set senaryosu: yalnız stale-olmayan draft var, aktif non-stale yok
 let mockSets: Array<Record<string, unknown>> = []
+let mockAdsResult: Record<string, unknown> = { total_groups: 0 }
 
 vi.mock('../../hooks/useTaskPolling', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../hooks/useTaskPolling')>()),
@@ -58,6 +59,7 @@ vi.mock('../../hooks/useTaskPolling', async (importOriginal) => ({
 describe('AdsPanel autofill', () => {
   beforeEach(() => {
     mockSets = []
+    mockAdsResult = { total_groups: 0 }
     useBrandStore.setState({
       activeWorkspace: {
         id: 10,
@@ -114,5 +116,126 @@ describe('AdsPanel autofill', () => {
     expect(await screen.findByText(/Güncel aktif reklam seti yok/)).toBeTruthy()
     expect(screen.getByText('Taslak')).toBeTruthy()
     expect(screen.getAllByText('Bayat').length).toBeGreaterThan(0)
+  })
+})
+
+// 15 KW teslim standardı raporu (standard_report) — yalnız olgu ve liste
+describe('AdsPanel standart raporu', () => {
+  const baseReport = {
+    keyword_count: 15,
+    headline_count: 15,
+    kw_description_count: 4,
+    missing_headlines: 0,
+    missing_kw_descriptions: 0,
+    cta_count: 3,
+    missing_cta: 0,
+    below_standard: false,
+    pool_below_target: false,
+    keywords_in_headlines: [],
+    keywords_description_only: [],
+    keywords_unused: [],
+    fill_keywords: [],
+  }
+  const showGroup = (standard_report?: Record<string, unknown> | null) => {
+    mockAdsResult = {
+      total_groups: 1,
+      ad_groups: [
+        {
+          id: 1,
+          group_name: 'Grup 1',
+          headlines: [],
+          descriptions: [],
+          negative_keywords: [],
+          ...(standard_report === undefined ? {} : { standard_report }),
+        },
+      ],
+    }
+    return render(<AdsPanel runId={1} />)
+  }
+
+  beforeEach(() => {
+    mockSets = []
+    mockAdsResult = { total_groups: 0 }
+    useBrandStore.setState({
+      activeWorkspace: {
+        id: 10,
+        name: 'WS',
+        company_url: 'https://ws.test',
+        status: 'confirmed',
+        profile_data: null,
+        suggested_keywords: null,
+      },
+    })
+  })
+
+  it('özet satırı sayıları gösterir; standart altı rozeti ve boş listeler yok', async () => {
+    showGroup(baseReport)
+    await waitFor(() =>
+      expect(document.querySelector('.adsx-std-summary')?.textContent).toBe(
+        "15 KW · 15 başlık · 4 KW'li açıklama · 3 CTA"
+      )
+    )
+    expect(screen.getByTitle(/Kural tabanlı sayım/)).toBeTruthy()
+    expect(screen.queryByText(/teslim standardının altında/)).toBeNull()
+    expect(screen.queryByText(/standart 15/)).toBeNull()
+    expect(screen.queryByText(/Başlıklarda kullanılan KW/)).toBeNull()
+    expect(screen.queryByText(/Hiç kullanılmayan KW/)).toBeNull()
+  })
+
+  it('standart altı rozeti yalnız eksik olan parçayı yazar', async () => {
+    showGroup({
+      ...baseReport,
+      headline_count: 13,
+      missing_headlines: 2,
+      below_standard: true,
+    })
+    expect(await screen.findByText('15 KW teslim standardının altında')).toBeTruthy()
+    expect(screen.getByText('Eksik: 2 başlık')).toBeTruthy()
+  })
+
+  it('iki eksik de varsa ikisini listeler', async () => {
+    showGroup({
+      ...baseReport,
+      missing_headlines: 3,
+      missing_kw_descriptions: 1,
+      below_standard: true,
+    })
+    expect(await screen.findByText("Eksik: 3 başlık, 1 KW'li açıklama")).toBeTruthy()
+  })
+
+  it('eksik CTA sayısını yazar', async () => {
+    showGroup({ ...baseReport, cta_count: 1, missing_cta: 2, below_standard: true })
+    await waitFor(() =>
+      expect(document.querySelector('.adsx-std-summary')?.textContent).toBe(
+        "15 KW · 15 başlık · 4 KW'li açıklama · 1 CTA"
+      )
+    )
+    expect(screen.getByTitle(/Kural tabanlı sayım/)).toBeTruthy()
+    expect(screen.getByText('Eksik: 2 CTA')).toBeTruthy()
+  })
+
+  it('havuz hedefin altındaysa KW sayısını yazar', async () => {
+    showGroup({ ...baseReport, keyword_count: 12, pool_below_target: true })
+    expect(await screen.findByText('Bu grupta 12 KW var (standart 15)')).toBeTruthy()
+  })
+
+  it('yalnız dolu KW listeleri çizilir', async () => {
+    showGroup({
+      ...baseReport,
+      keywords_unused: ['kalem'],
+      fill_keywords: ['defter'],
+    })
+    expect(await screen.findByText("Hiç kullanılmayan KW'ler (1)")).toBeTruthy()
+    expect(screen.getByText("15'e tamamlamak için eklenen KW'ler (1)")).toBeTruthy()
+    expect(screen.getByText('kalem')).toBeTruthy()
+    expect(screen.getByText('defter')).toBeTruthy()
+    expect(screen.queryByText(/Başlıklarda kullanılan KW/)).toBeNull()
+    expect(screen.queryByText(/Yalnız açıklamada geçen KW/)).toBeNull()
+  })
+
+  it.each([null, undefined])('rapor %s ise ek bir şey çizilmez', async (report) => {
+    const { container } = showGroup(report)
+    expect(await screen.findByText('Grup 1')).toBeTruthy()
+    expect(container.querySelector('.adsx-std')).toBeNull()
   })
 })

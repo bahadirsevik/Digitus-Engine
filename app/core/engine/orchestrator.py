@@ -38,7 +38,7 @@ from app.core.engine.family.runner import (
     family_prompt_shas,
     run_family_stage,
 )
-from app.core.engine.persistence import seal_manifest
+from app.core.engine.persistence import routes_for_seal, seal_manifest
 from app.core.engine.policy_gate import finalize_engine_delivery
 from app.core.engine.seo.runner import (
     seo_models,
@@ -135,6 +135,11 @@ def run_v3_orchestration(
     # finalize canlı profille karşılaştırıp fail-closed durur.
     from app.core.policy.location_policy import policy_snapshot
 
+    # Rota (provider+model) MUHURDAN ONCE cozulur ve manifest'e yazilir;
+    # run zaten muhurluyse MEVCUT muhurden okunur (resume ayar degisiminden
+    # etkilenmez). Sonrasinda runner'lar yalniz muhurden okur.
+    all_providers, all_models = routes_for_seal(run, all_models)
+
     seal_manifest(
         run,
         firm_block_sha256=firm_sha,
@@ -142,6 +147,7 @@ def run_v3_orchestration(
         models=all_models,
         prompt_shas=all_prompt_shas,
         location_policy=policy_snapshot(profile.profile_data),
+        providers=all_providers,
     )
     db.flush()
 

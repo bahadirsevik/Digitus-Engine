@@ -23,6 +23,10 @@ from loguru import logger
 # Fiyat tablosu — kaynak: ai.google.dev/gemini-api/docs/pricing (2026-07).
 # Guncelleme gerektiginde valid_from ile yeni satir eklenir; eski event'lerin
 # snapshot'i degismez.
+ANTHROPIC_PRICE_SOURCE = (
+    "https://platform.claude.com/docs/en/about-claude/pricing (2026-10-11)"
+)
+
 PRICE_TABLE: Dict[str, Dict[str, Any]] = {
     "gemini-3.5-flash": {
         "currency": "USD",
@@ -84,6 +88,29 @@ PRICE_TABLE: Dict[str, Dict[str, Any]] = {
         "output_per_m": 0.87,
         "valid_from": "2026-07-27",
     },
+    # Anthropic (kaynak: ANTHROPIC_PRICE_SOURCE). Haiku fiyati <=100K token
+    # promptlar icin gecerlidir.
+    "claude-haiku-5-5": {
+        "currency": "USD",
+        "input_per_m": 0.10,
+        "input_cache_hit_per_m": 0.01,
+        "output_per_m": 0.50,
+        "valid_from": "2026-10-11",
+    },
+    "claude-sonnet-5-5": {
+        "currency": "USD",
+        "input_per_m": 2.00,
+        "input_cache_hit_per_m": 0.10,
+        "output_per_m": 10.00,
+        "valid_from": "2026-10-11",
+    },
+    "claude-opus-5-5": {
+        "currency": "USD",
+        "input_per_m": 4.00,
+        "input_cache_hit_per_m": 0.20,
+        "output_per_m": 20.00,
+        "valid_from": "2026-10-11",
+    },
 }
 
 
@@ -130,7 +157,16 @@ def estimate_cost(events: List[dict]) -> Dict[str, Any]:
         snap = e.get("price_snapshot")
         if not snap:
             continue
-        inp = (e.get("prompt_tokens") or 0) / 1_000_000 * snap["input_per_m"]
+        prompt = e.get("prompt_tokens") or 0
+        # Cache-read tokenlari hit fiyatindan; kalan prompt input fiyatindan
+        hit = min(e.get("cache_read_tokens") or 0, prompt)
+        if hit and "input_cache_hit_per_m" in snap:
+            inp = (
+                (prompt - hit) * snap["input_per_m"]
+                + hit * snap["input_cache_hit_per_m"]
+            ) / 1_000_000
+        else:
+            inp = prompt / 1_000_000 * snap["input_per_m"]
         # Düşünme token'ları çıktı fiyatından faturalanır
         out_tokens = (e.get("candidates_tokens") or 0) + (e.get("thoughts_tokens") or 0)
         out = out_tokens / 1_000_000 * snap["output_per_m"]
@@ -188,6 +224,11 @@ class UsageCollector:
         latency_ms: Optional[int] = None,
         retry_reason: Optional[str] = None,
         cache_status: Optional[str] = None,
+        provider: Optional[str] = None,
+        cache_read_tokens: Optional[int] = None,
+        cache_creation_tokens: Optional[int] = None,
+        queue_wait_ms: Optional[int] = None,
+        http_attempts: Optional[int] = None,
     ) -> None:
         # Mantıksal-çağrı bağlamı varsa sabit request_id + artan attempt
         ctx = getattr(self._local, "ctx", None)
@@ -213,6 +254,11 @@ class UsageCollector:
             "retry_reason": retry_reason,
             "cache_status": cache_status,
             "price_snapshot": _price_snapshot(model),
+            "provider": provider,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_creation_tokens": cache_creation_tokens,
+            "queue_wait_ms": queue_wait_ms,
+            "http_attempts": http_attempts,
         }
         with self._lock:
             self._pending.append(event)

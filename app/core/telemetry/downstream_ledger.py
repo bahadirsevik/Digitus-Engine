@@ -25,6 +25,9 @@ from typing import Any, Dict, Optional
 from app.core.telemetry.ai_cost_budget import BUDGET_DOWNSTREAM, AiCostLedger
 from app.core.telemetry.usage import price_for
 
+_PROVIDERS = ("gemini", "deepseek", "anthropic")
+
+
 class LedgerBindError(RuntimeError):
     """Muhasebe kurulamadı — çağrı YAPILMAZ (fail-closed)."""
 
@@ -68,8 +71,10 @@ class DownstreamLedgerBinding:
                 + float(max_output_tokens) / 1_000_000 * price["output"])
 
     def reserve(self, *, stage: str, model: str, prompt_bytes: int,
-                max_output_tokens: int) -> int:
+                max_output_tokens: int, provider: str = "gemini") -> int:
         """Çağrıdan ÖNCE rezervasyon; başarısızsa çağrı YAPILMAZ."""
+        if provider not in _PROVIDERS:
+            raise LedgerBindError(f"bilinmeyen provider: {provider!r}")
         ceiling = self.request_ceiling_usd(model, prompt_bytes,
                                            max_output_tokens)
         if ceiling <= 0:
@@ -79,7 +84,7 @@ class DownstreamLedgerBinding:
             kind=BUDGET_DOWNSTREAM,
             request_id=self.next_request_id(stage),
             ceiling_usd=ceiling, auto_attempt=True, stage=stage,
-            provider="gemini", model=model)
+            provider=provider, model=model)
 
     def settle(self, reservation_id: Optional[int], *, model: str,
                usage) -> None:
@@ -148,12 +153,27 @@ def _usage_totals(usage) -> Optional[Dict[str, int]]:
     completion = _strict_int(getattr(usage, "candidates_token_count", None))
     thoughts = _strict_int(getattr(usage, "thoughts_token_count", None),
                            allow_missing=True)
-    if prompt is None or completion is None or thoughts is None:
+    cache_read = _strict_int(getattr(usage, "cache_read_token_count", None),
+                             allow_missing=True)
+    cache_write = _strict_int(
+        getattr(usage, "cache_creation_token_count", None),
+        allow_missing=True)
+    if (prompt is None or completion is None or thoughts is None
+            or cache_read is None or cache_write is None):
+        return None
+    # shortcut: cache_creation (write) pricing is not modeled — if cache_creation_token_count > 0, settle() must charge the CEILING (conservative), upgrade in Faz 2 when caching is enabled
+    if cache_write > 0:
         return None
     if prompt <= 0 and completion <= 0:
         return None            # token kanıtı YOK
-    return {"prompt_tokens": prompt, "completion_tokens": completion,
-            "thoughts_tokens": thoughts}
+    totals = {"prompt_tokens": prompt, "completion_tokens": completion,
+              "thoughts_tokens": thoughts}
+    if cache_read > 0:
+        # compute_cost_usd hit/miss'i yalniz biri doluysa kullanir; hit
+        # fiyati yoksa price_for input fiyatina duser (guvenli)
+        totals["cache_hit_tokens"] = cache_read
+        totals["cache_miss_tokens"] = max(prompt - cache_read, 0)
+    return totals
 
 
 # Kanal atamasinin AI asamalari. Ledger yalniz Gemini `_execute` yolunu
@@ -211,8 +231,8 @@ def _executing_backends(ai_service) -> list:
         seen.add(id(obj))
         if hasattr(obj, "_execute") or hasattr(obj, "_execute_grounded"):
             found.append(obj)
-        for name in ("_default", "_deepseek", "_gemini", "_backend",
-                     "primary", "inner"):
+        for name in ("_default", "_deepseek", "_gemini", "_anthropic",
+                     "_backend", "primary", "inner"):
             _walk(getattr(obj, name, None), depth + 1)
 
     _walk(ai_service)

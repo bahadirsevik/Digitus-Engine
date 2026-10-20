@@ -232,8 +232,13 @@ class AIService(ABC):
 class GeminiService(AIService):
     """Google Gemini API implementation."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None,
+                 retry_attempts: Optional[int] = None):
         self._api_key = api_key or os.getenv("GEMINI_API_KEY")
+        # google-genai SDK varsayilani 5 deneme (408/429/5xx, ustel bekleme).
+        # None = uretim davranisi aynen; benchmark adaleti icin 1 gecilir
+        # (anthropic max_retries=0 ile ayni deneme butcesi, plan §6.3).
+        self._retry_attempts = retry_attempts
         self.model_name = settings.GEMINI_MODEL
         self._client: Optional[genai.Client] = None
         self._client_pid: Optional[int] = None
@@ -266,7 +271,12 @@ class GeminiService(AIService):
             return client
         with self._client_lock:
             if self._client is None or self._client_pid != os.getpid():
-                self._client = genai.Client(api_key=self._api_key)
+                kwargs = {"api_key": self._api_key}
+                if self._retry_attempts is not None:
+                    kwargs["http_options"] = genai_types.HttpOptions(
+                        retry_options=genai_types.HttpRetryOptions(
+                            attempts=int(self._retry_attempts)))
+                self._client = genai.Client(**kwargs)
                 self._client_pid = os.getpid()
             return self._client
 
@@ -1035,7 +1045,7 @@ class DeepSeekService(AIService):
         return str(content)
 
 
-VALID_PROVIDERS = ("gemini", "deepseek")
+VALID_PROVIDERS = ("gemini", "deepseek", "anthropic")
 
 
 class RoutedAIService(AIService):
@@ -1052,9 +1062,11 @@ class RoutedAIService(AIService):
     """
 
     def __init__(self, default_backend: AIService,
-                 deepseek_backend: Optional[AIService] = None):
+                 deepseek_backend: Optional[AIService] = None,
+                 anthropic_backend: Optional[AIService] = None):
         self._default = default_backend
         self._deepseek = deepseek_backend
+        self._anthropic = anthropic_backend
         self._collector = getattr(default_backend, "collector", None)
         self._cost_binding = getattr(default_backend, "cost_binding", None)
         # Codex: kilitsiz check-then-create paralel batch'te birden fazla
@@ -1072,6 +1084,8 @@ class RoutedAIService(AIService):
         self._default.collector = value
         if self._deepseek is not None:
             self._deepseek.collector = value
+        if self._anthropic is not None:
+            self._anthropic.collector = value
 
     # Codex 22. tur #1: muhasebe bagi da collector GIBI TUM backend'lere
     # yayilmali. Yalniz kok nesneye yazmak, gercek cagriyi yapan
@@ -1087,6 +1101,8 @@ class RoutedAIService(AIService):
         self._default.cost_binding = value
         if self._deepseek is not None:
             self._deepseek.cost_binding = value
+        if self._anthropic is not None:
+            self._anthropic.cost_binding = value
 
     def _deepseek_backend(self) -> AIService:
         backend = self._deepseek
@@ -1100,6 +1116,20 @@ class RoutedAIService(AIService):
                 backend.cost_binding = self._cost_binding
                 self._deepseek = backend
             return self._deepseek
+
+    def _anthropic_backend(self) -> AIService:
+        backend = self._anthropic
+        if backend is not None:
+            return backend
+        with self._ds_lock:
+            if self._anthropic is None:
+                from app.generators.anthropic_service import AnthropicService
+
+                backend = AnthropicService()
+                backend.collector = self._collector
+                backend.cost_binding = self._cost_binding
+                self._anthropic = backend
+            return self._anthropic
 
     def _resolve(self, stage: str, model: Optional[str],
                  provider: Optional[str]):
@@ -1147,6 +1177,8 @@ class RoutedAIService(AIService):
     def _backend(self, provider: str) -> AIService:
         if provider == "deepseek":
             return self._deepseek_backend()
+        if provider == "anthropic":
+            return self._anthropic_backend()
         return self._default
 
     def _execute(self, prompt, *, max_tokens, temperature, json_mode,
@@ -1191,8 +1223,10 @@ class RoutedAIService(AIService):
             if callable(closer):
                 closer()
         finally:
-            if self._deepseek is not None:
-                self._deepseek.close()
+            for extra in (self._deepseek, self._anthropic):
+                closer = getattr(extra, "close", None)
+                if callable(closer):
+                    closer()
 
     def __getattr__(self, name):
         # Geriye uyumluluk: model_name, client vb. varsayılan backend'den
@@ -1315,7 +1349,8 @@ def get_ai_service(use_mock: bool = False, api_key: Optional[str] = None) -> AIS
         # yaratabiliyordu (anahtar varsa ücretli çağrı riski) — dışa
         # çağrısız garanti için İKİ backend de mock olmalı
         return RoutedAIService(MockAIService(),
-                               deepseek_backend=MockAIService())
+                               deepseek_backend=MockAIService(),
+                               anthropic_backend=MockAIService())
 
     # Varsayılan backend Gemini; RoutedAIService AI_STAGE_ROUTES boşken
     # birebir eski davranıştır (her çağrı varsayılan backend'e düşer)

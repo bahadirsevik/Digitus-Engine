@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_ai
-from app.core.http_headers import content_disposition
+from app.core.http_headers import content_disposition, download_filename
 from app.generators.ai_service import AIService
 from app.core.channel.channel_engine import ChannelEngine
 from app.core.channel.assignment_dispatcher import (
@@ -20,7 +20,7 @@ from app.core.channel.assignment_dispatcher import (
 )
 from app.core.engine_version_gate import require_non_legacy_run
 from app.core.scoring.state_machine import mark_run_content_stale
-from app.core.workspace import pool_freshness_for_run, verify_scoring_run
+from app.core.workspace import pool_freshness_for_run, verify_scoring_run, verify_workspace
 from app.database.models import ChannelPool
 from app.schemas.channel import ChannelAssignRequest
 
@@ -343,7 +343,11 @@ def export_channel_pool_xlsx(
     wb.save(output)
     output.seek(0)
 
-    filename = f"digitus_{channel}_havuzu_run{run_id}.xlsx"
+    filename = download_filename(
+        verify_workspace(db, brand_profile_id),
+        f"{'Sosyal' if channel == 'SOCIAL' else channel}_Havuzu",
+        ".xlsx",
+    )
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

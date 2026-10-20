@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Award, ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react'
 import { scoringApi, ScoringSortBy } from '../services/api'
 import { DEFAULT_SCORE_SORT, nextScoreSortState, ScoreSortState } from '../pages/scoringSort'
+import type { AnalysisChannels } from './AnalysisProgress'
 import '../pages/Scoring.css'
 
 interface KeywordScore {
@@ -32,14 +33,27 @@ const SCORE_PAGE_SIZE = 100
 export default function ScoreResults({
   runId,
   workspaceId,
+  channels,
 }: {
   runId: number | null
   workspaceId?: number | null
+  /** Run'da kapalı kanalların sütunları gizlenir (undefined = göster). */
+  channels?: AnalysisChannels
 }) {
+  const show = {
+    ads: channels?.ads !== false,
+    seo: channels?.seo !== false,
+    social: channels?.social !== false,
+  }
+  const shown = Object.values(show).filter(Boolean).length
+  // Varsayılan sıralama ilk açık kanalın skoru (ADS kapalı run'da boş ADS'e göre sıralanmasın)
+  const defaultSort: ScoreSortState = show.ads
+    ? DEFAULT_SCORE_SORT
+    : { sort_by: show.seo ? 'seo_score' : 'social_score', sort_dir: 'desc' }
   const [scores, setScores] = useState<KeywordScore[]>([])
   const [totalScored, setTotalScored] = useState(0)
   const [algorithmVersion, setAlgorithmVersion] = useState<string | null>(null)
-  const [scoreSort, setScoreSort] = useState<ScoreSortState>(DEFAULT_SCORE_SORT)
+  const [scoreSort, setScoreSort] = useState<ScoreSortState>(defaultSort)
   const [isLoadingScores, setIsLoadingScores] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -82,12 +96,12 @@ export default function ScoreResults({
     setScores([])
     setTotalScored(0)
     setAlgorithmVersion(null)
-    setScoreSort(DEFAULT_SCORE_SORT)
+    setScoreSort(defaultSort)
     if (runId && workspaceId) {
-      void fetchScores({ offset: 0, sort: DEFAULT_SCORE_SORT, append: false })
+      void fetchScores({ offset: 0, sort: defaultSort, append: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, workspaceId])
+  }, [runId, workspaceId, defaultSort.sort_by])
 
   const sortScores = async (column: ScoringSortBy) => {
     if (!runId) return
@@ -199,18 +213,18 @@ export default function ScoreResults({
               {isV3Run ? (
                 <>
                   <th>Aile</th>
-                  <th>{renderSortableHeader('ads_score', 'ADS')}</th>
-                  <th>{renderSortableHeader('seo_score', 'SEO')}</th>
-                  <th>{renderSortableHeader('social_score', 'SOCIAL')}</th>
+                  {show.ads && <th>{renderSortableHeader('ads_score', 'ADS')}</th>}
+                  {show.seo && <th>{renderSortableHeader('seo_score', 'SEO')}</th>}
+                  {show.social && <th>{renderSortableHeader('social_score', 'SOCIAL')}</th>}
                 </>
               ) : (
                 <>
-                  <th>{renderSortableHeader('ads_score', 'ADS Skor')}</th>
-                  <th>{renderSortableHeader('seo_score', 'SEO Skor')}</th>
-                  <th>{renderSortableHeader('social_score', 'SOCIAL Skor')}</th>
-                  <th>{renderSortableHeader('ads_rank', 'ADS Sıra')}</th>
-                  <th>{renderSortableHeader('seo_rank', 'SEO Sıra')}</th>
-                  <th>{renderSortableHeader('social_rank', 'SOCIAL Sıra')}</th>
+                  {show.ads && <th>{renderSortableHeader('ads_score', 'ADS Skor')}</th>}
+                  {show.seo && <th>{renderSortableHeader('seo_score', 'SEO Skor')}</th>}
+                  {show.social && <th>{renderSortableHeader('social_score', 'SOCIAL Skor')}</th>}
+                  {show.ads && <th>{renderSortableHeader('ads_rank', 'ADS Sıra')}</th>}
+                  {show.seo && <th>{renderSortableHeader('seo_rank', 'SEO Sıra')}</th>}
+                  {show.social && <th>{renderSortableHeader('social_rank', 'SOCIAL Sıra')}</th>}
                 </>
               )}
             </tr>
@@ -218,13 +232,13 @@ export default function ScoreResults({
           <tbody>
             {isLoadingScores && scores.length === 0 ? (
               <tr>
-                <td colSpan={isV3Run ? 5 : 7} className="scores-empty-cell">
+                <td colSpan={isV3Run ? 2 + shown : 1 + 2 * shown} className="scores-empty-cell">
                   Skorlar yükleniyor...
                 </td>
               </tr>
             ) : scores.length === 0 ? (
               <tr>
-                <td colSpan={isV3Run ? 5 : 7} className="scores-empty-cell">
+                <td colSpan={isV3Run ? 2 + shown : 1 + 2 * shown} className="scores-empty-cell">
                   Skor kaydı bulunamadı.
                 </td>
               </tr>
@@ -242,36 +256,42 @@ export default function ScoreResults({
                           {score.family_name && score.family_id && <span>{score.family_id}</span>}
                         </div>
                       </td>
-                      <td>{renderV3Channel(score, 'ads')}</td>
-                      <td>{renderV3Channel(score, 'seo')}</td>
-                      <td>{renderV3Channel(score, 'social')}</td>
+                      {show.ads && <td>{renderV3Channel(score, 'ads')}</td>}
+                      {show.seo && <td>{renderV3Channel(score, 'seo')}</td>}
+                      {show.social && <td>{renderV3Channel(score, 'social')}</td>}
                     </>
                   ) : (
                     <>
-                      <td>{formatScore(score.ads_score)}</td>
-                      <td>{formatScore(score.seo_score)}</td>
-                      <td>{formatScore(score.social_score)}</td>
-                      <td>
-                        {score.ads_rank && (
-                          <span className={score.ads_rank <= 3 ? 'top-rank' : ''}>
-                            {score.ads_rank <= 3 && <Award size={14} />}#{score.ads_rank}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {score.seo_rank && (
-                          <span className={score.seo_rank <= 3 ? 'top-rank' : ''}>
-                            {score.seo_rank <= 3 && <Award size={14} />}#{score.seo_rank}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {score.social_rank && (
-                          <span className={score.social_rank <= 3 ? 'top-rank' : ''}>
-                            {score.social_rank <= 3 && <Award size={14} />}#{score.social_rank}
-                          </span>
-                        )}
-                      </td>
+                      {show.ads && <td>{formatScore(score.ads_score)}</td>}
+                      {show.seo && <td>{formatScore(score.seo_score)}</td>}
+                      {show.social && <td>{formatScore(score.social_score)}</td>}
+                      {show.ads && (
+                        <td>
+                          {score.ads_rank && (
+                            <span className={score.ads_rank <= 3 ? 'top-rank' : ''}>
+                              {score.ads_rank <= 3 && <Award size={14} />}#{score.ads_rank}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {show.seo && (
+                        <td>
+                          {score.seo_rank && (
+                            <span className={score.seo_rank <= 3 ? 'top-rank' : ''}>
+                              {score.seo_rank <= 3 && <Award size={14} />}#{score.seo_rank}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {show.social && (
+                        <td>
+                          {score.social_rank && (
+                            <span className={score.social_rank <= 3 ? 'top-rank' : ''}>
+                              {score.social_rank <= 3 && <Award size={14} />}#{score.social_rank}
+                            </span>
+                          )}
+                        </td>
+                      )}
                     </>
                   )}
                 </tr>

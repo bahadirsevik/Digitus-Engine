@@ -611,3 +611,37 @@ class TestCollectorFinalizeCoverage:
         assert row.result_data["usage"]["requests"] == 1
         assert row.result_data["idea_ids"] == [101]
         assert row.result_data["scoring_run_id"] == run.id
+
+
+# ==================== provider / cache kolonlari (T3) ====================
+
+class TestProviderColumns:
+    def test_new_kwargs_persisted(self, db_session):
+        c = UsageCollector(task_id="t-prov", flush_every=1)
+        c.record(stage="intent", model="claude-haiku-5-5", prompt_tokens=100,
+                 provider="anthropic", cache_read_tokens=60,
+                 cache_creation_tokens=10, queue_wait_ms=7, http_attempts=2)
+        row = db_session.query(AiUsageEvent).filter_by(task_id="t-prov").one()
+        assert (row.provider, row.cache_read_tokens, row.cache_creation_tokens,
+                row.queue_wait_ms, row.http_attempts) == ("anthropic", 60, 10, 7, 2)
+
+    def test_defaults_are_null(self, db_session):
+        c = UsageCollector(task_id="t-prov-null", flush_every=1)
+        c.record(stage="intent", model="gemini-3.5-flash", total_tokens=5)
+        row = db_session.query(AiUsageEvent).filter_by(task_id="t-prov-null").one()
+        assert row.provider is None and row.cache_read_tokens is None
+        assert row.cache_creation_tokens is None
+        assert row.queue_wait_ms is None and row.http_attempts is None
+
+    def test_estimate_cost_with_cache_read(self):
+        c = UsageCollector(flush_every=100)
+        c.record(stage="intent", model="claude-haiku-5-5", prompt_tokens=1_000_000,
+                 candidates_tokens=1_000_000, cache_read_tokens=600_000)
+        # 400k*0.10 + 600k*0.01 (per M) + 1M*0.50 = 0.04 + 0.006 + 0.50
+        assert estimate_cost(c._all_events)["estimated_usd"] == 0.546
+
+    def test_estimate_cost_without_cache_read_unchanged(self):
+        c = UsageCollector(flush_every=100)
+        c.record(stage="intent", model="claude-haiku-5-5", prompt_tokens=1_000_000,
+                 candidates_tokens=1_000_000)
+        assert estimate_cost(c._all_events)["estimated_usd"] == 0.6

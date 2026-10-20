@@ -20,9 +20,14 @@ testler ucretli cagri yapmadan butun tekrar topolojisini kosabilir.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from app.core.telemetry.ai_cost_budget import BudgetExceeded
+
+# Opsiyonel istek yakalama kancasi (benchmark/stage_capture.py). None iken
+# `_complete` yolu degismez; sink hatasi motoru ASLA etkilemez.
+CAPTURE_SINK: Optional[Callable[[dict], None]] = None
 
 MAX_ATTEMPTS = 2          # parse/batch hatasi icin TOPLAM deneme
 TARGETED_RETRIES = 1      # eksik ID kumesi icin hedefli tekrar
@@ -38,7 +43,8 @@ _RATE_LIMIT_MARKS = ("429", "resource_exhausted", "resourceexhausted",
 # Tekrar denemenin ANLAMSIZ oldugu hatalar: istek/kimlik hatalidir.
 _FATAL_MARKS = ("api key not valid", "permission denied", "permissiondenied",
                 "unauthenticated", "invalid argument", "invalidargument",
-                "400 bad request", "401", "403")
+                "400 bad request", "401", "403",
+                "refusal")      # AnthropicRefusalError: ret tekrar ile degismez
 
 
 def _sleep(seconds: float) -> None:
@@ -91,9 +97,14 @@ class AiStageError(RuntimeError):
     """AI asamasi sozlesmeyi karsilamadi — yarim sonuc YAZILMAZ."""
 
 
-def _scoped(ai: Any, stage: str, model: str, thinking_level: str) -> Any:
+def _scoped(ai: Any, stage: str, model: str, thinking_level: str,
+            provider: str = "gemini") -> Any:
     if hasattr(ai, "for_stage"):
-        return ai.for_stage(stage, model=model, thinking_level=thinking_level)
+        # Provider GEMINI DAHIL her zaman acik gecer: aksi halde RoutedAIService
+        # global AI_STAGE_ROUTES'u yeniden okur ve muhurlu (gemini, model)
+        # cifti (anthropic, gemini-model) olarak cozulebilir (Codex Faz 0 #1).
+        return ai.for_stage(stage, model=model, thinking_level=thinking_level,
+                            provider=provider)
     return ai
 
 
@@ -130,7 +141,8 @@ def _parse(raw: Any, result_key: Optional[str]) -> Optional[List[Any]]:
 
 
 def _complete(scoped: Any, prompt: str, max_tokens: int,
-              schema: Mapping[str, Any]) -> Any:
+              schema: Mapping[str, Any], attempt_kind: str = "initial",
+              attempt: int = 1, meta: Optional[dict] = None) -> Any:
     """Tek saglayici cagrisi.
 
     DIKKAT: butce tavani korumasi BURADA OLAMAZ — buradaki bir
@@ -150,33 +162,72 @@ def _complete(scoped: Any, prompt: str, max_tokens: int,
     if (isinstance(scoped, StageScopedAIService)
             and getattr(scoped, "model", None) == "gemini-3.8-flash"):
         kwargs["temperature"] = None
-    return scoped.complete_json(prompt, **kwargs)
+    sink = CAPTURE_SINK
+    if sink is None:
+        return scoped.complete_json(prompt, **kwargs)
+    record = {**(meta or {}), "prompt": prompt,
+              "response_schema": kwargs["response_schema"],
+              "max_tokens": max_tokens, "attempt_kind": attempt_kind,
+              "attempt": attempt}
+    try:
+        raw = scoped.complete_json(prompt, **kwargs)
+    except Exception as exc:
+        _emit(sink, {**record, "raw_text": None, "error": str(exc)[:300]})
+        raise
+    _emit(sink, {**record, "raw_text": raw, "error": None})
+    return raw
+
+
+def _emit(sink: Callable[[dict], None], record: dict) -> None:
+    try:
+        sink(record)
+    except Exception:  # noqa: BLE001 — yakalama motor davranisini DEGISTIRMEZ
+        logging.getLogger(__name__).exception("CAPTURE_SINK hatasi (yutuldu)")
+
+
+def _meta(stage, provider, model, thinking_level, expected_ids, result_key,
+          id_field, response_id_field, has_response_parser=False) -> Optional[dict]:
+    if CAPTURE_SINK is None:
+        return None
+    return {"stage": stage, "provider": provider, "model": model,
+            "thinking_level": thinking_level, "expected_ids": sorted(expected_ids),
+            "result_key": result_key, "id_field": id_field,
+            "response_id_field": response_id_field,
+            "has_response_parser": bool(has_response_parser)}
 
 
 def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
                prompt: str, schema: Mapping[str, Any], max_tokens: int,
                result_key: Optional[str],
-               error_cls: type = AiStageError) -> List[Any]:
-    """ID'siz asama (A1 / A2B): liste dondurur, kirpik cevapta tekrar dener."""
-    scoped = _scoped(ai, stage, model, thinking_level)
+               error_cls: type = AiStageError,
+               provider: str = "gemini",
+               max_attempts: int = MAX_ATTEMPTS) -> List[Any]:
+    """ID'siz asama (A1 / A2B): liste dondurur, kirpik cevapta tekrar dener.
+
+    `max_attempts` yalniz benchmark replay icindir (ilk-deneme simetrisi);
+    uretim varsayilani MAX_ATTEMPTS'tir.
+    """
+    scoped = _scoped(ai, stage, model, thinking_level, provider)
     last_error: Optional[BaseException] = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, max_attempts + 1):
         try:
-            raw = _complete(scoped, prompt, max_tokens, schema)
+            raw = _complete(scoped, prompt, max_tokens, schema, attempt=attempt,
+                            meta=_meta(stage, provider, model, thinking_level,
+                                       (), result_key, None, None))
         except BudgetExceeded:            # TAVAN: tekrar YOK, sarmalama YOK
             raise
         except Exception as exc:          # saglayici/transport hatasi
             last_error = exc
-            if attempt < MAX_ATTEMPTS:    # son denemeden sonra beklemek anlamsiz
+            if attempt < max_attempts:    # son denemeden sonra beklemek anlamsiz
                 _wait_before_retry(exc)
             continue
         items = _parse(raw, result_key)
         if items is not None:
             return items
-    message = (f"{stage}: cevap {MAX_ATTEMPTS} denemede de kirpik/bozuk "
+    message = (f"{stage}: cevap {max_attempts} denemede de kirpik/bozuk "
                f"('{result_key}' listesi yok) — DEVAM EDILMEDI")
     if last_error is not None:
-        raise error_cls(f"{stage}: saglayici {MAX_ATTEMPTS} denemede de hata "
+        raise error_cls(f"{stage}: saglayici {max_attempts} denemede de hata "
                         "verdi — DEVAM EDILMEDI") from last_error
     raise error_cls(message)
 
@@ -214,8 +265,17 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
               response_parser: Optional[
                   Callable[[Any, Sequence[int]], Mapping[str, Any]]
               ] = None,
-              error_cls: type = AiStageError) -> Dict[int, Dict[str, Any]]:
+              error_cls: type = AiStageError,
+              provider: str = "gemini",
+              targeted_retries: int = TARGETED_RETRIES,
+              allow_missing: bool = False,
+              max_attempts: int = MAX_ATTEMPTS) -> Dict[int, Dict[str, Any]]:
     """ID bazli asama (A2 / A2C / A3) — eksiksiz kume donmezse HATA.
+
+    `targeted_retries` / `allow_missing` yalniz benchmark replay icindir
+    (uretim varsayilanlari degismez): replay, alt kume prompt'unu uretimle
+    birebir kuramadigi icin hedefli tekrari KAPATIR ve eksik ID'leri
+    kismi sonucla birlikte cagirana birakir.
 
     Donen sozluk: beklenen HER ID icin bir cevap ogesi. Cagiran taraf bunu
     dogruladiktan sonra tek seferde kaydeder; bu fonksiyon DB'ye dokunmaz.
@@ -223,21 +283,26 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
     expected = [int(row[id_field]) for row in rows]
     collected: Dict[int, Dict[str, Any]] = {}
 
-    def ask(subset: Sequence[Mapping[str, Any]]) -> None:
-        scoped = _scoped(ai, stage, model, thinking_level)
+    def ask(subset: Sequence[Mapping[str, Any]],
+            kind: str = "initial") -> None:
+        scoped = _scoped(ai, stage, model, thinking_level, provider)
         items: Optional[List[Any]] = None
         last_error: Optional[BaseException] = None
         last_validation: Optional[str] = None
         wanted = {int(row[id_field]) for row in subset}
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for attempt in range(1, max_attempts + 1):
             try:
                 raw = _complete(scoped, build_prompt(subset), max_tokens,
-                                schema)
+                                schema, kind, attempt,
+                                _meta(stage, provider, model, thinking_level,
+                                      wanted, result_key, id_field,
+                                      response_id_field,
+                                      response_parser is not None))
             except BudgetExceeded:        # TAVAN: tekrar YOK, sarmalama YOK
                 raise
             except Exception as exc:      # saglayici/transport hatasi
                 last_error = exc
-                if attempt < MAX_ATTEMPTS:
+                if attempt < max_attempts:
                     _wait_before_retry(exc)
                 continue
             if response_parser is None:
@@ -283,14 +348,14 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
         if items is None:
             if last_validation is not None:
                 raise error_cls(
-                    f"{stage}: cevap {MAX_ATTEMPTS} denemede de yapisal "
+                    f"{stage}: cevap {max_attempts} denemede de yapisal "
                     f"dogrulamadan gecmedi ({last_validation}) — DEVAM EDILMEDI")
             if last_error is not None:
                 raise error_cls(
-                    f"{stage}: saglayici {MAX_ATTEMPTS} denemede de hata "
+                    f"{stage}: saglayici {max_attempts} denemede de hata "
                     "verdi — DEVAM EDILMEDI") from last_error
             raise error_cls(
-                f"{stage}: cevap {MAX_ATTEMPTS} denemede de kirpik/bozuk "
+                f"{stage}: cevap {max_attempts} denemede de kirpik/bozuk "
                 f"('{result_key}' listesi yok) — DEVAM EDILMEDI")
 
         # ID'ler dongude `_id_problem` ile dogrulandi: hepsi sayisal, istenen
@@ -302,13 +367,16 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
 
     ask(rows)
     missing = [ident for ident in expected if ident not in collected]
-    for _ in range(TARGETED_RETRIES):
+    for _ in range(targeted_retries):
         if not missing:
             break
         # YALNIZ eksik kumesi tekrar sorulur (hedefli tekrar).
-        ask([row for row in rows if int(row[id_field]) in set(missing)])
+        ask([row for row in rows if int(row[id_field]) in set(missing)],
+            "targeted_retry")
         missing = [ident for ident in expected if ident not in collected]
 
+    if missing and allow_missing:
+        return collected
     if missing:
         raise error_cls(
             f"{stage}: hedefli tekrara ragmen {len(missing)} ID eksik "

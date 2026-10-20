@@ -107,7 +107,8 @@ class FakeSeoAI:
         self.call_counts: Counter = Counter()
 
     def for_stage(self, stage: str, *, model: str = None,
-                 thinking_level: str = None) -> "_ScopedFakeSeoAI":
+                 thinking_level: str = None,
+                 provider: str = None) -> "_ScopedFakeSeoAI":
         return _ScopedFakeSeoAI(self, stage)
 
     def _respond(self, stage: str, prompt: str) -> str:

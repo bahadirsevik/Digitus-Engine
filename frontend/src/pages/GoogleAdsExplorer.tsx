@@ -77,7 +77,10 @@ export default function GoogleAdsExplorer() {
       const items = customerRes.data || []
       setCustomers(items)
       if (!selectedCustomer && items[0]) {
-        setSelectedCustomer(items[0].customer_id)
+        // Varsayılan hesap: 956 ile biten; yoksa ilk hesap
+        setSelectedCustomer(
+          (items.find((c) => c.customer_id.endsWith('956')) ?? items[0]).customer_id
+        )
       }
       if (refresh && selectedCustomer) {
         await loadCustomerContext(selectedCustomer, true)

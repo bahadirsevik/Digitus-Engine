@@ -1,5 +1,221 @@
 # Current Status
 
+Last updated: 2026-10-17
+Branch: `deploy/lean-taslak`
+Active phase: **ADS 15 KW teslim standardi — FAZ 1-4 KOD TAMAM + TAM PAKET + TARAYICI KONTROLU TAMAM, commit YOK; CANLI DENEME YAPILDI (17.10, ws29 run 83, set 27 draft) — kullanici sonuclari inceliyor; commit+push ONAY BEKLIYOR; sunucu dagitimi AYRI**
+Kaynak plan: `plan_ads_15kw_standardi.md` rev.2.1 (Codex 3 inceleme, "Faz 1'e baslanabilir").
+Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (17.10, dev-team 1 Backend Dev gorevi Sonnet+high; Architect/Konsey KOSMADI — plan Codex onayli, bilinen kalip)
+
+- ADS gruplama: havuz kirpmasi (`max_groups*5`) silindi, `max_groups` yalniz grup sayisini sinirlar;
+  `G = max(1, n//15)`, dengeli hedef boyutlar; AI'ya tam G grup + boyutlar; deterministik `_repair_groups`
+  (fazla/eksik grup, unutulan/tekrarlanan/bilinmeyen id) her zaman tam G grup x tam boyut, her KW bir kez;
+  tasinan/yerlestirilen KW `KeywordGroupSchema.fill_keyword_ids` (yalniz bellekte; DB Faz 4);
+  "Diger Kelimeler" kaldirildi; fallback ayni boyutlar; Turkce-dogru baslik (`_turkish_title`, İstanbul).
+- Testler (docker-compose.test.yml, hedefli): yeni `tests/unit/test_ads_keyword_grouping.py` (18) +
+  mevcut ADS testleri = 84 passed; grouper'a dokunan test_usage_telemetry + test_ai_parse_hardening = 51 passed.
+  TAM PAKET KOSMADI (commit oncesi Faz 5'te).
+- dev-team `references/model-selection-guide.md` 5.5 nesline guncellendi (Haiku 5.5 1M + $0.10/$0.50;
+  oranlar 100x/40x/20x/1x).
+- Faz 2 (17.10): `validators.keyword_in_text` + `keyword_coverage` (site_analyzer normalize_turkish,
+  kelime sinirli ardisik ifade, DKI varsayilani `DKIValidator.VALID_PATTERN` ile; ek toleransi YOK);
+  `tests/unit/test_ads_keyword_coverage.py` (13). Hedefli ADS paketi 97 passed. Henuz hicbir yere bagli degil (Faz 3).
+- Kullanici duzeltmeleri (17.10): 15 -> `app/core/constants.py` `ADS_KEYWORDS_PER_GROUP`; G==1'de AI cagrisi
+  yok ONAYLANDI; bolunen grubun ikinci yarisi da `fill_keyword_ids`'e yazilir (test eklendi). Hedefli 149 passed.
+- COMMIT AYRIMI (kullanici, Faz 5'te): model rehberi (`.claude/skills/dev-team/references/model-selection-guide.md`)
+  ADS degisikliklerinden AYRI commit. Commit + push yalniz Faz 5'te.
+- Faz 3 (17.10, Backend Dev Sonnet+high): `rsa_generator` aday havuzu (18-20 baslik / 5-6 aciklama), [:15]/[:4] kesmeleri
+  kalkti, grounding SONRASI dedup + KW kontrolu, TEK tamamlama (strict retry'in yerine; yalniz sayi eksikse), acgozlu
+  kapsam secimi, sert minimum fallback degismedi, eksik `missing_headlines`/`missing_kw_descriptions` (exclude=True) +
+  task result_data `standard_shortfalls`. MUHURLU `ADS_RSA_GENERATION_PROMPT` (benchmark/idiomatic_prompts manifest SHA)
+  DOKUNULMADI; uretim turetilmis `ADS_RSA_CANDIDATES_PROMPT` kullanir (import aninda 3 tam-metin degisim, kayarsa RuntimeError).
+  ADS ile ilgili unit+integration (-k) 564 passed / 32 skipped / 0 failed. Degisen eski testler: test_ads_negative_conflict
+  (strict retry prompt testi -> aday prompt), test_claim_grounding CannedAI (2. cagri bos RSA).
+- Maliyet notu: tamamlama artik SIK (temiz baslik<15 veya KW'li aciklama<4); baslik AI yeniden yazimi aday basina sinirsiz
+  (eskisi gibi); task time_limit=900 — Faz 5 canli denemede usage + sure olc. '%30' yalniz primary cikti TAHMINI.
+- Faz 4 (17.10, Backend+Frontend paralel, Sonnet): `AdGroup.fill_keyword_ids` (JSON nullable) + idempotent migration
+  `20261017_001` (down 20261011_001); ilk kayit/klon/regenerate/_model_to_schema/export'ta tasinir; okuma-ani
+  `validators.build_standard_report` -> `AdGroupDBSchema.standard_report`; export 4 formatta yalniz olgu+liste
+  (`app/exporters/ads_standard_format.py`); AdsPanel ozet + standart-alti rozeti + 4 liste. Fallback duzeltmesi `_top_up`:
+  temiz adaylar korunur, eksik tip yalniz sert minimuma kadar tamamlanir (hic temiz yoksa fallback 3/2 verir, eskiden 5 baslik).
+  Testler: ADS/export/migration -k 685 passed / 32 skipped / 0 failed (test DB alembic 20261017_001 uygulandi);
+  frontend lint+format+build OK, vitest 264 passed. TAM PAKET KOSMADI.
+- 17.10 dogrulama: TAM PAKET 5038 passed / 112 skipped / 2 failed — ikisi de test_hybrid_run_db (budget_summary'de
+  'deepseek'/'anthropic' anahtari yok); temiz HEAD worktree'sinde AYNI iki test AYNI KeyError ile dusuyor -> ONCEDEN VAR
+  (Faz 1 karsilastirma isi c1f5a53 civari), ADS'den bagimsiz. Bizim etkimiz: test_aday'daki 'pools[ADS] > 3 -> ads_grouping'
+  kosulu `>= 2*ADS_KEYWORDS_PER_GROUP` yapildi.
+- Tarayici (Playwright, gecici vite :5180, API_KEY container env'den): ws29 /ads 13 grubun 13'unde rapor blogu dogru;
+  mobil 390px yatay kaydirma ONCEDEN VAR (eski kodla da). Docker frontend :3000 HMR tuzagi: eski AdsPanel'i sunuyor ->
+  `docker-compose restart frontend` gerekir (yapilmadi). YEREL DB'ye (kullanici onayi) alembic 20261017_001 UYGULANDI;
+  celery_worker YENIDEN BASLATILMADI (eski kod) -> yerel canli denemeden once restart sart.
+- Model rehberi resmi sayfalarla dogrulandi (models/overview + pricing, 17.10); harness alias cozumu dogrulanmadi. AYRI commit.
+- CANLI DENEME 17.10 (yerel, Gemini 3.8-flash; once task_results/ad_sets/export bos + celery inspect bos, sonra yalniz
+  celery_worker restart): run 83, 60 ADS KW -> 4 grup x 15 KW, her grup 15 baslik + 4 KW'li aciklama, standard_shortfalls=[],
+  fill=[] (AI tam boyut verdi), tamamlama cagrisi GEREKMEDI. AI aday: 20/20/19/19 baslik, 0 elenen. KW baslikta 11/14/13/12
+  (50/60), yalniz aciklamada 5, hic 5 (biri 'en iyi seo ajansi' -> iddia kurali; 'seo ajansi istanbul' ~ 'Istanbul SEO Ajansi'
+  K7 siralama katiligi). Sure 51 sn (eski Gemini 12-13 grup: 113/139 sn). Usage 6 istek (grouping 1, rsa 4, micro_shorten 1),
+  11.570 in / 6.716 out, ~0,034 $. RSA cagri basina in +11%, out +2% (run 78 Gemini ortalamasina gore; '%30' tahmini ASILDI
+  degil, altinda); RSA toplam token ~%67 az (13 yerine 4 cagri). Aktif set 26 (v1) DEGISMEDI; yeni set 27 v2 DRAFT.
+  Gozlem: basliklarin cogu KW-only (CTA/fayda az) — K6 sonucu; SEO grubu web tasarim KW'leriyle genisletilmis.
+- KALITE DUZELTMELERI 17.10 (kullanici onayi 1-4, K6 DEGISMEDI): tum baslik/aciklama position='any' (tek nokta, generate_rsa sonu);
+  prompt 'yazildigi gibi' kalkti -> dogal Turkce oncelikli; `_dedup` DKI-acik `validators.kw_tokens` ile; gruplama prompt'lari
+  ad/tema TUM KW'yi kapsasin. Odakli: 689 passed + bilinen 2 hybrid KeyError. 2. CANLI: set 28 v3 DRAFT, 63 sn, 7 istek,
+  12.484 in / 7.633 out / 765 thought, ~0,041 $; aktif set 26 DEGISMEDI.
+  KARSILASTIRMA 27->28: baslik KW kapsami 50/60 -> 30/60 (katı K7; dogal varyantlar sayilmiyor); konum position_1 32 -> 0;
+  DKI/duz tekrar 2 -> 0; CTA 0 -> 6, keyword-tipi baslik 45 -> 25; sorgu-kalipli basliklar ('...Fiyat', '...Verme(k)',
+  'Ankara Pazarlama') 28'de YOK; ACIKLAMALARDA bozuk KW yerlestirme SURUYOR ('dijital pazarlama ajanslari istanbul
+  cozumlerini', 'dijital reklam ajans desteğiyle'); grup adlari 3/4 genisledi, SEO grubu (6 web KW) HALA yalniz SEO adli;
+  Dijital grubunda tema-disi marka hizmeti basliklari (Web Tasarim, E-Ticaret). n=1 her set; gruplama ikisinde AYNI.
+- PROMPT TUR 3 (17.10, kullanici onayi): turetilmis prompt'ta 'oncelikle kullan' (mutlaka DEGIL), aciklamada 'cumleye dogal
+  yerlesen EN AZ BIR KW, digerlerini zorla doldurma' (yasak listesi YOK), 'basliklar BU GRUBUN KW + temasindan; marka bilgisi
+  yalniz temayla ilgiliyse'; tamamlama aciklama talimati ayni. Muhurlu prompt dokunulmadi. HEDEFLI DENEME (grup 228+229,
+  DB'ye YAZILMADI: collector.flush no-op + rollback; once/sonra sayim ayni): TOPLAM 2 cagri (yalniz ads_rsa; kisaltma/iddia/
+  tamamlama 0), 5.026 in / 2.576 out, ~0,013 $. Aciklamalar 8'de 7 dogal; tema kaymasi yok; baslikta KW 8 ve 6.
+  YENI BULGU: brand_usp bossa `_generate_raw_rsa` 'Kaliteli urun ve hizmet' varsayilanini prompt'a koyuyor -> metne siziyor
+  (2 baslik + 1 aciklama). Onceden var; duzeltme ONAY BEKLIYOR. Odakli 689 passed + bilinen 2 hybrid KeyError.
+  Set 28 (draft) grup 226 adi/temasi SQL ile 'SEO ve Web Tasarim Hizmetleri' yapildi; set 26 aktif DOKUNULMADI.
+  NOT: set 28 metinleri eski prompt'la; yeni prompt yalniz sonraki uretimlerde.
+- USP DUZELTMESI 17.10: bos USP'de jenerik 'Kaliteli urun ve hizmet' kaldirildi (api generation.py iki uc -> trusted or
+  profil USP or ''; rsa_generator prompt '—'; fallback aciklama on eki yalniz USP varsa). Testler: unit 2 + integration 1;
+  odakli 701 passed + bilinen 2 hybrid. Benchmark hybrid_run.py DOKUNULMADI.
+- 3. TAM URETIM (son kod): set 29 v4 DRAFT, 50 sn, 5 istek (grouping 1 + rsa 4), 12.451 in / 6.635 out, ~0,034 $;
+  eksik yok; baslikta KW 28/60; konum hep any; DKI/duz tekrar 0; 'Kaliteli' 0. Aktif 26 + draft 27/28 metinleri DEGISMEDI.
+  BULGU: gercek akista display USP = profil urunleri ('Web Tasarim, Web Yazilim, E-Ticaret Sistemleri -- Dijital Pazarlama
+  ve Yazilim Ajansi') -> her grup prompt'una giriyor -> tema kaymasinin buyuk olasi kaynagi; hedefli deneme USP='—' ile
+  kosulmustu (temsili DEGILDI). SEO grup adi 3 koşuda da dar kaldi. `{KeyWord:Sosyal Medya }` (sonda bosluk) DKI kusuru.
+- DKI BOSLUK DUZELTMESI 17.10: kaynak HeadlineValidator._apply_shortening_rules ('Hizmetleri' -> '' kurali
+  '{KeyWord:Sosyal Medya }' birakiyordu); cift bosluk + '}' onu bosluk temizlenir; test_dki_validator +2 test.
+- SON KONTROLLER: tam paket 5052 passed / 112 skipped / 2 failed (bilinen hybrid KeyError, HEAD'de de);
+  frontend lint+format+build OK, vitest 264. git diff --check temiz, CRLF yok.
+- COMMIT HAZIR (YAPILMADI): 36 dosya (28 M + 8 yeni), mesaj scratchpad ads_commit_msg.txt; HARIC: model rehberi (ayri),
+  benchmark/faz1/export xlsx, ponytail_audit (bizim degil). Commit / push / dagitim AYRI onaylarla.
+- DEPLOY (kullanici: dagitim asamasinda): mevcut DB'ye `alembic upgrade head` + celery_worker restart (once running task kontrolu).
+- Worker restart deploy'da sart.
+
+## Just completed (11.10, dev-team 6 Backend Dev gorevi, Architect/Konsey KOSMADI — mimari planda kayitli)
+
+- **Dalga 1 `4ede981`:** `AnthropicService` (anthropic==1.13.0/httpx2, max_retries=0, adaptive thinking +
+  effort tablosu, allowance-dahil max_tokens, structured output `output_config.format`, refusal/429/5xx/4xx
+  eslemesi, Gemini-sekilli usage namespace: prompt_token_count = input + cache_read + cache_creation);
+  `to_anthropic_response_schema` (additionalProperties:false, optional alanlar OLDUGU GIBI);
+  `RoutedAIService` "anthropic" slotu + mock; ledger `reserve(provider=)`, cache-farkinda `_usage_totals`
+  (cache write > 0 -> TAVAN, shortcut), `_anthropic` backend taramasi; PRICE_TABLE claude-haiku/sonnet/opus-5-5
+  (resmi sayfa 11.10); `AiUsageEvent` provider/cache/queue_wait_ms/http_attempts + idempotent migration
+  `20261011_001`; screening provider CHECK genisledi. 228 ilgili test yesil.
+- **Dalga 2 `1422fd4`:** `engine/routing.resolve_stage_route`; orchestrator rotayi MUHURDEN ONCE cozer,
+  runner'lar `stage_route(run, stage)` ile MUHURDEN okur (kosu ortasinda route degisikligi etkisiz);
+  `StageContext.provider`; manifest schema 3 (providers + adapter kimlik alanlari) yalniz gemini-disi route
+  varken, aksi halde schema 2 BAYT-AYNI (golden test); eski manifest gemini varsayimiyla resume; "refusal"
+  fatal mark; benchmark `CharacterizationBudget` provider-farkinda (anthropic zarfi, allowance cift sayilmaz,
+  provider->butce eslemesi, cagri-basi fiyat); `profile_inputs` (crawl dondurma); `claude_spike`
+  (≤30 sentetik cagri, kuru kosu tavani 0,33 $, muhurlu JSON).
+- **Tam paket: 4690 passed / 112 skipped / 0 failed** (temel 4527; +163 yeni), docker-compose.test.yml,
+  override ile `digitus_lean_test_*` konteyner adlari (eski `dg-auth-merge` test_db ile ad cakismasi).
+- Bulgu: ledger eszamanlilik testi ilk yazimda yanlis tasarlanmisti (thread icinde settle taahhudu
+  dusuruyordu) -> iki fazli yapildi; ledger kilidi dogru calisiyor (5 ok / 3 BudgetExceeded).
+- Bulgu (T4): gemini/deepseek route'lari artik motor asamasinda ETKILI (eskiden runner sabiti eziyordu);
+  route bos -> bayt-ayni. Uretim .env'de AI_STAGE_ROUTES yok.
+
+- **Codex Faz 0 kod incelemesi (`inceleme_claude_gemini_faz0_kod_codex.md`) -> 3 P1 DOGRU, duzeltildi (4. commit):**
+  (1) `_scoped` provider'i gemini'de de ACIK gecer (eski hali global route'u yeniden okutuyordu ->
+  muhurlu (gemini, model) -> (anthropic, gemini-model) riski); (2) `routes_for_seal`: muhurlu run'da
+  rota MUHURDEN, resume ayar degisiminden etkilenmez; (3) `to_anthropic_response_schema` v2:
+  maxItems / minItems∉{0,1} / min-maxLength / sayisal sinirlar / bilinmeyen format DUSER,
+  description'a tasinir (SOCIAL hashtags 5-20 regresyon testi); spike plani gercek SOCIAL semasiyla
+  2 cagri ekledi (kuru kosu 0,32 $). Tam paket **4696 / 112 skipped / 0**.
+
+- **SPIKE KOSULDU (11.10 12:52 UTC, `benchmark/claude_spike.json`, muhurlu):** 29 cagri (20 Haiku, 8 Sonnet,
+  1 header probu), settled **0,0837 $** (tavan 0,50, kuru tavan 0,32 -> rezervasyon zarflari gercegin ~3,8 kati,
+  §9 yeniden muhurde daraltilabilir). **14/14 sema KABUL** (optional alan eksik birakilabiliyor, nullable calisiyor,
+  gercek SOCIAL semasi iki modelde de kabul) -> `[T,"null"]` yedegi GEREKMEZ. max_tokens kirpilmasi 0.
+  Dusunme payi kucuk: low p99 489 tok (n=25), medium p99 288 (n=3) -> allowance 2000/4000 cok genis, Codex: n kucuk (25/3), gercek benchmark
+  verisi gelene kadar 2000/4000 KORUNUR; settled 0,0837 $ yerel fiyat tablosuyla hesap (probe haric), konsol karsilastirmasi yapilmadan 'faturayla dogrulandi' denmez; Faz 1 butcesi gercek asama girdi/cikti/cagri sayisiyla hesaplanir, spike yalniz kalibre eder. Tokenizer ~0,71 tok/bayt (Turkce) ->
+  bayt tabanli girdi tavani ~%40 muhafazakar. Gecikme p50 3,8 s / p90 12 s (uzun ciktilar 14-24 s).
+  Rate limit (tier): 1000 RPM, 2,4M TPM, 2M ITPM, 400K OTPM -> Faz 1 icin bol. anthropic 1.13.0, git a696d50.
+  Konsol faturasi ile 0,08 $ karsilastirmasi KULLANICIDA (fiyat tablosu dogrulamasi).
+
+- **Dalga 3 (Faz 0 madde 6/8/9/10 + Gemini retry):** arsiv benchmark modulleri lean'e tasindi
+  (bakeoff_comparison/gates, patron_compare/dataset, annotation_io/excel + 5 test, 132 yesil; routing_harness'tan
+  2 saf fonksiyon teste inline) + fixture'lar (reference_characterization_gemini-3.5-flash.json, plan, annotation_sheet*);
+  `GeminiService(retry_attempts=None)`: google-genai SDK varsayilani 5 deneme (408/429/5xx) -> benchmark 1 gecer,
+  uretim aynen (test); `claude_bakeoff_plan.py` -> `benchmark/claude_bakeoff_plan.json` MUHURLU (K3/K7/K8/K12/K16/K18/K19,
+  §7.5, §8 kapilar, §9 butce 23/50, §3.2 N_max, adapter kimlikleri, spike sha; `faz1_blockers()` =
+  [K12_document_reference, spike_console_reconciled, workspace_ids]); Faz 2 idiomatik prompt'lar
+  `benchmark/idiomatic_prompts/{seo_generation,ads_rsa,social_brief_contents}.md` + manifest.json muhurlu
+  (K16 tek atis; kaynak sablon sha'lari baglandi; is kurallari birebir, yalniz XML yapi). Tam paket **4855 / 112 / 0**.
+
+- **Faz 1 altyapisi (dalga A+B, 11.10, Codex Faz 0 hukmu: altyapi GO / ucretli kosu HENUZ DEGIL):**
+  A1 `stage_capture` (ai_runner CAPTURE_SINK hook'u, kapali iken bayt-ayni) + `stage_replay` (ayni prompt/sema/retry
+  butcesiyle baska saglayiciya replay, `compare_stage_outputs` asama karari uyumu); A2 `hybrid_run` (G/G/G, Aday, G/G/C
+  konfiglari planin K3 modellerinden; `StageRoutePinnedAI` icerik asamalarina provider enjeksiyonu; `GeminiService(
+  retry_attempts=1)` gercekten kullaniliyor; provider basina tavan Claude 50 / Gemini 20 / DeepSeek 5; `faz1_blockers`
+  ILK satirda, dry-run bile kilitli) + `BudgetGuardedAI` settle'i paralellikte `logical_request` ile dogru; A3
+  `claude_gates` (G1-G7 esikleri MUHURLU plandan regex ile, eksik sayi -> hata; kumeli bootstrap, Wilson, kappa, pilot
+  etiketi, rapor) + `patron_labels` (optimice/gr7/dijital v2 etiketleri bayt-ayni, muhurlu index; gr7 SEO 72/14);
+  B1 `content_pairs` (ortak katman, kor A/B kartlari, gizli esleme ayri dosya, sert kurallar gercek validator'larla) +
+  `pairwise_judge` (DeepSeek V4 Pro, pozisyon takasi, S formulu K4, berabere bandi 0,05, `pairwise_judge` asamasi
+  AI_STAGES'e eklendi); B2 `profile_compare` (donmus girdi, 3 saglayici, bloklu-rastgele sira, kor kartlar, G3 girdisi);
+  B3 QA: `tests/integration/test_hybrid_run_db.py` 9 DB'li uctan uca test (Aday/G/G/G/G/G/C, kilit, enjekte hatalar,
+  tavan) ILK KOSUDA YESIL; QA bulgusu: `claim_rewrite`/`micro_shorten` ic ice scoped() guard'i atliyordu -> `_GuardedScoped.for_stage`
+  ebeveynden gecer (KAPANDI). Dalga A tam paket 4906/0; dalga B hedefli 95+23 yesil; **dalga B sonrasi TAM PAKET
+  bellek yetersizligi nedeniyle sistem tarafindan DURDURULDU, yeniden kosulmali** (kullanici izniyle).
+- Bilinen bosluklar: `content_pairs.extract_items` SQL'i gercek DB'de denenmedi; sosyal ciftler pozisyonel eslesir;
+  Optimice "ADS 16" kaynagi belirsiz (artefakt 123); hybrid_run API'nin `require_run_allowed`/deneme-ws kapisini
+  atlar (ws38/39'a yoneltme); `AI_STAGE_ROUTES` global -> ayni process'te es zamanli iki run_hybrid yasak.
+
+- **Codex Faz 1 altyapi incelemesi (`inceleme_claude_gemini_faz1_altyapi_codex.md`) -> 3 P1 + 1 test DOGRU, duzeltildi:**
+  (1) `faz1_ledger.Faz1Ledger` (benchmark/faz1_budget_ledger.json, muhurlu): K7 tavanlari DENEY TOPLAMI; hybrid_run ve
+  profile_compare tavani defterden KALAN alir, bitiste taahhudu (settle edilmemis tavan yakimi dahil) isler; tukenmis
+  tavan -> AI/DB kurulmadan hata; (2) replay hedefli tekrari KAPATIR (`run_batch(targeted_retries=0, allow_missing=True)`,
+  uretim varsayilani degismez): alt kume prompt'u uretimle birebir kurulamaz -> kiyas iki tarafta ILK DENEME ile simetrik,
+  `missing_ids` kaydedilir; `has_response_parser` yakalanir, parser verilmeden replay BASLAMAZ; (3) `assert_workspace_allowed`
+  (1A/1B/profile kapsami, ad->id eslemesinden): run_hybrid ve profile_compare hedef ws'i DB/AI oncesi dogrular; (4) ic ice
+  scoped() regresyon testi xfail -> gercek assert. Hedefli 37+85 yesil; DB e2e 9 yesil. TAM PAKET henuz yeniden kosulmadi
+  (bellek kesintisi; kullanici izniyle).
+
+- **Codex Faz 1 2. tur -> 2 bulgu DOGRU, duzeltildi:** (1) defter IKI FAZLI: `reserve()` cagri ONCESI kalan tavani
+  dosyaya KALICI yazar (cokmede acik kalir, sonraki komutlar harcanmis sayar, `reconcile()` ile insan kapatir),
+  `settle()` kapanista (finally) taahhudu isler — hybrid_run ve profile_compare buna bagli; (2) replay
+  `max_attempts=1`: parse/saglayici hatasinda da TEK deneme (uretim MAX_ATTEMPTS=2 degismez) -> iki taraf ILK CEVAP
+  ile simetrik. Hedefli 140 yesil (DB e2e 9 dahil). TAM PAKET henuz yeniden kosulmadi.
+
+- **B4 QA:** `tests/integration/test_content_pairs_db.py` — gercek DB'de G/G/G + Aday kosusu sonrasi `extract_items`
+  (rsa/blog/social), `common_layer`, kor kartlar round-trip ve false-green (dayanaksiz iddia -> hard_rule_ok False) YESIL.
+  Not: `ad_headlines.headline_text` varchar(30) — 31 karakter DB'de zaten yazilamaz.
+
+- **FAZ 1 KOSULARI (11-12.10, patron karari: Hissefy+Digitus, degerlendirme patronda):** plan `amend_faz1_plan.py` ile
+  yeniden muhurlendi (K12 sozlu, kredi 99,92, ws 21/29, kapasite 60/30/30). 6 hibrit kosu + profil kiyasi basarili:
+  run 76/79/82 (ws21 GGG/Aday/GGC), 78/81/83 (ws29). Harcama (liste): Claude 19,18 $, Gemini 10,21 $. Basarisiz: run 77
+  (ws29 GGG, kosu tavani hatasi — tavan mantigi duzeltildi), run 80 (ws29 Aday: Haiku family_a2'de uydurma ID 11011,
+  2 denemede de -> fail-closed; tekrar 81 OK). Paket: benchmark/faz1/export/{README,ozet,ws*_havuzlar.xlsx,
+  ws*_icerikler.md/xlsx,profiller.md}. Kod: faz1_export (yeni), faz1_ledger kilit+reload+total_caps, hybrid_run
+  --caps + yalniz kullanilan saglayici rezervasyonu, ai_usage_events migration canli yerel DB'ye uygulandi.
+  Kosu mekanigi: test imaji konteyneri lean aginda, --env-file lean/.env + ayri anthropic.env (anahtar ana agac
+  .env'de), DATABASE_URL digitus_app'ten; ~30-40 dk/kosu (SEO blog dominant); ikiser paralel.
+  Gozlemler README'de (Haiku ID uydurma, Claude retry 3-7 vs Gemini 0-2, sosyal kaydedilen icerik Claude'da az,
+  Gemini provider kolonu NULL).
+
+## Open / next
+
+0b. Takip: GeminiService collector.record(provider="gemini"); 1A replay / hakem / kapilar istege bagli; konsol mutabakati.
+0. **TAM PAKET 11.10 (izole docker-compose.test.yml, iki parca): unit 2566 passed/38 skipped + integration 2394 passed/74 skipped = 4960 / 0 hata.** Faz 1 oncesi kalan: 1A icin referans G/G/G kosusunu
+   `StageCapture` ile sarmalayan sunucu adimi (hybrid_run'a `capture=True`); Faz 1 kosu sirasi/CLI betigi.
+0b. **Eski not — Faz 1 wiring (kod):** bakeoff_comparison provider/model pinleri gemini-3.5/deepseek -> Claude adayi icin sozlesme
+   genisletmesi; 1A istek yakalama/replay surucusu (K14) + 1B hibrit kosu CLI'i lean'de YOK (arsivde scripts/); profil
+   kiyasi icin `profile_inputs.freeze` cagrisi; DeepSeek hakem + patron kart uretimi (annotation_io). Idiomatik: SEO
+   revision/expansion, CLAIM_REWRITE, social repair prompt'lari Gemini metniyle kalir (karar: Faz 2 oncesi).
+1. ~~Spike~~ TAMAM (yukarida). **Madde 8 butce yeniden muhuru**: spike p90 zarflari ile §9 hucreleri; allowance karari — `python -m app.core.benchmark.claude_spike
+   --out benchmark/claude_spike.json` (tavan 0,50 $; kuru kosu 29 cagri / 0,33 $). Sonra allowance/effort
+   kalibrasyonu, optional-alan kabulu, rate-limit basliklari, tokenizer orani muhurlenir.
+2. Faz 0 madde 6 (arsiv benchmark moduller: bakeoff_*/patron_*/annotation_io -> lean), 8 (butce yeniden
+   muhuru, spike p90), 9 (`claude_bakeoff_plan.json`), 10 (Faz 2 idiomatik prompt SHA) — spike SONRASI.
+3. Gemini tarafi: `thoughts_tokens` kontrolu + genai ic retry hata enjeksiyonu (placeholder "not run").
+4. Konsol: net kredi/devir/kapsam/Batch API (manuel). K12 belge referansi Faz 1 oncesi.
+5. PUSH YAPILMADI — iki commit yerel. Sunucu feat/auth-login'den calisiyor; push karari kullanicinin.
+
+## Previous status (2026-09-17)
+
 Last updated: 2026-09-17
 Branch: `algoritma-kilitleri`
 Active phase: **Kilitli algoritmalarin uretime entegrasyonu — Faz 5 KAPANDI; sirada Faz 6 (post-policy + ChannelPool teslimi)**
@@ -536,6 +752,19 @@ made in this workstream.
       `-f docker-compose.prod.yml` ŞART.
   - Sıradaki: tarayıcı kontrolü (giriş, test kullanıcısıyla parola değişimi, küçük
     analiz).
+  - Dağıtım sonrası kullanıcı testi:
+    - Tam run (ws6, 33 kelime, 3 kanal) temiz, 1,5 dk. Süre sabit 16 AI aşamasından geliyor
+      → kanal paralelleştirmesi aday.
+    - Yeni çalışmada proteinim.com profil analizi "no page passed quality gate" ile düştü.
+      Sebep dağıtım DEĞİL: crawler ham HTML'i 50K'da kesiyordu (0b5d148, Mayıs'tan beri),
+      `<main>` 75.683'te; kalite kapısı (61c28c6, 23.09) bunu görünür yaptı.
+      Yereldeki ws46 profili elle yazılıp doğrudan DB'ye girildiği için hata yerelde
+      görülmemişti.
+    - Düzeltme 0cecc25: metin 50K, HTML 2M sınırı + regresyon testi. Birleşik dal 13c636d:
+      4569 passed.
+    - Sunucuya 11.10 ~03:18 alındı (migration yok). Proteinim analizi tamamlandı (ws7).
+  - Ders: tam pytest koşusundan önce HER ZAMAN `docker ps --filter name=test_app-run`. Boş
+    çıktı "durdu" demek değildir; iki eşzamanlı koşu ~30 dk boşa gitti.
   - Öneri: lean dalı auth'u içermiyor. İleride iki dal ayrışmasın diye
     `deploy/auth-lean-merge` lean'e birleştirilmeli (karar kullanıcıda).
   - Auth'ta not edilen, değiştirilmeyenler:

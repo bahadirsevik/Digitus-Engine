@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -28,9 +28,13 @@ from app.database.models import (
 MANIFEST_KEY = "engine_v3"
 # Manifest sozlesme surumu. 1 = lokasyon politikasi ONCESI muhurler
 # (yalnizca `location_filter_mode="none"` ile geriye donuk tamamlanabilir),
-# 2 = `location_policy` ZORUNLU.
+# 2 = `location_policy` ZORUNLU,
+# 3 = 2 + `providers` (YALNIZ en az bir asama gemini disi iken yazilir;
+# hepsi gemini ise muhur sema 2 olarak BAYT-AYNI kalir).
 LEGACY_MANIFEST_SCHEMA_VERSION = 1
 MANIFEST_SCHEMA_VERSION = 2
+PROVIDER_MANIFEST_SCHEMA_VERSION = 3
+DEFAULT_PROVIDER = "gemini"
 # V2 snapshot'inin TASIMASI GEREKEN alanlar: yalniz fingerprint yeterli
 # degildir — denetim ve sozluk kimligi de muhrun parcasidir.
 LOCATION_POLICY_REQUIRED_FIELDS = (
@@ -59,10 +63,14 @@ class StageContext:
     model: str
     prompt_sha: str
     firm_block_sha256: str
+    provider: str = DEFAULT_PROVIDER
 
     def as_dict(self) -> Dict[str, str]:
-        return {"model": self.model, "prompt_sha": self.prompt_sha,
-                "firm_block_sha256": self.firm_block_sha256}
+        out = {"model": self.model, "prompt_sha": self.prompt_sha,
+               "firm_block_sha256": self.firm_block_sha256}
+        if self.provider != DEFAULT_PROVIDER:   # eski satir karsilastirmalari bozulmasin
+            out["provider"] = self.provider
+        return out
 
 
 # ── execution_manifest muhru ─────────────────────────────────────────
@@ -76,7 +84,9 @@ def seal_manifest(run: ScoringRun, *, firm_block_sha256: str,
                   algorithm_versions: Mapping[str, str],
                   models: Mapping[str, str],
                   prompt_shas: Mapping[str, str],
-                  location_policy: Mapping[str, Any]) -> Dict[str, Any]:
+                  location_policy: Mapping[str, Any],
+                  providers: Optional[Mapping[str, str]] = None
+                  ) -> Dict[str, Any]:
     """Run'in v3 baglamini `execution_manifest` icine muhurler.
 
     Muhur TAMAMEN DEGISMEZDIR: firma hash'i, algoritma kilit kimlikleri,
@@ -88,6 +98,11 @@ def seal_manifest(run: ScoringRun, *, firm_block_sha256: str,
     `location_policy` ZORUNLUDUR (sema surumu 2): yeni run'lar lokasyon
     snapshot'i olmadan muhurlenemez — eksik snapshot sessizce "filtre yok"
     varsayilanina DUSMEZ (plan_v3_lokasyon_filtresi.md §5.4).
+
+    `providers` ({asama: provider}): hepsi "gemini" (veya None) ise muhur
+    BAYT-AYNI sema 2'dir. En az bir asama gemini disiysa sema 3 yazilir:
+    `providers` (yalniz gemini disi asamalar); en az biri "anthropic" ise
+    ayrica adapter/system/schema-donusturucu/thinking-policy kimlikleri.
 
     Mevcut manifest anahtarlari KORUNUR; yalniz `engine_v3` bolumu yazilir.
     """
@@ -110,6 +125,21 @@ def seal_manifest(run: ScoringRun, *, firm_block_sha256: str,
         "prompt_shas": dict(prompt_shas),
         "location_policy": dict(location_policy),
     }
+    non_default = {stage: provider for stage, provider in (providers or {}).items()
+                   if provider != DEFAULT_PROVIDER}
+    if non_default:
+        section["manifest_schema_version"] = PROVIDER_MANIFEST_SCHEMA_VERSION
+        section["providers"] = non_default
+        if "anthropic" in non_default.values():
+            from app.core.social.anthropic_schema import SCHEMA_TRANSFORMER_VERSION
+            from app.generators.anthropic_service import (
+                ADAPTER_CONTRACT_VERSION, SYSTEM_SHA, THINKING_POLICY_SHA,
+            )
+
+            section["adapter_contract_version"] = ADAPTER_CONTRACT_VERSION
+            section["system_sha"] = SYSTEM_SHA
+            section["schema_transformer_version"] = SCHEMA_TRANSFORMER_VERSION
+            section["thinking_policy_sha"] = THINKING_POLICY_SHA
     manifest = dict(run.execution_manifest or {})
     existing = manifest.get(MANIFEST_KEY)
     if existing is not None and _canonical(existing) != _canonical(section):
@@ -137,10 +167,60 @@ def verify_stage_context(run: ScoringRun, stage: str,
         raise StageContextMismatch(
             f"{stage}: model muhurle uyusmuyor "
             f"(muhur={expected_model!r}, gelen={context.model!r})")
+    expected_provider = _sealed_provider(section, stage)
+    if context.provider != expected_provider:
+        raise StageContextMismatch(
+            f"{stage}: provider muhurle uyusmuyor "
+            f"(muhur={expected_provider!r}, gelen={context.provider!r})")
     expected_prompt = (section.get("prompt_shas") or {}).get(stage)
     if expected_prompt is None or context.prompt_sha != expected_prompt:
         raise StageContextMismatch(
             f"{stage}: prompt SHA muhurle uyusmuyor")
+
+
+def _sealed_provider(section: Mapping[str, Any], stage: str) -> str:
+    """Muhurlu provider; `providers` anahtari olmayan (eski) muhur = gemini."""
+    return (section.get("providers") or {}).get(stage, DEFAULT_PROVIDER)
+
+
+def stage_route(run: ScoringRun, stage: str) -> "tuple[str, str]":
+    """(provider, model) — MUHURLU manifest'ten; global ayarlardan ASLA.
+
+    Muhurden sonra her runner cagrisi rotayi buradan okur: koşu ortasinda
+    `AI_STAGE_ROUTES` degisse bile kalan asamalar muhurle uyumlu kalir.
+    Asama muhurde yoksa fail-closed.
+    """
+    section = manifest_section(run)
+    model = (section.get("models") or {}).get(stage)
+    if not isinstance(model, str) or not model:
+        raise StageContextMismatch(
+            f"{stage}: muhurde model kaydi yok — muhurlenmemis asama kosulamaz")
+    return _sealed_provider(section, stage), model
+
+
+def routes_for_seal(run: ScoringRun, models: Mapping[str, str]
+                    ) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Muhur icin (providers, models): run ZATEN muhurluyse mevcut muhurden,
+    degilse global AI_STAGE_ROUTES'tan cozulur (Codex Faz 0 #2: ayar
+    degisikligi eski kosunun rotasini degistirmez, resume engellenmez).
+    "deterministic" AI asamasi degildir, oldugu gibi kalir."""
+    from app.core.engine.routing import resolve_stage_route
+
+    manifest = run.execution_manifest if isinstance(run.execution_manifest, dict) else {}
+    existing = manifest.get(MANIFEST_KEY) if isinstance(manifest, dict) else None
+    providers: Dict[str, str] = {}
+    resolved: Dict[str, str] = dict(models)
+    for stage, default_model in models.items():
+        if default_model == "deterministic":
+            continue
+        if isinstance(existing, dict) and stage in (existing.get("models") or {}):
+            resolved[stage] = existing["models"][stage]
+            providers[stage] = (existing.get("providers") or {}).get(
+                stage, DEFAULT_PROVIDER)
+        else:
+            providers[stage], resolved[stage] = resolve_stage_route(
+                stage, default_model)
+    return providers, resolved
 
 
 def manifest_section(run: ScoringRun) -> Dict[str, Any]:
@@ -198,11 +278,13 @@ def manifest_location_policy(run: ScoringRun) -> Optional[Dict[str, Any]]:
         raise StageContextMismatch(
             f"run {run.id}: manifest sema surumu gecersiz ({raw_version!r}) — "
             "teslimat reddedildi")
-    if version not in (LEGACY_MANIFEST_SCHEMA_VERSION, MANIFEST_SCHEMA_VERSION):
+    if version not in (LEGACY_MANIFEST_SCHEMA_VERSION, MANIFEST_SCHEMA_VERSION,
+                       PROVIDER_MANIFEST_SCHEMA_VERSION):
         raise StageContextMismatch(
             f"run {run.id}: desteklenmeyen manifest sema surumu {version} "
             f"(bilinen: {LEGACY_MANIFEST_SCHEMA_VERSION}, "
-            f"{MANIFEST_SCHEMA_VERSION}) — teslimat reddedildi")
+            f"{MANIFEST_SCHEMA_VERSION}, {PROVIDER_MANIFEST_SCHEMA_VERSION}) "
+            "— teslimat reddedildi")
 
     if version == LEGACY_MANIFEST_SCHEMA_VERSION:
         if policy is None:

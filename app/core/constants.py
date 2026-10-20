@@ -42,6 +42,13 @@ ADS_FINAL_CAPACITY = 60
 SEO_FINAL_CAPACITY = 30
 SOCIAL_FINAL_CAPACITY = 30
 
+# ADS reklam grubu başına hedef KW sayısı (15 KW teslim standardı, plan_ads_15kw_standardi K2)
+ADS_KEYWORDS_PER_GROUP = 15
+# RSA grup başına hedef metin sayıları (Google üst sınırı: 15 başlık / 4 açıklama)
+ADS_HEADLINES_PER_GROUP = 15
+ADS_DESCRIPTIONS_PER_GROUP = 4
+ADS_MIN_CTA_HEADLINES = 3  # teslim şartı: seçilen 15 başlığın en az 3'ü CTA (plan_ads_15kw_standardi §10)
+
 # Havuz çarpanı (testlerde kullanılıyor olabilir)
 POOL_MULTIPLIER = 2.0
 
@@ -227,6 +234,8 @@ AI_STAGES = (
     "ads_funnel", "ads_intent",
     "seo_rel", "seo_bp", "seo_subintent", "seo_authority", "seo_urlgroup",
     "social_rel", "social_v4", "social_intent", "social_normbounds",
+    # Gemini->Claude kiyasi: DeepSeek ikili hakem (plan K4); uretimde kullanilmaz
+    "pairwise_judge",
 )
 # Prompt/config surumu — run manifest'ine yazilir (plan C)
 # v2.1 Faz D (23.07): SEO strategy_fit sözleşmesi + ADS/SOCIAL v2_1 blokları

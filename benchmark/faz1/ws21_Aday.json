@@ -1,0 +1,308 @@
+{
+  "kind": "hybrid_run",
+  "workspace_id": 21,
+  "config_name": "Aday",
+  "routes": {
+    "ads_intent": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "ads_funnel": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "seo_rel": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "seo_bp": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "social_rel": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "family_a2": {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5"
+    },
+    "family_a3": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "seo_subintent": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "seo_urlgroup": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "social_v4": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "social_intent": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "seo_generation": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "ads_rsa": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "social_brief_contents": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "social_brief_ideas": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    }
+  },
+  "scoring_run_id": 79,
+  "universe_fingerprint": "148393f51b6a2181abe2c9182a5741c24fef0db394dde6e1ccbf6946d1e22ea7",
+  "capacities": {
+    "ADS": 60,
+    "SEO": 30,
+    "SOCIAL": 30
+  },
+  "delivery_summary": {
+    "status": "channel_assigned",
+    "channels": [
+      "ADS",
+      "SEO",
+      "SOCIAL"
+    ],
+    "enabled_channels": [
+      "ADS",
+      "SEO",
+      "SOCIAL"
+    ],
+    "delivery_summary": {
+      "scoring_run_id": 79,
+      "policy_version": 1,
+      "firm_block_sha256": "713dae26d65b9fda098bec1feb0ac960a2fccc040a6d37d1f6440ae994735239",
+      "strategic_keywords_count": 11,
+      "location_filter": {
+        "enabled": false,
+        "mode": "none",
+        "lexicon_version": "tr-provinces-v1",
+        "excluded_count": 0,
+        "excluded_by_reason": {},
+        "excluded_by_city": {}
+      },
+      "channels": {
+        "ADS": {
+          "total_candidates": 438,
+          "kept_count": 60,
+          "excluded_count": 378,
+          "pool_count": 60,
+          "capacity": 60,
+          "unfilled_count": 0
+        },
+        "SEO": {
+          "total_candidates": 101,
+          "kept_count": 29,
+          "excluded_count": 72,
+          "pool_count": 29,
+          "capacity": 30,
+          "unfilled_count": 1
+        },
+        "SOCIAL": {
+          "total_candidates": 364,
+          "kept_count": 30,
+          "excluded_count": 334,
+          "pool_count": 30,
+          "capacity": 30,
+          "unfilled_count": 0
+        }
+      }
+    },
+    "total_calls": 0
+  },
+  "manifest_section": {
+    "manifest_schema_version": 3,
+    "firm_block_sha256": "713dae26d65b9fda098bec1feb0ac960a2fccc040a6d37d1f6440ae994735239",
+    "algorithm_versions": {
+      "family": "nihai_family_v2_gemini38",
+      "ads": "nihai_niche_v2_gemini38",
+      "seo": "seo_v31_kati2_v2",
+      "social": "social_v5_uretim_v1"
+    },
+    "models": {
+      "family_a1": "gemini-3.8-flash",
+      "family_a2": "claude-haiku-5-5",
+      "family_a2b": "gemini-3.8-flash",
+      "family_a2c": "gemini-3.8-flash",
+      "family_a3": "claude-sonnet-5-5",
+      "ads_funnel": "claude-haiku-5-5",
+      "ads_intent": "claude-haiku-5-5",
+      "seo_rel": "claude-haiku-5-5",
+      "seo_bp": "claude-haiku-5-5",
+      "seo_subintent": "claude-sonnet-5-5",
+      "seo_authority": "gemini-3.8-flash",
+      "seo_urlgroup": "claude-sonnet-5-5",
+      "social_rel": "claude-haiku-5-5",
+      "social_normbounds": "deterministic",
+      "social_v4": "claude-sonnet-5-5",
+      "social_intent": "claude-sonnet-5-5"
+    },
+    "prompt_shas": {
+      "family_a1": "f444b5fb7288775a8db3ea4ccdba66bf1d7fc0b5443f04f62aef097dd7ce9cd9",
+      "family_a2": "831603d86a3cb65bc049eec71f2f299612fe0b59fcdabb75ee3493e22f176126",
+      "family_a2b": "57ff2d201a730b6a9174e2a5c646ee6423d407d111a12d0c896110f56f276c99",
+      "family_a2c": "831603d86a3cb65bc049eec71f2f299612fe0b59fcdabb75ee3493e22f176126",
+      "family_a3": "31bb1ad00e0e6dfa674e913ee02b2e857c47aac2b2cfe4ce9f926a36ba25404e",
+      "ads_funnel": "e426e0ae77b320693ec3df804ce6e7aef95c5f5c98c76112a36353494cd9d390",
+      "ads_intent": "4db6841f385ae9c06282282aa1f543a54d3166a149dd59aa33d4fbc95ab3d5dc",
+      "seo_rel": "09409ceb8c31b71d189fa18765c85a9c9ed8f08b7a66ab05e76ce94e78a8683f",
+      "seo_bp": "0e803677320f28b44eb63e8e50892d66ab6cc0ec861a48ef62c255a6219da9f3",
+      "seo_subintent": "0a941da824889a44cc13b607ed46491a2c992b21cf03e982e917891f99c2c2a7",
+      "seo_authority": "840c54fa6faa3f79eb99e79b029624d5a6a8a780bb353987d36012663ee30006",
+      "seo_urlgroup": "ff9643b92e15e50fc646a51572990ef124c5ccbb79f348410874ef7bf5c2410a",
+      "social_rel": "09409ceb8c31b71d189fa18765c85a9c9ed8f08b7a66ab05e76ce94e78a8683f",
+      "social_normbounds": "dd359f8317115aef7d33e14e746b07a167f533d1665feeeea990542d694e7e3b",
+      "social_v4": "64652f7bb466361b18b89375c559c1f713e2c69e0369a7daf25b3022be1a97d2",
+      "social_intent": "c95024b751837ab40a3c43b4473c327f384e797020e1115d1ad15679c48693f9"
+    },
+    "location_policy": {
+      "mode": "none",
+      "focus_cities": [],
+      "exempt_terms": [],
+      "city_lexicon_version": "tr-provinces-v1",
+      "city_lexicon_sha256": "5a82a64b7677f7eafc1ba1edf29ae7f595a51fa3d2bea93e1f260c169155401f",
+      "enforcement_fingerprint": "5dc808cc885eaa96b1822f3f61ed3c4205bc29915cb99ddb1896aa6bed29f414"
+    },
+    "providers": {
+      "family_a2": "anthropic",
+      "family_a3": "anthropic",
+      "ads_funnel": "anthropic",
+      "ads_intent": "anthropic",
+      "seo_rel": "anthropic",
+      "seo_bp": "anthropic",
+      "seo_subintent": "anthropic",
+      "seo_urlgroup": "anthropic",
+      "social_rel": "anthropic",
+      "social_v4": "anthropic",
+      "social_intent": "anthropic"
+    },
+    "adapter_contract_version": "1",
+    "system_sha": "ed1266fa5f93434c287ce4a928e1535948f42fc663d303b3692166807db9b431",
+    "schema_transformer_version": "2",
+    "thinking_policy_sha": "7de0d9d4acce085539373f34ebeba97e00ed41b73435f3ca264c5f7ab64d0079"
+  },
+  "content": {
+    "ads": {
+      "generation_set_id": 23,
+      "set_status": "active",
+      "n_groups": 10,
+      "failed_groups": 0
+    },
+    "seo": {
+      "content_ids": [
+        85,
+        88,
+        90,
+        92,
+        94,
+        96,
+        98,
+        102,
+        105,
+        107,
+        109,
+        112,
+        115,
+        117,
+        119,
+        121,
+        124,
+        126,
+        128,
+        130,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140
+      ],
+      "n_requested": 29,
+      "failed": {}
+    },
+    "social": {
+      "brief_id": 20,
+      "attempt_ids": {
+        "categories": 46,
+        "ideas": 47,
+        "contents": 48
+      },
+      "idea_status": "completed",
+      "content_status": "partial",
+      "n_ideas": 9,
+      "persisted_idea_ids": [
+        228,
+        230,
+        231,
+        234,
+        236
+      ],
+      "unresolved_idea_ids": [
+        229,
+        232,
+        233,
+        235
+      ]
+    }
+  },
+  "content_errors": {},
+  "budget_summary": {
+    "anthropic": {
+      "provider": "anthropic",
+      "requests_used": 517,
+      "max_requests": 20000,
+      "cost_settled_usd": 5.708248,
+      "cost_committed_usd": 5.708248,
+      "ceiling_charges": 0,
+      "max_cost_usd": 8.0,
+      "thinking_allowance_tokens": 0,
+      "accounting": "reserve = tam request zarfı UTF-8 bayt (provider'ın GERÇEK payload üreticisiyle aynı kaynak: gemini = nihai contents + JSON talimatı + schema; deepseek = OpenAI-uyumlu gövde, şema gönderilmez) + max_tokens; settle = gerçek usage, usage yoksa/kısmi geçersizse tavan (ceiling charge)"
+    },
+    "gemini": {
+      "provider": "gemini",
+      "requests_used": 92,
+      "max_requests": 20000,
+      "cost_settled_usd": 0.408689,
+      "cost_committed_usd": 0.408689,
+      "ceiling_charges": 0,
+      "max_cost_usd": 3.0,
+      "thinking_allowance_tokens": 0,
+      "accounting": "reserve = tam request zarfı UTF-8 bayt (provider'ın GERÇEK payload üreticisiyle aynı kaynak: gemini = nihai contents + JSON talimatı + schema; deepseek = OpenAI-uyumlu gövde, şema gönderilmez) + max_tokens; settle = gerçek usage, usage yoksa/kısmi geçersizse tavan (ceiling charge)"
+    }
+  },
+  "usage": {
+    "requests": 609,
+    "prompt_tokens": 1555468,
+    "candidates_tokens": 598129,
+    "thoughts_tokens": 2603,
+    "failed_requests": 4,
+    "estimated_usd": 6.1169
+  },
+  "wall_clock_s": {
+    "setup": 0.656,
+    "orchestration": 467.334,
+    "content_ads": 121.053,
+    "content_seo": 2126.004,
+    "content_social": 196.91
+  },
+  "created_at": "2026-10-11T21:50:04.703716+00:00",
+  "payload_sha256": "00ccfac99a4de27bb0085b11c031ec61eabd16e1d7362fb90faeae3c8a907613"
+}

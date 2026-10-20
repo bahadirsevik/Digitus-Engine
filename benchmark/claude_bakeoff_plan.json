@@ -1,0 +1,321 @@
+{
+  "plan_version": "rev.6",
+  "plan_file": "plan_claude_gemini_karsilastirma.md",
+  "sealed_at": "2026-10-11T13:21:13.731011+00:00",
+  "git_sha": "e9fd2ae",
+  "decisions": {
+    "K3_models": {
+      "Y": "claude-haiku-5-5",
+      "O": "claude-sonnet-5-5",
+      "content": "claude-sonnet-5-5",
+      "opus_in_faz1": false
+    },
+    "K7_caps_usd": {
+      "claude": 50.0,
+      "gemini": 20.0,
+      "deepseek": 5.0
+    },
+    "K8_monthly_volume_p90": null,
+    "K12_document_reference": "Patron beyani 11.10.2026: musteri izni SOZLU; sistemde yapay zekaya gonderilmesi sakincali veri yok (yazili belge referansi yok, patron karari)",
+    "K16_single_shot_idiomatic": true,
+    "K18_holdout_ws": "5. ws (Scento veya Proteinim), Faz 2'de bir kez",
+    "K19_task_p95_ratio": 1.25,
+    "repeats_faz1": 1
+  },
+  "routes": {
+    "Y": [
+      "ads_intent",
+      "ads_funnel",
+      "seo_rel",
+      "seo_bp",
+      "social_rel",
+      "family_a2"
+    ],
+    "O": [
+      "family_a3",
+      "seo_subintent",
+      "seo_urlgroup",
+      "social_v4",
+      "social_intent"
+    ],
+    "content": [
+      "seo_generation",
+      "ads_rsa",
+      "social_brief_contents",
+      "social_brief_ideas"
+    ],
+    "stay_gemini": [
+      "family_a1",
+      "family_a2b",
+      "family_a2c",
+      "ads_grouping",
+      "micro_shorten",
+      "claim_rewrite",
+      "seo_authority",
+      "social_brief_categories",
+      "geo_compliance",
+      "embedding",
+      "competitor_discovery"
+    ]
+  },
+  "prices": {
+    "claude-haiku-5-5": {
+      "currency": "USD",
+      "input_per_m": 0.1,
+      "input_cache_hit_per_m": 0.01,
+      "output_per_m": 0.5,
+      "valid_from": "2026-10-11"
+    },
+    "claude-sonnet-5-5": {
+      "currency": "USD",
+      "input_per_m": 2.0,
+      "input_cache_hit_per_m": 0.1,
+      "output_per_m": 10.0,
+      "valid_from": "2026-10-11"
+    },
+    "claude-opus-5-5": {
+      "currency": "USD",
+      "input_per_m": 4.0,
+      "input_cache_hit_per_m": 0.2,
+      "output_per_m": 20.0,
+      "valid_from": "2026-10-11"
+    },
+    "gemini-3.8-flash": {
+      "currency": "USD",
+      "input_per_m": 0.75,
+      "output_per_m": 3.75,
+      "valid_from": "2026-09-07",
+      "valid_until": "2026-12-31"
+    },
+    "deepseek-v4-pro": {
+      "currency": "USD",
+      "input_per_m": 0.435,
+      "input_cache_hit_per_m": 0.003625,
+      "output_per_m": 0.87,
+      "valid_from": "2026-07-27"
+    }
+  },
+  "adapter": {
+    "adapter_contract_version": "1",
+    "system_sha": "ed1266fa5f93434c287ce4a928e1535948f42fc663d303b3692166807db9b431",
+    "thinking_policy_sha": "7de0d9d4acce085539373f34ebeba97e00ed41b73435f3ca264c5f7ab64d0079",
+    "thinking_allowance": {
+      "low": 2000,
+      "medium": 4000,
+      "high": 8000
+    },
+    "effort_table": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high",
+      "None": "low"
+    },
+    "schema_transformer_version": "2",
+    "anthropic_sdk": "1.13.0",
+    "sdk_retries": {
+      "anthropic_max_retries": 0,
+      "gemini_retry_attempts": 1
+    }
+  },
+  "spike": {
+    "file": "benchmark/claude_spike.json",
+    "payload_sha256": "ceba014a1be68dd3619225f7d2c593902d8d85a987a02bf10435d0190fb63484",
+    "settled_usd_local_pricing": 0.083699,
+    "schemas_accepted": 14,
+    "schemas_rejected": 0,
+    "optional_fields_accepted": true,
+    "max_tokens_stops": [],
+    "thinking_p99": {
+      "low": 489,
+      "medium": 288,
+      "high": null
+    },
+    "allowance_decision": "2000/4000/8000 KORUNDU (n küçük; gerçek benchmark verisiyle bakılır)",
+    "console_reconciled": true
+  },
+  "gates": {
+    "G1_selection": "LB90(Δ recall_havuz) ≥ −0,03 VE fark kümesinde konu-dışı Δ ≤ 0",
+    "G2_content": "format başına: Wilson90 alt sınırı(kazanma, ITT, berabere=0,5) ≥ 0,45; n ≥ 30 PATRON çifti; κ ≥ 0,50; sert kural teslim LB90(Δ) ≥ −0,05",
+    "G3_profile": "UB90(Δ halüsinasyon_sayısı) ≤ 0 VE LB90(Δ patron puanı) ≥ −0,3",
+    "G4_reliability": "fatal/refusal = 0; ham parse ve teslim LB90(Δ) ≥ −0,01; kırpılma UB90(Δ) ≤ +0,01",
+    "G5_noise": "UB90(Δ flip) ≤ +0,05 — yalnız tekrarlı hücreler (Faz 2 ×2); Faz 1'de ölçülemedi",
+    "G6a_service": "aşama p95 ≤ 1,5× Gemini VE görev p99 < stale eşiklerinin %50'si",
+    "G6b_task": "görev p95 duvar saati ≤ 1,25× Gemini (Faz 3 gerçek tier ile kapı)",
+    "G7a_credit_go": "G1–G4 ∧ G6a ∧ (G5 ölçüldüyse) ∧ G6b ∧ net kredi ≥ projeksiyon ∧ dönüş planı; K8 yok → N_max tablosu + patron yazılı hükmü",
+    "G7b_operational_go": "G1–G4 ∧ G6a ∧ (G5 ölçüldüyse) ∧ G6b ∧ [teslim maliyeti ≤ Gemini ∨ superiority]; MDE: seçim LB90(Δ recall) ≥ +0,05; içerik Wilson LB > 0,50 ve nokta ≥ 0,60; profil UB90(Δ halüsinasyon) ≤ −0,5",
+    "outcome_faz1": [
+      "İYİ ADAY",
+      "UYGUN DEĞİL",
+      "KANIT YETERSİZ"
+    ],
+    "outcome_faz2_3": [
+      "GEÇ-SINIRLI",
+      "GEÇ-KREDİ",
+      "AYARLA-TEKRAR",
+      "KAL",
+      "GEÇ-KALICI (yalnız Faz 3, patron n ≥ 30/format, ≥ 2 ws)"
+    ],
+    "time_limits_s": {
+      "ads_generate_time_limit": 900,
+      "ADS_TASK_STALE_SECONDS": 1200,
+      "task_time_limit": 3600
+    }
+  },
+  "sample_table_7_5": [
+    {
+      "format": "RSA grubu",
+      "n_expected": "18–26",
+      "deepseek_pairs": "tümü (≤30)",
+      "patron_pairs": 15,
+      "g2_n30": false,
+      "faz1": "kanıt yetersiz; yön + W/T/L"
+    },
+    {
+      "format": "Blog",
+      "n_expected": "~30",
+      "deepseek_pairs": 30,
+      "patron_pairs": 15,
+      "g2_n30": false,
+      "faz1": "kanıt yetersiz; yön + W/T/L"
+    },
+    {
+      "format": "Sosyal içerik",
+      "n_expected": "~60",
+      "deepseek_pairs": 30,
+      "patron_pairs": 15,
+      "g2_n30": false,
+      "faz1": "kanıt yetersiz; yön + W/T/L"
+    },
+    {
+      "format": "Profil",
+      "n_expected": "10 ws",
+      "deepseek_pairs": null,
+      "patron_pairs": "10 ws × 1–5",
+      "g2_n30": null,
+      "faz1": "G3"
+    }
+  ],
+  "budget_usd": {
+    "cells": [
+      {
+        "cell": "Faz 0 spike",
+        "envelope": 0.5,
+        "settled": 0.083699
+      },
+      {
+        "cell": "1A Haiku Y ×1 4 ws",
+        "envelope": 0.7
+      },
+      {
+        "cell": "1A Sonnet O ×1 4 ws",
+        "envelope": 8.6
+      },
+      {
+        "cell": "1A arşiv replay D (Sonnet)",
+        "envelope": 1.5
+      },
+      {
+        "cell": "1B Aday ×1 2 ws",
+        "envelope": 7.2
+      },
+      {
+        "cell": "1B G/G/C ×1 2 ws",
+        "envelope": 3.5
+      },
+      {
+        "cell": "Profil 10 ws × (Sonnet+Haiku)",
+        "envelope": 1.0
+      }
+    ],
+    "total_envelope": 23.0,
+    "cap": 50.0,
+    "reserve": 27.0,
+    "cut_order": [
+      "1B G/G/C 2→1 ws (−1,75)",
+      "1B Aday 2→1 ws (−3,6)",
+      "arşiv replay düşer"
+    ],
+    "thinking_margin": "+%30 (spike: low p99 düşünme 489 tok, kırpılma 0 → zarf yeterli)",
+    "gemini_usd": {
+      "estimate": 18.0,
+      "cap": 20.0
+    },
+    "deepseek_usd": {
+      "estimate": 2.0,
+      "cap": 5.0,
+      "pairs_max": 90
+    }
+  },
+  "credit": {
+    "gross_assumed_usd": 100.0,
+    "net_available_usd": 99.92,
+    "expiry": "bilinmiyor",
+    "rollover": "bilinmiyor",
+    "scope": "bilinmiyor",
+    "source": "patron beyani 11.10: 100 $ kredi, 8 cent harcanmis"
+  },
+  "n_max_3_2": {
+    "Aday": {
+      "usd_per_run": 3.6,
+      "n_max": 27
+    },
+    "G/G/C": {
+      "usd_per_run": 1.25,
+      "n_max": 80
+    },
+    "Opus içerik": {
+      "usd_per_run": 2.5,
+      "n_max": 40
+    },
+    "Her şey Haiku": {
+      "usd_per_run": 0.34,
+      "n_max": 294
+    },
+    "Yalnız Y Haiku": {
+      "usd_per_run": 0.17,
+      "n_max": null
+    }
+  },
+  "workspaces": {
+    "1A": [
+      "Hissefy",
+      "Digitus"
+    ],
+    "1B": [
+      "Hissefy",
+      "Digitus"
+    ],
+    "profile": [
+      "Hissefy",
+      "Digitus"
+    ],
+    "ids": {
+      "Hissefy": 21,
+      "Digitus": 29
+    },
+    "note": "Patron 11.10: testler Hissefy + Digitus; GR-7/Optimice iptal"
+  },
+  "capacities": {
+    "ADS": 60,
+    "SEO": 30,
+    "SOCIAL": 30
+  },
+  "scope_change": {
+    "at": "2026-10-11T20:19:06.363940+00:00",
+    "by": "patron",
+    "text": "Karsilastirma ve dogruluk degerlendirmesi PATRONDA: Claude yalniz sistemleri kosar ve ciktilari teslim eder. DeepSeek hakem, patron kartlari, patron etiket recall ve G1-G7 hukumleri bu turda KOSULMAZ (altyapi hazir, istege bagli). 1A asama replay'i de atlanir; teslim edilen: 1B konfig ciktilari + profil kiyasi.",
+    "deliverables": [
+      "G/G/G",
+      "Aday",
+      "G/G/C",
+      "profile_compare"
+    ]
+  },
+  "amendments": [
+    {
+      "at": "2026-10-11T20:19:06.363940+00:00",
+      "what": "Faz 1 kilidi acildi (K12 sozlu, kredi, ws, kapsam)"
+    }
+  ],
+  "payload_sha256": "d14496c879d79c26bcf6411844e0b76e0366a6bcdba43dcd2d1b3f4324b969e3"
+}

@@ -1,0 +1,4022 @@
+{
+ "created": "2026-07-17",
+ "seed": 1807,
+ "label_schema": {
+  "intent_type": [
+   "transactional",
+   "commercial",
+   "informational",
+   "navigational",
+   "trend_worthy"
+  ],
+  "gt": [
+   0,
+   1
+  ],
+  "ga": [
+   0,
+   1
+  ],
+  "ads_class": [
+   2,
+   1,
+   -1
+  ],
+  "opinion_discussion": [
+   0,
+   1
+  ],
+  "curiosity_comparison": [
+   0,
+   1
+  ],
+  "agenda_theme": [
+   0,
+   1
+  ],
+  "relevance_band": [
+   "high",
+   "mid",
+   "low"
+  ]
+ },
+ "label_contract": "HER etiket alanı açıkça doldurulmalı ('FILL' kalamaz). 'skip' YALNIZ bozuk/anlaşılamayan metin içindir — alan-dışı kelimeler negatif sınıfın kendisidir, etiketlenir. double_label_required=true maddelerin İKİNCİ etiketi AYRI dosyadadır (annotation_sheet_second.json — birincil etiketleri İÇERMEZ, v14-1); uyuşmazlıkta adjudicated_labels + adjudication_note zorunludur.",
+ "entries": [
+  {
+   "item_id": "K001",
+   "keyword": "bilanço okuma rehberi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K002",
+   "keyword": "borsa canlı yayın",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K003",
+   "keyword": "hisse senedi hediye eden bankalar",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K004",
+   "keyword": "bist anlık veri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K005",
+   "keyword": "borsa istanbul hacim",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ga": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ga: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K006",
+   "keyword": "borsa al",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K007",
+   "keyword": "fırsat hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K008",
+   "keyword": "borsa dolandırıcılığı şikayet",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K009",
+   "keyword": "borsa tüyo",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K010",
+   "keyword": "hisse takip programı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "curiosity_comparison": 0
+   },
+   "adjudication_notes": {
+    "curiosity_comparison": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "curiosity_comparison: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K011",
+   "keyword": "matriks iq tarama",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K012",
+   "keyword": "borsa simülasyon oyunu",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K013",
+   "keyword": "hisse uygulamaları",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K014",
+   "keyword": "yukselecek hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K015",
+   "keyword": "hisse canli",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K016",
+   "keyword": "alınacak hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K017",
+   "keyword": "kap resmi sitesi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K018",
+   "keyword": "al sat yapılacak hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K019",
+   "keyword": "borsa canlı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K020",
+   "keyword": "en hızlı hisse senedi alım satım",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron nihai karari: ikinci uzmanın informational etiketi kanonik seçildi.",
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "opinion_discussion": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "curiosity_comparison": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "intent_type: Patron nihai karari: ikinci uzmanın informational etiketi kanonik seçildi.; gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; opinion_discussion: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; curiosity_comparison: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K021",
+   "keyword": "komisyonsuz borsa uygulaması",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K022",
+   "keyword": "temel teknik analiz",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K023",
+   "keyword": "anlık hisse senedi takip programı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K024",
+   "keyword": "borsa takas verileri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K025",
+   "keyword": "temel analiz teknik analiz",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "ads_class": 1,
+    "curiosity_comparison": 0,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "curiosity_comparison": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; curiosity_comparison: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K026",
+   "keyword": "orta uzun vade hisse önerileri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K027",
+   "keyword": "hisse hareketleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K028",
+   "keyword": "spk lisans sorgulama",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K029",
+   "keyword": "hisse al sat",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K030",
+   "keyword": "en karlı hisse senedi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0
+   },
+   "adjudication_notes": {
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "opinion_discussion": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "curiosity_comparison": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; opinion_discussion: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; curiosity_comparison: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K031",
+   "keyword": "hisse satın alma",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K032",
+   "keyword": "vadeli mevduat oranları",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K033",
+   "keyword": "bist veri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K034",
+   "keyword": "anlık grafik borsa",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K035",
+   "keyword": "borsa ekranı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K036",
+   "keyword": "hisse alım",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K037",
+   "keyword": "info günlük bülten",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K038",
+   "keyword": "bedava hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K039",
+   "keyword": "hisse senedi nedir kısaca ödev",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K040",
+   "keyword": "mantıklı yatırım tavsiyeleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "ads_class": 1
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K041",
+   "keyword": "borsa işlem hacmi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K042",
+   "keyword": "uzun vade yatırım tavsiyesi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K043",
+   "keyword": "tradingview hisse tarama",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K044",
+   "keyword": "güncel hisse senedi önerileri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K045",
+   "keyword": "güçlü al veren hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K046",
+   "keyword": "bist invest",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K047",
+   "keyword": "borsa takip sistemi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K048",
+   "keyword": "bist işlem gören şirketler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K049",
+   "keyword": "bist hisse listesi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K050",
+   "keyword": "bist yatırım",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K051",
+   "keyword": "borsa analiz uygulaması satın al",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "transactional",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K052",
+   "keyword": "info yatırım hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K053",
+   "keyword": "borsa terminali abonelik",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "transactional",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K054",
+   "keyword": "piyasa takip ekranı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K055",
+   "keyword": "hisse takip uygulaması öneri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0
+   },
+   "adjudication_notes": {
+    "opinion_discussion": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "curiosity_comparison": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "opinion_discussion: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; curiosity_comparison: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K056",
+   "keyword": "hisse alım satım",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K057",
+   "keyword": "hisse senedi anlık takip",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K058",
+   "keyword": "hisse senedi en ucuz",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K059",
+   "keyword": "borsa göstergeleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K060",
+   "keyword": "portföy takip uygulaması karşılaştırma",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "curiosity_comparison": 0
+   },
+   "adjudication_notes": {
+    "curiosity_comparison": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "curiosity_comparison: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K061",
+   "keyword": "teknik analiz programı premium",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K062",
+   "keyword": "günlük borsa haberleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K063",
+   "keyword": "faiz kararı sonrası borsa",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 1,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K064",
+   "keyword": "borsa hisse önerileri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K065",
+   "keyword": "sanal borsa oyunu",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ga": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ga: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K066",
+   "keyword": "borsa piyasalar",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K067",
+   "keyword": "en iyi borsa analiz uygulaması hangisi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K068",
+   "keyword": "hisse net",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K069",
+   "keyword": "bilanço programı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K070",
+   "keyword": "emeklilik fonu getirileri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "relevance_band": "low"
+   },
+   "adjudication_notes": {
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K071",
+   "keyword": "tradingview türkçe giriş",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K072",
+   "keyword": "borsa öğrenme uygulaması",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K073",
+   "keyword": "online borsa",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K074",
+   "keyword": "hisse teknik analiz",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K075",
+   "keyword": "anlık hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron commercial etiketini kanonik seçti; informational da makul alternatif olarak kabul edildi.",
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "opinion_discussion": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron commercial etiketini kanonik seçti; informational da makul alternatif olarak kabul edildi.; gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; opinion_discussion: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K076",
+   "keyword": "loğo hisse",
+   "evaluation_mask": {
+    "intent": false,
+    "gt_ga": false,
+    "ads_class": false,
+    "social_dims": false,
+    "relevance": false
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "skip",
+    "gt": "skip",
+    "ga": "skip",
+    "ads_class": "skip",
+    "opinion_discussion": "skip",
+    "curiosity_comparison": "skip",
+    "agenda_theme": "skip",
+    "relevance_band": "skip"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K077",
+   "keyword": "bist100 toplam değeri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K078",
+   "keyword": "online borsa takip",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K079",
+   "keyword": "logo hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K080",
+   "keyword": "borsa çöküşü haberleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 1,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "intent_type": "trend_worthy",
+    "agenda_theme": 1,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "agenda_theme": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; agenda_theme: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K081",
+   "keyword": "en düşük hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K082",
+   "keyword": "borsa sitesi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K083",
+   "keyword": "en iyi kripto borsası",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K084",
+   "keyword": "bist en çok yükselen",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K085",
+   "keyword": "borsa hisse yorumları",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "relevance_band": "high"
+   },
+   "adjudication_notes": {
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "opinion_discussion": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "curiosity_comparison": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; opinion_discussion: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; curiosity_comparison: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K086",
+   "keyword": "rsi göstergesi nedir",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K087",
+   "keyword": "dolar kuru bugün",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 1,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K088",
+   "keyword": "ücretsiz hisse takip uygulaması",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K089",
+   "keyword": "borsa al sat",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K090",
+   "keyword": "hisse senedi uzun vadeli yatırım",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "ads_class": 1,
+    "relevance_band": "high"
+   },
+   "adjudication_notes": {
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K091",
+   "keyword": "hisse derinlik",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K092",
+   "keyword": "uygun hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K093",
+   "keyword": "bist iletisim hisseleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K094",
+   "keyword": "teknik analiz öğrenme",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K095",
+   "keyword": "hisse senedi tarama",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "ads_class": 1
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K096",
+   "keyword": "borsa uygulaması pro sürüm",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K097",
+   "keyword": "borsa bist 100 hisseleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K098",
+   "keyword": "hisse takip programı indir",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "transactional",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K099",
+   "keyword": "endeks yorum",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K100",
+   "keyword": "matriks borsa crack",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "relevance_band": "low"
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ga": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ga: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K101",
+   "keyword": "info borsa",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K102",
+   "keyword": "günlük hisse tarama",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K103",
+   "keyword": "kısa hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K104",
+   "keyword": "hisse analiz siteleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K105",
+   "keyword": "borsa filmi izle",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "intent_type": "informational",
+    "relevance_band": "low"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K106",
+   "keyword": "günlük al sat yapılabilecek hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K107",
+   "keyword": "en düşük hisse senetleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K108",
+   "keyword": "hisse fikirleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K109",
+   "keyword": "borsa istanbul canlı veri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K110",
+   "keyword": "bist mali",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "ads_class": -1,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K111",
+   "keyword": "türk hisse senedi piyasası",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K112",
+   "keyword": "borsa 50",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K113",
+   "keyword": "app hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K114",
+   "keyword": "en çok kazandıran yatırım aracı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K115",
+   "keyword": "borsa günlük al sat",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "relevance_band": "mid"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.",
+    "gt": "Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.",
+    "ga": "Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.",
+    "ads_class": "Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.",
+    "relevance_band": "Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi."
+   },
+   "adjudication_note": "intent_type: Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.; gt: Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.; ga: Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.; ads_class: Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi.; relevance_band: Patron nihai kararı: bu kelimede Hale Hanımın ikinci uzman etiketi doğru kabul edildi."
+  },
+  {
+   "item_id": "K116",
+   "keyword": "hissefy giriş",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K117",
+   "keyword": "hisse senetleri hakkında bilgi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K118",
+   "keyword": "borsa hisse grafikleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K119",
+   "keyword": "artacak hisseler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K120",
+   "keyword": "en ucuz hisse senetleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "ads_class": 1,
+    "relevance_band": "high"
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "relevance_band": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; relevance_band: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K121",
+   "keyword": "bist resmi site",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K122",
+   "keyword": "hisse tarama aracı üyelik",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "transactional",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K123",
+   "keyword": "bist canlı veri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K124",
+   "keyword": "coin yorumlari",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K125",
+   "keyword": "matriks veri terminali crack",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "relevance_band": "low"
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ga": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ga: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K126",
+   "keyword": "finans hisseleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K127",
+   "keyword": "bist 100 direnç destek",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K128",
+   "keyword": "hissefy indir",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K129",
+   "keyword": "borsa analiz programı tavsiye",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K130",
+   "keyword": "borsada yatırım şirketleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "gt": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "opinion_discussion": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "curiosity_comparison": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; opinion_discussion: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; curiosity_comparison: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K131",
+   "keyword": "anlık hisse takibi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K132",
+   "keyword": "borsa kağıt hisseleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K133",
+   "keyword": "en iyi borsa",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K134",
+   "keyword": "mrk hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K135",
+   "keyword": "canlı borsa alım satım",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.",
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ga": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "opinion_discussion": "Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+   },
+   "adjudication_note": "intent_type: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı.; gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ga: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; opinion_discussion: Patron etiketi kanonik seçildi; ikinci uzman etiketi derece/yorum alternatifi olarak saklandı."
+  },
+  {
+   "item_id": "K136",
+   "keyword": "türkiye borsası canlı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K137",
+   "keyword": "borsa istanbul endeks canlı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K138",
+   "keyword": "hisse senedi analiz",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K139",
+   "keyword": "en yüksek hisse senedi",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K140",
+   "keyword": "bist de işlem gören şirketler",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": {
+    "gt": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "relevance_band": "high"
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "opinion_discussion": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "curiosity_comparison": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "relevance_band": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; opinion_discussion: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; curiosity_comparison: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; relevance_band: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K141",
+   "keyword": "konut kredisi hesaplama",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K142",
+   "keyword": "altın yatırımı mantıklı mı",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K143",
+   "keyword": "hisse raporları",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 1,
+    "relevance_band": "high"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K144",
+   "keyword": "macd tarama formülü",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K145",
+   "keyword": "canli bist",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "intent_type": "commercial",
+    "ads_class": -1
+   },
+   "adjudication_notes": {
+    "intent_type": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "intent_type: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  },
+  {
+   "item_id": "K146",
+   "keyword": "borsa bilgileri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K147",
+   "keyword": "iş hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K148",
+   "keyword": "iş a hisse",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "trend_worthy",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K149",
+   "keyword": "hisse işlemleri",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": false,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   },
+   "adjudicated_labels": null,
+   "adjudication_notes": {},
+   "adjudication_note": ""
+  },
+  {
+   "item_id": "K150",
+   "keyword": "borsa finans",
+   "evaluation_mask": {
+    "intent": true,
+    "gt_ga": true,
+    "ads_class": true,
+    "social_dims": true,
+    "relevance": true
+   },
+   "double_label_required": true,
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   },
+   "adjudicated_labels": {
+    "gt": 0,
+    "ads_class": -1
+   },
+   "adjudication_notes": {
+    "gt": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi.",
+    "ads_class": "Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+   },
+   "adjudication_note": "gt: Patron incelemesi: birincil etiket kanonik doğru kabul edildi.; ads_class: Patron incelemesi: birincil etiket kanonik doğru kabul edildi."
+  }
+ ]
+}

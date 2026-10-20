@@ -1,0 +1,465 @@
+{
+ "created": "2026-07-17",
+ "label_schema": {
+  "intent_type": [
+   "transactional",
+   "commercial",
+   "informational",
+   "navigational",
+   "trend_worthy"
+  ],
+  "gt": [
+   0,
+   1
+  ],
+  "ga": [
+   0,
+   1
+  ],
+  "ads_class": [
+   2,
+   1,
+   -1
+  ],
+  "opinion_discussion": [
+   0,
+   1
+  ],
+  "curiosity_comparison": [
+   0,
+   1
+  ],
+  "agenda_theme": [
+   0,
+   1
+  ],
+  "relevance_band": [
+   "high",
+   "mid",
+   "low"
+  ]
+ },
+ "label_contract": "İKİNCİ annotator dosyası: BAĞIMSIZ doldurulur. Birincil annotation_sheet.* dosyalarını ve benchmark/private/ dizinini AÇMAYIN. 'skip' yalnız bozuk/anlaşılamayan metin.",
+ "entries": [
+  {
+   "item_id": "K005",
+   "keyword": "borsa istanbul hacim",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K010",
+   "keyword": "hisse takip programı",
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K015",
+   "keyword": "hisse canli",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  },
+  {
+   "item_id": "K020",
+   "keyword": "en hızlı hisse senedi alım satım",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K025",
+   "keyword": "temel analiz teknik analiz",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K030",
+   "keyword": "en karlı hisse senedi",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  },
+  {
+   "item_id": "K035",
+   "keyword": "borsa ekranı",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K040",
+   "keyword": "mantıklı yatırım tavsiyeleri",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K045",
+   "keyword": "güçlü al veren hisseler",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K050",
+   "keyword": "bist yatırım",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K055",
+   "keyword": "hisse takip uygulaması öneri",
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K060",
+   "keyword": "portföy takip uygulaması karşılaştırma",
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K065",
+   "keyword": "sanal borsa oyunu",
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "skip"
+   }
+  },
+  {
+   "item_id": "K070",
+   "keyword": "emeklilik fonu getirileri",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "skip"
+   }
+  },
+  {
+   "item_id": "K075",
+   "keyword": "anlık hisse",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K080",
+   "keyword": "borsa çöküşü haberleri",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K085",
+   "keyword": "borsa hisse yorumları",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K090",
+   "keyword": "hisse senedi uzun vadeli yatırım",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  },
+  {
+   "item_id": "K095",
+   "keyword": "hisse senedi tarama",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K100",
+   "keyword": "matriks borsa crack",
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K105",
+   "keyword": "borsa filmi izle",
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 0,
+    "ga": 0,
+    "ads_class": -1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "skip"
+   }
+  },
+  {
+   "item_id": "K110",
+   "keyword": "bist mali",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 0,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K115",
+   "keyword": "borsa günlük al sat",
+   "labels": {
+    "intent_type": "commercial",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  },
+  {
+   "item_id": "K120",
+   "keyword": "en ucuz hisse senetleri",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  },
+  {
+   "item_id": "K125",
+   "keyword": "matriks veri terminali crack",
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K130",
+   "keyword": "borsada yatırım şirketleri",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "high"
+   }
+  },
+  {
+   "item_id": "K135",
+   "keyword": "canlı borsa alım satım",
+   "labels": {
+    "intent_type": "navigational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K140",
+   "keyword": "bist de işlem gören şirketler",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 1,
+    "curiosity_comparison": 1,
+    "agenda_theme": 0,
+    "relevance_band": "low"
+   }
+  },
+  {
+   "item_id": "K145",
+   "keyword": "canli bist",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 2,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  },
+  {
+   "item_id": "K150",
+   "keyword": "borsa finans",
+   "labels": {
+    "intent_type": "informational",
+    "gt": 1,
+    "ga": 1,
+    "ads_class": 1,
+    "opinion_discussion": 0,
+    "curiosity_comparison": 0,
+    "agenda_theme": 0,
+    "relevance_band": "mid"
+   }
+  }
+ ]
+}
