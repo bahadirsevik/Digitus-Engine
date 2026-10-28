@@ -398,7 +398,14 @@ def test_build_brand_context_drops_offering_fields():
     context = build_brand_context(_parent_profile())
     assert context.splitlines() == [
         "- Marka adı: Acme Danismanlik", "- Sektör: Tarim danismanligi", "- Hedef kitle: Ciftciler",
+        "- Marka özeti: Tarim analiz hizmetleri",
     ]
+    # hizmet/urun/konum sizmaz
+    for leaked in ("GizliUrunX", "GizliHizmetY", "GizliSenaryoZ", "GizliSorunW", "Ankara"):
+        assert leaked not in context
+    # ozet 400 karakterle sinirli
+    long_summary = build_brand_context({"brand_summary": "x" * 900})
+    assert long_summary == "- Marka özeti: " + "x" * 400
     assert build_brand_context({"products": ["x"]}) is None
     assert build_brand_context(None) is None
 

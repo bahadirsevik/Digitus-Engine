@@ -331,13 +331,13 @@ def _run_alembic(*args):
 
 
 def test_single_head_after_lean_focus_merge(fresh_schema):
-    """Merge sonrasi tek head 20261028_003 olmali (sunucu 20261020_001 + lean 20261028_002
+    """Merge sonrasi tek head 20261029_002 olmali (20261028_003 + lean 20261029_001
     birlesimi; iki head kalirsa uygulama acilisindaki upgrade durur)."""
     heads = [
         line for line in _run_alembic("heads").splitlines() if "(head)" in line
     ]
     assert len(heads) == 1, heads
-    assert heads[0].startswith("20261028_003"), heads
+    assert heads[0].startswith("20261029_002"), heads
 
 
 def test_user_session_version_column_and_idempotent_migration(fresh_schema, db_engine):
@@ -417,7 +417,7 @@ def test_upgrade_from_server_revision_20261006_002_to_head(fresh_schema, db_engi
             row = conn.execute(text(
                 "SELECT session_version FROM users WHERE email = 'server@example.test'"
             )).scalar()
-        assert version == "20261028_003"
+        assert version == "20261029_002"
         assert row == 0
     finally:
         with db_engine.begin() as conn:
@@ -428,7 +428,7 @@ def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schem
     """Sunucunun 20.10 itibariyla revizyonu 20261010_003 (auth-lean-merge 13c636d).
 
     Lean kolonlari yokken bu revizyondan head'e yukseltme ai_usage_events.provider ve
-    ad_groups.fill_keyword_ids'i eklemeli ve tek head'de (20261028_003) bitmeli.
+    ad_groups.fill_keyword_ids'i eklemeli ve tek head'de (20261029_002) bitmeli.
     """
     with db_engine.begin() as conn:
         conn.execute(text("ALTER TABLE ad_groups DROP COLUMN IF EXISTS fill_keyword_ids"))
@@ -441,7 +441,7 @@ def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schem
     assert "provider" in {c["name"] for c in inspector.get_columns("ai_usage_events")}
     with db_engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == "20261028_003"
+    assert version == "20261029_002"
 
 
 def test_brand_profile_crawl_scope_column_and_idempotent_migration(fresh_schema, db_engine):
@@ -559,7 +559,8 @@ def test_upgrade_from_server_revision_20261020_001_adds_focus_columns(fresh_sche
 
     Kapsam/odak kolonlari yokken bu revizyondan head'e yukseltme crawl_scope,
     parent_brand_profile_id ve archived_with_parent'i eklemeli; mevcut marka
-    'site' kapsamli ve ebeveynsiz kalmali; tek head 20261028_003'te bitmeli.
+    'site' kapsamli ve ebeveynsiz kalmali; bekleyen alt sayfa alanlari eklenmeli;
+    tek head 20261029_002'de bitmeli.
     """
     with db_engine.begin() as conn:
         conn.execute(text(
@@ -567,6 +568,8 @@ def test_upgrade_from_server_revision_20261020_001_adds_focus_columns(fresh_sche
         ))
         conn.execute(text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS archived_with_parent"))
         conn.execute(text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS crawl_scope"))
+        conn.execute(text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS pending_focus_url"))
+        conn.execute(text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS pending_focus_error"))
         conn.execute(text(
             "INSERT INTO brand_profiles (name, company_url, status) "
             "VALUES ('server_brand', 'https://server.test', 'confirmed')"
@@ -575,12 +578,64 @@ def test_upgrade_from_server_revision_20261020_001_adds_focus_columns(fresh_sche
     _run_alembic("upgrade", "head")
 
     names = {c["name"] for c in inspect(db_engine).get_columns("brand_profiles")}
-    assert {"crawl_scope", "parent_brand_profile_id", "archived_with_parent"} <= names
+    assert {"crawl_scope", "parent_brand_profile_id", "archived_with_parent",
+            "pending_focus_url", "pending_focus_error"} <= names
     with db_engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
         row = conn.execute(text(
             "SELECT crawl_scope, parent_brand_profile_id, archived_with_parent "
             "FROM brand_profiles WHERE name = 'server_brand'"
         )).one()
-    assert version == "20261028_003"
+    assert version == "20261029_002"
     assert tuple(row) == ("site", None, False)
+
+
+def test_brand_profile_pending_focus_columns_and_idempotent_migration(fresh_schema, db_engine):
+    """20261029_001: pending_focus_url / pending_focus_error (nullable String).
+
+    Tekrar upgrade no-op, downgrade ikisini dusurur (ikinci downgrade no-op), yeniden
+    upgrade geri ekler; mevcut satir NULL alanlarla korunur.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert columns["pending_focus_url"]["nullable"] is True
+    assert columns["pending_focus_url"]["type"].length == 2048
+    assert columns["pending_focus_error"]["nullable"] is True
+    assert columns["pending_focus_error"]["type"].length == 500
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261029_001_add_brand_profile_pending_focus.py")
+    spec = importlib.util.spec_from_file_location("mig_20261029_001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261029_001" and module.down_revision == "20261028_002"
+
+    def state(conn) -> tuple:
+        names = {c["name"] for c in inspect(conn).get_columns("brand_profiles")}
+        return "pending_focus_url" in names, "pending_focus_error" in names
+
+    assert state(db_engine.connect()) == (True, True)
+
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('legacy_pending', 'https://x.test', 'confirmed')"
+        ))
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # zaten var -> no-op
+            assert state(conn) == (True, True)
+            module.downgrade()
+            assert state(conn) == (False, False)
+            module.downgrade()          # hicbiri yok -> no-op
+            module.upgrade()            # geri ekler
+            assert state(conn) == (True, True)
+        assert conn.execute(text(
+            "SELECT pending_focus_url, pending_focus_error "
+            "FROM brand_profiles WHERE name = 'legacy_pending'"
+        )).one() == (None, None)

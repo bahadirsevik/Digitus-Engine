@@ -361,6 +361,17 @@ export const workspaceApi = {
   createFocus: (workspaceId: number, url: string) =>
     api.post<WorkspaceResponse>(`/brand-profile/workspaces/${workspaceId}/focuses`, { url }),
 
+  // Bekleyen alt sayfa (marka onayından sonra otomatik oluşur): tekrar dene / vazgeç
+  retryPendingFocus: (id: number) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${id}/pending-focus/retry`),
+
+  cancelPendingFocus: (id: number) =>
+    api.delete<WorkspaceResponse>(`/brand-profile/workspaces/${id}/pending-focus`),
+
+  // Başarısız (profilsiz) profil-önce analizini aynı kayıtta yeniden başlatır
+  retryAnalysis: (id: number) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${id}/analysis/retry`),
+
   // Marka ayarlarını alt sayfalara toplu uygulama: önizleme (yazmaz) + uygula
   previewFocusSettings: (id: number) =>
     api.post<FocusSettingsPreviewResponse>(
@@ -856,6 +867,7 @@ export interface WorkspaceCreateRequest {
   default_language_id?: string
   flow_version?: 'legacy' | 'profile_first'
   crawl_scope?: 'site' | 'page'
+  pending_focus_url?: string
 }
 
 export interface WorkspaceResponse {
@@ -865,6 +877,9 @@ export interface WorkspaceResponse {
   crawl_scope?: string
   parent_brand_profile_id?: number | null
   archived_with_parent?: boolean
+  pending_focus_url?: string | null
+  pending_focus_error?: string | null
+  focus_handoff_id?: number | null
   competitor_urls?: string[] | null
   competitor_url_decisions?: Record<string, CompetitorUrlDecision> | null
   status: string

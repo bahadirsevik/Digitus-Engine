@@ -543,19 +543,20 @@ PROFILE_MISSING_SERVICE_ERROR = "profile_missing_service: Sayfada hizmet/ürün 
 
 
 def build_brand_context(parent_profile: Optional[Dict[str, Any]]) -> Optional[str]:
-    """Ebeveyn marka profilinden YALNIZ kimlik satirlari (ad, sektor, hedef kitle).
+    """Ebeveyn marka profilinden YALNIZ kimlik satirlari (ad, sektor, hedef kitle, ozet).
 
-    products/services/use_cases/problems_solved BILEREK alinmaz: odak sayfanin
-    urun/hizmeti marka listesinden tamamlanmasin.
+    products/services/use_cases/problems_solved ve konum BILEREK alinmaz: odak sayfanin
+    urun/hizmeti marka listesinden tamamlanmasin (konum zaten miras kopyasi).
     """
     parent_profile = parent_profile if isinstance(parent_profile, dict) else {}
     lines = []
-    for label, key in (
-        ("Marka adı", "company_name"), ("Sektör", "sector"), ("Hedef kitle", "target_audience"),
+    for label, key, limit in (
+        ("Marka adı", "company_name", 200), ("Sektör", "sector", 200),
+        ("Hedef kitle", "target_audience", 200), ("Marka özeti", "brand_summary", 400),
     ):
         value = parent_profile.get(key)
         if isinstance(value, str) and value.strip():
-            lines.append(f"- {label}: {value.strip()[:200]}")
+            lines.append(f"- {label}: {value.strip()[:limit]}")
     return "\n".join(lines) or None
 
 
