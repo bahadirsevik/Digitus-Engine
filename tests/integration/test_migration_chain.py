@@ -330,14 +330,14 @@ def _run_alembic(*args):
     return result.stdout + result.stderr
 
 
-def test_single_head_after_lean_ads_merge(fresh_schema):
-    """Merge sonrasi tek head 20261020_001 olmali (auth 20261010_003 + lean 20261017_001
+def test_single_head_after_lean_focus_merge(fresh_schema):
+    """Merge sonrasi tek head 20261028_003 olmali (sunucu 20261020_001 + lean 20261028_002
     birlesimi; iki head kalirsa uygulama acilisindaki upgrade durur)."""
     heads = [
         line for line in _run_alembic("heads").splitlines() if "(head)" in line
     ]
     assert len(heads) == 1, heads
-    assert heads[0].startswith("20261020_001"), heads
+    assert heads[0].startswith("20261028_003"), heads
 
 
 def test_user_session_version_column_and_idempotent_migration(fresh_schema, db_engine):
@@ -417,7 +417,7 @@ def test_upgrade_from_server_revision_20261006_002_to_head(fresh_schema, db_engi
             row = conn.execute(text(
                 "SELECT session_version FROM users WHERE email = 'server@example.test'"
             )).scalar()
-        assert version == "20261020_001"
+        assert version == "20261028_003"
         assert row == 0
     finally:
         with db_engine.begin() as conn:
@@ -428,7 +428,7 @@ def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schem
     """Sunucunun 20.10 itibariyla revizyonu 20261010_003 (auth-lean-merge 13c636d).
 
     Lean kolonlari yokken bu revizyondan head'e yukseltme ai_usage_events.provider ve
-    ad_groups.fill_keyword_ids'i eklemeli ve tek head 20261020_001'de bitmeli.
+    ad_groups.fill_keyword_ids'i eklemeli ve tek head'de (20261028_003) bitmeli.
     """
     with db_engine.begin() as conn:
         conn.execute(text("ALTER TABLE ad_groups DROP COLUMN IF EXISTS fill_keyword_ids"))
@@ -441,4 +441,146 @@ def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schem
     assert "provider" in {c["name"] for c in inspector.get_columns("ai_usage_events")}
     with db_engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == "20261020_001"
+    assert version == "20261028_003"
+
+
+def test_brand_profile_crawl_scope_column_and_idempotent_migration(fresh_schema, db_engine):
+    """20261028_001: brand_profiles.crawl_scope (NOT NULL, server_default 'site').
+
+    Eski satirlar 'site' olur; migration tekrar upgrade'de no-op, downgrade
+    kolonu dusurur, yeniden upgrade geri ekler.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert "crawl_scope" in columns
+    assert columns["crawl_scope"]["nullable"] is False
+    assert "site" in str(columns["crawl_scope"]["default"])
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261028_001_add_brand_profile_crawl_scope.py")
+    spec = importlib.util.spec_from_file_location("mig_20261028_001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261028_001" and module.down_revision == "20261017_001"
+
+    def present(conn) -> bool:
+        return "crawl_scope" in {
+            c["name"] for c in inspect(conn).get_columns("brand_profiles")
+        }
+
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('legacy', 'https://x.test', 'confirmed')"
+        ))
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # kolon zaten var -> no-op
+            assert present(conn)
+            module.downgrade()
+            assert not present(conn)
+            module.downgrade()          # kolon yok -> no-op
+            module.upgrade()            # geri ekler; mevcut satir 'site' olur
+            assert present(conn)
+        assert conn.execute(text(
+            "SELECT crawl_scope FROM brand_profiles WHERE name = 'legacy'"
+        )).scalar() == "site"
+
+
+def test_brand_profile_focus_relation_columns_and_idempotent_migration(fresh_schema, db_engine):
+    """20261028_002: parent_brand_profile_id (FK + index) ve archived_with_parent.
+
+    Migration tekrar upgrade'de no-op, downgrade hepsini dusurur (ikinci downgrade
+    no-op), yeniden upgrade geri ekler; mevcut satir archived_with_parent=false olur.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert columns["parent_brand_profile_id"]["nullable"] is True
+    assert columns["archived_with_parent"]["nullable"] is False
+    assert "false" in str(columns["archived_with_parent"]["default"]).lower()
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261028_002_add_brand_profile_focus_relation.py")
+    spec = importlib.util.spec_from_file_location("mig_20261028_002", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261028_002" and module.down_revision == "20261028_001"
+
+    def state(conn) -> tuple:
+        insp = inspect(conn)
+        names = {c["name"] for c in insp.get_columns("brand_profiles")}
+        has_fk = any(
+            fk["constrained_columns"] == ["parent_brand_profile_id"]
+            for fk in insp.get_foreign_keys("brand_profiles")
+        )
+        has_index = any(
+            i["column_names"] == ["parent_brand_profile_id"]
+            for i in insp.get_indexes("brand_profiles")
+        )
+        return (
+            "parent_brand_profile_id" in names, has_fk, has_index,
+            "archived_with_parent" in names,
+        )
+
+    assert state(db_engine.connect()) == (True, True, True, True)
+
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('legacy_focus', 'https://x.test', 'confirmed')"
+        ))
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # her parca zaten var -> no-op
+            assert state(conn) == (True, True, True, True)
+            module.downgrade()
+            assert state(conn) == (False, False, False, False)
+            module.downgrade()          # hicbiri yok -> no-op
+            module.upgrade()            # geri ekler
+            assert state(conn) == (True, True, True, True)
+        assert conn.execute(text(
+            "SELECT archived_with_parent, parent_brand_profile_id "
+            "FROM brand_profiles WHERE name = 'legacy_focus'"
+        )).one() == (False, None)
+
+
+def test_upgrade_from_server_revision_20261020_001_adds_focus_columns(fresh_schema, db_engine):
+    """Sunucunun 28.10 itibariyla revizyonu 20261020_001 (auth-lean-merge 557a118).
+
+    Kapsam/odak kolonlari yokken bu revizyondan head'e yukseltme crawl_scope,
+    parent_brand_profile_id ve archived_with_parent'i eklemeli; mevcut marka
+    'site' kapsamli ve ebeveynsiz kalmali; tek head 20261028_003'te bitmeli.
+    """
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE brand_profiles DROP COLUMN IF EXISTS parent_brand_profile_id"
+        ))
+        conn.execute(text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS archived_with_parent"))
+        conn.execute(text("ALTER TABLE brand_profiles DROP COLUMN IF EXISTS crawl_scope"))
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('server_brand', 'https://server.test', 'confirmed')"
+        ))
+    _run_alembic("stamp", "20261020_001")
+    _run_alembic("upgrade", "head")
+
+    names = {c["name"] for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert {"crawl_scope", "parent_brand_profile_id", "archived_with_parent"} <= names
+    with db_engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        row = conn.execute(text(
+            "SELECT crawl_scope, parent_brand_profile_id, archived_with_parent "
+            "FROM brand_profiles WHERE name = 'server_brand'"
+        )).one()
+    assert version == "20261028_003"
+    assert tuple(row) == ("site", None, False)

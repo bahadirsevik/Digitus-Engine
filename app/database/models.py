@@ -1055,7 +1055,13 @@ class BrandProfile(Base):
     is_system_default = Column(Boolean, nullable=False, default=False, server_default="false")
 
     company_url = Column(String(500), nullable=False)
+    # Crawl kapsami: site (ana sayfa + onemli sayfalar) | page (yalniz girilen sayfa); olusturmada sabit
+    crawl_scope = Column(String(10), nullable=False, default="site", server_default="site")
     competitor_urls = Column(JSON)  # ["url1", "url2", "url3"] — yalniz oneri kaynagi
+    # Odak (alt sayfa) iliskisi: dolu = bu satir bir markanin odagi (tek seviye, crawl_scope='page').
+    # Arsiv soft-delete oldugu icin FK duz; archived_with_parent: ebeveynle birlikte arsivlendi.
+    parent_brand_profile_id = Column(Integer, ForeignKey("brand_profiles.id"), nullable=True, index=True)
+    archived_with_parent = Column(Boolean, nullable=False, default=False, server_default="false")
 
     # ── Kalite+maliyet plani A/B/F (plan_kalite_maliyet.md) ──
     # DIKKAT: JSON kolon guncellemelerinde in-place mutation'a guvenme —

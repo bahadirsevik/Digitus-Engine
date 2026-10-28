@@ -4,6 +4,7 @@ Uses AI to analyze crawled website content and generate a structured brand profi
 """
 import json
 import logging
+import re
 from typing import Dict, Any, Optional, List
 
 from app.generators.ai_service import AIService, scoped
@@ -11,6 +12,7 @@ from app.core.site_analyzer.crawler import (
     SiteCrawler,
     CrawlContentUnusable,
     assess_text_quality,
+    dedupe_lines,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,28 @@ SADECE aşağıdaki JSON formatında yanıt ver:
 - suggested_keywords: Bu marka için Google Ads'te aranabilecek ~10 anahtar kelime önerisi
 - Türkçe yaz
 - Tahmin yapma, sadece sitede gördüğün bilgileri kullan
+"""
+
+# Yalniz crawl_scope="page"de PROFILE_EXTRACTION_PROMPT'un SONUNA eklenir; site modu
+# prompt'u bayt-ayni kalir (benchmark/profile_inputs ayni sablonu kullanir).
+PAGE_SCOPE_RULES = """
+# ALT SAYFA KURALLARI (içerik sitenin TEK bir alt sayfasından alındı)
+- Profil YALNIZ bu sayfanın ana konusunu (sayfa başlığı, H1, sayfaya özgü açıklama) anlatır.
+- Sitenin genel tanıtım cümleleri (tüm platformu/markayı anlatan açıklamalar, firma künyesi,
+  adres, sosyal hesaplar) yalnız MARKA BAĞLAMIDIR: company_name ve brand_summary için
+  kullanılabilir; products, services, use_cases ve problems_solved listelerine TAŞINMAZ.
+- products ve services: yalnız bu sayfada açıkça anlatılan ürün/hizmetler. Şirket adından,
+  ticari unvanından (ör. "... Elektronik Hizmetler A.Ş.") veya sektöründen ürün/hizmet TÜRETME.
+- Sayfa bir ürün/hizmet anlatmıyorsa products, services, use_cases ve problems_solved
+  BOŞ liste ([]) olsun.
+"""
+
+# Odak (alt sayfa) workspace'inde ebeveyn markanin YALNIZ kimligi; kaynak kalite
+# kapisina girmez (site_content'in parcasi degildir).
+PAGE_BRAND_CONTEXT_BLOCK = """
+# MARKA BAĞLAMI (yalnız kimlik; ürün/hizmet kaynağı DEĞİLDİR)
+{brand_context}
+- Ürün/hizmet tanımı yalnız sayfa içeriğinden; sayfada yoksa boş bırak, marka bağlamından tamamlama.
 """
 
 COMPETITOR_VALIDATION_PROMPT = """
@@ -499,7 +523,67 @@ def _fill_missing_competitors(ai_competitors, competitor_urls) -> list:
     return result
 
 
-def resolve_site_content(extractor, company_url: str, cached_content: Optional[str]):
+# `_prepare_content`'in sayfa basina ekledigi bicimlendirme satirlari
+_PREPARED_FORMAT_LINE = re.compile(r"^(## Sayfa:.*|URL:.*|---)[ \t]*$", re.MULTILINE)
+
+
+def prepared_source_text(prepared: str) -> str:
+    """Hazirlanmis icerikten bicimlendirme satirlarini (`## Sayfa:`/`URL:`/`---`)
+    cikarir ve tekrarlari ayiklar; yeterlilik kapisi YALNIZ gercek kaynak metni olcer
+    (uzun bir URL/baslik kisa sayfayi kapidan gecirmesin)."""
+    return dedupe_lines(_PREPARED_FORMAT_LINE.sub("", prepared or ""))
+
+
+def missing_service_info(profile: Dict[str, Any], scope: str) -> bool:
+    """`page` kapsaminda hizmet/urun alani bos profil hizmet profili sayilmaz."""
+    return scope == "page" and not (profile.get("products") or profile.get("services"))
+
+
+PROFILE_MISSING_SERVICE_ERROR = "profile_missing_service: Sayfada hizmet/ürün açıklaması bulunamadı"
+
+
+def build_brand_context(parent_profile: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Ebeveyn marka profilinden YALNIZ kimlik satirlari (ad, sektor, hedef kitle).
+
+    products/services/use_cases/problems_solved BILEREK alinmaz: odak sayfanin
+    urun/hizmeti marka listesinden tamamlanmasin.
+    """
+    parent_profile = parent_profile if isinstance(parent_profile, dict) else {}
+    lines = []
+    for label, key in (
+        ("Marka adı", "company_name"), ("Sektör", "sector"), ("Hedef kitle", "target_audience"),
+    ):
+        value = parent_profile.get(key)
+        if isinstance(value, str) and value.strip():
+            lines.append(f"- {label}: {value.strip()[:200]}")
+    return "\n".join(lines) or None
+
+
+def build_profile_prompt(
+    site_content: str,
+    preliminary_info: Optional[str],
+    scope: str,
+    brand_context: Optional[str] = None,
+) -> str:
+    """Dogrudan ve cache yolunun ORTAK profil prompt'u; page kapsaminda alt sayfa kurallari.
+
+    `brand_context` yalniz page kapsaminda kullanilir; site prompt'u bayt-ayni kalir.
+    """
+    prompt = PROFILE_EXTRACTION_PROMPT.format(
+        site_content=site_content,
+        preliminary_info=preliminary_info or "(kullanıcı tarafından sağlanmadı)",
+    )
+    if scope != "page":
+        return prompt
+    prompt += PAGE_SCOPE_RULES
+    if brand_context:
+        prompt += PAGE_BRAND_CONTEXT_BLOCK.format(brand_context=brand_context)
+    return prompt
+
+
+def resolve_site_content(
+    extractor, company_url: str, cached_content: Optional[str], *, crawl_scope: str
+):
     """Cache OKUMA KAPISI — bozuk cache'in AI'a gitmesini engeller.
 
     Arka plan: `crawl_content_cache` gecmiste cozulememis (brotli) ikili icerikle
@@ -512,6 +596,8 @@ def resolve_site_content(extractor, company_url: str, cached_content: Optional[s
       3. Yeni crawl da basarisizsa AI CAGRILMADAN acik hata doner.
       4. Basariliysa cache yalnizca o zaman yenilenir (source_pages != None).
       5. Bozuk cache + basarisiz crawl: eski cache KORUNUR fakat KULLANILMAZ.
+      6. crawl_scope ZORUNLU (varsayilan yok): yeniden crawl workspace kapsamini
+         korur; page workspace sessizce site crawl'una DUSMEZ.
 
     Returns:
         (site_content, source_pages, error)
@@ -520,7 +606,7 @@ def resolve_site_content(extractor, company_url: str, cached_content: Optional[s
     """
     cached = (cached_content or "").strip()
     if cached:
-        quality = assess_text_quality(cached)
+        quality = assess_text_quality(prepared_source_text(cached))
         if quality["usable"]:
             return cached, None, None
         logger.warning(
@@ -530,7 +616,7 @@ def resolve_site_content(extractor, company_url: str, cached_content: Optional[s
             quality["replacement_ratio"], quality["control_ratio"],
         )
 
-    crawl = extractor.crawl_for_profile_content(company_url)
+    crawl = extractor.crawl_for_profile_content(company_url, crawl_scope=crawl_scope)
     if crawl.get("error") and not crawl.get("site_content"):
         # Eski cache'e DOKUNULMAZ; yalnizca kullanilmaz.
         return "", None, crawl.get("error") or "crawl_content_unusable"
@@ -548,6 +634,7 @@ class ProfileExtractor:
         self,
         company_url: str,
         preliminary_info: Optional[str] = None,
+        crawl_scope: str = "site",
     ) -> Dict[str, Any]:
         """
         Crawl site and extract brand profile.
@@ -555,6 +642,7 @@ class ProfileExtractor:
         Args:
             company_url: Company website URL to crawl
             preliminary_info: Optional user-provided context (vision, target audience, USPs)
+            crawl_scope: "site" (ana sayfa + onemli sayfalar) veya "page" (yalniz girilen sayfa)
 
         Returns:
             {
@@ -566,7 +654,7 @@ class ProfileExtractor:
         """
         self._preliminary_info = preliminary_info  # Store for _format_prompt
         # Crawl the site
-        crawl_result = self.crawler.crawl_site(company_url)
+        crawl_result = self.crawler.crawl_site(company_url, scope=crawl_scope)
 
         if crawl_result["error"] and not crawl_result["pages"]:
             return {
@@ -581,10 +669,7 @@ class ProfileExtractor:
 
         # Extract profile via AI
         try:
-            prompt = PROFILE_EXTRACTION_PROMPT.format(
-                site_content=site_content,
-                preliminary_info=preliminary_info or "(kullanıcı tarafından sağlanmadı)",
-            )
+            prompt = build_profile_prompt(site_content, preliminary_info, crawl_scope)
             response = self.ai_service.complete_json(
                 prompt,
                 max_tokens=2000,
@@ -600,6 +685,14 @@ class ProfileExtractor:
                 "error": f"AI extraction failed: {e}",
             }
 
+        if missing_service_info(profile, crawl_scope):
+            return {
+                "profile": None,
+                "source_pages": self._page_summaries(crawl_result["pages"]),
+                "anchor_texts": [],
+                "error": PROFILE_MISSING_SERVICE_ERROR,
+            }
+
         # Generate anchor texts from profile
         anchor_texts = self._generate_anchors(profile)
         profile["anchor_texts"] = anchor_texts
@@ -611,14 +704,16 @@ class ProfileExtractor:
             "error": None,
         }
 
-    def crawl_for_profile_content(self, company_url: str) -> Dict[str, Any]:
+    def crawl_for_profile_content(
+        self, company_url: str, crawl_scope: str = "site"
+    ) -> Dict[str, Any]:
         """Crawl a site and return prepared AI input plus lightweight page summaries.
 
         FAIL-CLOSED: cikarilan metin kalite kapisini gecemezse `error` doldurulur ve
         `site_content` BOS birakilir. Boylece kullanilamaz icerik AI'a gidemez ve
         `preliminary_info` ile SESSIZCE telafi edilemez.
         """
-        crawl_result = self.crawler.crawl_site(company_url)
+        crawl_result = self.crawler.crawl_site(company_url, scope=crawl_scope)
         if crawl_result["error"] and not crawl_result["pages"]:
             return {
                 "site_content": "",
@@ -627,7 +722,7 @@ class ProfileExtractor:
                 "content_quality": None,
             }
         prepared = self._prepare_content(crawl_result["pages"])
-        quality = assess_text_quality(prepared)
+        quality = assess_text_quality(prepared_source_text(prepared))
         if not quality["usable"]:
             logger.warning(
                 "crawl_content_unusable (%s) for %s — chars=%s repl=%s ctrl=%s",
@@ -651,8 +746,14 @@ class ProfileExtractor:
         self,
         site_content: str,
         preliminary_info: Optional[str] = None,
+        crawl_scope: str = "site",
+        brand_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Hazır site içeriğinden (cache) profil çıkarır; crawl ETMEZ.
+
+        `crawl_scope="page"`: alt sayfa kuralları prompt'a eklenir ve ürün/hizmet
+        alanı boş profil ``CrawlContentUnusable`` (profile_missing_service) ile
+        reddedilir — uydurma yerine açık hata.
 
         Profil-önce onboarding'in ilk adımı: suggested_keywords bu aşamada
         ÜRETİLMEZ/sızmaz (10 KW profil onayından sonra ayrıca istenir).
@@ -662,16 +763,15 @@ class ProfileExtractor:
         ``preliminary_info`` (kullanıcı beyanı) üzerinden MAKUL AMA KANITSIZ bir profil
         üretir; bu hata sessizdir ve insan onayından da geçebilir.
         """
-        quality = assess_text_quality(site_content)
+        quality = assess_text_quality(prepared_source_text(site_content))
         if not quality["usable"]:
             raise CrawlContentUnusable(
                 f"crawl_content_unusable: {quality['reason']} "
                 f"(chars={quality['chars']}, repl={quality['replacement_ratio']}, "
                 f"ctrl={quality['control_ratio']})"
             )
-        prompt = PROFILE_EXTRACTION_PROMPT.format(
-            site_content=site_content,
-            preliminary_info=preliminary_info or "(kullanıcı tarafından sağlanmadı)",
+        prompt = build_profile_prompt(
+            site_content, preliminary_info, crawl_scope, brand_context
         )
         response = self.ai_service.complete_json(
             prompt,
@@ -691,6 +791,8 @@ class ProfileExtractor:
                 response_schema=PROFILE_RESPONSE_SCHEMA,
             )
             profile = self._parse_json_response(response)
+        if missing_service_info(profile, crawl_scope):
+            raise CrawlContentUnusable(PROFILE_MISSING_SERVICE_ERROR)
         profile.pop("suggested_keywords", None)
         profile["anchor_texts"] = self._generate_anchors(profile)
         return profile

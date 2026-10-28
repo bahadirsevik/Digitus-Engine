@@ -168,7 +168,7 @@ class FakeExtractor:
         if type(self).fail:
             raise RuntimeError("sahte AI hatasi")
 
-    def crawl_for_profile_content(self, _url):
+    def crawl_for_profile_content(self, _url, crawl_scope="site"):
         if type(self).crawl_error:
             self._fire_hook()
             return {"error": "site acilamadi", "site_content": "", "source_pages": None}
@@ -178,7 +178,7 @@ class FakeExtractor:
         self._ai_step()
         return ["kw one", "kw two"]
 
-    def extract_profile_from_site_content(self, _content):
+    def extract_profile_from_site_content(self, _content, crawl_scope="site"):
         self._ai_step()
         return _profile("A-Corp")
 
@@ -406,7 +406,7 @@ def test_stale_success_spec_scenario_real_b_run_then_confirm(make_workspace):
 
     def run_b_to_completion_and_confirm():
         class _BExtractor(FakeExtractor):
-            def extract_profile_from_site_content(self, _content):
+            def extract_profile_from_site_content(self, _content, crawl_scope="site"):
                 return _profile("B-Corp")
 
         # B'nin task'ı kendi sahte extractor'ıyla gerçekten koşar

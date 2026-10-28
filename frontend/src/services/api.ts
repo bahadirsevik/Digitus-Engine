@@ -357,6 +357,19 @@ export const workspaceApi = {
 
   create: (data: WorkspaceCreateRequest) => api.post('/brand-profile/workspaces', data),
 
+  // Marka altında alt sayfa odağı (Faz 3): 201 + yeni odak (pending, analiz başlar)
+  createFocus: (workspaceId: number, url: string) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${workspaceId}/focuses`, { url }),
+
+  // Marka ayarlarını alt sayfalara toplu uygulama: önizleme (yazmaz) + uygula
+  previewFocusSettings: (id: number) =>
+    api.post<FocusSettingsPreviewResponse>(
+      `/brand-profile/workspaces/${id}/focuses/settings/preview`
+    ),
+
+  applyFocusSettings: (id: number) =>
+    api.post<FocusSettingsApplyResponse>(`/brand-profile/workspaces/${id}/focuses/settings/apply`),
+
   approveKeywords: (id: number, data: WorkspaceKeywordApproveRequest) =>
     api.put<WorkspaceResponse>(`/brand-profile/workspaces/${id}/keywords/approve`, data),
 
@@ -842,12 +855,16 @@ export interface WorkspaceCreateRequest {
   default_geo_target_id?: string
   default_language_id?: string
   flow_version?: 'legacy' | 'profile_first'
+  crawl_scope?: 'site' | 'page'
 }
 
 export interface WorkspaceResponse {
   id: number
   name: string
   company_url: string
+  crawl_scope?: string
+  parent_brand_profile_id?: number | null
+  archived_with_parent?: boolean
   competitor_urls?: string[] | null
   competitor_url_decisions?: Record<string, CompetitorUrlDecision> | null
   status: string
@@ -1009,6 +1026,20 @@ export interface WorkspaceKeywordRefreshRequest {
   max_results?: number
   min_volume?: number
   include_new_ideas?: boolean
+}
+
+export interface FocusSettingsPreviewResponse {
+  focuses: {
+    id: number
+    name: string
+    busy: boolean
+    changes: { field: string; label: string }[]
+  }[]
+}
+
+export interface FocusSettingsApplyResponse {
+  applied: { id: number; name: string; changed: boolean }[]
+  skipped: { id: number; name: string; reason: string }[]
 }
 
 export interface WorkspaceKeywordRefreshResponse {

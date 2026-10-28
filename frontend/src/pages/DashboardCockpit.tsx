@@ -28,7 +28,7 @@ import {
   workspaceApi,
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
-import { toActiveWorkspace, WorkspaceListRow } from './brandProfileState'
+import { orderWithFocuses, toActiveWorkspace, WorkspaceListRow } from './brandProfileState'
 import { jobTypeLabel } from '../components/exportLabels'
 
 interface Props {
@@ -186,8 +186,9 @@ function WorkspaceSwitcher({ currentId }: { currentId?: number }) {
         aria-label="Aktif çalışmayı değiştir"
       >
         {currentId === undefined && <option value="">Çalışma seç…</option>}
-        {workspaces.map((ws) => (
+        {orderWithFocuses(workspaces).map((ws) => (
           <option key={ws.id} value={ws.id}>
+            {ws.parent_brand_profile_id != null ? '↳ ' : ''}
             {ws.name}
             {ws.status !== 'confirmed' ? ` (${STATUS_LABEL[ws.status] || ws.status})` : ''}
           </option>

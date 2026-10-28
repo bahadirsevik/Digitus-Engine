@@ -111,14 +111,14 @@ def test_profile_first_validation_finishes_before_workspace_row_lock(
         def __init__(self, _ai):
             pass
 
-        def crawl_for_profile_content(self, _url):
+        def crawl_for_profile_content(self, _url, crawl_scope="site"):
             return {
                 "error": None,
                 "site_content": "Hisse analiz platformu",
                 "source_pages": ["https://hissefy.test"],
             }
 
-        def extract_profile_from_site_content(self, _content):
+        def extract_profile_from_site_content(self, _content, crawl_scope="site"):
             return dict(VALID_PROFILE)
 
         def validate_with_competitors(self, _profile, competitor_urls):
@@ -188,14 +188,14 @@ def test_profile_first_db_write_failure_rolls_back_and_marks_failed(
         def __init__(self, _ai):
             pass
 
-        def crawl_for_profile_content(self, _url):
+        def crawl_for_profile_content(self, _url, crawl_scope="site"):
             return {
                 "error": None,
                 "site_content": "Hisse analiz platformu",
                 "source_pages": ["https://hissefy.test"],
             }
 
-        def extract_profile_from_site_content(self, _content):
+        def extract_profile_from_site_content(self, _content, crawl_scope="site"):
             return dict(VALID_PROFILE)
 
     def fail_final_write(db, _workspace, _profile):

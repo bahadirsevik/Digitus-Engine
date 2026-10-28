@@ -98,6 +98,48 @@ class WorkspaceCreateRequest(BaseModel):
         "legacy",
         description="Onboarding akışı: legacy (keyword-önce) | profile_first (profil-önce sihirbaz)",
     )
+    crawl_scope: Optional[Literal["site", "page"]] = Field(
+        None,
+        description="Crawl kapsamı; boşsa URL'den türetilir (kök → site, alt sayfa → page)",
+    )
+
+
+class FocusCreateRequest(BaseModel):
+    """Marka altına alt sayfa odağı ekleme isteği."""
+    url: str = Field(..., min_length=1, max_length=500, description="Odak sayfa URL'i (marka ile aynı site)")
+
+
+class FocusSettingsChange(BaseModel):
+    field: str
+    label: str
+
+
+class FocusSettingsPreviewItem(BaseModel):
+    id: int
+    name: Optional[str] = None
+    busy: bool
+    changes: List[FocusSettingsChange]
+
+
+class FocusSettingsPreviewResponse(BaseModel):
+    focuses: List[FocusSettingsPreviewItem]
+
+
+class FocusSettingsApplied(BaseModel):
+    id: int
+    name: Optional[str] = None
+    changed: bool
+
+
+class FocusSettingsSkipped(BaseModel):
+    id: int
+    name: Optional[str] = None
+    reason: str
+
+
+class FocusSettingsApplyResponse(BaseModel):
+    applied: List[FocusSettingsApplied]
+    skipped: List[FocusSettingsSkipped]
 
 
 class CompetitorDecision(BaseModel):
@@ -224,6 +266,9 @@ class WorkspaceResponse(BaseModel):
     id: int
     name: Optional[str] = None
     company_url: str
+    crawl_scope: str = "site"
+    parent_brand_profile_id: Optional[int] = None
+    archived_with_parent: bool = False
     competitor_urls: Optional[List[str]] = None
     # Plan v13: kalıcı URL kararları — Rakipler kartı yeniden açılışta
     # varsayılanı BUNDAN türetir ("Rakip değil" block'a geri dönmez)
@@ -255,6 +300,9 @@ class WorkspaceListResponse(BaseModel):
     id: int
     name: Optional[str] = None
     company_url: str
+    crawl_scope: str = "site"
+    parent_brand_profile_id: Optional[int] = None
+    archived_with_parent: bool = False
     status: str
     onboarding_flow: str = "legacy"
     profile_approved_at: Optional[datetime] = None

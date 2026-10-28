@@ -1,12 +1,57 @@
 # Current Status
 
-Last updated: 2026-10-17
+Last updated: 2026-10-28
 Branch: `deploy/lean-taslak`
-Active phase: **ADS 15 KW teslim standardi — FAZ 1-4 KOD TAMAM + TAM PAKET + TARAYICI KONTROLU TAMAM, commit YOK; CANLI DENEME YAPILDI (17.10, ws29 run 83, set 27 draft) — kullanici sonuclari inceliyor; commit+push ONAY BEKLIYOR; sunucu dagitimi AYRI**
-Kaynak plan: `plan_ads_15kw_standardi.md` rev.2.1 (Codex 3 inceleme, "Faz 1'e baslanabilir").
+Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127, Faz 3c+3d 914ffe5 (push yok); gelistirme ortaminda gercek site + tarayici kontrolu GECTI (28.10); dagitim oncesi acik: sunucu dalinda yeni merge revizyonu, sunucuda worker restart; Faz 4 baslamadi**
+Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
 Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
 
-## Just completed (17.10, dev-team 1 Backend Dev gorevi Sonnet+high; Architect/Konsey KOSMADI — plan Codex onayli, bilinen kalip)
+## Just completed (28.10, gelistirme ortaminda gercek site uctan uca + tarayici kontrolu)
+
+- Ortam: yerel dev (lean klon bagli digitus_app); yerel DB alembic 20261017_001 -> 20261028_002 yukseltildi, celery_worker + frontend yeniden baslatildi (calisan gorev 0). Sunucuya dokunulmadi, push yok.
+- Faz 1-2 (imecemobil, Next.js SPA; eski #62 HATA vakasi): alt sayfa + page -> ws63 profile_review, 1 sayfa okundu (499 krk), hizmet yalniz 'Toprak analizi hizmeti'; ana sayfa + site -> ws64 profile_review, 3 sayfa (5119 krk), uygulama + 7 servis.
+- Faz 3 (ws55 dthasanfatihsezgin.com altina /hizmetler/pedodonti/ -> ws65): page, 1 sayfa; hizmetler pedodontiye ozgu; konum alanlari analizden sonra korundu; ayni sayfa ikinci kez 409; onay bos rakip yukuyle -> rakip adimi YOK (profile_review -> running -> keywords_review -> confirmed); URL kaynakli 2 rakip engeli (manual_approved=false) odakta VE markada korundu; 10 pedodonti keyword'u.
+- Toplu uygulama: yerel competitor_policy degisikligi onizlemede gorundu, uygulama markaya dondurdu (policy_version +1), ikinci uygulama changed=false. Arsiv: marka arsivi odagi archived_with_parent=True ile arsivledi; marka arsivliyken odak restore 409; marka donunce odak dondu; elle arsivlenen odak marka dongusunde arsivde kaldi.
+- Tarayici (headless Chromium, Playwright): arsiv onayi 'Bu markanin 1 alt sayfasi da arsivlenecek.' (iptal edildi); marka penceresinde Alt sayfalar listesi + onizleme 'Degisiklik yok'; odak penceresi 'Alt sayfa' rozeti + 'Marka:' baglantisi, rakip adimi yok; alt sayfa URL'sinde kapsam sorusu acildi (olusturulmadi); konsol hatasi 0.
+- Gorsel kusurlar (islevsel degil): odak kart adi kelime ortasindan kiriliyor; onizleme basligi giris alanina yapisik, Uygula/Vazgec arasinda bosluk yok; bagimsiz page calismasi kartinda kapsam rozeti yok.
+- Gozlem: odak AI'si markanin diger hizmetlerini (implant, ortodonti, beyazlatma) odagin exclude_themes'ine yaziyor — odak icin makul, markaya yansimaz; patronla teyit edilebilir.
+- Maliyet: 4 gemini-3.8-flash cagrisi, 5812 girdi + 2121 cikti token ~0,012 $. Yeniden analiz canlida kosulmadi (testlerde kapsanir).
+- Codex bagimsiz dogrulamasi (28.10, main repo review_artifacts/marka_dogrulama/sonuc.md): yeni islevsel hata YOK. #63/#65 icin yeniden tarama + bellekte AI cikarimi (DB'ye yazilmadi), #64 yalniz yeniden tarama (3 sayfa); salt okunur tarayici kontrolu (mutasyon istekleri engelli), konsol hatasi 0; izole 4 test dosyasi 126 passed. Bulgu: AI dislama temalari kosudan kosuya degisiyor (#65: kayitta 'Ortodontik tel', yeni cikarimda protez/gulus tasarimi) -> profil onayinda kullanici gozden gecirmeli. Kalici yeniden analiz HTTP akisi canlida kosulmadi.
+
+## Just completed (28.10, FAZ 3c+3d — Backend Dev + Frontend Dev Sonnet paralel; lead QA duzeltmeleri)
+
+- 3c: marka arsivi aktif odaklari archived_with_parent=True ile arsivler; marka geri gelince YALNIZ onlar doner (elle arsivlenen kalir); arsivli markanin odagi tek basina geri gelemez (409); odak dogrudan arsivlenince bayrak False.
+- 3d: POST .../focuses/settings/preview (odak basina degisecek alanlar + busy) ve /apply (odak basina _lock_workspace_for_policy_mutation; 409 -> 'islem suruyor' atlanir; profil analizi bitmemis odak atlanir; konum alanlari apply_profile_data_update(invalidate=False, manage=False) + tek _bump_policy_version_if_changed -> yalniz degisen odak bayatlar). capabilities dokunulmaz.
+- Lead QA: create_focus kilitten SONRA arsiv kontrolu (yaris: arsivli markaya aktif odak); modal icindeki 'Arsivden Cikar' 409'u modalda gosterilir.
+- Codex incelemesi (4 bulgu) duzeltildi: (1) competitor_urls mirasa + toplu uygulamaya eklendi, odak onayi rakip URL/karar yukunu YOK SAYAR (URL kaynakli engel silinmez), odakta rakip dogrulamasi kosmaz; (2) toplu uygulama exclude_themes'i provenance'li yeniden birlestirir (eski kullanici terimi cikar, odagin AI temasi kalir; anchor degisirse stale); (3) restore once marka sonra odak kilitler (arsiv/odak ekleme ile ayni sira; eszamanlilik testi); (4) marka arsivlenince aktif secili alt sayfa da temizlenir.
+- Testler: tam paket 5255 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError) / 112 atlandi; FE lint+format+build temiz, 308/308. Canli/tarayici kontrolu YOK.
+
+## Just completed (28.10, FAZ 3a+3b — Backend Dev + Frontend Dev Sonnet paralel; Architect/Konsey KOSMADI, karar planda yazili)
+
+- BrandProfile.parent_brand_profile_id (FK, index) + archived_with_parent; migration 20261028_002 (down 20261028_001, idempotent).
+- POST /workspaces/{id}/focuses: ebeveyn kilitli; marka degilse 400 (bagimsiz page/odak ebeveyn OLAMAZ), onaysiz 409, baska site/ana sayfa 400, ayni aktif odak 409. Miras kopya (capabilities YOK); konum alanlari analiz+yeniden analizde _carry_location_fields ile korunur (normal workspace icin de).
+- Prompt: odakta ebeveynin yalniz ad/sektor/hedef kitle blogu (page'de, site_content'e girmez). Onay: odak profile_review'dan dogrudan keyword uretimine; competitor_review'a hicbir yoldan girmez. Failed-onay kapisi yalniz-konum profile_data'yi profil saymaz.
+- FE: liste/secicide odak girintili, 'Alt sayfalar' karti + 'Alt sayfa ekle', 'Marka: X' baglantisi, Faz 2 secimindeki alt sayfa URL'si on-doldurma; odak fazi competitor_review'a dusmez.
+- Testler: tam paket 5232 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError) / 112 atlandi; FE lint+format+build temiz, 297/297. Canli/tarayici kontrolu YOK.
+
+## Just completed (28.10, FAZ 2 — dev-team Backend Dev + Frontend Dev Sonnet paralel; Architect/Konsey KOSMADI, karar planda yazili)
+
+- BrandProfile.crawl_scope (String(10) NOT NULL server_default 'site') + idempotent migration 20261028_001 (down 20261017_001). Create: verilmezse URL yolu kok -> site, degilse page.
+- 4 arka plan gorevi scope'u KILITLI SATIRDAN okur; resolve_site_content crawl_scope ZORUNLU kw-only (varsayilan yok) -> bozuk cache yeniden crawl'i ayni kapsamla. CrawlContentUnusable mesaji DEBUG kapaliyken de kullaniciya gider.
+- FE: alt sayfa diyalogu (Markayi ana sayfayla olustur / Yalniz bu alt sayfa ile devam / Vazgec); crawl_scope her zaman acik gonderilir.
+- Testler: tam paket 5199 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError) / 112 atlandi; FE lint+format+build temiz, 282/282. Canli/tarayici kontrolu YOK.
+- Acik: legacy keyword-once akista page prompt kurali yok; dagitimda sunucu 20261020_001 merge'u icin ek merge + worker restart.
+
+## Just completed (28.10, plan_marka_alt_sayfa.md rev.2.1 FAZ 1 — dev-team Backend Dev Sonnet+high; Architect/Konsey KOSMADI, plan Codex onayli)
+
+- url_guard: `safe_fetch` (HTML/XML/text, FetchBudget 12 istek/45 sn redirect dahil, timeout kalan sureyle + govde okurken sure kontrolu), HttpStatusError/TlsVerificationError/FetchBudgetExceeded; `safe_fetch_html` sozlesmesi aynen.
+- crawler: tum indirmeler safe_fetch (verify=True), scope site|page, meta+JSON-LD+h1-h3 + satir tekrari ayiklama, sitemap origin+robots+sitemapindex 1 seviye, www esdegerligi, kapi kaynak metinde, Turkce `kod: mesaj` hatalari, ic linklerde sondaki `/` korunur.
+- profile_extractor: prepared_source_text (4 kapi noktasi), crawl_scope parametresi, missing_service_info. Prompt: yalniz page kapsaminda ek kural (asagida). Faz 2-3 YOK.
+- Testler: hedefli 10 dosya 205 passed; TAM PAKET (izole, alembic upgrade head dahil) 5173 passed / 2 failed / 112 skipped — 2 kirmizi onceden bilinen test_hybrid_run_db KeyError 'deepseek'/'anthropic' (degisen modulleri import etmiyor).
+- Canli AI'siz: imecemobil alt sayfa 0 sayfa -> site 3 sayfa / page 388 krk; 6 calisan sitede gerileme yok.
+- Codex 3. tur sonrasi (28.10): PAGE_SCOPE_RULES yalniz page'de prompt SONUNA (site prompt'u bayt-ayni, testli); build_profile_prompt + missing_service_info hem extract_profile hem extract_profile_from_site_content (cache yolu CrawlContentUnusable); LOW_PRIORITY_SEGMENTS (kurumsal/yasal sayfalar -10, noksel urun sayfalarini kaciriyordu); butce YUMUSAK sinir olarak belgelendi (45+8 sn+DNS). Hedefli 205 passed. Canli 4 Gemini cagrisi (n=1): imecemobil dogrudan+cache yalniz 'Toprak Analizi Hizmeti'; yalniz kunye sayfasi iki yolda da profile_missing_service. Noksel: spiral/boyuna kaynakli boru + celik profil sayfalari secildi. resolve_site_content scope'u Faz 2'de baglanacak.
+
+## Onceki:  (17.10, dev-team 1 Backend Dev gorevi Sonnet+high; Architect/Konsey KOSMADI — plan Codex onayli, bilinen kalip)
 
 - ADS gruplama: havuz kirpmasi (`max_groups*5`) silindi, `max_groups` yalniz grup sayisini sinirlar;
   `G = max(1, n//15)`, dengeli hedef boyutlar; AI'ya tam G grup + boyutlar; deterministik `_repair_groups`
