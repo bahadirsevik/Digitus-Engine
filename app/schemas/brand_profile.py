@@ -98,6 +98,10 @@ class WorkspaceCreateRequest(BaseModel):
         "legacy",
         description="Onboarding akışı: legacy (keyword-önce) | profile_first (profil-önce sihirbaz)",
     )
+    crawl_scope: Optional[Literal["site", "page"]] = Field(
+        None,
+        description="Crawl kapsamı; boşsa URL'den türetilir (kök → site, alt sayfa → page)",
+    )
 
 
 class CompetitorDecision(BaseModel):
@@ -224,6 +228,7 @@ class WorkspaceResponse(BaseModel):
     id: int
     name: Optional[str] = None
     company_url: str
+    crawl_scope: str = "site"
     competitor_urls: Optional[List[str]] = None
     # Plan v13: kalıcı URL kararları — Rakipler kartı yeniden açılışta
     # varsayılanı BUNDAN türetir ("Rakip değil" block'a geri dönmez)
@@ -255,6 +260,7 @@ class WorkspaceListResponse(BaseModel):
     id: int
     name: Optional[str] = None
     company_url: str
+    crawl_scope: str = "site"
     status: str
     onboarding_flow: str = "legacy"
     profile_approved_at: Optional[datetime] = None

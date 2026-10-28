@@ -28,7 +28,7 @@ class _FakeExtractor:
         self._result = result
         self.crawl_calls = 0
 
-    def crawl_for_profile_content(self, company_url):
+    def crawl_for_profile_content(self, company_url, crawl_scope="site"):
         self.crawl_calls += 1
         return self._result
 
@@ -36,7 +36,7 @@ class _FakeExtractor:
 def test_valid_cache_is_used_without_recrawl():
     """1. Gecerli cache kullanilir; crawl HIC cagrilmaz."""
     ex = _FakeExtractor({"site_content": GOOD2, "source_pages": [{"url": "x"}], "error": None})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", GOOD)
+    content, pages, error = resolve_site_content(ex, "https://example.test/", GOOD, crawl_scope="site")
 
     assert error is None
     assert content == GOOD.strip(), "cache aynen (strip'li) dondurulmeli"
@@ -47,7 +47,7 @@ def test_valid_cache_is_used_without_recrawl():
 def test_corrupt_cache_triggers_recrawl():
     """2. Bozuk cache yeniden taranir ve taze icerik kullanilir."""
     ex = _FakeExtractor({"site_content": GOOD2, "source_pages": [{"url": "a"}], "error": None})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE)
+    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE, crawl_scope="site")
 
     assert error is None
     assert ex.crawl_calls == 1, "bozuk cache yeniden crawl TETIKLEMELI"
@@ -59,7 +59,7 @@ def test_failed_recrawl_returns_error_and_never_calls_ai():
     """3. Yeniden tarama da basarisizsa AI'a hicbir sey gitmez."""
     ex = _FakeExtractor({"site_content": "", "source_pages": [],
                          "error": "crawl_content_unusable: binary_or_undecoded"})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE)
+    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE, crawl_scope="site")
 
     assert ex.crawl_calls == 1
     assert error is not None and "crawl_content_unusable" in error
@@ -71,7 +71,7 @@ def test_successful_recrawl_refreshes_cache():
     """4. Basarili yeniden tarama cache yenilemesini tetikler."""
     fresh_pages = [{"url": "https://example.test/hizmetler", "title": "Hizmetler"}]
     ex = _FakeExtractor({"site_content": GOOD2, "source_pages": fresh_pages, "error": None})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE)
+    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE, crawl_scope="site")
 
     assert error is None
     assert pages == fresh_pages, "source_pages dolu -> cagiran cache'i YENILER"
@@ -81,20 +81,20 @@ def test_successful_recrawl_refreshes_cache():
 # --------------------------------------------------------------- ek kenar durumlar
 def test_empty_cache_triggers_crawl():
     ex = _FakeExtractor({"site_content": GOOD2, "source_pages": [{"url": "a"}], "error": None})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", "")
+    content, pages, error = resolve_site_content(ex, "https://example.test/", "", crawl_scope="site")
     assert ex.crawl_calls == 1 and error is None and content == GOOD2
 
 
 def test_none_cache_triggers_crawl():
     ex = _FakeExtractor({"site_content": GOOD2, "source_pages": [{"url": "a"}], "error": None})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", None)
+    content, pages, error = resolve_site_content(ex, "https://example.test/", None, crawl_scope="site")
     assert ex.crawl_calls == 1 and error is None
 
 
 def test_too_short_cache_is_treated_as_corrupt():
     """JS kabugu ('Yukleniyor...') cache'e yazilmis olabilir."""
     ex = _FakeExtractor({"site_content": GOOD2, "source_pages": [{"url": "a"}], "error": None})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", "Yukleniyor...")
+    content, pages, error = resolve_site_content(ex, "https://example.test/", "Yukleniyor...", crawl_scope="site")
     assert ex.crawl_calls == 1, "cok kisa cache yeniden crawl tetiklemeli"
     assert content == GOOD2
 
@@ -102,5 +102,5 @@ def test_too_short_cache_is_treated_as_corrupt():
 def test_recrawl_producing_garbage_is_also_rejected():
     """Yeniden tarama cop dondururse de AI'a gitmez."""
     ex = _FakeExtractor({"site_content": "", "source_pages": [], "error": "crawl_content_unusable"})
-    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE)
+    content, pages, error = resolve_site_content(ex, "https://example.test/", GARBAGE, crawl_scope="site")
     assert error is not None and content == ""

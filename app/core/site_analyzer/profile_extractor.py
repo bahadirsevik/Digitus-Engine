@@ -543,7 +543,9 @@ def build_profile_prompt(site_content: str, preliminary_info: Optional[str], sco
     return prompt + PAGE_SCOPE_RULES if scope == "page" else prompt
 
 
-def resolve_site_content(extractor, company_url: str, cached_content: Optional[str]):
+def resolve_site_content(
+    extractor, company_url: str, cached_content: Optional[str], *, crawl_scope: str
+):
     """Cache OKUMA KAPISI — bozuk cache'in AI'a gitmesini engeller.
 
     Arka plan: `crawl_content_cache` gecmiste cozulememis (brotli) ikili icerikle
@@ -556,6 +558,8 @@ def resolve_site_content(extractor, company_url: str, cached_content: Optional[s
       3. Yeni crawl da basarisizsa AI CAGRILMADAN acik hata doner.
       4. Basariliysa cache yalnizca o zaman yenilenir (source_pages != None).
       5. Bozuk cache + basarisiz crawl: eski cache KORUNUR fakat KULLANILMAZ.
+      6. crawl_scope ZORUNLU (varsayilan yok): yeniden crawl workspace kapsamini
+         korur; page workspace sessizce site crawl'una DUSMEZ.
 
     Returns:
         (site_content, source_pages, error)
@@ -574,7 +578,7 @@ def resolve_site_content(extractor, company_url: str, cached_content: Optional[s
             quality["replacement_ratio"], quality["control_ratio"],
         )
 
-    crawl = extractor.crawl_for_profile_content(company_url)
+    crawl = extractor.crawl_for_profile_content(company_url, crawl_scope=crawl_scope)
     if crawl.get("error") and not crawl.get("site_content"):
         # Eski cache'e DOKUNULMAZ; yalnizca kullanilmaz.
         return "", None, crawl.get("error") or "crawl_content_unusable"

@@ -2334,3 +2334,29 @@
   font-size: 12.5px;
   color: var(--text-secondary);
 }
+
+.bpx-scope-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-surface-2);
+}
+.bpx-scope-ask-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.bpx-scope-ask .bpx-step-intro {
+  margin: 0 0 8px;
+}
+.bpx-scope-ask-help {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}

@@ -317,3 +317,51 @@ def test_money_columns_are_numeric(fresh_schema, db_engine):
                  for c in inspector.get_columns(table)}
         for column in columns:
             assert "NUMERIC" in types[column], f"{table}.{column}: {types[column]}"
+
+
+def test_brand_profile_crawl_scope_column_and_idempotent_migration(fresh_schema, db_engine):
+    """20261028_001: brand_profiles.crawl_scope (NOT NULL, server_default 'site').
+
+    Eski satirlar 'site' olur; migration tekrar upgrade'de no-op, downgrade
+    kolonu dusurur, yeniden upgrade geri ekler.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert "crawl_scope" in columns
+    assert columns["crawl_scope"]["nullable"] is False
+    assert "site" in str(columns["crawl_scope"]["default"])
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261028_001_add_brand_profile_crawl_scope.py")
+    spec = importlib.util.spec_from_file_location("mig_20261028_001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261028_001" and module.down_revision == "20261017_001"
+
+    def present(conn) -> bool:
+        return "crawl_scope" in {
+            c["name"] for c in inspect(conn).get_columns("brand_profiles")
+        }
+
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('legacy', 'https://x.test', 'confirmed')"
+        ))
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # kolon zaten var -> no-op
+            assert present(conn)
+            module.downgrade()
+            assert not present(conn)
+            module.downgrade()          # kolon yok -> no-op
+            module.upgrade()            # geri ekler; mevcut satir 'site' olur
+            assert present(conn)
+        assert conn.execute(text(
+            "SELECT crawl_scope FROM brand_profiles WHERE name = 'legacy'"
+        )).scalar() == "site"

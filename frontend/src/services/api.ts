@@ -819,12 +819,14 @@ export interface WorkspaceCreateRequest {
   default_geo_target_id?: string
   default_language_id?: string
   flow_version?: 'legacy' | 'profile_first'
+  crawl_scope?: 'site' | 'page'
 }
 
 export interface WorkspaceResponse {
   id: number
   name: string
   company_url: string
+  crawl_scope?: string
   competitor_urls?: string[] | null
   competitor_url_decisions?: Record<string, CompetitorUrlDecision> | null
   status: string

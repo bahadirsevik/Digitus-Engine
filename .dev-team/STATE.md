@@ -2,9 +2,17 @@
 
 Last updated: 2026-10-28
 Branch: `deploy/lean-taslak`
-Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — FAZ 1 TAMAM + COMMIT'LI (28.10); Faz 2-3 kullanici onayi bekliyor. Onceki: ADS 15 KW standardi push'lu, sunucuya dagitildi (20.10)**
+Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — FAZ 1 commit 7fd5dec; FAZ 2 KOD TAMAM (28.10) commit onayi bekliyor; Faz 3 sonra. Onceki: ADS 15 KW standardi push'lu, sunucuya dagitildi (20.10)**
 Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
 Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (28.10, FAZ 2 — dev-team Backend Dev + Frontend Dev Sonnet paralel; Architect/Konsey KOSMADI, karar planda yazili)
+
+- BrandProfile.crawl_scope (String(10) NOT NULL server_default 'site') + idempotent migration 20261028_001 (down 20261017_001). Create: verilmezse URL yolu kok -> site, degilse page.
+- 4 arka plan gorevi scope'u KILITLI SATIRDAN okur; resolve_site_content crawl_scope ZORUNLU kw-only (varsayilan yok) -> bozuk cache yeniden crawl'i ayni kapsamla. CrawlContentUnusable mesaji DEBUG kapaliyken de kullaniciya gider.
+- FE: alt sayfa diyalogu (Markayi ana sayfayla olustur / Yalniz bu alt sayfa ile devam / Vazgec); crawl_scope her zaman acik gonderilir.
+- Testler: tam paket 5199 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError) / 112 atlandi; FE lint+format+build temiz, 282/282. Canli/tarayici kontrolu YOK.
+- Acik: legacy keyword-once akista page prompt kurali yok; dagitimda sunucu 20261020_001 merge'u icin ek merge + worker restart.
 
 ## Just completed (28.10, plan_marka_alt_sayfa.md rev.2.1 FAZ 1 — dev-team Backend Dev Sonnet+high; Architect/Konsey KOSMADI, plan Codex onayli)
 

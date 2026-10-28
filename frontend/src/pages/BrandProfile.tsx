@@ -204,6 +204,16 @@ const LOADING_PHASES: WorkspacePhase[] = [
   'generating_profile',
 ]
 
+function parseCompanyUrl(raw: string): URL | null {
+  try {
+    return new URL(raw.includes('//') ? raw : `https://${raw}`)
+  } catch {
+    return null
+  }
+}
+
+const isRootPath = (u: URL) => u.pathname === '' || u.pathname === '/'
+
 // ─── Tek modal: yeni çalışma sihirbazı + mevcut kart detayı ───────────
 
 function WorkspaceModal({
@@ -224,6 +234,9 @@ function WorkspaceModal({
   const [competitors, setCompetitors] = useState(['', '', ''])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  // Alt sayfa URL'si için kapsam sorusu; 'site' seçilince tekrar sorulmaz
+  const [askScope, setAskScope] = useState(false)
+  const [scopeChoice, setScopeChoice] = useState<'site' | null>(null)
 
   // Legacy formlar (keyword-önce çalışmalar + confirmed düzenleme)
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
@@ -291,8 +304,8 @@ function WorkspaceModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws?.id, phase])
 
-  const handleCreate = async () => {
-    if (!companyUrl.trim()) return
+  const createWorkspace = async (crawlScope: 'site' | 'page') => {
+    setAskScope(false)
     setCreating(true)
     setError('')
     try {
@@ -301,6 +314,7 @@ function WorkspaceModal({
         company_url: companyUrl.trim(),
         competitor_urls: competitorUrls.length > 0 ? competitorUrls : undefined,
         flow_version: 'profile_first',
+        crawl_scope: crawlScope,
       })
       const created = res.data as WorkspaceResponse
       setWs(workspaceResponseToListRow(created))
@@ -310,6 +324,25 @@ function WorkspaceModal({
     } finally {
       setCreating(false)
     }
+  }
+
+  const handleCreate = () => {
+    const raw = companyUrl.trim()
+    if (!raw) return
+    const parsed = parseCompanyUrl(raw)
+    // Ayrıştırılamayan URL'yi backend doğrular; kök veya 'site' seçimi sormadan devam eder
+    if (!parsed || scopeChoice === 'site' || isRootPath(parsed)) {
+      void createWorkspace('site')
+      return
+    }
+    setAskScope(true)
+  }
+
+  const chooseSiteScope = () => {
+    const parsed = parseCompanyUrl(companyUrl.trim())
+    if (parsed) setCompanyUrl(parsed.origin)
+    setScopeChoice('site')
+    setAskScope(false)
   }
 
   const handleModalWorkspaceUpdated = (updated: WorkspaceResponse) => {
@@ -523,6 +556,36 @@ function WorkspaceModal({
             ))}
           </div>
           {error && <div className="error-banner">{error}</div>}
+          {askScope && (
+            <div className="bpx-scope-ask" role="dialog" aria-labelledby="bpx-scope-ask-title">
+              <div id="bpx-scope-ask-title" className="bpx-scope-ask-title">
+                Bu adres bir alt sayfa
+              </div>
+              <p className="bpx-step-intro">
+                Girdiğiniz adres sitenin ana sayfası değil. Nasıl devam edelim?
+              </p>
+              <button type="button" className="bpx-btn-primary" onClick={chooseSiteScope} autoFocus>
+                Markayı ana sayfayla oluştur
+              </button>
+              <p className="bpx-scope-ask-help">
+                Sitenin tamamı okunur. Adres alanına ana sayfa yazılır; isterseniz
+                değiştirebilirsiniz.
+              </p>
+              <button
+                type="button"
+                className="bpx-btn-ghost"
+                onClick={() => void createWorkspace('page')}
+              >
+                Yalnız bu alt sayfa ile devam
+              </button>
+              <p className="bpx-scope-ask-help">
+                Yalnız bu sayfa okunur; profil bu sayfanın konusuna göre çıkarılır.
+              </p>
+              <button type="button" className="bpx-btn-ghost" onClick={() => setAskScope(false)}>
+                Vazgeç
+              </button>
+            </div>
+          )}
           <div className="bpx-modal-footer is-end bpx-inline-footer">
             <button type="button" className="bpx-btn-ghost" onClick={onClose} disabled={creating}>
               İptal

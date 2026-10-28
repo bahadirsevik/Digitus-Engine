@@ -42,6 +42,7 @@ from app.core.engine_version_gate import (
     run_algorithm_version,
 )
 from app.core.workspace import verify_scoring_run, verify_workspace
+from app.core.site_analyzer.crawler import CrawlContentUnusable
 from app.core.site_analyzer.stuck_janitor import fail_if_stuck
 from app.core.site_analyzer.analysis_attempt import (
     lock_if_current,
@@ -610,14 +611,16 @@ def create_workspace(
             seen_keys.add(key)
 
     must_have_info = request.must_have_info or request.preliminary_info
+    from urllib.parse import urlparse
+    parsed = urlparse(
+        request.company_url if "//" in request.company_url else f"https://{request.company_url}"
+    )
     name = (request.name or "").strip()
     if not name:
         # Sihirbaz akışında tek zorunlu alan URL — adı domain'den türet
-        from urllib.parse import urlparse
-        parsed = urlparse(
-            request.company_url if "//" in request.company_url else f"https://{request.company_url}"
-        )
         name = (parsed.hostname or request.company_url).removeprefix("www.")
+    # Kapsam: açıkça verilmediyse URL yolundan türet (kök → site, alt sayfa → page)
+    crawl_scope = request.crawl_scope or ("site" if parsed.path in ("", "/") else "page")
 
     # Yeni satır henüz kimseye görünmediği için kilit gerekmez: attempt token'ı
     # satırla AYNI insert'te yazılır (analiz kapalıysa dispatch yok → token yok).
@@ -625,6 +628,7 @@ def create_workspace(
     workspace = BrandProfile(
         name=name,
         company_url=request.company_url,
+        crawl_scope=crawl_scope,
         competitor_urls=request.competitor_urls,
         preliminary_info=must_have_info,
         excluded_info=request.excluded_info,
@@ -689,6 +693,7 @@ def list_workspaces(
             id=ws.id,
             name=ws.name,
             company_url=ws.company_url,
+            crawl_scope=ws.crawl_scope,
             status=ws.status,
             onboarding_flow=ws.onboarding_flow or "legacy",
             profile_approved_at=ws.profile_approved_at,
@@ -2132,6 +2137,7 @@ def _run_keyword_suggestion(
         if workspace is None:
             return
 
+        crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2142,7 +2148,7 @@ def _run_keyword_suggestion(
         ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
         extractor = ProfileExtractor(ai)
 
-        crawl = extractor.crawl_for_profile_content(company_url)
+        crawl = extractor.crawl_for_profile_content(company_url, crawl_scope=crawl_scope)
         if crawl["error"] and not crawl["site_content"]:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
@@ -2213,6 +2219,7 @@ def _run_profile_analysis_first(
         if workspace is None:
             return
 
+        crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2223,7 +2230,7 @@ def _run_profile_analysis_first(
         ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
         extractor = ProfileExtractor(ai)
 
-        crawl = extractor.crawl_for_profile_content(company_url)
+        crawl = extractor.crawl_for_profile_content(company_url, crawl_scope=crawl_scope)
         if crawl["error"] and not crawl["site_content"]:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
@@ -2231,7 +2238,9 @@ def _run_profile_analysis_first(
             )
             return
 
-        profile = extractor.extract_profile_from_site_content(crawl["site_content"])
+        profile = extractor.extract_profile_from_site_content(
+            crawl["site_content"], crawl_scope=crawl_scope
+        )
         profile.pop("suggested_keywords", None)
 
         # Keep validation outside the final write transaction. Its telemetry
@@ -2267,7 +2276,10 @@ def _run_profile_analysis_first(
             db.rollback()
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                safe_500_detail(e, "Profil analizi başarısız oldu"),
+                # kaynak-yetersiz hatasi guvenli Turkce mesaj tasir; kullanici acik nedeni gormeli
+                f"Profil analizi basarisiz: {e}"
+                if isinstance(e, CrawlContentUnusable)
+                else safe_500_detail(e, "Profil analizi başarısız oldu"),
             )
         except Exception:
             pass
@@ -2330,13 +2342,14 @@ def _run_keyword_suggestion_from_profile(
         extractor = ProfileExtractor(ai)
 
         company_url = workspace.company_url
+        crawl_scope = workspace.crawl_scope
         preliminary_info = workspace.preliminary_info
         excluded_info = workspace.excluded_info
         profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
         competitor_terms = approved_competitor_terms(workspace)
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
-            extractor, company_url, workspace.crawl_content_cache
+            extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope
         )
         if content_error:
             mark_failed_if_current(
@@ -2450,12 +2463,13 @@ def _run_profile_from_keywords(
         extractor = ProfileExtractor(ai)
 
         company_url = workspace.company_url
+        crawl_scope = workspace.crawl_scope
         preliminary_info = workspace.preliminary_info
         excluded_info = workspace.excluded_info
         competitor_urls = list(workspace.competitor_urls or [])
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
-            extractor, company_url, workspace.crawl_content_cache
+            extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope
         )
         if content_error:
             mark_failed_if_current(

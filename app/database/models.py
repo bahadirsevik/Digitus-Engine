@@ -1055,6 +1055,8 @@ class BrandProfile(Base):
     is_system_default = Column(Boolean, nullable=False, default=False, server_default="false")
 
     company_url = Column(String(500), nullable=False)
+    # Crawl kapsami: site (ana sayfa + onemli sayfalar) | page (yalniz girilen sayfa); olusturmada sabit
+    crawl_scope = Column(String(10), nullable=False, default="site", server_default="site")
     competitor_urls = Column(JSON)  # ["url1", "url2", "url3"] — yalniz oneri kaynagi
 
     # ── Kalite+maliyet plani A/B/F (plan_kalite_maliyet.md) ──

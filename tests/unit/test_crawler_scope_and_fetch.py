@@ -176,12 +176,14 @@ def test_cache_gate_ignores_format_lines():
     class Ex:
         calls = 0
 
-        def crawl_for_profile_content(self, url):
+        def crawl_for_profile_content(self, url, crawl_scope="site"):
             Ex.calls += 1
             return {"site_content": "", "source_pages": [], "error": "crawl_content_unusable: too_short"}
 
     cached = "## Sayfa: " + "B" * 300 + "\nURL: https://example.test/" + "y" * 300 + "\n\nKisa."
-    content, pages, error = resolve_site_content(Ex(), "https://example.test", cached)
+    content, pages, error = resolve_site_content(
+        Ex(), "https://example.test", cached, crawl_scope="site"
+    )
     assert Ex.calls == 1 and error and content == ""
 
 

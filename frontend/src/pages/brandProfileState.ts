@@ -119,6 +119,7 @@ export interface WorkspaceListRow {
   id: number
   name: string
   company_url: string
+  crawl_scope?: string
   status: string
   onboarding_flow?: 'legacy' | 'profile_first'
   profile_approved_at?: string | null
