@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 import re
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
@@ -649,6 +649,22 @@ def create_workspace(
     # Kapsam: açıkça verilmediyse URL yolundan türet (kök → site, alt sayfa → page)
     crawl_scope = request.crawl_scope or ("site" if parsed.path in ("", "/") else "page")
 
+    # Faz 3e: onaydan sonra otomatik acilacak alt sayfa — create_focus ile AYNI kurallar,
+    # gecersizse calisma satiri hic olusmaz
+    pending_focus_url = None
+    if (request.pending_focus_url or "").strip():
+        if crawl_scope != "site" or request.flow_version != "profile_first":
+            raise HTTPException(
+                status_code=400,
+                detail="Alt sayfa yalnız profil-önce akışta ve site kapsamlı markada istenebilir",
+            )
+        try:
+            pending_focus_url, _ = _validate_focus_url(
+                request.pending_focus_url, request.company_url
+            )
+        except FocusCreateError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
     # Yeni satır henüz kimseye görünmediği için kilit gerekmez: attempt token'ı
     # satırla AYNI insert'te yazılır (analiz kapalıysa dispatch yok → token yok).
     attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
@@ -664,6 +680,7 @@ def create_workspace(
         status="pending",
         onboarding_flow=request.flow_version,
         analysis_attempt_id=attempt_id,
+        pending_focus_url=pending_focus_url,
     )
     db.add(workspace)
     db.commit()
@@ -709,6 +726,108 @@ def _with_scheme(url: str) -> str:
     return url if "//" in url else f"https://{url}"
 
 
+class FocusCreateError(Exception):
+    """Odak olusturma cekirdeginin dogrulama hatasi (HTTP durumu + Turkce kullanici metni)."""
+
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def _validate_focus_url(raw_url: str, brand_company_url: str) -> Tuple[str, str]:
+    """Alt sayfa adresi kurallari (create_focus + pending_focus_url ORTAK).
+
+    Doner: (semali normalize adres, sayfa anahtari). Hata: FocusCreateError(400).
+    """
+    from urllib.parse import urlparse
+
+    url = _with_scheme(raw_url)
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise FocusCreateError(400, "Geçersiz alt sayfa adresi")
+    brand_url = _with_scheme(brand_company_url)
+    if not _is_same_site_url(url, brand_url):
+        raise FocusCreateError(400, "Alt sayfa markanın sitesiyle aynı sitede olmalı")
+    page_key = _page_key(url)
+    if page_key == _page_key(brand_url):
+        raise FocusCreateError(400, "Ana sayfa zaten markanın kendisi")
+    return url, page_key
+
+
+def _create_focus_core(
+    db: Session, parent: BrandProfile, raw_url: str
+) -> Tuple[BrandProfile, bool]:
+    """Odak olusturma cekirdegi — COMMIT YOK (yalniz flush); `parent` KILITLI gelmeli.
+
+    Ayni sayfa icin AKTIF odak varsa onu (created=False) dondurur; yoksa satiri + miras
+    kopyasini ekler (created=True). Dogrulama hatasi FocusCreateError. Analiz dispatch
+    ve commit cagiranin isidir (yeni odagin attempt token'i `focus.analysis_attempt_id`).
+    """
+    from urllib.parse import urlparse
+
+    # kilit beklenirken marka arsivlenmis olabilir; arsivli markaya aktif odak eklenmez
+    if parent.deleted_at is not None:
+        raise FocusCreateError(
+            404, f"Marka çalışması (id={parent.id}) bulunamadı veya arşivlenmiş"
+        )
+    if parent.parent_brand_profile_id is not None or parent.crawl_scope != "site":
+        raise FocusCreateError(400, "Alt sayfa yalnız marka çalışmasına eklenebilir")
+    if parent.status != "confirmed":
+        raise FocusCreateError(409, "Önce marka profilini onaylayın")
+
+    url, page_key = _validate_focus_url(raw_url, parent.company_url)
+    active_focuses = db.query(BrandProfile).filter(
+        BrandProfile.parent_brand_profile_id == parent.id,
+        BrandProfile.deleted_at.is_(None),
+    ).all()
+    for existing in active_focuses:
+        if _page_key(_with_scheme(existing.company_url)) == page_key:
+            return existing, False
+
+    parent_url = _with_scheme(parent.company_url)
+    parent_profile = parent.profile_data if isinstance(parent.profile_data, dict) else {}
+    location = {
+        key: copy.deepcopy(parent_profile[key])
+        for key in LOCATION_PROFILE_KEYS if key in parent_profile
+    }
+    # None alanlar HİÇ verilmez: JSON kolona açık None 'null' JSON'u yazar (SQL NULL değil)
+    inherited = {
+        field: copy.deepcopy(getattr(parent, field))
+        for field in _FOCUS_INHERITED_FIELDS if getattr(parent, field) is not None
+    }
+    if location:
+        inherited["profile_data"] = location
+    brand_label = parent.name or (urlparse(parent_url).hostname or "")
+    attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
+    focus = BrandProfile(
+        name=f"{brand_label} — {urlparse(url).path.rstrip('/')[:80] or '/'}"[:200],
+        company_url=url,
+        crawl_scope="page",
+        onboarding_flow="profile_first",
+        parent_brand_profile_id=parent.id,
+        status="pending",
+        analysis_attempt_id=attempt_id,
+        **inherited,
+    )
+    db.add(focus)
+    db.flush()
+    return focus, True
+
+
+def _dispatch_analysis(background_tasks: BackgroundTasks, row: BrandProfile) -> None:
+    """Profil-once analizi kuyruga alir (odakta rakip kesfi/dogrulamasi calismaz)."""
+    if settings.ENABLE_SITE_PROFILE_ANALYSIS:
+        background_tasks.add_task(
+            _run_profile_analysis_first,
+            workspace_id=row.id,
+            company_url=row.company_url,
+            competitor_urls=None if row.parent_brand_profile_id is not None
+            else row.competitor_urls,
+            attempt_id=row.analysis_attempt_id,
+        )
+
+
 @router.post(
     "/workspaces/{workspace_id}/focuses",
     response_model=WorkspaceResponse,
@@ -725,81 +844,25 @@ def create_focus(
     Ebeveyn satırı kilitlenir: aynı sayfa için eşzamanlı çift istek serileşir.
     Politika alanları oluşturma anında KOPYALANIR (capabilities hariç).
     """
-    from urllib.parse import urlparse
-
     verify_workspace(db, workspace_id)
     parent = lock_workspace_row(db, workspace_id)
-    # kilit beklenirken marka arsivlenmis olabilir; arsivli markaya aktif odak eklenmez
-    if parent is None or parent.deleted_at is not None:
+    if parent is None:
         raise HTTPException(
             status_code=404,
             detail=f"Marka çalışması (id={workspace_id}) bulunamadı veya arşivlenmiş",
         )
-
-    if parent.parent_brand_profile_id is not None or parent.crawl_scope != "site":
-        raise HTTPException(
-            status_code=400, detail="Alt sayfa yalnız marka çalışmasına eklenebilir"
-        )
-    if parent.status != "confirmed":
-        raise HTTPException(status_code=409, detail="Önce marka profilini onaylayın")
-
-    url = _with_scheme(request.url)
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise HTTPException(status_code=400, detail="Geçersiz alt sayfa adresi")
-    parent_url = _with_scheme(parent.company_url)
-    if not _is_same_site_url(url, parent_url):
-        raise HTTPException(
-            status_code=400, detail="Alt sayfa markanın sitesiyle aynı sitede olmalı"
-        )
-    page_key = _page_key(url)
-    if page_key == _page_key(parent_url):
-        raise HTTPException(status_code=400, detail="Ana sayfa zaten markanın kendisi")
-    active_focuses = db.query(BrandProfile).filter(
-        BrandProfile.parent_brand_profile_id == parent.id,
-        BrandProfile.deleted_at.is_(None),
-    ).all()
-    if any(_page_key(_with_scheme(f.company_url)) == page_key for f in active_focuses):
+    try:
+        focus, created = _create_focus_core(db, parent, request.url)
+    except FocusCreateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    if not created:
+        db.rollback()
         raise HTTPException(status_code=409, detail="Bu sayfa için zaten bir odak var")
-
-    parent_profile = parent.profile_data if isinstance(parent.profile_data, dict) else {}
-    location = {
-        key: copy.deepcopy(parent_profile[key])
-        for key in LOCATION_PROFILE_KEYS if key in parent_profile
-    }
-    # None alanlar HİÇ verilmez: JSON kolona açık None 'null' JSON'u yazar (SQL NULL değil)
-    inherited = {
-        field: copy.deepcopy(getattr(parent, field))
-        for field in _FOCUS_INHERITED_FIELDS if getattr(parent, field) is not None
-    }
-    if location:
-        inherited["profile_data"] = location
-    brand_label = parent.name or (urlparse(parent_url).hostname or "")
-    attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
-    focus = BrandProfile(
-        name=f"{brand_label} — {parsed.path.rstrip('/')[:80] or '/'}"[:200],
-        company_url=url,
-        crawl_scope="page",
-        onboarding_flow="profile_first",
-        parent_brand_profile_id=parent.id,
-        status="pending",
-        analysis_attempt_id=attempt_id,
-        **inherited,
-    )
-    db.add(focus)
     db.commit()
     db.refresh(focus)
 
-    if settings.ENABLE_SITE_PROFILE_ANALYSIS:
-        # Rakip keşfi/doğrulaması odakta çalışmaz (competitor_urls=None)
-        background_tasks.add_task(
-            _run_profile_analysis_first,
-            workspace_id=focus.id,
-            company_url=url,
-            competitor_urls=None,
-            attempt_id=attempt_id,
-        )
-
+    _dispatch_analysis(background_tasks, focus)
     return WorkspaceResponse.model_validate(focus)
 
 
@@ -973,6 +1036,8 @@ def list_workspaces(
             crawl_scope=ws.crawl_scope,
             parent_brand_profile_id=ws.parent_brand_profile_id,
             archived_with_parent=ws.archived_with_parent,
+            pending_focus_url=ws.pending_focus_url,
+            pending_focus_error=ws.pending_focus_error,
             status=ws.status,
             onboarding_flow=ws.onboarding_flow or "legacy",
             profile_approved_at=ws.profile_approved_at,
@@ -1096,11 +1161,14 @@ def approve_workspace_keywords(
         workspace.suggested_keywords = keywords
         workspace.status = "confirmed"
         workspace.error_message = None
+        # Faz 3e: marka onayi ile bekleyen alt sayfa AYNI kilitli islemde acilir;
+        # hata markanin onayini BOZMAZ (adres korunur, hata metni yazilir)
+        handoff = _hand_off_pending_focus(db, workspace) if workspace.pending_focus_url else None
         db.commit()
         db.refresh(workspace)
 
         _trigger_latest_run_relevance(db, background_tasks, workspace)
-        return WorkspaceResponse.model_validate(workspace)
+        return _workspace_response_with_handoff(workspace, handoff, background_tasks)
 
     workspace.suggested_keywords = keywords
     workspace.status = "running"
@@ -1116,6 +1184,140 @@ def approve_workspace_keywords(
         attempt_id=attempt_id,
     )
 
+    return WorkspaceResponse.model_validate(workspace)
+
+
+def _hand_off_pending_focus(
+    db: Session, brand: BrandProfile
+) -> Optional[Tuple[BrandProfile, bool]]:
+    """`brand` (KILITLI, confirmed) icin bekleyen alt sayfayi SAVEPOINT icinde acar. Commit YOK.
+
+    Basari: alanlar temizlenir, (odak, yeni_mi) doner. Hata (dogrulama/beklenmeyen):
+    savepoint geri alinir, adres KORUNUR, `pending_focus_error` yazilir, None doner.
+    """
+    try:
+        with db.begin_nested():
+            focus, created = _create_focus_core(db, brand, brand.pending_focus_url)
+    except FocusCreateError as exc:
+        brand.pending_focus_error = exc.detail[:500]
+        return None
+    except Exception:
+        logger.exception(f"Bekleyen alt sayfa acilamadi: brand_id={brand.id}")
+        brand.pending_focus_error = "Alt sayfa hazırlanamadı, lütfen tekrar deneyin."
+        return None
+    brand.pending_focus_url = None
+    brand.pending_focus_error = None
+    return focus, created
+
+
+def _workspace_response_with_handoff(
+    brand: BrandProfile,
+    handoff: Optional[Tuple[BrandProfile, bool]],
+    background_tasks: BackgroundTasks,
+) -> WorkspaceResponse:
+    """Commit sonrasi: yeni olusan odagin analizini kuyruga alir, cevaba odak id'sini koyar."""
+    response = WorkspaceResponse.model_validate(brand)
+    if handoff is not None:
+        focus, created = handoff
+        if created:
+            _dispatch_analysis(background_tasks, focus)
+        response.focus_handoff_id = focus.id
+    return response
+
+
+def _lock_active_workspace(db: Session, workspace_id: int) -> BrandProfile:
+    verify_workspace(db, workspace_id)
+    brand = lock_workspace_row(db, workspace_id)
+    if brand is None or brand.deleted_at is not None:
+        db.rollback()
+        raise HTTPException(
+            status_code=404,
+            detail=f"Marka çalışması (id={workspace_id}) bulunamadı veya arşivlenmiş",
+        )
+    return brand
+
+
+@router.post(
+    "/workspaces/{workspace_id}/pending-focus/retry",
+    response_model=WorkspaceResponse,
+)
+def retry_pending_focus(
+    workspace_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Bekleyen alt sayfayı yeniden dene (marka confirmed olmalı). Hata 200 + hata metni."""
+    brand = _lock_active_workspace(db, workspace_id)
+    if brand.status != "confirmed" or not brand.pending_focus_url:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Bekleyen alt sayfa yok ya da marka henüz onaylanmadı",
+        )
+    handoff = _hand_off_pending_focus(db, brand)
+    db.commit()
+    db.refresh(brand)
+    return _workspace_response_with_handoff(brand, handoff, background_tasks)
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/pending-focus",
+    response_model=WorkspaceResponse,
+)
+def delete_pending_focus(workspace_id: int, db: Session = Depends(get_db)):
+    """Bekleyen alt sayfa isteğinden vazgeç (adres + hata temizlenir)."""
+    brand = _lock_active_workspace(db, workspace_id)
+    brand.pending_focus_url = None
+    brand.pending_focus_error = None
+    db.commit()
+    db.refresh(brand)
+    return WorkspaceResponse.model_validate(brand)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/analysis/retry",
+    response_model=WorkspaceResponse,
+)
+def retry_workspace_analysis(
+    workspace_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Başarısız profil analizini aynı kayıtta yeniden başlat (marka ve odak).
+
+    Yalnız profile_first + failed + analiz edilmiş profil YOK. Satır kilitli + yeni attempt
+    token: ikinci istek pending'i görüp 409 alır (çift analiz yok).
+    """
+    workspace = verify_workspace(db, workspace_id)
+    # takili pending/running satir okuma aninda failed'a doner (get_workspace ile ayni yol)
+    fail_if_stuck(db, workspace)
+    workspace = _lock_active_workspace(db, workspace_id)
+
+    if workspace.onboarding_flow != "profile_first":
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="Bu çalışma profil-önce akışta değil"
+        )
+    if workspace.status in ("pending", "running"):
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Analiz zaten sürüyor")
+    if workspace.status != "failed" or _has_analyzed_profile(workspace.profile_data):
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Analizi yeniden deneme yalnız başarısız ve profili olmayan çalışmada mümkün",
+        )
+    if not settings.ENABLE_SITE_PROFILE_ANALYSIS:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Profil analizi şu an kapalı")
+
+    workspace.status = "pending"
+    workspace.error_message = None
+    start_attempt(workspace)
+    db.commit()
+    db.refresh(workspace)
+
+    _dispatch_analysis(background_tasks, workspace)
     return WorkspaceResponse.model_validate(workspace)
 
 

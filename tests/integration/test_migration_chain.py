@@ -427,3 +427,54 @@ def test_brand_profile_focus_relation_columns_and_idempotent_migration(fresh_sch
             "SELECT archived_with_parent, parent_brand_profile_id "
             "FROM brand_profiles WHERE name = 'legacy_focus'"
         )).one() == (False, None)
+
+
+def test_brand_profile_pending_focus_columns_and_idempotent_migration(fresh_schema, db_engine):
+    """20261029_001: pending_focus_url / pending_focus_error (nullable String).
+
+    Tekrar upgrade no-op, downgrade ikisini dusurur (ikinci downgrade no-op), yeniden
+    upgrade geri ekler; mevcut satir NULL alanlarla korunur.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert columns["pending_focus_url"]["nullable"] is True
+    assert columns["pending_focus_url"]["type"].length == 2048
+    assert columns["pending_focus_error"]["nullable"] is True
+    assert columns["pending_focus_error"]["type"].length == 500
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261029_001_add_brand_profile_pending_focus.py")
+    spec = importlib.util.spec_from_file_location("mig_20261029_001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261029_001" and module.down_revision == "20261028_002"
+
+    def state(conn) -> tuple:
+        names = {c["name"] for c in inspect(conn).get_columns("brand_profiles")}
+        return "pending_focus_url" in names, "pending_focus_error" in names
+
+    assert state(db_engine.connect()) == (True, True)
+
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('legacy_pending', 'https://x.test', 'confirmed')"
+        ))
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # zaten var -> no-op
+            assert state(conn) == (True, True)
+            module.downgrade()
+            assert state(conn) == (False, False)
+            module.downgrade()          # hicbiri yok -> no-op
+            module.upgrade()            # geri ekler
+            assert state(conn) == (True, True)
+        assert conn.execute(text(
+            "SELECT pending_focus_url, pending_focus_error "
+            "FROM brand_profiles WHERE name = 'legacy_pending'"
+        )).one() == (None, None)

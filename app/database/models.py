@@ -1062,6 +1062,10 @@ class BrandProfile(Base):
     # Arsiv soft-delete oldugu icin FK duz; archived_with_parent: ebeveynle birlikte arsivlendi.
     parent_brand_profile_id = Column(Integer, ForeignKey("brand_profiles.id"), nullable=True, index=True)
     archived_with_parent = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Marka onayindan sonra kendiliginden acilacak alt sayfa istegi (Faz 3e);
+    # hata metni kullaniciya gosterilir, adres hata halinde SILINMEZ.
+    pending_focus_url = Column(String(2048), nullable=True)
+    pending_focus_error = Column(String(500), nullable=True)
 
     # ── Kalite+maliyet plani A/B/F (plan_kalite_maliyet.md) ──
     # DIKKAT: JSON kolon guncellemelerinde in-place mutation'a guvenme —

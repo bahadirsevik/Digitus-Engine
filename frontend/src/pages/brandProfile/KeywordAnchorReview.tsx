@@ -150,6 +150,15 @@ export default function KeywordAnchorReview({
 
   return (
     <div className="bpx-fade">
+      {workspace.pending_focus_url && (
+        <ol className="bpx-wizard-steps" aria-label="Akış adımları">
+          {['Profil', 'Rakipler', "Keyword'ler", 'Alt sayfa'].map((label, i) => (
+            <li key={label} aria-current={i === 2 ? 'step' : undefined}>
+              {label}
+            </li>
+          ))}
+        </ol>
+      )}
       <h3 className="bpx-h3">Keyword Önerileri ve Marka Odakları</h3>
       <p className="bpx-sub">Detaylı hacim ve rekabet analizi bir sonraki adımda yapılacak.</p>
 
@@ -312,7 +321,9 @@ export default function KeywordAnchorReview({
           ) : (
             <Check size={16} strokeWidth={2.4} />
           )}
-          Onayla ve analize geç
+          {workspace.pending_focus_url
+            ? 'Markayı onayla ve alt sayfaya devam et'
+            : 'Onayla ve analize geç'}
         </button>
       </div>
     </div>

@@ -102,6 +102,11 @@ class WorkspaceCreateRequest(BaseModel):
         None,
         description="Crawl kapsamı; boşsa URL'den türetilir (kök → site, alt sayfa → page)",
     )
+    pending_focus_url: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description="Marka onayından sonra kendiliğinden açılacak alt sayfa (yalnız site + profile_first)",
+    )
 
 
 class FocusCreateRequest(BaseModel):
@@ -269,6 +274,10 @@ class WorkspaceResponse(BaseModel):
     crawl_scope: str = "site"
     parent_brand_profile_id: Optional[int] = None
     archived_with_parent: bool = False
+    pending_focus_url: Optional[str] = None
+    pending_focus_error: Optional[str] = None
+    # Yalnız keywords/approve ve pending-focus/retry cevaplarında dolu (istek-başına, kalıcı değil)
+    focus_handoff_id: Optional[int] = None
     competitor_urls: Optional[List[str]] = None
     # Plan v13: kalıcı URL kararları — Rakipler kartı yeniden açılışta
     # varsayılanı BUNDAN türetir ("Rakip değil" block'a geri dönmez)
@@ -303,6 +312,8 @@ class WorkspaceListResponse(BaseModel):
     crawl_scope: str = "site"
     parent_brand_profile_id: Optional[int] = None
     archived_with_parent: bool = False
+    pending_focus_url: Optional[str] = None
+    pending_focus_error: Optional[str] = None
     status: str
     onboarding_flow: str = "legacy"
     profile_approved_at: Optional[datetime] = None

@@ -122,6 +122,8 @@ export interface WorkspaceListRow {
   crawl_scope?: string
   parent_brand_profile_id?: number | null
   archived_with_parent?: boolean
+  pending_focus_url?: string | null
+  pending_focus_error?: string | null
   status: string
   onboarding_flow?: 'legacy' | 'profile_first'
   profile_approved_at?: string | null
@@ -192,33 +194,32 @@ export function orderWithFocuses<T extends { id: number; parent_brand_profile_id
   return top.flatMap((r) => [r, ...(children.get(r.id) ?? [])])
 }
 
-// Faz 2 diyaloğunda "Markayı ana sayfayla oluştur" denince özgün alt sayfa URL'si,
-// yeni markanın id'siyle tutulur; marka onaylanınca "Alt sayfa ekle" alanı bununla dolar.
-// Depolama yoksa/atarsa sessizce atlanır (özellik yalnız kolaylık).
-const pendingFocusKey = (id: number) => `bpx-pending-focus-url:${id}`
+const LOCATION_PROFILE_KEYS = ['location_filter_mode', 'focus_cities', 'location_exempt_terms']
 
-export function rememberPendingFocusUrl(id: number, url: string): void {
-  try {
-    window.localStorage.setItem(pendingFocusKey(id), url)
-  } catch {
-    /* depolama kapalı */
-  }
+/** Backend `_has_analyzed_profile` ile aynı: analizden önce odak yalnız konum alanı taşır. */
+export function hasAnalyzedProfile(profileData: Record<string, unknown> | null | undefined) {
+  return !!profileData && Object.keys(profileData).some((k) => !LOCATION_PROFILE_KEYS.includes(k))
 }
 
-export function readPendingFocusUrl(id: number): string {
+/**
+ * Menü/şerit için kısa alt sayfa adı: " — " sonrası; boşluksuz ise (yol/slug) son parça
+ * insanlaştırılır: "toprak-analizi-hizmeti" -> "Toprak analizi hizmeti". Uzun URL taşınmaz.
+ */
+export function focusShortName(name: string): string {
+  const sep = name.indexOf(' — ')
+  const rest = (sep >= 0 ? name.slice(sep + 3) : name).trim()
+  if (!rest || /\s/.test(rest)) return rest || name
+  let last = rest.split(/[?#]/)[0].split('/').filter(Boolean).pop() ?? rest
   try {
-    return window.localStorage.getItem(pendingFocusKey(id)) ?? ''
+    last = decodeURIComponent(last)
   } catch {
-    return ''
+    /* kodlanmamış parça olduğu gibi kalır */
   }
-}
-
-export function clearPendingFocusUrl(id: number): void {
-  try {
-    window.localStorage.removeItem(pendingFocusKey(id))
-  } catch {
-    /* depolama kapalı */
-  }
+  const text = last
+    .replace(/\.[a-z0-9]{2,5}$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim()
+  return text ? text.charAt(0).toLocaleUpperCase('tr') + text.slice(1) : rest
 }
 
 // Tek faz kaynağı: hem workspace kartları hem sihirbaz panelleri bunu kullanır.
