@@ -2,6 +2,7 @@
 Brand Profile API endpoints.
 Site analysis, profile management, and relevance scoring.
 """
+import copy
 import logging
 from datetime import datetime, timedelta, timezone
 import re
@@ -22,7 +23,7 @@ from app.schemas.brand_profile import (
     ProfileConfirmRequest,
     BrandProfileResponse, ChannelSeedInput, ChannelSeedResponse,
     KeywordRelevanceResponse, RelevanceComputeResponse,
-    WorkspaceCreateRequest, WorkspaceResponse, WorkspaceListResponse,
+    WorkspaceCreateRequest, WorkspaceResponse, WorkspaceListResponse, FocusCreateRequest,
     WorkspaceKeywordApproveRequest, WorkspaceKeywordRefreshRequest,
     WorkspaceKeywordRefreshResponse,
     WorkspaceProfileApproveRequest, AnchorPreviewRequest, AnchorPreviewResponse,
@@ -42,7 +43,9 @@ from app.core.engine_version_gate import (
     run_algorithm_version,
 )
 from app.core.workspace import verify_scoring_run, verify_workspace
-from app.core.site_analyzer.crawler import CrawlContentUnusable
+from app.core.site_analyzer.crawler import (
+    CrawlContentUnusable, _is_same_site_url, _page_key,
+)
 from app.core.site_analyzer.stuck_janitor import fail_if_stuck
 from app.core.site_analyzer.analysis_attempt import (
     lock_if_current,
@@ -105,6 +108,24 @@ EDITABLE_LIST_FIELDS = {
 
 # Skaler (liste olmayan) lokasyon alanı — enum, ayrı doğrulanır.
 LOCATION_MODE_FIELD = "location_filter_mode"
+# Odak olusturmada ebeveynden kopyalanan ve analizde korunan konum alanlari
+LOCATION_PROFILE_KEYS = (LOCATION_MODE_FIELD, "focus_cities", "location_exempt_terms")
+
+
+def _carry_location_fields(workspace: BrandProfile, profile: Dict[str, Any]) -> None:
+    """Mevcut satirdaki konum alanlarini AI profiline tasir (AI semasinda yoklar);
+    aksi halde analiz/yeniden analiz kullanicinin konum politikasini siler."""
+    existing = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
+    for key in LOCATION_PROFILE_KEYS:
+        if key in existing:
+            profile[key] = copy.deepcopy(existing[key])
+
+
+def _has_analyzed_profile(profile_data: Any) -> bool:
+    """Odak satiri analizden once yalniz konum alanlari tasir; bu bir profil sayilmaz."""
+    return isinstance(profile_data, dict) and any(
+        key not in LOCATION_PROFILE_KEYS for key in profile_data
+    )
 
 # Onizleme yanitindaki ornek keyword listeleri icin ust sinir (plan §5.7:
 # "sinirli sayida ornek" — tam keyword metinleri toplu cogaltilmaz).
@@ -667,6 +688,106 @@ def create_workspace(
     return WorkspaceResponse.model_validate(workspace)
 
 
+# capabilities BİLEREK yok: ürüne özgü olabilir ve hiçbir kod okumuyor
+_FOCUS_INHERITED_FIELDS = (
+    "competitor_terms", "competitor_url_decisions", "competitor_policy", "topic_policy",
+    "excluded_info", "default_geo_target_id", "default_language_id",
+)
+
+
+def _with_scheme(url: str) -> str:
+    url = (url or "").strip()
+    return url if "//" in url else f"https://{url}"
+
+
+@router.post(
+    "/workspaces/{workspace_id}/focuses",
+    response_model=WorkspaceResponse,
+    status_code=201,
+)
+def create_focus(
+    workspace_id: int,
+    request: FocusCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Onaylı markanın altına alt sayfa odağı ekle (normal bir workspace olarak).
+
+    Ebeveyn satırı kilitlenir: aynı sayfa için eşzamanlı çift istek serileşir.
+    Politika alanları oluşturma anında KOPYALANIR (capabilities hariç).
+    """
+    from urllib.parse import urlparse
+
+    verify_workspace(db, workspace_id)
+    parent = lock_workspace_row(db, workspace_id)
+
+    if parent.parent_brand_profile_id is not None or parent.crawl_scope != "site":
+        raise HTTPException(
+            status_code=400, detail="Alt sayfa yalnız marka çalışmasına eklenebilir"
+        )
+    if parent.status != "confirmed":
+        raise HTTPException(status_code=409, detail="Önce marka profilini onaylayın")
+
+    url = _with_scheme(request.url)
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="Geçersiz alt sayfa adresi")
+    parent_url = _with_scheme(parent.company_url)
+    if not _is_same_site_url(url, parent_url):
+        raise HTTPException(
+            status_code=400, detail="Alt sayfa markanın sitesiyle aynı sitede olmalı"
+        )
+    page_key = _page_key(url)
+    if page_key == _page_key(parent_url):
+        raise HTTPException(status_code=400, detail="Ana sayfa zaten markanın kendisi")
+    active_focuses = db.query(BrandProfile).filter(
+        BrandProfile.parent_brand_profile_id == parent.id,
+        BrandProfile.deleted_at.is_(None),
+    ).all()
+    if any(_page_key(_with_scheme(f.company_url)) == page_key for f in active_focuses):
+        raise HTTPException(status_code=409, detail="Bu sayfa için zaten bir odak var")
+
+    parent_profile = parent.profile_data if isinstance(parent.profile_data, dict) else {}
+    location = {
+        key: copy.deepcopy(parent_profile[key])
+        for key in LOCATION_PROFILE_KEYS if key in parent_profile
+    }
+    # None alanlar HİÇ verilmez: JSON kolona açık None 'null' JSON'u yazar (SQL NULL değil)
+    inherited = {
+        field: copy.deepcopy(getattr(parent, field))
+        for field in _FOCUS_INHERITED_FIELDS if getattr(parent, field) is not None
+    }
+    if location:
+        inherited["profile_data"] = location
+    brand_label = parent.name or (urlparse(parent_url).hostname or "")
+    attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
+    focus = BrandProfile(
+        name=f"{brand_label} — {parsed.path.rstrip('/')[:80] or '/'}"[:200],
+        company_url=url,
+        crawl_scope="page",
+        onboarding_flow="profile_first",
+        parent_brand_profile_id=parent.id,
+        status="pending",
+        analysis_attempt_id=attempt_id,
+        **inherited,
+    )
+    db.add(focus)
+    db.commit()
+    db.refresh(focus)
+
+    if settings.ENABLE_SITE_PROFILE_ANALYSIS:
+        # Rakip keşfi/doğrulaması odakta çalışmaz (competitor_urls=None)
+        background_tasks.add_task(
+            _run_profile_analysis_first,
+            workspace_id=focus.id,
+            company_url=url,
+            competitor_urls=None,
+            attempt_id=attempt_id,
+        )
+
+    return WorkspaceResponse.model_validate(focus)
+
+
 @router.get(
     "/workspaces",
     response_model=List[WorkspaceListResponse],
@@ -694,6 +815,8 @@ def list_workspaces(
             name=ws.name,
             company_url=ws.company_url,
             crawl_scope=ws.crawl_scope,
+            parent_brand_profile_id=ws.parent_brand_profile_id,
+            archived_with_parent=ws.archived_with_parent,
             status=ws.status,
             onboarding_flow=ws.onboarding_flow or "legacy",
             profile_approved_at=ws.profile_approved_at,
@@ -876,7 +999,7 @@ def approve_workspace_profile(
     allowed = workspace.status in (
         "profile_review", "competitor_review", "keywords_review"
     ) or (
-        workspace.status == "failed" and bool(workspace.profile_data)
+        workspace.status == "failed" and _has_analyzed_profile(workspace.profile_data)
     )
     if not allowed:
         raise HTTPException(
@@ -926,7 +1049,11 @@ def approve_workspace_profile(
     if initial_status == "profile_review":
         workspace.profile_approved_at = datetime.utcnow()
 
-    if request.rerun_keywords:
+    # Odak (alt sayfa) rakip adımına HİÇ girmez: ilk onay doğrudan keyword üretimine gider
+    rerun_keywords = request.rerun_keywords or (
+        workspace.parent_brand_profile_id is not None and initial_status == "profile_review"
+    )
+    if rerun_keywords:
         # Eski öneriler ekranda/response'ta kalmasın; yeni liste üretilecek
         workspace.suggested_keywords = None
         workspace.status = "running"
@@ -2209,7 +2336,10 @@ def _run_profile_analysis_first(
     """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
-    from app.core.site_analyzer.profile_extractor import ProfileExtractor
+    from app.core.site_analyzer.profile_extractor import (
+        ProfileExtractor,
+        build_brand_context,
+    )
     from app.core.site_analyzer.anchor_builder import build_anchor_texts
 
     db = SessionLocal()
@@ -2220,6 +2350,7 @@ def _run_profile_analysis_first(
             return
 
         crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
+        parent_id = workspace.parent_brand_profile_id
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2238,8 +2369,15 @@ def _run_profile_analysis_first(
             )
             return
 
+        extract_kwargs: Dict[str, Any] = {"crawl_scope": crawl_scope}
+        if parent_id is not None:
+            # Odak: ebeveynin yalniz kimligi prompt'a girer (site_content'e DEGIL)
+            parent = db.get(BrandProfile, parent_id)
+            brand_context = build_brand_context(parent.profile_data if parent else None)
+            if brand_context:
+                extract_kwargs["brand_context"] = brand_context
         profile = extractor.extract_profile_from_site_content(
-            crawl["site_content"], crawl_scope=crawl_scope
+            crawl["site_content"], **extract_kwargs
         )
         profile.pop("suggested_keywords", None)
 
@@ -2258,6 +2396,7 @@ def _run_profile_analysis_first(
             return
         workspace.source_pages = crawl["source_pages"]
         workspace.crawl_content_cache = crawl["site_content"]
+        _carry_location_fields(workspace, profile)
         apply_profile_data_update(db, workspace, profile)
         workspace.suggested_keywords = None
 
@@ -2513,6 +2652,7 @@ def _run_profile_from_keywords(
         if crawled_source_pages is not None:
             workspace.source_pages = crawled_source_pages
             workspace.crawl_content_cache = site_content
+        _carry_location_fields(workspace, profile)
         apply_profile_data_update(db, workspace, profile)
         workspace.suggested_keywords = approved_keywords
 

@@ -29,12 +29,18 @@ import {
 import { useBrandStore } from '../stores/brandStore'
 import { workspaceApi, ProfileConfirmRequest, WorkspaceResponse } from '../services/api'
 import {
+  canHaveFocuses,
+  clearPendingFocusUrl,
   editableExcludeThemes,
   extractErrorMessage,
   getWorkspacePhase,
   HARD_EXCLUDE_CHIP_NOTE,
+  isFocusWorkspace,
   listToTextarea,
+  orderWithFocuses,
   parseExcludedInfo,
+  readPendingFocusUrl,
+  rememberPendingFocusUrl,
   SOFT_EXCLUDE_HELP,
   SOFT_EXCLUDE_LABEL,
   splitNewlineItems,
@@ -214,6 +220,81 @@ function parseCompanyUrl(raw: string): URL | null {
 
 const isRootPath = (u: URL) => u.pathname === '' || u.pathname === '/'
 
+// ─── Alt sayfalar kartı (onaylı marka) ────────────────────────────────
+
+function FocusesCard({
+  parent,
+  focuses,
+  onCreated,
+  onOpen,
+}: {
+  parent: WorkspaceListRow
+  focuses: WorkspaceListRow[]
+  onCreated: (focus: WorkspaceResponse) => void
+  onOpen: (id: number) => void
+}) {
+  // Faz 2 diyaloğunda ana sayfayla oluşturulan markanın özgün alt sayfa URL'si
+  const [url, setUrl] = useState(() => readPendingFocusUrl(parent.id))
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState('')
+
+  const add = async () => {
+    setAdding(true)
+    setError('')
+    try {
+      const res = await workspaceApi.createFocus(parent.id, url.trim())
+      clearPendingFocusUrl(parent.id)
+      setUrl('')
+      onCreated(res.data)
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="bpx-section bpx-focuses">
+      <div className="bpx-section-title">Alt sayfalar</div>
+      {focuses.length === 0 ? (
+        <p className="bpx-section-hint">Henüz alt sayfa yok.</p>
+      ) : (
+        <ul className="bpx-focus-list">
+          {focuses.map((f) => (
+            <li key={f.id}>
+              <button type="button" className="bpx-focus-link" onClick={() => onOpen(f.id)}>
+                {f.name}
+              </button>
+              <span className="bpx-focus-status">{statusLabel(f)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="bpx-focus-add">
+        <input
+          className="bpx-input"
+          type="text"
+          aria-label="Alt sayfa URL"
+          placeholder="https://… (markanın sitesindeki bir alt sayfa)"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          disabled={adding}
+        />
+        <button
+          type="button"
+          className="bpx-btn-raised"
+          onClick={() => void add()}
+          disabled={adding || !url.trim()}
+        >
+          {adding ? <Loader2 size={14} className="spin-icon" /> : <Plus size={14} />}
+          Alt sayfa ekle
+        </button>
+      </div>
+      {error && <div className="error-banner">{error}</div>}
+    </div>
+  )
+}
+
 // ─── Tek modal: yeni çalışma sihirbazı + mevcut kart detayı ───────────
 
 function WorkspaceModal({
@@ -222,12 +303,16 @@ function WorkspaceModal({
   onWorkspaceUpdated,
   onFinished,
   onRestore,
+  onOpenWorkspace,
+  allWorkspaces,
 }: {
   workspace: WorkspaceListRow | null // null = "Yeni Çalışma" (url adımı)
   onClose: () => void
   onWorkspaceUpdated: (workspace: WorkspaceResponse) => void
   onFinished: (workspace: WorkspaceResponse) => void
   onRestore: (id: number) => void
+  onOpenWorkspace: (id: number) => void
+  allWorkspaces: WorkspaceListRow[]
 }) {
   const [ws, setWs] = useState<WorkspaceListRow | null>(initialWorkspace)
   const [companyUrl, setCompanyUrl] = useState('')
@@ -237,6 +322,8 @@ function WorkspaceModal({
   // Alt sayfa URL'si için kapsam sorusu; 'site' seçilince tekrar sorulmaz
   const [askScope, setAskScope] = useState(false)
   const [scopeChoice, setScopeChoice] = useState<'site' | null>(null)
+  // "Ana sayfayla oluştur" denince özgün alt sayfa URL'si (marka onaylanınca "Alt sayfa ekle" önerisi)
+  const subpageUrlRef = useRef('')
 
   // Legacy formlar (keyword-önce çalışmalar + confirmed düzenleme)
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
@@ -317,6 +404,9 @@ function WorkspaceModal({
         crawl_scope: crawlScope,
       })
       const created = res.data as WorkspaceResponse
+      if (crawlScope === 'site' && subpageUrlRef.current) {
+        rememberPendingFocusUrl(created.id, subpageUrlRef.current)
+      }
       setWs(workspaceResponseToListRow(created))
       onWorkspaceUpdated(created)
     } catch (err: unknown) {
@@ -340,6 +430,7 @@ function WorkspaceModal({
 
   const chooseSiteScope = () => {
     const parsed = parseCompanyUrl(companyUrl.trim())
+    subpageUrlRef.current = companyUrl.trim()
     if (parsed) setCompanyUrl(parsed.origin)
     setScopeChoice('site')
     setAskScope(false)
@@ -450,7 +541,17 @@ function WorkspaceModal({
           <div className="bpx-modal-title-row">
             <span className="bpx-modal-title">{ws.name}</span>
             <span className={`bpx-pill is-${tone}`}>{statusLabel(ws)}</span>
+            {isFocusWorkspace(ws) && <span className="bpx-focus-tag">Alt sayfa</span>}
           </div>
+          {ws.parent_brand_profile_id != null && (
+            <button
+              type="button"
+              className="bpx-focus-link"
+              onClick={() => onOpenWorkspace(ws.parent_brand_profile_id as number)}
+            >
+              Marka: {allWorkspaces.find((w) => w.id === ws.parent_brand_profile_id)?.name ?? '—'}
+            </button>
+          )}
           <a className="bpx-modal-url" href={ws.company_url} onClick={(e) => e.preventDefault()}>
             <Globe size={14} /> {ws.company_url}
           </a>
@@ -721,6 +822,21 @@ function WorkspaceModal({
           </div>
         )}
 
+        {isConfirmed && !isArchived && canHaveFocuses(ws) && (
+          <FocusesCard
+            key={ws.id}
+            parent={ws}
+            focuses={allWorkspaces.filter(
+              (w) => w.parent_brand_profile_id === ws.id && !w.deleted_at
+            )}
+            onCreated={(focus) => {
+              onWorkspaceUpdated(focus)
+              onOpenWorkspace(focus.id)
+            }}
+            onOpen={onOpenWorkspace}
+          />
+        )}
+
         {(isDraft || isConfirmed) && ws.profile_data && (
           <div className="profile-form">
             <div className="form-group">
@@ -854,8 +970,10 @@ function BrandCard({
   onActivate,
   onArchive,
   onRestore,
+  nested,
 }: {
   ws: WorkspaceListRow
+  nested: boolean
   isActive: boolean
   onOpen: () => void
   onActivate: () => void
@@ -872,7 +990,9 @@ function BrandCard({
 
   return (
     <div
-      className={`bpx-card${isActive ? ' is-active' : ''}${ws.deleted_at ? ' is-archived' : ''}`}
+      className={`bpx-card${isActive ? ' is-active' : ''}${ws.deleted_at ? ' is-archived' : ''}${
+        nested ? ' is-focus-nested' : ''
+      }`}
       onClick={onOpen}
       role="button"
       tabIndex={0}
@@ -881,7 +1001,10 @@ function BrandCard({
       }}
     >
       <div className="bpx-card-top">
-        <div className="bpx-card-name">{ws.name}</div>
+        <div className="bpx-card-name">
+          {ws.name}
+          {isFocusWorkspace(ws) && <span className="bpx-focus-tag">Alt sayfa</span>}
+        </div>
         <div className="bpx-card-actions">
           <span className={`bpx-pill is-${tone}`}>
             {busy && <Loader2 size={9} className="spin-icon" />} {statusLabel(ws)}
@@ -1206,8 +1329,16 @@ export default function BrandProfile() {
   const archivedCount = archivedRows.length
   const tokens = useMemo(() => searchTokens(searchQuery), [searchQuery])
   const visibleWorkspaces = useMemo(
-    () => workspaces.filter((ws) => workspaceMatchesSearch(ws, tokens)),
+    () => orderWithFocuses(workspaces.filter((ws) => workspaceMatchesSearch(ws, tokens))),
     [workspaces, tokens]
+  )
+  const visibleIds = useMemo(
+    () => new Set(visibleWorkspaces.map((ws) => ws.id)),
+    [visibleWorkspaces]
+  )
+  const knownWorkspaces = useMemo(
+    () => [...workspaces, ...archivedRows],
+    [workspaces, archivedRows]
   )
   // Arşiv gizliyken aramaya uyan arşivlenmiş çalışmalar — kullanıcıya ipucu olarak gösterilir
   const hiddenArchivedMatches = useMemo(
@@ -1308,6 +1439,9 @@ export default function BrandProfile() {
           <BrandCard
             key={ws.id}
             ws={ws}
+            nested={
+              ws.parent_brand_profile_id != null && visibleIds.has(ws.parent_brand_profile_id)
+            }
             isActive={activeWorkspace?.id === ws.id}
             onOpen={() => handleOpen(ws.id)}
             onActivate={() => handleActivateWorkspace(ws)}
@@ -1331,6 +1465,8 @@ export default function BrandProfile() {
           onWorkspaceUpdated={handleWorkspaceUpdated}
           onFinished={handleFinished}
           onRestore={handleRestore}
+          onOpenWorkspace={(id) => void handleOpen(id)}
+          allWorkspaces={knownWorkspaces}
         />
       )}
     </div>

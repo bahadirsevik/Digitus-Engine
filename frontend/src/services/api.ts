@@ -334,6 +334,10 @@ export const workspaceApi = {
 
   create: (data: WorkspaceCreateRequest) => api.post('/brand-profile/workspaces', data),
 
+  // Marka altında alt sayfa odağı (Faz 3): 201 + yeni odak (pending, analiz başlar)
+  createFocus: (workspaceId: number, url: string) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${workspaceId}/focuses`, { url }),
+
   approveKeywords: (id: number, data: WorkspaceKeywordApproveRequest) =>
     api.put<WorkspaceResponse>(`/brand-profile/workspaces/${id}/keywords/approve`, data),
 
@@ -827,6 +831,8 @@ export interface WorkspaceResponse {
   name: string
   company_url: string
   crawl_scope?: string
+  parent_brand_profile_id?: number | null
+  archived_with_parent?: boolean
   competitor_urls?: string[] | null
   competitor_url_decisions?: Record<string, CompetitorUrlDecision> | null
   status: string

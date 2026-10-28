@@ -82,6 +82,14 @@ PAGE_SCOPE_RULES = """
   BOŞ liste ([]) olsun.
 """
 
+# Odak (alt sayfa) workspace'inde ebeveyn markanin YALNIZ kimligi; kaynak kalite
+# kapisina girmez (site_content'in parcasi degildir).
+PAGE_BRAND_CONTEXT_BLOCK = """
+# MARKA BAĞLAMI (yalnız kimlik; ürün/hizmet kaynağı DEĞİLDİR)
+{brand_context}
+- Ürün/hizmet tanımı yalnız sayfa içeriğinden; sayfada yoksa boş bırak, marka bağlamından tamamlama.
+"""
+
 COMPETITOR_VALIDATION_PROMPT = """
 # GÖREV
 Ana firma profili ile rakip firma profillerini karşılaştır.
@@ -534,13 +542,43 @@ def missing_service_info(profile: Dict[str, Any], scope: str) -> bool:
 PROFILE_MISSING_SERVICE_ERROR = "profile_missing_service: Sayfada hizmet/ürün açıklaması bulunamadı"
 
 
-def build_profile_prompt(site_content: str, preliminary_info: Optional[str], scope: str) -> str:
-    """Dogrudan ve cache yolunun ORTAK profil prompt'u; page kapsaminda alt sayfa kurallari."""
+def build_brand_context(parent_profile: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Ebeveyn marka profilinden YALNIZ kimlik satirlari (ad, sektor, hedef kitle).
+
+    products/services/use_cases/problems_solved BILEREK alinmaz: odak sayfanin
+    urun/hizmeti marka listesinden tamamlanmasin.
+    """
+    parent_profile = parent_profile if isinstance(parent_profile, dict) else {}
+    lines = []
+    for label, key in (
+        ("Marka adı", "company_name"), ("Sektör", "sector"), ("Hedef kitle", "target_audience"),
+    ):
+        value = parent_profile.get(key)
+        if isinstance(value, str) and value.strip():
+            lines.append(f"- {label}: {value.strip()[:200]}")
+    return "\n".join(lines) or None
+
+
+def build_profile_prompt(
+    site_content: str,
+    preliminary_info: Optional[str],
+    scope: str,
+    brand_context: Optional[str] = None,
+) -> str:
+    """Dogrudan ve cache yolunun ORTAK profil prompt'u; page kapsaminda alt sayfa kurallari.
+
+    `brand_context` yalniz page kapsaminda kullanilir; site prompt'u bayt-ayni kalir.
+    """
     prompt = PROFILE_EXTRACTION_PROMPT.format(
         site_content=site_content,
         preliminary_info=preliminary_info or "(kullanıcı tarafından sağlanmadı)",
     )
-    return prompt + PAGE_SCOPE_RULES if scope == "page" else prompt
+    if scope != "page":
+        return prompt
+    prompt += PAGE_SCOPE_RULES
+    if brand_context:
+        prompt += PAGE_BRAND_CONTEXT_BLOCK.format(brand_context=brand_context)
+    return prompt
 
 
 def resolve_site_content(
@@ -709,6 +747,7 @@ class ProfileExtractor:
         site_content: str,
         preliminary_info: Optional[str] = None,
         crawl_scope: str = "site",
+        brand_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Hazır site içeriğinden (cache) profil çıkarır; crawl ETMEZ.
 
@@ -731,7 +770,9 @@ class ProfileExtractor:
                 f"(chars={quality['chars']}, repl={quality['replacement_ratio']}, "
                 f"ctrl={quality['control_ratio']})"
             )
-        prompt = build_profile_prompt(site_content, preliminary_info, crawl_scope)
+        prompt = build_profile_prompt(
+            site_content, preliminary_info, crawl_scope, brand_context
+        )
         response = self.ai_service.complete_json(
             prompt,
             max_tokens=4000,

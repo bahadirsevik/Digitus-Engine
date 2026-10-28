@@ -365,3 +365,65 @@ def test_brand_profile_crawl_scope_column_and_idempotent_migration(fresh_schema,
         assert conn.execute(text(
             "SELECT crawl_scope FROM brand_profiles WHERE name = 'legacy'"
         )).scalar() == "site"
+
+
+def test_brand_profile_focus_relation_columns_and_idempotent_migration(fresh_schema, db_engine):
+    """20261028_002: parent_brand_profile_id (FK + index) ve archived_with_parent.
+
+    Migration tekrar upgrade'de no-op, downgrade hepsini dusurur (ikinci downgrade
+    no-op), yeniden upgrade geri ekler; mevcut satir archived_with_parent=false olur.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    columns = {c["name"]: c for c in inspect(db_engine).get_columns("brand_profiles")}
+    assert columns["parent_brand_profile_id"]["nullable"] is True
+    assert columns["archived_with_parent"]["nullable"] is False
+    assert "false" in str(columns["archived_with_parent"]["default"]).lower()
+
+    path = (Path(__file__).resolve().parents[2] / "migrations" / "versions"
+            / "20261028_002_add_brand_profile_focus_relation.py")
+    spec = importlib.util.spec_from_file_location("mig_20261028_002", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "20261028_002" and module.down_revision == "20261028_001"
+
+    def state(conn) -> tuple:
+        insp = inspect(conn)
+        names = {c["name"] for c in insp.get_columns("brand_profiles")}
+        has_fk = any(
+            fk["constrained_columns"] == ["parent_brand_profile_id"]
+            for fk in insp.get_foreign_keys("brand_profiles")
+        )
+        has_index = any(
+            i["column_names"] == ["parent_brand_profile_id"]
+            for i in insp.get_indexes("brand_profiles")
+        )
+        return (
+            "parent_brand_profile_id" in names, has_fk, has_index,
+            "archived_with_parent" in names,
+        )
+
+    assert state(db_engine.connect()) == (True, True, True, True)
+
+    with db_engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO brand_profiles (name, company_url, status) "
+            "VALUES ('legacy_focus', 'https://x.test', 'confirmed')"
+        ))
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            module.upgrade()            # her parca zaten var -> no-op
+            assert state(conn) == (True, True, True, True)
+            module.downgrade()
+            assert state(conn) == (False, False, False, False)
+            module.downgrade()          # hicbiri yok -> no-op
+            module.upgrade()            # geri ekler
+            assert state(conn) == (True, True, True, True)
+        assert conn.execute(text(
+            "SELECT archived_with_parent, parent_brand_profile_id "
+            "FROM brand_profiles WHERE name = 'legacy_focus'"
+        )).one() == (False, None)

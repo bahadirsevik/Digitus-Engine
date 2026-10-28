@@ -2,9 +2,17 @@
 
 Last updated: 2026-10-28
 Branch: `deploy/lean-taslak`
-Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — FAZ 1 commit 7fd5dec; FAZ 2 KOD TAMAM (28.10) commit onayi bekliyor; Faz 3 sonra. Onceki: ADS 15 KW standardi push'lu, sunucuya dagitildi (20.10)**
+Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d; FAZ 3a+3b KOD TAMAM (28.10) commit onayi bekliyor; sirada 3c (arsiv) + 3d (toplu uygulama)**
 Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
 Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (28.10, FAZ 3a+3b — Backend Dev + Frontend Dev Sonnet paralel; Architect/Konsey KOSMADI, karar planda yazili)
+
+- BrandProfile.parent_brand_profile_id (FK, index) + archived_with_parent; migration 20261028_002 (down 20261028_001, idempotent).
+- POST /workspaces/{id}/focuses: ebeveyn kilitli; marka degilse 400 (bagimsiz page/odak ebeveyn OLAMAZ), onaysiz 409, baska site/ana sayfa 400, ayni aktif odak 409. Miras kopya (capabilities YOK); konum alanlari analiz+yeniden analizde _carry_location_fields ile korunur (normal workspace icin de).
+- Prompt: odakta ebeveynin yalniz ad/sektor/hedef kitle blogu (page'de, site_content'e girmez). Onay: odak profile_review'dan dogrudan keyword uretimine; competitor_review'a hicbir yoldan girmez. Failed-onay kapisi yalniz-konum profile_data'yi profil saymaz.
+- FE: liste/secicide odak girintili, 'Alt sayfalar' karti + 'Alt sayfa ekle', 'Marka: X' baglantisi, Faz 2 secimindeki alt sayfa URL'si on-doldurma; odak fazi competitor_review'a dusmez.
+- Testler: tam paket 5232 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError) / 112 atlandi; FE lint+format+build temiz, 297/297. Canli/tarayici kontrolu YOK.
 
 ## Just completed (28.10, FAZ 2 — dev-team Backend Dev + Frontend Dev Sonnet paralel; Architect/Konsey KOSMADI, karar planda yazili)
 

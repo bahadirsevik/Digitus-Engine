@@ -104,6 +104,11 @@ class WorkspaceCreateRequest(BaseModel):
     )
 
 
+class FocusCreateRequest(BaseModel):
+    """Marka altına alt sayfa odağı ekleme isteği."""
+    url: str = Field(..., min_length=1, max_length=500, description="Odak sayfa URL'i (marka ile aynı site)")
+
+
 class CompetitorDecision(BaseModel):
     """Rakipler kartındaki URL-bazlı kullanıcı kararı (plan v13).
 
@@ -229,6 +234,8 @@ class WorkspaceResponse(BaseModel):
     name: Optional[str] = None
     company_url: str
     crawl_scope: str = "site"
+    parent_brand_profile_id: Optional[int] = None
+    archived_with_parent: bool = False
     competitor_urls: Optional[List[str]] = None
     # Plan v13: kalıcı URL kararları — Rakipler kartı yeniden açılışta
     # varsayılanı BUNDAN türetir ("Rakip değil" block'a geri dönmez)
@@ -261,6 +268,8 @@ class WorkspaceListResponse(BaseModel):
     name: Optional[str] = None
     company_url: str
     crawl_scope: str = "site"
+    parent_brand_profile_id: Optional[int] = None
+    archived_with_parent: bool = False
     status: str
     onboarding_flow: str = "legacy"
     profile_approved_at: Optional[datetime] = None

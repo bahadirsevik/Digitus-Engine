@@ -120,6 +120,8 @@ export interface WorkspaceListRow {
   name: string
   company_url: string
   crawl_scope?: string
+  parent_brand_profile_id?: number | null
+  archived_with_parent?: boolean
   status: string
   onboarding_flow?: 'legacy' | 'profile_first'
   profile_approved_at?: string | null
@@ -156,11 +158,67 @@ export type WorkspacePhase =
 
 interface PhaseInput {
   status: string
+  parent_brand_profile_id?: number | null
   onboarding_flow?: 'legacy' | 'profile_first'
   profile_approved_at?: string | null
   profile_data?: Record<string, unknown> | null
   suggested_keywords?: string[] | null
   deleted_at?: string | null
+}
+
+// ── Marka altı alt sayfa odakları (Faz 3) ──
+
+type FocusFields = { parent_brand_profile_id?: number | null; crawl_scope?: string }
+
+export const isFocusWorkspace = (ws: FocusFields) => ws.parent_brand_profile_id != null
+
+/** Alt sayfa ekleyebilen çalışma: marka (ebeveyni yok, site kapsamı; eksik kapsam = site) + onaylı. */
+export const canHaveFocuses = (ws: FocusFields & { status: string }) =>
+  !isFocusWorkspace(ws) && (ws.crawl_scope ?? 'site') === 'site' && ws.status === 'confirmed'
+
+/** Her odak ebeveyninin hemen ardından; ebeveyni listede olmayan odak üst seviyede kalır. */
+export function orderWithFocuses<T extends { id: number; parent_brand_profile_id?: number | null }>(
+  rows: T[]
+): T[] {
+  const ids = new Set(rows.map((r) => r.id))
+  const children = new Map<number, T[]>()
+  const top: T[] = []
+  rows.forEach((r) => {
+    const parent = r.parent_brand_profile_id
+    if (parent != null && ids.has(parent))
+      children.set(parent, [...(children.get(parent) ?? []), r])
+    else top.push(r)
+  })
+  return top.flatMap((r) => [r, ...(children.get(r.id) ?? [])])
+}
+
+// Faz 2 diyaloğunda "Markayı ana sayfayla oluştur" denince özgün alt sayfa URL'si,
+// yeni markanın id'siyle tutulur; marka onaylanınca "Alt sayfa ekle" alanı bununla dolar.
+// Depolama yoksa/atarsa sessizce atlanır (özellik yalnız kolaylık).
+const pendingFocusKey = (id: number) => `bpx-pending-focus-url:${id}`
+
+export function rememberPendingFocusUrl(id: number, url: string): void {
+  try {
+    window.localStorage.setItem(pendingFocusKey(id), url)
+  } catch {
+    /* depolama kapalı */
+  }
+}
+
+export function readPendingFocusUrl(id: number): string {
+  try {
+    return window.localStorage.getItem(pendingFocusKey(id)) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function clearPendingFocusUrl(id: number): void {
+  try {
+    window.localStorage.removeItem(pendingFocusKey(id))
+  } catch {
+    /* depolama kapalı */
+  }
 }
 
 // Tek faz kaynağı: hem workspace kartları hem sihirbaz panelleri bunu kullanır.
@@ -174,7 +232,11 @@ export function getWorkspacePhase(workspace: PhaseInput): WorkspacePhase {
 
   if (workspace.onboarding_flow === 'profile_first') {
     if (workspace.status === 'profile_review') return 'profile_cards_review'
-    if (workspace.status === 'competitor_review') return 'competitor_review'
+    // Alt sayfa odağında rakip adımı YOK (parent_brand_profile_id'den türer: yenilemede
+    // tutarlı). Beklenmedik competitor_review durumu bile rakip keşfi sunmaz.
+    if (workspace.status === 'competitor_review') {
+      return isFocusWorkspace(workspace) ? 'profile_cards_review' : 'competitor_review'
+    }
     if (workspace.status === 'keywords_review') return 'keyword_anchor_review'
     if (workspace.status === 'pending' || workspace.status === 'running') {
       return workspace.profile_approved_at ? 'generating_keywords' : 'analyzing_site'
