@@ -443,7 +443,6 @@ function WorkspaceModal({
   const [error, setError] = useState('')
   // Alt sayfa URL'si için kapsam sorusu: seçim kontrolü (seçmek başlatmaz); URL değişince sıfırlanır
   const [scopeChoice, setScopeChoice] = useState<ScopeChoice | null>(null)
-  const [scopeDismissed, setScopeDismissed] = useState(false)
   // Alt sayfa / analiz tekrar deneme (şerit + başarısız analiz bandı)
   const [focusBusy, setFocusBusy] = useState(false)
   const [stripError, setStripError] = useState('')
@@ -558,9 +557,8 @@ function WorkspaceModal({
   const handleCreate = () => {
     if (!companyUrl.trim()) return
     if (scopeNeeded) {
-      // Soru kapatılmışsa yeniden açılır; seçim yoksa başlatma
-      if (!scopeChoice) setScopeDismissed(false)
-      else void createWorkspace(scopeChoice)
+      // Alt sayfa adresinde seçim yapılmadan başlatılmaz (buton da pasif)
+      if (scopeChoice) void createWorkspace(scopeChoice)
       return
     }
     void createWorkspace('root')
@@ -569,7 +567,6 @@ function WorkspaceModal({
   const changeCompanyUrl = (value: string) => {
     setCompanyUrl(value)
     setScopeChoice(null)
-    setScopeDismissed(false)
   }
 
   const handleModalWorkspaceUpdated = (updated: WorkspaceResponse) => {
@@ -703,12 +700,16 @@ function WorkspaceModal({
   const urlValid = /\./.test(companyUrl)
   const enteredUrl = parseCompanyUrl(companyUrl.trim())
   const scopeNeeded = urlValid && !!enteredUrl && !isRootPath(enteredUrl)
-  const scopeOpen = scopeNeeded && !scopeDismissed
   // Başarısız + analiz edilmiş profili olmayan profil-önce çalışma aynı kayıtta tekrar denenebilir
   const canRetryAnalysis =
     phase === 'failed' &&
     ws?.onboarding_flow === 'profile_first' &&
     !hasAnalyzedProfile(ws.profile_data)
+  // Profil hazırken sonraki keyword üretimi başarısızsa site yeniden taranmadan yalnız o adım
+  const canRetryKeywords =
+    phase === 'failed' &&
+    ws?.onboarding_flow === 'profile_first' &&
+    hasAnalyzedProfile(ws.profile_data)
   // Onaylı markanın onay bekleyen aktif alt sayfaları (sunucu verisinden, her açılışta)
   const unfinishedFocuses =
     ws && isConfirmed && !isArchived && !isFocusWorkspace(ws)
@@ -859,7 +860,7 @@ function WorkspaceModal({
             ))}
           </div>
           {error && <div className="error-banner">{error}</div>}
-          {scopeOpen && (
+          {scopeNeeded && (
             <div className="bpx-scope-ask" role="dialog" aria-labelledby="bpx-scope-ask-title">
               <div id="bpx-scope-ask-title" className="bpx-scope-ask-title">
                 Bu adres bir alt sayfa
@@ -895,10 +896,8 @@ function WorkspaceModal({
               <button
                 type="button"
                 className="bpx-btn-ghost"
-                onClick={() => {
-                  setScopeChoice(null)
-                  setScopeDismissed(true)
-                }}
+                // Bu adresten vazgeçilir: alan temizlenir, seçimsiz başlatma yolu kalmaz
+                onClick={() => changeCompanyUrl('')}
               >
                 Vazgeç
               </button>
@@ -912,7 +911,7 @@ function WorkspaceModal({
               type="button"
               className="bpx-btn-primary"
               onClick={handleCreate}
-              disabled={creating || !urlValid || (scopeOpen && !scopeChoice)}
+              disabled={creating || !urlValid || (scopeNeeded && !scopeChoice)}
             >
               {creating ? (
                 <Loader2 size={15} className="spin-icon" />
@@ -974,6 +973,19 @@ function WorkspaceModal({
               >
                 {retryingAnalysis && <Loader2 size={14} className="spin-icon" />}
                 Analizi tekrar dene
+              </button>
+            </div>
+          ) : canRetryKeywords ? (
+            <div className="error-banner bpx-banner-action">
+              <span>Keyword üretimi tamamlanamadı. Profil hazır; site yeniden taranmaz.</span>
+              <button
+                type="button"
+                className="bpx-btn-raised"
+                onClick={() => void continueToKeywordGeneration()}
+                disabled={startingKeywords}
+              >
+                {startingKeywords && <Loader2 size={14} className="spin-icon" />}
+                Keyword üretimini tekrar dene
               </button>
             </div>
           ) : (
