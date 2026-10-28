@@ -2,9 +2,21 @@
 
 Last updated: 2026-10-28
 Branch: `deploy/lean-taslak`
-Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127; FAZ 3c+3d KOD TAMAM (28.10) commit onayi bekliyor; dagitim oncesi acik: gercek site + tarayici, sunucu merge revizyonu, worker restart**
+Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127, Faz 3c+3d 914ffe5 (push yok); gelistirme ortaminda gercek site + tarayici kontrolu GECTI (28.10); dagitim oncesi acik: sunucu dalinda yeni merge revizyonu, sunucuda worker restart; Faz 4 baslamadi**
 Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
 Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (28.10, gelistirme ortaminda gercek site uctan uca + tarayici kontrolu)
+
+- Ortam: yerel dev (lean klon bagli digitus_app); yerel DB alembic 20261017_001 -> 20261028_002 yukseltildi, celery_worker + frontend yeniden baslatildi (calisan gorev 0). Sunucuya dokunulmadi, push yok.
+- Faz 1-2 (imecemobil, Next.js SPA; eski #62 HATA vakasi): alt sayfa + page -> ws63 profile_review, 1 sayfa okundu (499 krk), hizmet yalniz 'Toprak analizi hizmeti'; ana sayfa + site -> ws64 profile_review, 3 sayfa (5119 krk), uygulama + 7 servis.
+- Faz 3 (ws55 dthasanfatihsezgin.com altina /hizmetler/pedodonti/ -> ws65): page, 1 sayfa; hizmetler pedodontiye ozgu; konum alanlari analizden sonra korundu; ayni sayfa ikinci kez 409; onay bos rakip yukuyle -> rakip adimi YOK (profile_review -> running -> keywords_review -> confirmed); URL kaynakli 2 rakip engeli (manual_approved=false) odakta VE markada korundu; 10 pedodonti keyword'u.
+- Toplu uygulama: yerel competitor_policy degisikligi onizlemede gorundu, uygulama markaya dondurdu (policy_version +1), ikinci uygulama changed=false. Arsiv: marka arsivi odagi archived_with_parent=True ile arsivledi; marka arsivliyken odak restore 409; marka donunce odak dondu; elle arsivlenen odak marka dongusunde arsivde kaldi.
+- Tarayici (headless Chromium, Playwright): arsiv onayi 'Bu markanin 1 alt sayfasi da arsivlenecek.' (iptal edildi); marka penceresinde Alt sayfalar listesi + onizleme 'Degisiklik yok'; odak penceresi 'Alt sayfa' rozeti + 'Marka:' baglantisi, rakip adimi yok; alt sayfa URL'sinde kapsam sorusu acildi (olusturulmadi); konsol hatasi 0.
+- Gorsel kusurlar (islevsel degil): odak kart adi kelime ortasindan kiriliyor; onizleme basligi giris alanina yapisik, Uygula/Vazgec arasinda bosluk yok; bagimsiz page calismasi kartinda kapsam rozeti yok.
+- Gozlem: odak AI'si markanin diger hizmetlerini (implant, ortodonti, beyazlatma) odagin exclude_themes'ine yaziyor — odak icin makul, markaya yansimaz; patronla teyit edilebilir.
+- Maliyet: 4 gemini-3.8-flash cagrisi, 5812 girdi + 2121 cikti token ~0,012 $. Yeniden analiz canlida kosulmadi (testlerde kapsanir).
+- Codex bagimsiz dogrulamasi (28.10, main repo review_artifacts/marka_dogrulama/sonuc.md): yeni islevsel hata YOK. #63/#65 icin yeniden tarama + bellekte AI cikarimi (DB'ye yazilmadi), #64 yalniz yeniden tarama (3 sayfa); salt okunur tarayici kontrolu (mutasyon istekleri engelli), konsol hatasi 0; izole 4 test dosyasi 126 passed. Bulgu: AI dislama temalari kosudan kosuya degisiyor (#65: kayitta 'Ortodontik tel', yeni cikarimda protez/gulus tasarimi) -> profil onayinda kullanici gozden gecirmeli. Kalici yeniden analiz HTTP akisi canlida kosulmadi.
 
 ## Just completed (28.10, FAZ 3c+3d — Backend Dev + Frontend Dev Sonnet paralel; lead QA duzeltmeleri)
 
