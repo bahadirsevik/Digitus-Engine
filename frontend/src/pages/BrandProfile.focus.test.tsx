@@ -132,6 +132,7 @@ const approveKeywords = vi.fn()
 const retryPendingFocus = vi.fn()
 const cancelPendingFocus = vi.fn()
 const retryAnalysis = vi.fn()
+const approveProfile = vi.fn()
 
 vi.mock('../services/api', () => ({
   workspaceApi: {
@@ -145,6 +146,7 @@ vi.mock('../services/api', () => ({
     retryPendingFocus: (...a: unknown[]) => retryPendingFocus(...a),
     cancelPendingFocus: (...a: unknown[]) => cancelPendingFocus(...a),
     retryAnalysis: (...a: unknown[]) => retryAnalysis(...a),
+    approveProfile: (...a: unknown[]) => approveProfile(...a),
   },
   brandProfileApi: {
     policyReview: vi.fn(() => Promise.resolve({ data: {} })),
@@ -364,6 +366,7 @@ describe('Bekleyen alt sayfa: onay, devam şeridi, tekrar deneme', () => {
     retryPendingFocus.mockReset()
     cancelPendingFocus.mockReset()
     retryAnalysis.mockReset()
+    approveProfile.mockReset()
     list.mockResolvedValue({ data: allRows })
   })
 
@@ -485,10 +488,15 @@ describe('Bekleyen alt sayfa: onay, devam şeridi, tekrar deneme', () => {
     expect(await screen.findByText('Siteniz inceleniyor…')).toBeTruthy()
   })
 
-  it('başarısız ama profilli çalışmada tekrar dene yok, eski metin', async () => {
+  it('başarısız ama profilli çalışma: yalnız keyword üretimi tekrar denenir', async () => {
+    approveProfile.mockResolvedValue({ data: { ...flowRows[6], status: 'running' } })
     renderAt('/brand-profile?workspace_id=71')
-    expect(await screen.findByText(/Yeni bir çalışma oluşturmayı/)).toBeTruthy()
+    expect(await screen.findByText(/Keyword üretimi tamamlanamadı/)).toBeTruthy()
+    expect(screen.queryByText(/Yeni bir çalışma oluşturmayı/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Analizi tekrar dene' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Keyword üretimini tekrar dene' }))
+    await waitFor(() => expect(approveProfile).toHaveBeenCalledWith(71, { rerun_keywords: true }))
+    expect(retryAnalysis).not.toHaveBeenCalled()
   })
 })
 

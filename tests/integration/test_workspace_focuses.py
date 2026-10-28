@@ -497,6 +497,18 @@ def test_focus_reapproval_never_enters_competitor_review(
         assert keyword_calls == []
 
 
+def test_focus_failed_after_profile_retries_only_keyword_generation(
+    client, make_workspace, parent, keyword_calls
+):
+    """Arayuzdeki 'Keyword uretimini tekrar dene': profil korunur, yalniz keyword adimi kosar."""
+    focus = _focus_row(make_workspace, parent, "failed", dict(ANALYZED))
+    resp = _approve(client, focus.id, rerun_keywords=True)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "running"
+    assert len(keyword_calls) == 1 and keyword_calls[0]["workspace_id"] == focus.id
+    assert _reload(focus.id).profile_data["services"] == ANALYZED["services"]
+
+
 def test_focus_failed_with_location_only_profile_cannot_be_approved(
     client, make_workspace, parent, keyword_calls
 ):

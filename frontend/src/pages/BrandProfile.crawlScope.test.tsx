@@ -120,13 +120,12 @@ describe('Çalışma oluşturma: alt sayfa kapsam sorusu', () => {
     expect(startButton().disabled).toBe(false)
   })
 
-  it('"Vazgeç" soruyu kapatır, oluşturmaz; "Analizi Başlat" soruyu yeniden açar', async () => {
+  it('"Vazgeç" adresi temizler, oluşturmaz; seçimsiz "Analizi Başlat" pasif kalır', async () => {
     await openWizard(SUBPAGE)
     fireEvent.click(screen.getByRole('button', { name: 'Vazgeç' }))
     expect(screen.queryByText(DIALOG_TITLE)).toBeNull()
-    expect(create).not.toHaveBeenCalled()
-    clickCreate()
-    expect(await screen.findByRole('dialog', { name: DIALOG_TITLE })).toBeTruthy()
+    expect(urlField().value).toBe('')
+    expect(startButton().disabled).toBe(true)
     expect(create).not.toHaveBeenCalled()
   })
 })
