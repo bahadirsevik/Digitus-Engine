@@ -1,12 +1,21 @@
 # Current Status
 
-Last updated: 2026-10-17
+Last updated: 2026-10-28
 Branch: `deploy/lean-taslak`
-Active phase: **ADS 15 KW teslim standardi — FAZ 1-4 KOD TAMAM + TAM PAKET + TARAYICI KONTROLU TAMAM, commit YOK; CANLI DENEME YAPILDI (17.10, ws29 run 83, set 27 draft) — kullanici sonuclari inceliyor; commit+push ONAY BEKLIYOR; sunucu dagitimi AYRI**
-Kaynak plan: `plan_ads_15kw_standardi.md` rev.2.1 (Codex 3 inceleme, "Faz 1'e baslanabilir").
+Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — FAZ 1 TAMAM + COMMIT'LI (28.10); Faz 2-3 kullanici onayi bekliyor. Onceki: ADS 15 KW standardi push'lu, sunucuya dagitildi (20.10)**
+Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
 Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
 
-## Just completed (17.10, dev-team 1 Backend Dev gorevi Sonnet+high; Architect/Konsey KOSMADI — plan Codex onayli, bilinen kalip)
+## Just completed (28.10, plan_marka_alt_sayfa.md rev.2.1 FAZ 1 — dev-team Backend Dev Sonnet+high; Architect/Konsey KOSMADI, plan Codex onayli)
+
+- url_guard: `safe_fetch` (HTML/XML/text, FetchBudget 12 istek/45 sn redirect dahil, timeout kalan sureyle + govde okurken sure kontrolu), HttpStatusError/TlsVerificationError/FetchBudgetExceeded; `safe_fetch_html` sozlesmesi aynen.
+- crawler: tum indirmeler safe_fetch (verify=True), scope site|page, meta+JSON-LD+h1-h3 + satir tekrari ayiklama, sitemap origin+robots+sitemapindex 1 seviye, www esdegerligi, kapi kaynak metinde, Turkce `kod: mesaj` hatalari, ic linklerde sondaki `/` korunur.
+- profile_extractor: prepared_source_text (4 kapi noktasi), crawl_scope parametresi, missing_service_info. Prompt: yalniz page kapsaminda ek kural (asagida). Faz 2-3 YOK.
+- Testler: hedefli 10 dosya 205 passed; TAM PAKET (izole, alembic upgrade head dahil) 5173 passed / 2 failed / 112 skipped — 2 kirmizi onceden bilinen test_hybrid_run_db KeyError 'deepseek'/'anthropic' (degisen modulleri import etmiyor).
+- Canli AI'siz: imecemobil alt sayfa 0 sayfa -> site 3 sayfa / page 388 krk; 6 calisan sitede gerileme yok.
+- Codex 3. tur sonrasi (28.10): PAGE_SCOPE_RULES yalniz page'de prompt SONUNA (site prompt'u bayt-ayni, testli); build_profile_prompt + missing_service_info hem extract_profile hem extract_profile_from_site_content (cache yolu CrawlContentUnusable); LOW_PRIORITY_SEGMENTS (kurumsal/yasal sayfalar -10, noksel urun sayfalarini kaciriyordu); butce YUMUSAK sinir olarak belgelendi (45+8 sn+DNS). Hedefli 205 passed. Canli 4 Gemini cagrisi (n=1): imecemobil dogrudan+cache yalniz 'Toprak Analizi Hizmeti'; yalniz kunye sayfasi iki yolda da profile_missing_service. Noksel: spiral/boyuna kaynakli boru + celik profil sayfalari secildi. resolve_site_content scope'u Faz 2'de baglanacak.
+
+## Onceki:  (17.10, dev-team 1 Backend Dev gorevi Sonnet+high; Architect/Konsey KOSMADI — plan Codex onayli, bilinen kalip)
 
 - ADS gruplama: havuz kirpmasi (`max_groups*5`) silindi, `max_groups` yalniz grup sayisini sinirlar;
   `G = max(1, n//15)`, dengeli hedef boyutlar; AI'ya tam G grup + boyutlar; deterministik `_repair_groups`

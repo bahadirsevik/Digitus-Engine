@@ -7,6 +7,7 @@ AI'a gidiyor ve model `preliminary_info` (kullanici beyani) uzerinden MAKUL AMA
 KANITSIZ bir profil uretiyordu. Hata gozle bakilmadikca fark edilmiyordu.
 """
 import gzip as _gzip
+import socket
 import zlib as _zlib
 
 import httpx
@@ -20,6 +21,14 @@ from app.core.site_analyzer.crawler import (
     SiteCrawler,
     assess_text_quality,
 )
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    """Crawler artik SSRF guard'indan (safe_fetch) gecer: example.test public IP'ye cozulur."""
+    monkeypatch.setattr(
+        socket, "getaddrinfo",
+        lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))])
+
 
 HTML = (
     "<html><head><title>Klinik</title></head><body><main>"
