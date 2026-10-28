@@ -109,6 +109,39 @@ class FocusCreateRequest(BaseModel):
     url: str = Field(..., min_length=1, max_length=500, description="Odak sayfa URL'i (marka ile aynı site)")
 
 
+class FocusSettingsChange(BaseModel):
+    field: str
+    label: str
+
+
+class FocusSettingsPreviewItem(BaseModel):
+    id: int
+    name: Optional[str] = None
+    busy: bool
+    changes: List[FocusSettingsChange]
+
+
+class FocusSettingsPreviewResponse(BaseModel):
+    focuses: List[FocusSettingsPreviewItem]
+
+
+class FocusSettingsApplied(BaseModel):
+    id: int
+    name: Optional[str] = None
+    changed: bool
+
+
+class FocusSettingsSkipped(BaseModel):
+    id: int
+    name: Optional[str] = None
+    reason: str
+
+
+class FocusSettingsApplyResponse(BaseModel):
+    applied: List[FocusSettingsApplied]
+    skipped: List[FocusSettingsSkipped]
+
+
 class CompetitorDecision(BaseModel):
     """Rakipler kartındaki URL-bazlı kullanıcı kararı (plan v13).
 

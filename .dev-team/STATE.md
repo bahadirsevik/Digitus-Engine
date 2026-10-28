@@ -2,9 +2,17 @@
 
 Last updated: 2026-10-28
 Branch: `deploy/lean-taslak`
-Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d; FAZ 3a+3b KOD TAMAM (28.10) commit onayi bekliyor; sirada 3c (arsiv) + 3d (toplu uygulama)**
+Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127; FAZ 3c+3d KOD TAMAM (28.10) commit onayi bekliyor; dagitim oncesi acik: gercek site + tarayici, sunucu merge revizyonu, worker restart**
 Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
 Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (28.10, FAZ 3c+3d — Backend Dev + Frontend Dev Sonnet paralel; lead QA duzeltmeleri)
+
+- 3c: marka arsivi aktif odaklari archived_with_parent=True ile arsivler; marka geri gelince YALNIZ onlar doner (elle arsivlenen kalir); arsivli markanin odagi tek basina geri gelemez (409); odak dogrudan arsivlenince bayrak False.
+- 3d: POST .../focuses/settings/preview (odak basina degisecek alanlar + busy) ve /apply (odak basina _lock_workspace_for_policy_mutation; 409 -> 'islem suruyor' atlanir; profil analizi bitmemis odak atlanir; konum alanlari apply_profile_data_update(invalidate=False, manage=False) + tek _bump_policy_version_if_changed -> yalniz degisen odak bayatlar). capabilities dokunulmaz.
+- Lead QA: create_focus kilitten SONRA arsiv kontrolu (yaris: arsivli markaya aktif odak); modal icindeki 'Arsivden Cikar' 409'u modalda gosterilir.
+- Codex incelemesi (4 bulgu) duzeltildi: (1) competitor_urls mirasa + toplu uygulamaya eklendi, odak onayi rakip URL/karar yukunu YOK SAYAR (URL kaynakli engel silinmez), odakta rakip dogrulamasi kosmaz; (2) toplu uygulama exclude_themes'i provenance'li yeniden birlestirir (eski kullanici terimi cikar, odagin AI temasi kalir; anchor degisirse stale); (3) restore once marka sonra odak kilitler (arsiv/odak ekleme ile ayni sira; eszamanlilik testi); (4) marka arsivlenince aktif secili alt sayfa da temizlenir.
+- Testler: tam paket 5255 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError) / 112 atlandi; FE lint+format+build temiz, 308/308. Canli/tarayici kontrolu YOK.
 
 ## Just completed (28.10, FAZ 3a+3b — Backend Dev + Frontend Dev Sonnet paralel; Architect/Konsey KOSMADI, karar planda yazili)
 

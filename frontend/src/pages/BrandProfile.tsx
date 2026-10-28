@@ -27,7 +27,13 @@ import {
   Search,
 } from 'lucide-react'
 import { useBrandStore } from '../stores/brandStore'
-import { workspaceApi, ProfileConfirmRequest, WorkspaceResponse } from '../services/api'
+import {
+  workspaceApi,
+  FocusSettingsApplyResponse,
+  FocusSettingsPreviewResponse,
+  ProfileConfirmRequest,
+  WorkspaceResponse,
+} from '../services/api'
 import {
   canHaveFocuses,
   clearPendingFocusUrl,
@@ -227,16 +233,51 @@ function FocusesCard({
   focuses,
   onCreated,
   onOpen,
+  onReload,
 }: {
   parent: WorkspaceListRow
   focuses: WorkspaceListRow[]
   onCreated: (focus: WorkspaceResponse) => void
   onOpen: (id: number) => void
+  onReload: () => void
 }) {
   // Faz 2 diyaloğunda ana sayfayla oluşturulan markanın özgün alt sayfa URL'si
   const [url, setUrl] = useState(() => readPendingFocusUrl(parent.id))
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
+  // Marka ayarlarını alt sayfalara uygula: önizleme -> uygula (Faz 3d)
+  const [preview, setPreview] = useState<FocusSettingsPreviewResponse['focuses'] | null>(null)
+  const [applyResult, setApplyResult] = useState<FocusSettingsApplyResponse | null>(null)
+  const [settingsBusy, setSettingsBusy] = useState(false)
+
+  const openPreview = async () => {
+    setSettingsBusy(true)
+    setError('')
+    setApplyResult(null)
+    try {
+      const res = await workspaceApi.previewFocusSettings(parent.id)
+      setPreview(res.data.focuses)
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  const applySettings = async () => {
+    setSettingsBusy(true)
+    setError('')
+    try {
+      const res = await workspaceApi.applyFocusSettings(parent.id)
+      setApplyResult(res.data)
+      setPreview(null)
+      onReload()
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
 
   const add = async () => {
     setAdding(true)
@@ -290,6 +331,65 @@ function FocusesCard({
           Alt sayfa ekle
         </button>
       </div>
+      {focuses.length > 0 && !preview && (
+        <button
+          type="button"
+          className="bpx-btn-raised"
+          onClick={() => void openPreview()}
+          disabled={settingsBusy}
+        >
+          {settingsBusy && <Loader2 size={14} className="spin-icon" />}
+          Marka ayarlarını alt sayfalara uygula
+        </button>
+      )}
+      {preview && (
+        <div className="bpx-focus-preview">
+          <div className="bpx-section-title">Önizleme</div>
+          <ul className="bpx-focus-list">
+            {preview.map((f) => (
+              <li key={f.id}>
+                <strong>{f.name}</strong>{' '}
+                {f.busy
+                  ? 'İşlem sürüyor — atlanacak'
+                  : f.changes.length === 0
+                    ? 'Değişiklik yok'
+                    : `Değişecek: ${f.changes.map((c) => c.label).join(', ')}`}
+              </li>
+            ))}
+          </ul>
+          {preview.some((f) => !f.busy && f.changes.length > 0) && (
+            <p className="bpx-section-hint">
+              Bu alt sayfadaki yerel düzenlemeler marka ayarlarıyla değiştirilecek.
+            </p>
+          )}
+          <button
+            type="button"
+            className="bpx-btn-primary"
+            onClick={() => void applySettings()}
+            disabled={settingsBusy}
+          >
+            Uygula
+          </button>
+          <button
+            type="button"
+            className="bpx-btn-raised"
+            onClick={() => setPreview(null)}
+            disabled={settingsBusy}
+          >
+            Vazgeç
+          </button>
+        </div>
+      )}
+      {applyResult && (
+        <div className="bpx-section-hint">
+          <p>{applyResult.applied.length} alt sayfaya uygulandı.</p>
+          {applyResult.skipped.map((s) => (
+            <p key={s.id}>
+              {s.name}: atlandı ({s.reason})
+            </p>
+          ))}
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
     </div>
   )
@@ -304,17 +404,21 @@ function WorkspaceModal({
   onFinished,
   onRestore,
   onOpenWorkspace,
+  onReloadList,
   allWorkspaces,
 }: {
   workspace: WorkspaceListRow | null // null = "Yeni Çalışma" (url adımı)
   onClose: () => void
   onWorkspaceUpdated: (workspace: WorkspaceResponse) => void
   onFinished: (workspace: WorkspaceResponse) => void
-  onRestore: (id: number) => void
+  onRestore: (id: number) => Promise<string | null>
   onOpenWorkspace: (id: number) => void
+  onReloadList: () => void
   allWorkspaces: WorkspaceListRow[]
 }) {
   const [ws, setWs] = useState<WorkspaceListRow | null>(initialWorkspace)
+  // Sayfa hata bandı modal örtüsünün arkasında kalır; geri getirme hatası modalda gösterilir
+  const [restoreError, setRestoreError] = useState('')
   const [companyUrl, setCompanyUrl] = useState('')
   const [competitors, setCompetitors] = useState(['', '', ''])
   const [creating, setCreating] = useState(false)
@@ -562,7 +666,11 @@ function WorkspaceModal({
           </button>
         )}
         {isArchived && (
-          <button type="button" className="bpx-btn-raised" onClick={() => onRestore(ws.id)}>
+          <button
+            type="button"
+            className="bpx-btn-raised"
+            onClick={async () => setRestoreError((await onRestore(ws.id)) || '')}
+          >
             <RotateCcw size={14} /> Arşivden Çıkar
           </button>
         )}
@@ -834,6 +942,7 @@ function WorkspaceModal({
               onOpenWorkspace(focus.id)
             }}
             onOpen={onOpenWorkspace}
+            onReload={onReloadList}
           />
         )}
 
@@ -955,6 +1064,7 @@ function WorkspaceModal({
     <div className="bpx-overlay" onClick={onClose}>
       <div className="bpx-modal" onClick={(e) => e.stopPropagation()}>
         {renderHeader()}
+        {restoreError && <div className="error-banner">{restoreError}</div>}
         <div className={`bpx-modal-body${isLoadingPhase ? ' is-loading' : ''}`}>{renderBody()}</div>
       </div>
     </div>
@@ -1249,12 +1359,27 @@ export default function BrandProfile() {
   }, [workspaces, activeWorkspace, setActiveWorkspace])
 
   const handleArchive = async (id: number) => {
+    // Arşivde onay yoktu; yalnız aktif alt sayfası olan markada, etkisini bildirmek için sorulur
+    const focusIds = workspaces
+      .filter((w) => w.parent_brand_profile_id === id && !w.deleted_at)
+      .map((w) => w.id)
+    const focusCount = focusIds.length
+    // Marka arşivlenince alt sayfaları da arşivlenir: seçili alt sayfa da temizlenmeli
+    const archivedIds = new Set([id, ...focusIds])
+    if (
+      focusCount > 0 &&
+      !window.confirm(
+        `Marka arşivlensin mi? Bu markanın ${focusCount} alt sayfası da arşivlenecek.`
+      )
+    ) {
+      return
+    }
     try {
       await workspaceApi.archive(id)
-      if (activeWorkspace?.id === id) {
+      if (activeWorkspace && archivedIds.has(activeWorkspace.id)) {
         setActiveWorkspace(null)
       }
-      if (selectedWs?.id === id) {
+      if (selectedWs && archivedIds.has(selectedWs.id)) {
         setSelectedWs(null)
         setModalOpen(false)
       }
@@ -1264,12 +1389,15 @@ export default function BrandProfile() {
     }
   }
 
-  const handleRestore = async (id: number) => {
+  const handleRestore = async (id: number): Promise<string | null> => {
     try {
       await workspaceApi.restore(id)
       fetchWorkspaces()
+      return null
     } catch (err: unknown) {
-      setError(extractErrorMessage(err))
+      const message = extractErrorMessage(err)
+      setError(message)
+      return message
     }
   }
 
@@ -1466,6 +1594,7 @@ export default function BrandProfile() {
           onFinished={handleFinished}
           onRestore={handleRestore}
           onOpenWorkspace={(id) => void handleOpen(id)}
+          onReloadList={() => void fetchWorkspaces()}
           allWorkspaces={knownWorkspaces}
         />
       )}

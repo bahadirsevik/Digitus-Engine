@@ -70,6 +70,7 @@ def parent(make_workspace):
         status="confirmed",
         onboarding_flow="profile_first",
         profile_data=_parent_profile(),
+        competitor_urls=["https://rakip.test"],
         competitor_terms=[{"term": "Rakip", "status": "approved", "manual_approved": True}],
         competitor_url_decisions={"rakip.test": {"url": "https://rakip.test", "decision": "block"}},
         competitor_policy={"ads": "block", "seo": "allow", "social": "block"},
@@ -208,7 +209,8 @@ def test_inheritance_copies_policy_and_location_only(client, db_session, parent,
     parent = db_session.get(BrandProfile, parent.id)
 
     for field in (
-        "competitor_terms", "competitor_url_decisions", "competitor_policy", "topic_policy",
+        "competitor_urls", "competitor_terms", "competitor_url_decisions",
+        "competitor_policy", "topic_policy",
         "excluded_info", "default_geo_target_id", "default_language_id",
     ):
         assert getattr(child, field) == getattr(parent, field), field
@@ -494,6 +496,43 @@ def test_focus_failed_with_location_only_profile_cannot_be_approved(
     focus = _focus_row(make_workspace, parent, "failed", dict(LOCATION))
     assert _approve(client, focus.id).status_code == 400
     assert keyword_calls == []
+
+
+def test_focus_approval_keeps_inherited_url_sourced_competitor_block(
+    client, db_session, make_workspace, dispatched, keyword_calls
+):
+    """URL kaynakli (manuel olmayan) engel, odagin bos rakip yukuyle onayinda kalkmaz."""
+    from app.core.policy.competitor_policy import approved_competitor_terms
+
+    brand = make_workspace(
+        name="Acme", company_url=PARENT_URL, status="confirmed",
+        onboarding_flow="profile_first", profile_data=_parent_profile(),
+        competitor_urls=["https://rival.com"],
+        competitor_terms=[{
+            "term": "Rival", "status": "approved", "source": "url",
+            "manual_approved": False, "source_urls": ["rival.com"],
+        }],
+        competitor_url_decisions={
+            "rival.com": {"url": "https://rival.com", "term": "Rival", "decision": "block"}
+        },
+    )
+    focus_id = _post(client, brand.id, "https://www.example.test/a").json()["id"]
+    db_session.expire_all()
+    focus = db_session.get(BrandProfile, focus_id)
+    assert focus.competitor_urls == ["https://rival.com"]
+    focus.status = "profile_review"
+    focus.profile_data = dict(ANALYZED)
+    db_session.commit()
+
+    # odakta rakip adimi yok: istemci bos liste gonderse de miras kayit silinmez
+    resp = _approve(
+        client, focus_id, competitor_urls=[], competitor_decisions=[], rerun_keywords=False
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    focus = db_session.get(BrandProfile, focus_id)
+    assert approved_competitor_terms(focus) == ["Rival"]
+    assert focus.competitor_urls == ["https://rival.com"]
 
 
 def test_normal_brand_still_goes_to_competitor_review(client, make_workspace, keyword_calls):

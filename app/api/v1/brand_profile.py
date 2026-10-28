@@ -24,6 +24,7 @@ from app.schemas.brand_profile import (
     BrandProfileResponse, ChannelSeedInput, ChannelSeedResponse,
     KeywordRelevanceResponse, RelevanceComputeResponse,
     WorkspaceCreateRequest, WorkspaceResponse, WorkspaceListResponse, FocusCreateRequest,
+    FocusSettingsPreviewResponse, FocusSettingsApplyResponse,
     WorkspaceKeywordApproveRequest, WorkspaceKeywordRefreshRequest,
     WorkspaceKeywordRefreshResponse,
     WorkspaceProfileApproveRequest, AnchorPreviewRequest, AnchorPreviewResponse,
@@ -60,6 +61,11 @@ from app.core.policy import (
     apply_profile_data_update,
 )
 from app.core.policy.guards import find_active_workspace_work
+from app.core.policy.topic_policy import (
+    merge_normalized,
+    parse_excluded_info,
+    remove_normalized,
+)
 from app.core.policy.review import policy_effect_snapshot
 from app.core.scoring.state_machine import (
     invalidate_workspace_outputs,
@@ -689,8 +695,11 @@ def create_workspace(
 
 
 # capabilities BİLEREK yok: ürüne özgü olabilir ve hiçbir kod okumuyor
+# competitor_urls terimlerin source_urls desteğiyle birlikte taşınır: URL'siz kopya,
+# boş URL listesiyle yapılan ilk kayıtta URL kaynaklı engelleri serbest bırakırdı
 _FOCUS_INHERITED_FIELDS = (
-    "competitor_terms", "competitor_url_decisions", "competitor_policy", "topic_policy",
+    "competitor_urls", "competitor_terms", "competitor_url_decisions",
+    "competitor_policy", "topic_policy",
     "excluded_info", "default_geo_target_id", "default_language_id",
 )
 
@@ -720,6 +729,12 @@ def create_focus(
 
     verify_workspace(db, workspace_id)
     parent = lock_workspace_row(db, workspace_id)
+    # kilit beklenirken marka arsivlenmis olabilir; arsivli markaya aktif odak eklenmez
+    if parent is None or parent.deleted_at is not None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Marka çalışması (id={workspace_id}) bulunamadı veya arşivlenmiş",
+        )
 
     if parent.parent_brand_profile_id is not None or parent.crawl_scope != "site":
         raise HTTPException(
@@ -786,6 +801,147 @@ def create_focus(
         )
 
     return WorkspaceResponse.model_validate(focus)
+
+
+_FOCUS_FIELD_LABELS = {
+    "competitor_urls": "Rakip adresleri",
+    "competitor_terms": "Rakip terimleri",
+    "competitor_url_decisions": "Rakip URL kararları",
+    "competitor_policy": "Rakip kanal politikası",
+    "topic_policy": "Konu politikası",
+    "excluded_info": "Dışlanacak konular",
+    "default_geo_target_id": "Ülke",
+    "default_language_id": "Dil",
+    "location_filter_mode": "Konum filtresi",
+    "focus_cities": "Odak şehirler",
+    "location_exempt_terms": "Konum muafiyetleri",
+}
+
+
+def _brand_for_focus_settings(db: Session, workspace_id: int) -> BrandProfile:
+    brand = verify_workspace(db, workspace_id)
+    if brand.parent_brand_profile_id is not None or brand.crawl_scope != "site":
+        raise HTTPException(
+            status_code=400, detail="Yalnız marka çalışmasında kullanılabilir"
+        )
+    return brand
+
+
+def _active_focuses(db: Session, brand_id: int) -> List[BrandProfile]:
+    return (
+        db.query(BrandProfile)
+        .filter(
+            BrandProfile.parent_brand_profile_id == brand_id,
+            BrandProfile.deleted_at.is_(None),
+        )
+        .order_by(BrandProfile.id)
+        .all()
+    )
+
+
+def _focus_setting_diff(brand: BrandProfile, focus: BrandProfile) -> List[str]:
+    """Marka ile odak arasında farklı miras alanları (= ezilecek yerel düzenlemeler)."""
+    diff = [
+        f for f in _FOCUS_INHERITED_FIELDS if getattr(focus, f) != getattr(brand, f)
+    ]
+    b = brand.profile_data if isinstance(brand.profile_data, dict) else {}
+    f = focus.profile_data if isinstance(focus.profile_data, dict) else {}
+    diff += [k for k in LOCATION_PROFILE_KEYS if f.get(k) != b.get(k)]
+    return diff
+
+
+@router.post(
+    "/workspaces/{workspace_id}/focuses/settings/preview",
+    response_model=FocusSettingsPreviewResponse,
+)
+def preview_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
+    """Marka ayarlarını alt sayfalara uygulamanın önizlemesi (salt-okunur)."""
+    brand = _brand_for_focus_settings(db, workspace_id)
+    items = []
+    for focus in _active_focuses(db, brand.id):
+        busy = focus.status in ("pending", "running") or bool(
+            find_active_workspace_work(db, focus.id)
+        )
+        items.append({
+            "id": focus.id,
+            "name": focus.name,
+            "busy": busy,
+            "changes": [
+                {"field": f, "label": _FOCUS_FIELD_LABELS[f]}
+                for f in _focus_setting_diff(brand, focus)
+            ],
+        })
+    return {"focuses": items}
+
+
+@router.post(
+    "/workspaces/{workspace_id}/focuses/settings/apply",
+    response_model=FocusSettingsApplyResponse,
+)
+def apply_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
+    """Marka politika/konum ayarlarını her aktif odağa uygula (capabilities hariç).
+
+    Her odak kendi transaction'ında, mevcut politika mutasyon yolundan geçer;
+    işi süren odak atlanır, döngü durmaz.
+    """
+    brand = _brand_for_focus_settings(db, workspace_id)
+    focus_ids = [(f.id, f.name) for f in _active_focuses(db, brand.id)]
+    applied, skipped = [], []
+
+    for focus_id, focus_name in focus_ids:
+        try:
+            db.expire_all()  # kilitli SELECT taze status/profile_data döndürsün
+            focus = _lock_workspace_for_policy_mutation(db, focus_id)
+            # Her odak commit/rollback'ten sonra marka taze okunur (expire_on_commit)
+            brand_profile = brand.profile_data if isinstance(brand.profile_data, dict) else {}
+            if not _has_analyzed_profile(focus.profile_data):
+                # Profil yok: konum yazmak anchor_texts ekleyip 'analiz edilmiş' gösterirdi
+                db.rollback()
+                skipped.append({"id": focus_id, "name": focus_name,
+                                "reason": "profil analizi tamamlanmadı"})
+                continue
+            diff = _focus_setting_diff(brand, focus)
+            before = policy_effect_snapshot(focus)
+            old_user_terms = parse_excluded_info(focus.excluded_info)
+            for field in diff:
+                if field in _FOCUS_INHERITED_FIELDS:
+                    setattr(focus, field, copy.deepcopy(getattr(brand, field)))
+            location_diff = [k for k in diff if k in LOCATION_PROFILE_KEYS]
+            anchor_changed = False
+            if location_diff or "excluded_info" in diff:
+                new_profile = dict(focus.profile_data)
+                for key in location_diff:
+                    if brand_profile.get(key) is None:
+                        new_profile.pop(key, None)
+                    else:
+                        new_profile[key] = copy.deepcopy(brand_profile[key])
+                if "excluded_info" in diff:
+                    # apply_competitor_review ile aynı kural: eski kullanıcı terimleri
+                    # çıkar, yeniler girer; odağın kendi AI temaları korunur
+                    ai_only = remove_normalized(new_profile.get("exclude_themes"), old_user_terms)
+                    new_profile["exclude_themes"] = merge_normalized(
+                        parse_excluded_info(focus.excluded_info), ai_only
+                    )
+                anchor_changed = apply_profile_data_update(
+                    db, focus, new_profile,
+                    invalidate_outputs=False, manage_policy_version=False,
+                )
+            if not _bump_policy_version_if_changed(db, focus, before) and anchor_changed:
+                invalidate_workspace_outputs(db, focus.id)
+            db.commit()
+            applied.append({"id": focus_id, "name": focus_name, "changed": bool(diff)})
+        except HTTPException as exc:
+            db.rollback()
+            if exc.status_code != 409:
+                raise
+            skipped.append({"id": focus_id, "name": focus_name, "reason": "işlem sürüyor"})
+        except Exception:
+            db.rollback()
+            logger.exception("focus settings apply failed for focus %s", focus_id)
+            skipped.append({"id": focus_id, "name": focus_name,
+                            "reason": "uygulanamadı, tekrar deneyin"})
+
+    return {"applied": applied, "skipped": skipped}
 
 
 @router.get(
@@ -1034,12 +1190,14 @@ def approve_workspace_profile(
 
     # Rakip URL/karar + excluded_info: paylaşılan çekirdek (provenance'lı
     # exclude_themes yeniden birleşimi + topic senkronu + sürümleme + stale)
+    # Odakta rakip adımı yok: onay yükündeki URL/karar listesi miras kayıtlara dokunmaz
+    is_focus = workspace.parent_brand_profile_id is not None
     try:
         apply_competitor_review(
             db,
             workspace,
-            competitor_urls=request.competitor_urls,
-            decisions=request.competitor_decisions,
+            competitor_urls=None if is_focus else request.competitor_urls,
+            decisions=None if is_focus else request.competitor_decisions,
             excluded_info=request.excluded_info,
         )
     except PolicyValidationError as exc:
@@ -2067,9 +2225,31 @@ def decide_discovered_competitors(
     response_model=WorkspaceResponse,
 )
 def archive_workspace(workspace_id: int, db: Session = Depends(get_db)):
-    """Marka çalışmasını arşivle (soft delete)."""
-    workspace = verify_workspace(db, workspace_id)
-    workspace.deleted_at = datetime.utcnow()
+    """Marka çalışmasını arşivle (soft delete).
+
+    Marka arşivlenince aktif odakları da (aynı transaction) arşivlenir ve
+    `archived_with_parent` işaretlenir; odak doğrudan arşivlenirse bayrak false kalır.
+    """
+    verify_workspace(db, workspace_id)
+    workspace = lock_workspace_row(db, workspace_id)  # create_focus ile serileşir
+    if workspace.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Marka çalışması bulunamadı veya arşivlenmiş")
+    now = datetime.utcnow()
+    if workspace.parent_brand_profile_id is None:
+        focuses = (
+            db.query(BrandProfile)
+            .filter(
+                BrandProfile.parent_brand_profile_id == workspace.id,
+                BrandProfile.deleted_at.is_(None),
+            )
+            .with_for_update()
+            .all()
+        )
+        for focus in focuses:
+            focus.deleted_at = now
+            focus.archived_with_parent = True
+    workspace.deleted_at = now
+    workspace.archived_with_parent = False
     db.commit()
     db.refresh(workspace)
     return WorkspaceResponse.model_validate(workspace)
@@ -2080,14 +2260,32 @@ def archive_workspace(workspace_id: int, db: Session = Depends(get_db)):
     response_model=WorkspaceResponse,
 )
 def restore_workspace(workspace_id: int, db: Session = Depends(get_db)):
-    """Arşivden çıkar."""
-    workspace = db.query(BrandProfile).filter(
-        BrandProfile.id == workspace_id,
-        BrandProfile.deleted_at.isnot(None),
-    ).first()
-    if not workspace:
+    """Arşivden çıkar. Marka dönünce yalnız onunla birlikte arşivlenen odaklar döner.
+
+    Kilit sırası arşivleme/odak eklemeyle aynı: önce marka, sonra odak (ters sıra
+    deadlock; kilitsiz ebeveyn okuması arşivlenmiş markanın altında aktif odak bırakır).
+    """
+    target = db.get(BrandProfile, workspace_id)
+    parent = None
+    if target is not None and target.parent_brand_profile_id is not None:
+        parent = lock_workspace_row(db, target.parent_brand_profile_id)
+    workspace = lock_workspace_row(db, workspace_id)
+    if workspace is None or workspace.deleted_at is None:
         raise HTTPException(status_code=404, detail="Arşivlenmiş çalışma bulunamadı")
+    if workspace.parent_brand_profile_id is not None:
+        if parent is None or parent.deleted_at is not None:
+            raise HTTPException(status_code=409, detail="Önce markayı arşivden çıkarın")
+    else:
+        db.query(BrandProfile).filter(
+            BrandProfile.parent_brand_profile_id == workspace.id,
+            BrandProfile.deleted_at.isnot(None),
+            BrandProfile.archived_with_parent.is_(True),
+        ).update(
+            {"deleted_at": None, "archived_with_parent": False},
+            synchronize_session=False,
+        )
     workspace.deleted_at = None
+    workspace.archived_with_parent = False
     db.commit()
     db.refresh(workspace)
     return WorkspaceResponse.model_validate(workspace)
@@ -2605,7 +2803,11 @@ def _run_profile_from_keywords(
         crawl_scope = workspace.crawl_scope
         preliminary_info = workspace.preliminary_info
         excluded_info = workspace.excluded_info
-        competitor_urls = list(workspace.competitor_urls or [])
+        # Odak miras rakip URL'lerini yalnız politika için taşır; rakip doğrulaması koşmaz
+        competitor_urls = (
+            [] if workspace.parent_brand_profile_id is not None
+            else list(workspace.competitor_urls or [])
+        )
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
             extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope

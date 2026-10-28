@@ -338,6 +338,15 @@ export const workspaceApi = {
   createFocus: (workspaceId: number, url: string) =>
     api.post<WorkspaceResponse>(`/brand-profile/workspaces/${workspaceId}/focuses`, { url }),
 
+  // Marka ayarlarını alt sayfalara toplu uygulama: önizleme (yazmaz) + uygula
+  previewFocusSettings: (id: number) =>
+    api.post<FocusSettingsPreviewResponse>(
+      `/brand-profile/workspaces/${id}/focuses/settings/preview`
+    ),
+
+  applyFocusSettings: (id: number) =>
+    api.post<FocusSettingsApplyResponse>(`/brand-profile/workspaces/${id}/focuses/settings/apply`),
+
   approveKeywords: (id: number, data: WorkspaceKeywordApproveRequest) =>
     api.put<WorkspaceResponse>(`/brand-profile/workspaces/${id}/keywords/approve`, data),
 
@@ -994,6 +1003,20 @@ export interface WorkspaceKeywordRefreshRequest {
   max_results?: number
   min_volume?: number
   include_new_ideas?: boolean
+}
+
+export interface FocusSettingsPreviewResponse {
+  focuses: {
+    id: number
+    name: string
+    busy: boolean
+    changes: { field: string; label: string }[]
+  }[]
+}
+
+export interface FocusSettingsApplyResponse {
+  applied: { id: number; name: string; changed: boolean }[]
+  skipped: { id: number; name: string; reason: string }[]
 }
 
 export interface WorkspaceKeywordRefreshResponse {
