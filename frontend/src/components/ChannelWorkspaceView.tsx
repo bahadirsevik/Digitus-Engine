@@ -45,6 +45,7 @@ const CHANNEL_LABELS: Record<ChannelName, string> = {
 
 // Tasarım: havuz tablosu kapalıyken gösterilen satır sayısı
 const COLLAPSED_COUNT = 8
+const ASSIGN_DONE_HIDE_MS = 3000
 
 function isActiveTask(task?: RunTask | null) {
   return task?.status === 'pending' || task?.status === 'running'
@@ -204,6 +205,19 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
     }
   }, [assignPolling.isCompleted, selectedRunId, fetchRuns, fetchPool])
 
+  // "Tamamlandı" kartı kısa süre görünür, sonra kendiliğinden kapanır (hata kartı kalır)
+  useEffect(() => {
+    if (!assignPolling.isCompleted) return
+    const timer = window.setTimeout(() => setAssignTaskId(null), ASSIGN_DONE_HIDE_MS)
+    return () => window.clearTimeout(timer)
+  }, [assignPolling.isCompleted, setAssignTaskId])
+
+  const assigning = assignPolling.isActive || selectedRun?.status === 'channel_assigning'
+  const assignMessage =
+    typeof assignPolling.resultData?.current_message === 'string'
+      ? assignPolling.resultData.current_message
+      : 'Kanal ataması yapılıyor...'
+
   const handleRemove = async (item: PoolKeyword) => {
     if (!activeWorkspace?.id || !selectedRunId) return
     const ok = window.confirm(
@@ -258,7 +272,12 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
           </button>
         </div>
       ) : pool.length === 0 ? (
-        <p className="empty-text chx-empty">Bu kanal için havuz henüz hazır değil.</p>
+        <p className="empty-text chx-empty">
+          {assigning
+            ? // Motor havuzları post-policy kapısından sonra TEK seferde yazar (orchestrator adım 7)
+              `Kanal ataması sürüyor. ${CHANNEL_LABELS[channel]} havuzu, tüm kanallar bitince burada kendiliğinden açılır.`
+            : 'Bu kanal için havuz henüz hazır değil.'}
+        </p>
       ) : channel === 'SOCIAL' ? (
         // Tasarım (Social.html): tablo yerine kompakt satır-kart gridi
         <>
@@ -524,7 +543,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
             taskId={assignTaskId}
             status={assignPolling.status.status}
             progress={assignPolling.progress}
-            message="Kanal ataması yapılıyor..."
+            message={assignPolling.isActive ? assignMessage : undefined}
             errorMessage={assignPolling.errorMessage}
           />
         </div>
