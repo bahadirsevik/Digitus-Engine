@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, RefreshCw, X } from 'lucide-rea
 import { channelsApi, scoringApi, tasksApi, tasksFromListResponse } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import type { ScoringRun } from '../types/models'
-import TaskProgress from './TaskProgress'
+import { AnalysisBanner } from './AnalysisProgress'
 import ExportMenu from './ExportMenu'
 import SeoGeoPanel from './generation/SeoGeoPanel'
 import AdsPanel from './generation/AdsPanel'
@@ -538,15 +538,25 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       )}
 
       {assignTaskId && assignPolling.status && (
-        <div className="chx-card chx-assign-progress">
-          <TaskProgress
-            taskId={assignTaskId}
-            status={assignPolling.status.status}
-            progress={assignPolling.progress}
-            message={assignPolling.isActive ? assignMessage : undefined}
-            errorMessage={assignPolling.errorMessage}
-          />
-        </div>
+        <AnalysisBanner
+          onChannelPage
+          stage={
+            assignPolling.isCompleted ? 'done' : assignPolling.isActive ? 'assigning' : 'failed'
+          }
+          taskProgress={assignPolling.progress}
+          channels={{
+            ads: selectedRun?.enable_ads,
+            seo: selectedRun?.enable_seo,
+            social: selectedRun?.enable_social,
+          }}
+          message={assignMessage}
+          errorMessage={
+            assignPolling.status.status === 'cancelled'
+              ? 'Kanal ataması iptal edildi'
+              : assignPolling.errorMessage
+          }
+          onDismiss={() => setAssignTaskId(null)}
+        />
       )}
 
       {sideBySide ? (

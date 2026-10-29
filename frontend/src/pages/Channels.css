@@ -353,9 +353,8 @@
   overflow: hidden;
 }
 
-.chx-assign-progress {
-  padding: 16px 18px;
-  margin-bottom: 16px;
+.kwx-banner.is-channel {
+  margin: 0 0 16px;
 }
 
 .chx-card-head {
