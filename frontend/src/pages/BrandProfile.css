@@ -1012,8 +1012,11 @@
   border-color: rgba(45, 212, 191, 0.3);
   background: var(--bg-surface-2);
 }
+/* hover'dan sonra gelir: seçili kart üzerine gelince de yeşil kalır */
 .bpx-card.is-active {
-  border-color: rgba(45, 212, 191, 0.3);
+  background: rgba(46, 166, 111, 0.22);
+  border-color: var(--success);
+  box-shadow: 0 0 0 1px var(--success);
 }
 .bpx-card.is-archived {
   opacity: 0.55;
