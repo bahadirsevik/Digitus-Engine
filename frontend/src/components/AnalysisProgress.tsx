@@ -101,6 +101,7 @@ export function AnalysisBanner({
   message,
   errorMessage,
   onDismiss,
+  onChannelPage,
 }: {
   stage: ChainStage
   taskProgress: number
@@ -108,6 +109,8 @@ export function AnalysisBanner({
   message?: string | null
   errorMessage?: string | null
   onDismiss: () => void
+  /** Kanal sayfası (ADS/SEO/Social): havuz metni, kanal bağlantıları yok */
+  onChannelPage?: boolean
 }) {
   const done = stage === 'done'
   const failed = stage === 'failed'
@@ -115,7 +118,11 @@ export function AnalysisBanner({
   const { active, pct } = stageInfo(stage, taskProgress, steps)
 
   return (
-    <div className={`kwx-banner${done ? ' is-done' : ''}${failed ? ' is-failed' : ''}`}>
+    <div
+      className={`kwx-banner${done ? ' is-done' : ''}${failed ? ' is-failed' : ''}${
+        onChannelPage ? ' is-channel' : ''
+      }`}
+    >
       <div className="kwx-banner-inner">
         <div className="kwx-banner-top">
           <span className="kwx-banner-icon">
@@ -132,13 +139,31 @@ export function AnalysisBanner({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="kwx-banner-title">
               {done
-                ? 'Analiz tamamlandı — skorlar ve kanal atamaları hazır'
+                ? onChannelPage
+                  ? 'Kanal ataması tamamlandı — havuz hazır'
+                  : 'Analiz tamamlandı — skorlar ve kanal atamaları hazır'
                 : failed
                   ? 'Analiz sırasında hata oluştu'
-                  : 'Kelimeler yapay zekâ ile işleniyor'}
+                  : onChannelPage
+                    ? 'Kanal ataması sürüyor'
+                    : 'Kelimeler yapay zekâ ile işleniyor'}
             </div>
             <div className="kwx-banner-sub">
-              {done ? (
+              {done && onChannelPage ? (
+                'Havuz aşağıda güncellendi.'
+              ) : !done && !failed && onChannelPage ? (
+                <>
+                  {message && (
+                    <>
+                      <b className="strong" data-testid="analysis-message">
+                        {message}
+                      </b>
+                      {' — '}
+                    </>
+                  )}
+                  Sayfadan ayrılabilirsiniz; işlem arka planda sürer.
+                </>
+              ) : done ? (
                 `Skorlama tablosu aşağıda. İçerik üretimini ${pageList(channels)} ${enabledLinks(channels).length > 1 ? 'sayfalarından' : 'sayfasından'} yapabilirsiniz.`
               ) : failed ? (
                 errorMessage ||
@@ -195,7 +220,7 @@ export function AnalysisBanner({
           })}
         </div>
 
-        {done && (
+        {done && !onChannelPage && (
           <div className="kwx-banner-links">
             <div className="hint">Kanal çıktılarına git:</div>
             <ChannelNav channels={channels} />

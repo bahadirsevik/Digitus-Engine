@@ -78,11 +78,11 @@ describe('ADS sayfası kanal atama ilerlemesi', () => {
     mocks.listRuns.mockResolvedValue({ data: [{ id: 10, status: 'channel_assigned' }] })
     mocks.getStatus.mockResolvedValue({ data: { ...TASK, status: 'completed', progress: 100 } })
     renderAds()
-    expect(await screen.findByText('Tamamlandı')).toBeInTheDocument()
+    expect(await screen.findByText('Kanal ataması tamamlandı — havuz hazır')).toBeInTheDocument()
     await act(async () => {
       vi.advanceTimersByTime(3100)
     })
-    expect(screen.queryByText('Tamamlandı')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kanal ataması tamamlandı — havuz hazır')).not.toBeInTheDocument()
   })
 
   it('hata kartı kendiliğinden kapanmaz', async () => {
@@ -92,10 +92,10 @@ describe('ADS sayfası kanal atama ilerlemesi', () => {
       data: { ...TASK, status: 'failed', progress: 40, error_message: 'motor hatası' },
     })
     renderAds()
-    expect(await screen.findByText('Hata')).toBeInTheDocument()
+    expect(await screen.findByText('Analiz sırasında hata oluştu')).toBeInTheDocument()
     await act(async () => {
       vi.advanceTimersByTime(5000)
     })
-    expect(screen.getByText('Hata')).toBeInTheDocument()
+    expect(screen.getByText('Analiz sırasında hata oluştu')).toBeInTheDocument()
   })
 })
