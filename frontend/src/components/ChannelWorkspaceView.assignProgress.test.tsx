@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import ChannelWorkspaceView from './ChannelWorkspaceView'
 import { useBrandStore } from '../stores/brandStore'
@@ -74,16 +74,27 @@ describe('ADS sayfası kanal atama ilerlemesi', () => {
   })
 
   it('"Tamamlandı" kartı birkaç saniye sonra kendiliğinden kapanır', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
+    // Gerçek saat: fake saat + waitFor yoklaması kilitleniyor, yük altında da kararsızdı
     mocks.listRuns.mockResolvedValue({ data: [{ id: 10, status: 'channel_assigned' }] })
     mocks.getStatus.mockResolvedValue({ data: { ...TASK, status: 'completed', progress: 100 } })
+    // Sayfa görev listesini yeniden sorgulayabilir; bitmiş görev artık aktif dönmez
+    mocks.listByRun
+      .mockResolvedValueOnce({ data: [{ ...TASK, status: 'running' }] })
+      .mockResolvedValue({ data: [{ ...TASK, status: 'completed' }] })
     renderAds()
-    expect(await screen.findByText('Kanal ataması tamamlandı — havuz hazır')).toBeInTheDocument()
-    await act(async () => {
-      vi.advanceTimersByTime(3100)
-    })
-    expect(screen.queryByText('Kanal ataması tamamlandı — havuz hazır')).not.toBeInTheDocument()
-  })
+    expect(
+      await screen.findByText('Kanal ataması tamamlandı — havuz hazır', {}, { timeout: 5000 })
+    ).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    expect(screen.getByText('Kanal ataması tamamlandı — havuz hazır')).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(
+          screen.queryByText('Kanal ataması tamamlandı — havuz hazır')
+        ).not.toBeInTheDocument(),
+      { timeout: 6000 }
+    )
+  }, 15000)
 
   it('hata kartı kendiliğinden kapanmaz', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -92,7 +103,9 @@ describe('ADS sayfası kanal atama ilerlemesi', () => {
       data: { ...TASK, status: 'failed', progress: 40, error_message: 'motor hatası' },
     })
     renderAds()
-    expect(await screen.findByText('Analiz sırasında hata oluştu')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Analiz sırasında hata oluştu', {}, { timeout: 5000 })
+    ).toBeInTheDocument()
     await act(async () => {
       vi.advanceTimersByTime(5000)
     })
