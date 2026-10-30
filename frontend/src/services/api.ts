@@ -647,8 +647,6 @@ export const googleAdsApi = {
 
   enrich: (data: EnrichRequest) => api.post<EnrichResponse>('/google-ads/enrich', data),
 
-  import: (data: ImportRequest) => api.post<ImportResponse>('/google-ads/import', data),
-
   listCampaigns: (customerId: string, refresh = false) =>
     api.get<CampaignInfo[]>('/google-ads/campaigns', {
       params: { customer_id: customerId, refresh },
@@ -665,9 +663,6 @@ export const googleAdsApi = {
     api.get<CampaignKeywordsResponse>('/google-ads/campaigns/keywords', {
       params,
     }),
-
-  importCampaignKeywords: (data: CampaignKeywordsImportRequest) =>
-    api.post<ImportResponse>('/google-ads/campaigns/keywords/import', data),
 }
 
 // Tasks API
@@ -1119,24 +1114,6 @@ export interface EnrichResponse {
   keywords: EnrichedKeywordOut[]
 }
 
-export interface ImportRequest {
-  customer_id: string
-  seeds: string[]
-  max_results: number
-  min_volume: number
-  sector?: string
-  target_market?: string
-}
-
-export interface ImportResponse {
-  created: number
-  already_existing: number
-  skipped_fuzzy: number
-  truncated: boolean
-  truncated_reason: string | null
-  message: string
-}
-
 export interface CampaignInfo {
   campaign_id: string
   campaign_name: string
@@ -1159,16 +1136,6 @@ export interface CampaignKeywordOut {
 export interface CampaignKeywordsResponse {
   count: number
   keywords: CampaignKeywordOut[]
-}
-
-export interface CampaignKeywordsImportRequest {
-  customer_id: string
-  campaign_id?: string
-  min_impressions?: number
-  date_range?: string
-  limit?: number
-  sector?: string
-  target_market?: string
 }
 
 export interface ProfileConfirmRequest {

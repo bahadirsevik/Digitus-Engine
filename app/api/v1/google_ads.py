@@ -18,7 +18,11 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db
 from app.config import settings
 from app.core.keyword_normalize import normalize_keyword
-from app.integrations.google_ads.service import GoogleAdsService
+from app.integrations.google_ads.service import (
+    CAMPAIGN_IMPORT_DISABLED_DETAIL,
+    KEYWORD_IMPORT_DISABLED_DETAIL,
+    GoogleAdsService,
+)
 
 router = APIRouter()
 
@@ -132,25 +136,6 @@ class EnrichResponse(BaseModel):
     keywords: List[EnrichedKeywordOut]
 
 
-class ImportRequest(BaseModel):
-    customer_id: str
-    seeds: List[str] = Field(..., min_length=1, max_length=20)
-    max_results: int = Field(300, ge=1, le=5000)
-    min_volume: int = Field(0, ge=0)
-    sector: Optional[str] = None
-    target_market: Optional[str] = None
-
-
-class ImportResponse(BaseModel):
-    created: int
-    already_existing: int
-    skipped_fuzzy: int
-    skipped_junk: int = 0
-    truncated: bool
-    truncated_reason: Optional[str]
-    message: str
-
-
 class CustomerIdItem(BaseModel):
     customer_id: str
 
@@ -184,19 +169,6 @@ class CampaignKeywordOut(BaseModel):
 class CampaignKeywordsResponse(BaseModel):
     count: int
     keywords: List[CampaignKeywordOut]
-
-
-class CampaignKeywordsImportRequest(BaseModel):
-    customer_id: str
-    campaign_id: Optional[str] = None
-    min_impressions: int = Field(0, ge=0)
-    date_range: str = Field(
-        "ALL_TIME",
-        pattern="^(ALL_TIME|LAST_7_DAYS|LAST_14_DAYS|LAST_30_DAYS)$",
-    )
-    limit: int = Field(2000, ge=1, le=2000)
-    sector: Optional[str] = None
-    target_market: Optional[str] = None
 
 
 class UrlSeedRequest(BaseModel):
@@ -638,50 +610,10 @@ def keyword_ideas_by_url(
     )
 
 
-@router.post("/import", response_model=ImportResponse)
-def import_keywords(payload: ImportRequest, db: Session = Depends(get_db)):
-    """
-    Google Ads keyword onerilerini DB'ye aktar.
-
-    IS KURALI — ONEMLI:
-    Mevcut DB'de ayni metin ile kayit varsa (CSV'den veya baska herhangi bir
-    kaynaktan) o keyword skip edilir ve data_source'u guncellenmez.
-
-    Sonuc olarak: POST /scoring/runs icinde keyword_source_filter="google_ads_api"
-    kullanildiginda sadece BU endpoint ile yeni olusturulan keywordler
-    skorlanir. Ortusme gosteren mevcut keywordler o run'a dahil edilmez.
-
-    Ortusenleri de dahil etmek istiyorsaniz keyword_source_filter=None
-    ile run olusturun (tum aktif keywordler).
-    """
-    svc = _get_service()
-    try:
-        result = svc.import_keywords(
-            db=db,
-            customer_id=payload.customer_id,
-            seeds=payload.seeds,
-            max_results=payload.max_results,
-            min_volume=payload.min_volume,
-            sector=payload.sector,
-            target_market=payload.target_market,
-        )
-    except Exception as exc:
-        _raise_google_ads_error(exc)
-
-    return ImportResponse(
-        created=result.created,
-        already_existing=result.already_existing,
-        skipped_fuzzy=result.skipped_fuzzy,
-        skipped_junk=result.skipped_junk,
-        truncated=result.truncated,
-        truncated_reason=result.truncated_reason,
-        message=(
-            f"{result.created} keyword olusturuldu (data_source=google_ads_api). "
-            f"{result.already_existing} zaten mevcuttu (data_source degistirilmedi). "
-            f"{result.skipped_fuzzy} fuzzy eslesme ile atildi. "
-            f"{result.skipped_junk} gecersiz kelime (bos / yalniz sayi veya sembol) atildi."
-        ),
-    )
+@router.post("/import")
+def import_keywords():
+    """410 Gone: workspace'siz legacy import; fikirleri /keywords/import ile workspace'e aktarin."""
+    raise HTTPException(status_code=410, detail=KEYWORD_IMPORT_DISABLED_DETAIL)
 
 
 @router.get("/campaigns", response_model=List[CampaignInfo])
@@ -768,40 +700,7 @@ def list_campaign_keywords(
     )
 
 
-@router.post("/campaigns/keywords/import", response_model=ImportResponse)
-def import_campaign_keywords(
-    payload: CampaignKeywordsImportRequest,
-    db: Session = Depends(get_db),
-):
-    """Import campaign keyword_view rows into keywords table."""
-    svc = _get_service()
-    try:
-        result = svc.import_campaign_keywords(
-            db=db,
-            customer_id=payload.customer_id,
-            campaign_id=payload.campaign_id,
-            min_impressions=payload.min_impressions,
-            date_range=payload.date_range,
-            limit=payload.limit,
-            sector=payload.sector,
-            target_market=payload.target_market,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        _raise_google_ads_error(exc)
-
-    return ImportResponse(
-        created=result.created,
-        already_existing=result.already_existing,
-        skipped_fuzzy=result.skipped_fuzzy,
-        skipped_junk=result.skipped_junk,
-        truncated=result.truncated,
-        truncated_reason=result.truncated_reason,
-        message=(
-            f"{result.created} keyword olusturuldu. "
-            f"{result.already_existing} zaten mevcuttu. "
-            f"{result.skipped_fuzzy} benzer atlandi. "
-            f"{result.skipped_junk} gecersiz kelime atildi."
-        ),
-    )
+@router.post("/campaigns/keywords/import")
+def import_campaign_keywords():
+    """410 Gone: kampanya gosterimleri hacim degildir; fikirleri /keywords/import ile workspace'e aktarin."""
+    raise HTTPException(status_code=410, detail=CAMPAIGN_IMPORT_DISABLED_DETAIL)
