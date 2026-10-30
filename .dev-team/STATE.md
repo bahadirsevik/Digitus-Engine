@@ -1,10 +1,42 @@
 # Current Status
 
-Last updated: 2026-10-28
+Last updated: 2026-10-31
 Branch: `deploy/lean-taslak`
-Active phase: **Marka alt sayfa + SPA crawler (plan_marka_alt_sayfa.md rev.2.1) — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127, Faz 3c+3d 914ffe5 (push yok); gelistirme ortaminda gercek site + tarayici kontrolu GECTI (28.10); dagitim oncesi acik: sunucu dalinda yeni merge revizyonu, sunucuda worker restart; Faz 4 baslamadi**
-Kaynak plan: main repo kokunde `plan_marka_alt_sayfa.md` rev.2.1 (Codex 3 inceleme).
-Onceki aktif is (beklemede): Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+Active phase: **Hedef konum (ulke/sehir) + cikti dili secimi — main repo `plan_pazar_dil_secimi.md` rev.4 (Codex 5 tur, "uygulamaya gecilebilir"). Kapi KAPALI: Architect/Konsey KOSMADI, kararlar planda (K1-K6). Faz 0 BASLADI 31.10.**
+Onceki aktif is (dagitim bekliyor): Marka alt sayfa + SPA crawler — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127, Faz 3c+3d 914ffe5, 3e 65cfe3f + 8e6a27a (push yok); sunucu dali dg-auth-merge d9e045e (uzak 78aac3a).
+Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (31.10 — pazar/dil plani FAZ 0; Backend Dev Sonnet+high; Architect/Konsey KOSMADI)
+
+- `app/core/markets.py`: COUNTRIES 64 (ID'ler resmi CSV'den, 2000+ISO saglamasi 64/64), LANGUAGES 5 (1037/1031/1036/1000/1001), LANGUAGE_ALIASES (google_ads.py'deki kopya Faz 1'de kalkacak), konum katalogu `app/core/data/geotargets_2026-10-06.csv.gz` (58.503 satir, 796 KB; Country+City+1. seviye idari tipler; County/District vb. disarida), lazy yukleme (~1,6 s), `location_label` (bolge adi sehirden farkliysa araya girer; Istanbul/Berlin/Moskova hem sehir hem il/eyalet kaydi ile ayri listelenir), `market_label`, `workspace_market` (NULL → 409 MARKET_NOT_SET), `validate_market_input` → KANONIK (geo, lang) doner (Codex P2: 'geoTargetConstants/1003854' ham yazilinca String(20) tasiyordu; alias 1055→1037 yazimda kanonik), `search_locations_page` (ulke→exact→prefix→contains; ayni kanonik adli cift ID'ler etikette tekil).
+- Uclar: `GET /brand-profile/market-options`, `GET /brand-profile/market-options/locations?q=&country=` (≤20 + total; katalog yoksa 503). 422: create_workspace + approve_workspace_profile. Okuma eski ID'leri degistirmez.
+- `scripts/build_geotargets_catalog.py` (resmi CSV → gz), `scripts/market_inventory.sql` (yerel: ws 64 TR/TR, 2 NULL, 1 GB/EN; 20.646 satirin 6.371'i NULL; acik farkli satir 0; Kiril/Yunan kelime 0).
+- Testler: yeni 2 dosya; TAM PAKET (sabit agac, alembic head once): 5316 gecti / 2 bilinen basarisizlik (test_hybrid_run_db KeyError + manifest) / 112 atlandi, 19,5 dk. Codex Faz 0 incelemesi: P2 duzeltildi, "yeni engelleyici yok".
+- Sinirlar: Turkce sehir eksonimleri ("Moskova") eslesmez (Google Latin adlari); katalog 2026-10-06 anlik goruntusu, yenilemek icin build script yeniden kosulur.
+- Legacy Google Ads import 410 isi (baska oturum) Faz 0'dan ONCE ayri commit olarak alindi (Codex onerisi).
+- Plan kucuk sapma: rekey `--dry-run` sayimi Faz 2-f teslimiyle (yeni normalize kodu gerekir).
+
+## Currently in progress (31.10)
+
+- Wave 2 / Faz 1: TASK-PZ-002 Backend (set_workspace_market kilidi + odak ayar uygulama, verify_workspace(lock=True) FOR SHARE, satir pazari on-gecis dogrulama + damga, enrich/url-seed brand_profile_id + cevapta pazar, run kapisi, CSV onizleme bilgi satiri, export basligi) ∥ TASK-PZ-003 Frontend (MarketSelect, olusturma formu, kilitli select, GoogleAdsKeywordSearch/UrlKeywordExtractor pazar etiketi, import satirlarina cevap pazari, rozet, '2792' literal'leri kalkar).
+
+## Just completed (28.10 gece, FAZ 3e — kullanici geri bildirimi; PUSH/DAGITIM YOK)
+
+- Plan: main repo plan_marka_alt_sayfa.md Faz 3e rev.3.1 (Codex 1. tur C1-C5). Lean yerel commit 65cfe3f (Backend Dev + Frontend Dev Sonnet paralel; lead: FE hasAnalyzedProfile konum anahtarlarini profil saymaz).
+- Ozet: alt sayfa adresinde 3 secenek (ana marka + alt sayfa / yalniz ana marka / yalniz alt sayfa), secim analizi BASLATMAZ, secilmeden 'Analizi Baslat' pasif; pending_focus_url + pending_focus_error (migration 20261029_001); marka keywords/approve ile confirmed olunca alt sayfa ayni islemde (SAVEPOINT) acilir, hata onayi bozmaz + adres korunur; pending-focus/retry + DELETE; analysis/retry (failed + profilsiz); kartta 'Calismaya gec' menusu, alt sayfa ayri kart degil; arama eslesen alt sayfa; brand context'e brand_summary (hizmet YOK).
+- Testler: lean tam paket 5285 gecti / 2 bilinen (test_hybrid_run_db) / 112 atlandi; FE lint+format+build temiz, 327/327.
+- Canli dev: #70 imecemobil (site) + #71 toprak analizi alt sayfasi otomatik acildi -> onaylandi; tekrar istek ikinci kayit acmadi (409); alt sayfa hizmetlerinde marka hizmeti sizmasi YOK. Tarayici: menu, arama, diyalog buton durumlari dogru.
+- Codex kod incelemesi: 2 duzeltme (Vazgec butonu aktif ediyordu; profilli failed'da keyword uretimi tekrar denenemiyordu) -> lean 8e6a27a, sunucu dali yerel merge c438974.
+- Sunucu dali: dg-auth-merge yerel merge d9e045e + merge rev 20261029_002 (20261028_003 + 20261029_001); uzak hala 78aac3a. localhost:9105 = birlesik dal + dev DB kopyasi (kullanici kontrolu bekleniyor).
+
+## Just completed (28.10, sunucu dali birlestirmesi + dagitim oncesi kontroller; PUSH/DAGITIM YOK)
+
+- dg-auth-merge worktree'sinde deploy/auth-lean-merge = 78aac3a: lean-taslak merge + alembic merge 20261028_003 (20261020_001 + 20261028_002, sema degisikligi yok); test_migration_chain cakismasi iki taraf korunarak cozuldu + sunucu-20261020_001 -> head testi.
+- Temiz imaj: test imaji --no-cache yeniden kuruldu, ek kurulum YOK (anthropic 1.13.0 + argon2-cffi 23.1.0 requirements.txt'ten geldi); tam paket 5299 gecti / 2 bilinen basarisizlik (test_hybrid_run_db) / 112 atlandi. FE lint+format+build temiz, 308/308.
+- Giris akisi (birlesik dal prod imaji, gecici bos DB, LOGIN_ENABLED=true, localhost:9105, headless Chromium): CLI ile kullanici ac + sifirla, yanlis parola reddi, gecici parola -> zorunlu parola degisimi -> tum oturumlar kapanir, yeni parolayla giris, sayfa yenilemede oturum kalir, cikis -> giris ekrani + API 401, eski gecici parola reddedilir. Bos DB'den alembic 20261028_003'e kadar kostu. Gecici ortam + imajlari silindi.
+- Canli yeniden uretim (dev, gecici odak #66 = ws55 /hizmetler/endodonti/, sonra arsivlendi): profil onayi -> keywords_review (rakip adimi yok) -> arayuzdeki 'Keyword'leri yeniden uret' ({rerun_keywords:true}) -> keywords_review; kapsam page, ebeveyn, konum, excluded_info, rakip URL'leri + 2 engel, competitor_policy, exclude_themes, hizmetler DEGISMEDI; policy_version sabit; ws65 bayt-ayni. 3 Gemini cagrisi ~0,006 $. Not: ayri bir 'yeniden tara' ucu yok; yeniden analiz = rerun_keywords.
+- Olay: derleme sirasinda C: ~1,5 GB'a dustu, Docker veri diski 'dosya sistemi yok' deyip bicimlendirmeye calisti (cihaz mesgul oldugu icin yapmadi). Docker + WSL durduruldu, docker_data.vhdx D:\docker_yedek_20261028\'e yedeklendi (38,4 GB), Docker yeniden acildi, tum veri saglam.
+- Kucuk gozlem: yanlis parolada mesaj 'Kimlik dogrulama gerekli. Lutfen oturum acin.' — 'e-posta veya parola hatali' degil (mevcut sunucu davranisi, bu birlestirmeden degil).
 
 ## Just completed (28.10, gelistirme ortaminda gercek site uctan uca + tarayici kontrolu)
 

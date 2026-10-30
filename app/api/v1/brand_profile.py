@@ -31,6 +31,7 @@ from app.schemas.brand_profile import (
     AnchorGroupResponse,
     LocationFilterPreviewRequest, LocationFilterPreviewResponse,
     LocationPreviewCityCount, LocationPreviewSample, LocationPreviewExemptSample,
+    MarketOptionsResponse, MarketLocationSearchResponse,
 )
 from app.schemas.location_gate import LocationAuditResponse, LocationAuditRow
 from app.core.channel_seed import (
@@ -73,6 +74,7 @@ from app.core.scoring.state_machine import (
 )
 from app.core.telemetry import UsageCollector
 from app.core.keyword_normalize import normalize_keyword
+from app.core import markets
 from app.core.workspace_refresh import (
     ExistingWorkspaceKeyword,
     build_refreshed_workspace_keywords,
@@ -601,6 +603,38 @@ def get_relevance_scores(
     ]
 
 
+# ==================== MARKET OPTIONS (hedef konum + cikti dili) ====================
+
+@router.get("/market-options", response_model=MarketOptionsResponse)
+def get_market_options():
+    """Ülke listesi, 5 çıktı dili ve varsayılan pazar (ID'ler yalnız teknik alan)."""
+    return {
+        "countries": [
+            {**c, "label": markets.location_label(c["geo_target_id"])}
+            for c in markets.COUNTRIES
+        ],
+        "languages": markets.LANGUAGES,
+        "default": {
+            "geo_target_id": settings.GOOGLE_ADS_GEO_TARGET_ID or "2792",
+            "language_id": settings.GOOGLE_ADS_LANGUAGE_ID or "1037",
+        },
+    }
+
+
+@router.get("/market-options/locations", response_model=MarketLocationSearchResponse)
+def search_market_locations(
+    q: str = Query("", max_length=100, description="Konum adı (en az 2 karakter; kısaysa yalnız ülkeler)"),
+    country: Optional[str] = Query(None, max_length=2, description="ISO alpha-2 ülke kodu ile daralt"),
+):
+    """Ülke + şehir + il/bölge araması (en fazla 20 sonuç)."""
+    try:
+        items, total = markets.search_locations_page(q, country, limit=20)
+    except markets.MarketCatalogError as exc:
+        logger.error("Konum katalogu okunamadi: %s", exc)
+        raise HTTPException(status_code=503, detail="Konum kataloğu şu an kullanılamıyor.")
+    return {"items": items, "total": total}
+
+
 # ==================== WORKSPACE CRUD ENDPOINTS ====================
 
 @router.post(
@@ -618,6 +652,10 @@ def create_workspace(
     Yeni marka çalışması oluştur.
     Background task'ta site crawl + AI profile extraction başlatılır.
     """
+    market_geo, market_lang = markets.validate_market_input(
+        request.default_geo_target_id, request.default_language_id
+    )
+
     # Erken URL doğrulaması (plan v13): geçersiz/tekrarlı rakip URL'si crawl
     # ve AI süreci hiç başlamadan reddedilir.
     if request.competitor_urls:
@@ -675,8 +713,8 @@ def create_workspace(
         competitor_urls=request.competitor_urls,
         preliminary_info=must_have_info,
         excluded_info=request.excluded_info,
-        default_geo_target_id=request.default_geo_target_id,
-        default_language_id=request.default_language_id,
+        default_geo_target_id=market_geo,
+        default_language_id=market_lang,
         status="pending",
         onboarding_flow=request.flow_version,
         analysis_attempt_id=attempt_id,
@@ -1341,6 +1379,9 @@ def approve_workspace_profile(
     apply_profile_data_update kapısından (anchor sürümlemesi).
     """
     verify_workspace(db, workspace_id)
+    market_geo, market_lang = markets.validate_market_input(
+        request.default_geo_target_id, request.default_language_id
+    )
     # Row lock (plan v13): status/profile_data dahil her okuma kilitli satırdan —
     # eşzamanlı politika mutasyonu / background analiz yarışları kapanır.
     # populate_existing: verify_workspace satırı identity map'e zaten yükledi;
@@ -1385,10 +1426,10 @@ def approve_workspace_profile(
 
     if request.must_have_info is not None:
         workspace.preliminary_info = request.must_have_info.strip() or None
-    if request.default_geo_target_id is not None:
-        workspace.default_geo_target_id = request.default_geo_target_id
-    if request.default_language_id is not None:
-        workspace.default_language_id = request.default_language_id
+    if market_geo is not None:
+        workspace.default_geo_target_id = market_geo
+    if market_lang is not None:
+        workspace.default_language_id = market_lang
 
     # Rakip URL/karar + excluded_info: paylaşılan çekirdek (provenance'lı
     # exclude_themes yeniden birleşimi + topic senkronu + sürümleme + stale)

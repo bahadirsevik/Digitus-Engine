@@ -434,3 +434,43 @@ class RelevanceComputeResponse(BaseModel):
     computed: int
     failed: int
     average_relevance: float
+
+
+# ==================== PAZAR (HEDEF KONUM + DIL) ====================
+
+class MarketCountry(BaseModel):
+    geo_target_id: str
+    code: str
+    name_tr: str
+    label: str
+
+
+class MarketLanguage(BaseModel):
+    language_id: str
+    code: str
+    name_tr: str
+    name_native: str
+
+
+class MarketDefault(BaseModel):
+    geo_target_id: str
+    language_id: str
+
+
+class MarketOptionsResponse(BaseModel):
+    countries: List[MarketCountry]
+    languages: List[MarketLanguage]
+    default: MarketDefault
+
+
+class MarketLocationItem(BaseModel):
+    geo_target_id: str
+    label: str
+    kind: Literal["country", "city", "region"]
+    country_code: str
+    name: str
+
+
+class MarketLocationSearchResponse(BaseModel):
+    items: List[MarketLocationItem]
+    total: int = Field(..., description="Toplam eşleşme (items en fazla 20)")
