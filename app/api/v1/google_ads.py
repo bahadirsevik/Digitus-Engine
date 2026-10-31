@@ -54,8 +54,8 @@ def _translate_invalid_argument(raw: str) -> str:
     # 2022'den beri): API resource path degil alan adi doner.
     if "geo_target_constants" in lower and "invalid_value" in lower:
         return (
-            "Google Ads bu hedef konumda arama verisi sunmuyor (ör. Rusya'da reklam "
-            "hizmetleri askıda). Kelimeleri CSV ile içe aktarın veya başka bir konum seçin."
+            "Google Ads bu hesapta hedef konum için isteği reddetti (konum hedeflemeye kapalı "
+            "olabilir, ör. Rusya). Kelimeleri CSV ile içe aktarın veya başka bir konum seçin."
         )
 
     if "customer" in lower and ("not found" in lower or "invalid" in lower):

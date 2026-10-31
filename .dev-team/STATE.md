@@ -41,12 +41,12 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 
 ## Just completed (31.10 — FAZ 4 CANLI DOGRULAMA KOSULDU; kullanici ucretli kosuyu onayladi; toplam 3,44 $ / 1155 cagri / 2,14M token, hepsi gemini-3.8-flash)
 - Ortam: app imaji fonts-dejavu-core ile yeniden derlendi (tek sirali build), app+3 worker recreate, frontend restart; worker'da a45b4c1 negatif listesi dogrulandi.
-- (a) RUSYA: Google Ads API geo 2643'u REDDEDIYOR (keyword_plan_idea_error INVALID_VALUE, geo_target_constants[0]); katalog CSV'de 'Active' gorundugu icin filtre yakalamaz. RU pazari icin Google verisi YOK -> CSV import veya Yandex (K3/Faz 5). Ukrayna (2804) KABUL (uk 129 fikir, ru 300).
+- (a) RUSYA: test edilen hesap/istekte Google Ads API geo 2643'u REDDETTI (keyword_plan_idea_error INVALID_VALUE, geo_target_constants[0]); katalog CSV'de 'Active' gorundugu icin filtre yakalamaz. Tek hata kodundan evrensel/kalici sonuc CIKARILMADI (Codex); bu hesapta RU icin Google verisi yok -> CSV import veya Yandex (K3/Faz 5). Ukrayna (2804) KABUL (uk 129 fikir, ru 300).
 - (b) Berlin/Rusca (ws77, run 90, 300 kw): v3 2 dk 40 sn, ADS 30/SEO 26/SOCIAL 20; RSA 1 grup (Rusca basliklar+CTA, negatifler RU), SEO blog Rusca (0.97), sosyal brief->kategori->fikir->icerik Rusca, export 4 format; PDF'de DejaVu gomulu, Kiril okunakli (Playwright ile goruldu). MALIYET 0,73 $.
 - (c) UA/uk ws79 run 91 (0,36 $, uk RSA+SEO+sosyal+export OK), UA/ru ws80 run 92 (0,66 $, RSA), TR/tr gerileme ws59 run 93 top300 (0,71 $: '- Genel' etiketi, Turkce negatifler/CTA, Turkce rapor AYNI), GB/en ws60 run 94 top300 (0,74 $), DE/de ws76 run 95 (0,13 $, 33 kw). Suggested kw isleri ~0,003 $/kopya.
 - Bulgu->duzeltme 5b6684b: (1) geo_target_constants INVALID_VALUE -> anlasilir mesaj (CSV/baska konum); (2) tek-grup yedegi yabanci dilde ilk kelimeyi ad+tema yapar (Turkce degismedi); canlida set 38/39/41/42 ile dogrulandi, set 37 (duzeltme oncesi) 'Genel' tasir. test_market_output_fallbacks.py 4 test; hedefli 62 gecti. TAM PAKET KOSULMADI.
 - RU/UK insan degerlendirmesi notlari: 'Зиркон' (dogrusu цирконий), 'Uzm. Dr.' unvani Turkce kaldi (marka terimi), UA/ru negatiflerinde 'по полису омс' (Rusya'ya ozgu, Ukrayna'da anlamsiz). Rapor etiketleri (Hook'lar, Gorsel Onerisi...) bilincli Turkce.
-- Kalan: push yok; Codex incelemesi (5b6684b); K3 Yandex; sunucu dagitimi ayri is (imaj rebuild + worker restart + rekey).
+- DURUM (Codex kapanis, 5b6684b onayli, 35 test bagimsiz): TEKNIK canli dogrulama TAMAM; RU/UK dil kalitesi (tibbi terminoloji + UA hedefinde 'по полису омс') ve sunucu hazirligi (envanter SQL + rekey dry-run) TAMAMLANMADI; Yandex ayri teslim karari acik. Push yok.
 
 ## Just completed (01.11 — Codex Faz 0-3 incelemesi (bd87a6b) 4 bulgu KAPANDI; lead + 1 Backend Dev Sonnet)
 

@@ -13,7 +13,7 @@ RU_GRPC = (
 
 def test_untargetable_geo_gets_friendly_message():
     msg = _translate_invalid_argument(RU_GRPC)
-    assert "arama verisi sunmuyor" in msg and "CSV" in msg
+    assert "isteği reddetti" in msg and "CSV" in msg
     assert "INVALID_VALUE" not in msg
 
 
