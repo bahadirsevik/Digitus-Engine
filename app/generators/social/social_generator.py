@@ -51,6 +51,7 @@ from app.schemas.social import (
     PolicyWarning,
 )
 from app.generators.ads.validators import find_ungrounded_claims
+from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 
 
 class SocialGenerator:
@@ -924,7 +925,10 @@ class SocialGenerator:
         SOCIAL isteklerinde kullanıcı USP alanı yok; whitelist yalnız
         confirmed product_facts'ten kurulur. Boşsa hiçbir sayısal iddia geçemez.
         """
-        from app.core.channel.brand_defense import load_product_definition
+        from app.core.channel.brand_defense import (
+            load_grounding_facts,
+            load_product_definition,
+        )
         from app.database.models import ScoringRun
 
         if not scoring_run_id:
@@ -935,16 +939,18 @@ class SocialGenerator:
             .first()
         )
         product_facts = load_product_definition(self.db, run) or ""
-        return product_facts, product_facts
+        return product_facts, load_grounding_facts(self.db, run)
 
     def _find_content_claims(
         self, content: SocialContentSchema, grounding_facts: str
     ) -> List[str]:
-        """Caption + hook metinlerindeki desteksiz iddiaları toplar."""
+        """Hook, caption, CTA, görsel önerisi ve hashtag metinlerindeki desteksiz iddiaları toplar."""
         claims: List[str] = []
-        for hook in content.hooks or []:
-            claims.extend(find_ungrounded_claims(hook.text, grounding_facts))
-        claims.extend(find_ungrounded_claims(content.caption or "", grounding_facts))
+        texts = [h.text for h in content.hooks or []]
+        texts += [content.caption, content.cta_text, content.visual_suggestion]
+        texts += list(content.hashtags or [])
+        for text in texts:
+            claims.extend(find_ungrounded_claims(text or "", grounding_facts))
         # Tekilleştir, sırayı koru
         seen = set()
         return [c for c in claims if not (c in seen or seen.add(c))]
@@ -975,6 +981,7 @@ class SocialGenerator:
             additional_context=(
                 "Önceki içerik desteksiz iddia içeriyordu, bunları KULLANMA: "
                 + "; ".join(claims)
+                + ". " + CLAIM_REPAIR_RULE
             ),
             product_facts=product_facts,
             output_ctx=output_ctx,

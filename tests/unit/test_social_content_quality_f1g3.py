@@ -236,7 +236,7 @@ def test_g07_hook_and_caption_claims_deduplicated_preserving_order():
 
 
 def test_g08_format_payload_not_scanned_for_claims():
-    """format_payload (scene, voiceover, slides, posts) bu fazda taranmaz; yalnızca hook ve caption taranır."""
+    """format_payload (scene, voiceover, slides, posts) taranmaz; hook/caption/CTA/görsel/hashtag taranır."""
     context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
     # Video içeriğinin payload'ında (on_screen_text ve voiceover) 100.000+ ve %80 geçiyor,
     # ancak caption ve hook tamamen temiz
@@ -250,11 +250,37 @@ def test_g08_format_payload_not_scanned_for_claims():
     assert claims == ()
 
 
+def test_g08b_cta_visual_and_hashtags_scanned():
+    """cta_text, visual_suggestion ve hashtag öğeleri de taranır (ws77: hashtag'e sızdı)."""
+    import dataclasses
+
+    context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
+    base = _make_post_content()
+    assert find_social_content_ungrounded_claims(base, context) == ()
+
+    cta = dataclasses.replace(base, cta_text="Hemen ara: %100 ağrısız deneyim")
+    assert any(c.startswith("absolute:") for c in find_social_content_ungrounded_claims(cta, context))
+
+    tags = dataclasses.replace(base, hashtags=base.hashtags[:4] + ("#лечениезубовбезболи",))
+    assert any(c.startswith("absolute:") for c in find_social_content_ungrounded_claims(tags, context))
+
+    visual = dataclasses.replace(base, visual_suggestion="Klinikte lazer çekimi")
+    assert any(c.startswith("service:") for c in find_social_content_ungrounded_claims(visual, context))
+
+    # format_payload yine taranmaz
+    payload = _make_video_content(
+        hooks=(_make_hook(text="Cilt bakımında 3 altın adım."),),
+        caption="Günlük cilt temizliği ve bakım adımları rehberi.",
+        payload_claim=True,
+    )
+    assert find_social_content_ungrounded_claims(payload, context) == ()
+
+
 def test_g09_exact_primary_keyword_exemption_and_narrow_scope():
     """primary_keyword dar ve tam eşleşme muafiyeti sağlar; kısmi veya alakasız sayıları aklamaz."""
     # 1. Tam eşleşen keyword içindeki sayı/yıl muaf sayılır
-    context_exact = SocialContentGroundingContext(primary_keyword="en iyi hisse 2026")
-    content_exact = _make_post_content(caption="en iyi hisse 2026 analizini sizler için derledik.")
+    context_exact = SocialContentGroundingContext(primary_keyword="hisse 2026")
+    content_exact = _make_post_content(caption="hisse 2026 analizini sizler için derledik.")
     claims_exact = find_social_content_ungrounded_claims(content_exact, context_exact)
     assert claims_exact == ()
 

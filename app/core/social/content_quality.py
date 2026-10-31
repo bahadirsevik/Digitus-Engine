@@ -11,7 +11,7 @@ Kurallar (plan_social_brief_akisi.md rev.4 §6, §9):
 - Logger'a kullanıcı içeriği, iddia (claim) veya hassas veri YAZILMAZ.
 - DTO'lar dondurulmuş (frozen dataclass) ve immutable'dır.
 - app/generators/ads/validators.py içindeki find_ungrounded_claims yeniden kullanılır.
-- Caption ve hook metinleri taranır; format_payload bu fazda taranmaz.
+- Hook, caption, CTA, görsel önerisi ve hashtag metinleri taranır; format_payload taranmaz.
 - Grounding whitelist yalnızca product_facts ve kullanıcının sağladığı trusted_brand_usp'dir.
 - brand_context whitelist'e DAHİL EDİLMEZ.
 - primary_keyword yalnızca dar ve tam kelime muafiyeti (exempt_keywords) için kullanılır.
@@ -289,10 +289,10 @@ def find_social_content_ungrounded_claims(
     content: ValidatedSocialContent,
     context: SocialContentGroundingContext,
 ) -> tuple[str, ...]:
-    """Caption ve hook metinlerindeki desteksiz iddiaları bulur.
+    """Hook, caption, CTA, görsel önerisi ve hashtag metinlerindeki desteksiz iddiaları bulur.
 
     Kurallar:
-    - Yalnızca content.caption ve hook.text alanları taranır.
+    - Taranan alanlar: hook.text, caption, cta_text, visual_suggestion, hashtags.
     - format_payload içindeki alanlar (scene, on_screen_text, voiceover, slides, posts) taranmaz.
     - grounding_facts: confirmed product_facts + trusted_brand_usp (veya boş string).
     - exempt_keywords: [context.primary_keyword].
@@ -316,23 +316,23 @@ def find_social_content_ungrounded_claims(
     exempt_keywords = [context.primary_keyword]
 
     try:
+        texts: list[str] = [
+            hook.text for hook in content.hooks
+            if hasattr(hook, "text") and isinstance(hook.text, str)
+        ]
+        texts.append(content.caption)
+        texts.append(content.cta_text)
+        texts.append(content.visual_suggestion)
+        texts.extend(content.hashtags or ())  # düz metin olarak taranır
+
         raw_claims: list[str] = []
-        for hook in content.hooks:
-            if hasattr(hook, "text") and isinstance(hook.text, str):
-                hook_claims = find_ungrounded_claims(
-                    hook.text,
+        for text in texts:
+            if isinstance(text, str):
+                raw_claims.extend(find_ungrounded_claims(
+                    text,
                     grounding_facts=grounding_facts,
                     exempt_keywords=exempt_keywords,
-                )
-                raw_claims.extend(hook_claims)
-
-        if isinstance(content.caption, str):
-            caption_claims = find_ungrounded_claims(
-                content.caption,
-                grounding_facts=grounding_facts,
-                exempt_keywords=exempt_keywords,
-            )
-            raw_claims.extend(caption_claims)
+                ))
     except Exception as exc:
         raise SocialContentQualityError(
             "İddia taraması sırasında beklenmeyen bir hata oluştu.",

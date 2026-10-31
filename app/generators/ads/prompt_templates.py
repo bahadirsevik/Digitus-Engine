@@ -6,6 +6,7 @@ Contains:
 2. ADS_RSA_GENERATION_PROMPT - Headlines + Descriptions + Negatives
 3. HEADLINE_REGENERATION_PROMPT - Single headline fix
 """
+from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 
 # ==================== KEYWORD GROUPING PROMPT ====================
 
@@ -317,6 +318,7 @@ Metni bu iddialar OLMADAN yeniden yaz.
 3. Anahtar kelime bağlamını koru: {keyword}
 4. MUTLAKA {max_length} karakter veya daha kısa olsun.
 5. Akıcı ve doğal olsun (çıktı dilinde).
+6. ''' + CLAIM_REPAIR_RULE + '''
 
 # ÇIKTI
 Sadece yeni metni yaz. Tırnak kullanma. Açıklama ekleme.
