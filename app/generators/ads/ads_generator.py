@@ -241,7 +241,10 @@ class AdsGenerator:
         istekte AÇIKÇA verdiği USP. Sistemin ürettiği generic fallback USP
         kullanıcı doğrulamalı gerçek DEĞİLDİR ve whitelist'e girmez.
         """
-        from app.core.channel.brand_defense import load_product_definition
+        from app.core.channel.brand_defense import (
+            load_grounding_facts,
+            load_product_definition,
+        )
 
         run = (
             self.db.query(ScoringRun)
@@ -249,8 +252,7 @@ class AdsGenerator:
             .first()
         )
         product_facts = load_product_definition(self.db, run) or ""
-        trusted = (trusted_brand_usp or "").strip()
-        grounding_facts = "\n".join(p for p in (product_facts, trusted) if p)
+        grounding_facts = load_grounding_facts(self.db, run, trusted_brand_usp)
         return product_facts, grounding_facts
 
     def _get_ads_keywords(self, scoring_run_id: int) -> List[dict]:

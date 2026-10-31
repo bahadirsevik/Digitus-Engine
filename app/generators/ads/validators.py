@@ -7,7 +7,7 @@ Contains:
 - DKIValidator: Regex-based DKI format validation
 """
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from loguru import logger
 
 from app.core.constants import (
@@ -18,6 +18,12 @@ from app.core.constants import (
 )
 from app.core.site_analyzer.turkish_normalizer import normalize_turkish
 from app.generators.ai_service import scoped
+from app.generators.claim_lexicon import (
+    ABSOLUTE_RX,
+    CERT_PATTERN,
+    SERVICE_RX,
+    GroundingSource,
+)
 from app.generators.output_language import with_output_block
 from app.schemas.ads import AdGroupStandardReport
 from app.generators.ads.prompt_templates import (
@@ -664,9 +670,42 @@ def _extract_numeric_claims(text: str) -> list:
     return claims
 
 
+def _lexicon_violations(lowered: str, original: str, source: GroundingSource) -> list:
+    """Hizmet/marka, sertifika ve mutlak sonuç ihlalleri (plan_iddia_denetimi A1).
+
+    lowered: _tr_lower'lı, MASKESİZ metin; original: sertifika için ham metin.
+    """
+    search = lowered.replace("ı", "i")
+    units = source.permission_units()
+    folded_units = [_tr_lower(u).replace("ı", "i") for u in units]
+    violations = []
+
+    for rx in SERVICE_RX.values():
+        m = rx.search(search)
+        if m and not any(rx.search(u) for u in folded_units):
+            violations.append("service:" + search[m.start():m.end()])
+
+    granted = {
+        _cert_key(cm) for u in units for cm in CERT_PATTERN.finditer(u) if cm.group(2)
+    }
+    for cm in CERT_PATTERN.finditer(original):
+        if not cm.group(2) or _cert_key(cm) not in granted:
+            violations.append("cert:" + cm.group(0).strip())
+
+    for rx in ABSOLUTE_RX:
+        for m in rx.finditer(search):
+            violations.append("absolute:" + search[m.start():m.end()])
+    return violations
+
+
+def _cert_key(m) -> tuple:
+    org = m.group(1).upper().replace("Ü", "U")
+    return org, m.group(2).split(":")[0]
+
+
 def find_ungrounded_claims(
     text: str,
-    grounding_facts: str,
+    grounding_facts: Union[str, GroundingSource],
     exempt_keywords=None,
 ) -> list:
     """Metindeki, grounding_facts ile desteklenmeyen iddiaları döndürür.
@@ -674,20 +713,29 @@ def find_ungrounded_claims(
     Dönüş: okunur iddia string listesi (boş liste = temiz).
     Dil-bağımsız: TR + RU/UK/EN/DE tabloları birlikte taranır (hedef dil
     parametresi yok); sayı biçimi dilden bağımsızdır.
+    grounding_facts: düz metin (etiketli satırlar GroundingSource.from_text ile
+    ayrıştırılır) veya GroundingSource. Hizmet/marka ve sertifika dayanağı yalnız
+    olumlu kaynak birimlerinden gelir; mutlak sonuç kalıpları kaynağa bakılmaz.
     """
     if not text or not text.strip():
         return []
 
+    source = (
+        grounding_facts if isinstance(grounding_facts, GroundingSource)
+        else GroundingSource.from_text(grounding_facts or "")
+    )
     working = _tr_lower(text)
 
-    # Keyword muafiyeti DAR: yalnız asset içinde gerçekten geçen tam
-    # keyword metni taramadan çıkarılır.
+    # Keyword muafiyeti DAR: yalnız SAYISAL taramada, asset içinde gerçekten
+    # geçen tam keyword metni maskelenir. Süperlatif/garanti/hizmet/sertifika/
+    # mutlak kalıplar maskesiz metinde çalışır (keyword'deki "en iyi" de yakalanır).
+    numeric_text = working
     for kw in exempt_keywords or []:
         kw_l = _tr_lower(str(kw)).strip()
-        if kw_l and kw_l in working:
-            working = working.replace(kw_l, " ")
+        if kw_l and kw_l in numeric_text:
+            numeric_text = numeric_text.replace(kw_l, " ")
 
-    facts_l = _tr_lower(grounding_facts or "")
+    facts_l = _tr_lower(source.facts_text())
     fact_numeric = {canon for _, canon in _extract_numeric_claims(facts_l)}
     # "100.000+ müşteri" iddiası fact'te "100.000 müşteri" olarak geçiyorsa
     # sayı bazında ground'lanır (+ eki abartı sayılmaz)
@@ -695,7 +743,7 @@ def find_ungrounded_claims(
 
     violations = []
 
-    for span, canon in _extract_numeric_claims(working):
+    for span, canon in _extract_numeric_claims(numeric_text):
         if canon in fact_numeric:
             continue
         if canon.endswith("+") and canon.rstrip("+") in fact_numbers:
@@ -724,6 +772,8 @@ def find_ungrounded_claims(
     for rx in _ML_GUARANTEE_COMPILED:
         for m in rx.finditer(working_i):
             violations.append(m.group(0))
+
+    violations.extend(_lexicon_violations(working, text, source))
 
     # Tekilleştir, sırayı koru
     seen = set()

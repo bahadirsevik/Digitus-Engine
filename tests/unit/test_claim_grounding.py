@@ -71,10 +71,11 @@ class TestFindUngroundedClaims:
     def test_keyword_year_exemption(self):
         # Keyword'deki doğal yıl sayısı claim sayılmaz (dar muafiyet)
         assert (
-            find_ungrounded_claims(
-                "en iyi hisse 2026 önerileri", "", ["en iyi hisse 2026"]
-            )
-            == []
+            find_ungrounded_claims("hisse 2026 önerileri", "", ["hisse 2026"]) == []
+        )
+        # Muafiyet yalnız SAYISAL taramada: keyword'deki süperlatif artık aklanmaz
+        assert find_ungrounded_claims(
+            "en iyi hisse 2026 önerileri", "", ["en iyi hisse 2026"]
         )
         # Aynı sayı keyword DIŞI bağlamda muaf DEĞİL
         assert find_ungrounded_claims(
@@ -162,8 +163,11 @@ class TestMultilingualClaims:
         assert find_ungrounded_claims("80% of patients", "") and find_ungrounded_claims("80 Prozent", "")
 
     def test_english_keyword_exemption_stays_narrow(self):
+        # Keyword muafiyeti yalnız sayısal taramada: 'best' süperlatifi artık aklanmaz
         assert find_ungrounded_claims(
-            "Best Western Hotel Berlin", "", ["best western hotel berlin"]) == []
+            "Best Western Hotel Berlin", "", ["best western hotel berlin"])
+        assert find_ungrounded_claims(
+            "Hotel Berlin 2026", "", ["hotel berlin 2026"]) == []
         assert find_ungrounded_claims(
             "Best price for Best Western", "", ["best western"])
 
