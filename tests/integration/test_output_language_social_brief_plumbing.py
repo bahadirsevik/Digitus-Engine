@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # kardes test modulleri (importl
 
 from app.database.connection import SessionLocal
 from app.dependencies import get_ai
-from app.generators.output_language import DEFAULT_CONTEXT
+from app.generators.output_language import DEFAULT_CONTEXT, MARKET_RULE
 from app.main import app
 
 # Mevcut brief testlerinin kurulum yardimcilari + autouse fixture'lari
@@ -62,7 +62,7 @@ def test_category_endpoint_prompt_has_workspace_market(
     )
     assert resp.status_code == 201, resp.text
     assert fake.call_args and all(EXPECT in c["prompt"] for c in fake.call_args)
-    assert fake.call_args[0]["prompt"].rstrip().endswith("değişmez.")  # blok prompt'un sonunda
+    assert fake.call_args[0]["prompt"].rstrip().endswith(MARKET_RULE)  # blok prompt'un sonunda
 
 
 def test_category_endpoint_turkish_workspace_gets_turkish_block(

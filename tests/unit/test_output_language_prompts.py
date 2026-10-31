@@ -72,9 +72,10 @@ def test_block_keeps_template_and_appends_after_prompt():
     base = 'Gorev... {"headlines": []} ... 30 karakter, 90 karakter'
     out = with_output_block(base, CTXS[1])
     assert out.startswith(base + "\n\n")
-    assert out.endswith(
-        OUTPUT_BLOCK_TEMPLATE.format(output_language="Rusça", target_location="Berlin, Almanya — Şehir")
-    )
+    assert out.endswith(CTXS[1].block())
+    assert OUTPUT_BLOCK_TEMPLATE.format(
+        output_language="Rusça", target_location="Berlin, Almanya — Şehir"
+    ) in out
     assert "JSON anahtarları, enum değerleri ve ID'ler değişmez" in out
     assert with_output_block(base).endswith(DEFAULT_CONTEXT.block())
 
@@ -361,3 +362,28 @@ _PROFILE_FIELDS = dict(
 def BERLIN_RU_WS_FULL():
     return SimpleNamespace(default_geo_target_id="1003854", default_language_id="1031",
                            **_PROFILE_FIELDS)
+
+
+# ==================== PAKET B: unvan + pazar kuralları (B1/B5) ====================
+
+def test_turkish_default_block_is_byte_identical():
+    expected = (
+        "ÇIKTI DİLİ: Türkçe. HEDEF KONUM: Seçilmedi "
+        "(işletmenin adresi değil; adres/şehir uydurma). İstisnalar: marka/ürün adları, "
+        "URL'ler, tıbbi/teknik terimler, yerleşik yabancı kelimeler. "
+        "JSON anahtarları, enum değerleri ve ID'ler değişmez."
+    )
+    assert DEFAULT_CONTEXT.block() == expected
+    tr = output_context(TR_WS)
+    assert tr.block() == expected.replace("Seçilmedi", "Türkiye (TR) — Ülke")
+
+
+def test_foreign_block_adds_title_and_market_rules():
+    from app.generators.output_language import MARKET_RULE, TITLE_RULE
+
+    ru = CTXS[1].block()
+    assert TITLE_RULE in ru and MARKET_RULE in ru
+    assert "Uzm. Dr., Dt., Op. Dr." in ru and "ödeme sistemi" in ru
+    # Türkçe dil + yabancı pazar: yalnız pazar kuralı
+    tr_abroad = OutputContext(language="Türkçe", location="Berlin, Almanya — Şehir").block()
+    assert MARKET_RULE in tr_abroad and TITLE_RULE not in tr_abroad

@@ -25,15 +25,36 @@ OUTPUT_BLOCK_TEMPLATE = (
 )
 
 
+# Yalnız Türkçe-dışı dil / Türkiye-dışı pazarda eklenir; Türkçe + TR/Seçilmedi blok BAYT-AYNI kalır.
+TITLE_RULE = (
+    "Türkçe mesleki unvan kısaltmalarını (Uzm. Dr., Dt., Op. Dr.) hedef dilde doğal biçimde yaz; "
+    "uzmanlık veya yetki EKLEME, ad-soyadı değiştirme."
+)
+MARKET_RULE = (
+    "Hedef pazarda bulunmayan kurum, sigorta, para birimi ve ödeme sistemi adı kullanma; "
+    "işletme bilgisinde olmayan şube veya adres yazma."
+)
+
+
 @dataclass(frozen=True)
 class OutputContext:
     language: str = DEFAULT_LANGUAGE
     location: str = DEFAULT_LOCATION
 
     def block(self) -> str:
-        return OUTPUT_BLOCK_TEMPLATE.format(
+        text = OUTPUT_BLOCK_TEMPLATE.format(
             output_language=self.language, target_location=self.location
         )
+        foreign_language = self.language != DEFAULT_LANGUAGE
+        foreign_market = not (
+            self.location == DEFAULT_LOCATION or self.location.startswith("Türkiye")
+        )
+        extra = []
+        if foreign_language:
+            extra.append(TITLE_RULE)
+        if foreign_language or foreign_market:
+            extra.append(MARKET_RULE)
+        return " ".join([text, *extra])
 
 
 DEFAULT_CONTEXT = OutputContext()
