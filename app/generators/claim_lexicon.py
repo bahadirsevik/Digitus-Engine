@@ -42,7 +42,7 @@ SERVICE_CONCEPTS: Dict[str, Dict[str, List[str]]] = {
         "tr": ["botoks"], "ru": ["ботокс"], "uk": ["ботокс"], "en": ["botox"], "de": ["botox"],
     },
     "filler": {
-        "tr": ["dolgu"], "ru": ["филлер"], "uk": ["філер", "філлер"],
+        "tr": ["dolgu(?!n)"], "ru": ["филлер"], "uk": ["філер", "філлер"],
         "en": ["fillers?"], "de": ["filler", "unterspritzung"],
     },
     "zirconium_crown": {
@@ -69,7 +69,7 @@ SERVICE_RX: Dict[str, Pattern] = {
 
 # Kuruluş + opsiyonel kod. Kodsuz geçiş her zaman ihlal (belirsiz → insan incelemesi).
 CERT_PATTERN = re.compile(
-    r"(?<![^\W\d_])(ISO|CE|FDA|T[ÜU]V|JCI)(?![^\W\d_])"
+    r"(?<![^\W\d_])(ISO|CE|FDA|T[ÜU]V|JCI)(?![^\W\d_])(?:\s*/\s*IEC)?"
     r"(?:\s*[-–:]?\s*(\d{3,5}(?::\d{4})?))?",
     re.IGNORECASE,
 )
@@ -94,7 +94,8 @@ ABSOLUTE_RX: Tuple[Pattern, ...] = tuple(
 
 # Olumsuz cümle kaynak izni sayılmaz.
 NEGATION_RX = re.compile(
-    rf"{_LEAD}(?:yapmiyor\w*|yapilmaz|yok|değil|degil|hariç|haric|не|нет|без|немає|"
+    rf"{_LEAD}(?:yapmiyor\w*|yapilmaz|yoktur|yok|değil|degil|hariç|haric|не|нет|без|немає|"
+    r"\w+m[iuü]yor\w*|\w+(?:me|ma)(?:mektedir|maktadir)|"
     r"not|no|kein\w*|ohne)(?![^\W\d_])"
 )
 
@@ -159,5 +160,5 @@ class GroundingSource:
         """Olumlu izin birimleri (ham harf; olumsuz cümleler hariç)."""
         units: List[str] = [*self.services, *self.products, *self.use_cases]
         for line in self.usp:
-            units.extend(re.split(r"[.;!?]+(?:\s|$)", line))
+            units.extend(re.split(r"[.;!?,]+(?:\s|$)", line))
         return [u for u in units if u.strip() and not NEGATION_RX.search(fold(u))]

@@ -210,3 +210,29 @@ def test_exports_carry_claim_text(db_session, blocked, tmp_path):
     assert 'Dayanaksız iddia yok' in cells
     assert 'Dayanaksız iddia' in text + cells
     assert 'Yayın öncesi inceleme: Gerekli' in text
+
+
+def test_load_grounding_facts_full_confirmed_lists_only(db_session, make_workspace, make_scoring_run):
+    from app.core.channel.brand_defense import load_grounding_facts
+
+    services = [f"hizmet{i}" for i in range(12)]
+    ws = make_workspace(
+        name='gf-ws', status='confirmed',
+        profile_data={
+            'company_name': 'Firma X', 'sector': 'Sağlık', 'target_audience': 'Genç hedef kitle',
+            'problems_solved': ['sorun1'], 'products': ['urun1'], 'services': services,
+            'use_cases': ['kullanim1'],
+        })
+    run = make_scoring_run(brand_profile_id=ws.id, status='channel_assigned')
+
+    text = load_grounding_facts(db_session, run, "Güvenilir USP")
+    assert all(s in text for s in services)  # 10 sınırı yok
+    assert 'Ürünler: urun1' in text and 'Kullanım Alanları: kullanim1' in text
+    assert text.endswith('Güvenilir USP')
+    for absent in ('Firma', 'Sektör', 'Hedef kitle', 'Çözdüğü', 'sorun1', 'Sağlık'):
+        assert absent not in text
+
+    draft = make_workspace(name='gf-draft', status='draft', profile_data={'services': ['x']})
+    run2 = make_scoring_run(brand_profile_id=draft.id, status='channel_assigned')
+    assert load_grounding_facts(db_session, run2) == ''
+    assert load_grounding_facts(db_session, None, 'usp') == 'usp'

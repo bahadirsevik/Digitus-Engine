@@ -44,6 +44,32 @@ class TestServiceConcepts:
         src = GroundingSource(services=("sedasyon",))
         assert find_ungrounded_claims("sedation available", src) == []
 
+    def test_grounding_source_without_service_is_violation(self):
+        src = GroundingSource(services=("implant",))
+        v = find_ungrounded_claims("sedation available", src)
+        assert any(x.startswith("service:") for x in v)
+
+    def test_negation_forms(self):
+        for line in ("Sedasyon sunmuyoruz", "Sedasyon verilmemektedir", "Sedasyon yoktur"):
+            v = find_ungrounded_claims("седация", f"Hizmetler: implant\n{line}")
+            assert any(x.startswith("service:") for x in v), line
+
+    def test_comma_splits_permission_units(self):
+        facts = "Sedasyon seçeneği var, gizli ücret yok"
+        assert find_ungrounded_claims("седация", facts) == []
+
+    def test_dolgun_is_not_filler(self):
+        assert find_ungrounded_claims("dolgun dudaklar", "") == []
+        assert find_ungrounded_claims("dolgu uygulaması", "")
+
+    def test_profile_concepts_can_be_disabled_for_keyword_reports(self):
+        for kw in ("botoks", "straumann implant", "lazer epilasyon", "ISO"):
+            assert find_ungrounded_claims(kw, "")
+            assert find_ungrounded_claims(kw, "", include_profile_concepts=False) == []
+        # sayısal/süperlatif/mutlak yine sayılır
+        assert find_ungrounded_claims("en iyi implant", "", include_profile_concepts=False)
+        assert find_ungrounded_claims("ağrısız implant", "", include_profile_concepts=False)
+
 
 class TestCertificates:
     def test_different_code_is_violation(self):
@@ -55,6 +81,17 @@ class TestCertificates:
 
     def test_bare_org_is_always_violation(self):
         v = find_ungrounded_claims("ISO ve CE belgeli", "Hizmetler: ISO ve CE")
+        assert any(x.startswith("cert:") for x in v)
+
+    def test_iso_iec_with_same_code_in_source(self):
+        facts = "Ürünler: ISO/IEC 27001"
+        assert find_ungrounded_claims("ISO/IEC 27001 sertifikalı", facts) == []
+        assert find_ungrounded_claims("ISO 27001 sertifikalı", facts) == []
+        v = find_ungrounded_claims("ISO/IEC 27002 sertifikalı", facts)
+        assert any(x.startswith("cert:") for x in v)
+
+    def test_bare_iso_iec_is_violation(self):
+        v = find_ungrounded_claims("ISO/IEC belgeli", "Ürünler: ISO/IEC 27001")
         assert any(x.startswith("cert:") for x in v)
 
     def test_org_inside_word_not_matched(self):
@@ -94,8 +131,8 @@ class TestAbsoluteOutcome:
 
 class TestKeywordExemptionNarrowed:
     def test_keyword_number_is_exempt_in_numeric_scan(self):
-        v = find_ungrounded_claims("4 implant tek seansta", "", ["4 implant"])
-        assert not any("4" in x for x in v)
+        assert find_ungrounded_claims("20 yıllık implant", "")
+        assert find_ungrounded_claims("20 yıllık implant", "", ["20 yıllık implant"]) == []
 
     def test_keyword_year_still_exempt(self):
         assert find_ungrounded_claims("2026 yıl sonu hisse", "", ["2026 yıl sonu hisse"]) == []

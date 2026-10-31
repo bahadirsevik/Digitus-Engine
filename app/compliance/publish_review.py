@@ -89,7 +89,11 @@ def build_publish_review(
             failures.append({
                 'criterion': item.get('criterion', ''),
                 'source': 'seo_auto',
-                'detail': "Değerlendirilmedi (kayıt boş) — manuel kontrol",
+                'detail': (
+                    item.get('details') if item.get('criterion') == CLAIM_CRITERION
+                    and item.get('details')
+                    else "Değerlendirilmedi (kayıt boş) — manuel kontrol"
+                ),
             })
 
     if geo_flags is None or not geo_evaluated:

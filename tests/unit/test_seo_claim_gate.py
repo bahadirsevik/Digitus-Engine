@@ -145,6 +145,68 @@ def test_scans_faq_alt_text_and_link_anchor_fields():
     assert kinds == {"absolute", "service", "cert"}
 
 
+def test_slug_is_not_scanned_and_keyword_number_in_title_exempt():
+    gen = _gen(FakeAI())
+    content = _content(title="20 Yıllık Implant Rehberi")
+    content["url_suggestion"] = "20-yıllık-implant"
+    assert gen._scan_claims(content, "", ["20 yıllık implant"]) == []
+    # slug tek başına ihlal üretmez
+    content["title"] = "Implant Rehberi"
+    assert gen._scan_claims(content, "", ["20 yıllık implant"]) == []
+
+
+def test_repair_keeps_fields_the_model_omitted():
+    original = _content(intro="ISO belgeli hizmet.")
+    original["image_alt_texts"] = ["alt metin"]
+    original["meta_description"] = "Meta."
+    reply = {k: v for k, v in _content(intro="Temiz giriş.").items() if k in (
+        "title", "intro_paragraph", "subheadings", "body_sections")}
+    gen = _gen(FakeAI(reply))
+    out = gen._repair_claims(KEYWORD, original, ["cert:ISO"], "", 500, 600, [])
+    assert out["intro_paragraph"] == "Temiz giriş."
+    assert out["image_alt_texts"] == ["alt metin"] and out["meta_description"] == "Meta."
+    assert out["faq_items"]
+
+
+def test_claim_item_is_not_in_score_weights():
+    from app.compliance.seo_checker import SEOComplianceChecker
+    assert "no_ungrounded_claims" not in SEOComplianceChecker.CRITERIA_WEIGHTS
+
+
+def test_generate_bulk_counts_claim_blocked(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    gen = _gen(FakeAI())
+    pools = [SimpleNamespace(keyword_id=i) for i in (1, 2, 3)]
+    gen.db = MagicMock()
+    gen.db.query.return_value.filter.return_value.order_by.return_value.all.return_value = pools
+    statuses = iter(["fail", "pass", "fail"])
+
+    def fake_generate(self, request, scoring_run_id=None):
+        return {"id": request.keyword_id, "seo_compliance": {"score": 0.5},
+                "geo_compliance": {"score": 0.5},
+                "claim_check": {"status": next(statuses)}}
+
+    monkeypatch.setattr(SEOGEOGenerator, "generate_content", fake_generate)
+    out = gen.generate_bulk(7)
+    assert out["generated"] == 3 and out["claim_blocked_count"] == 2
+
+
+def test_finalize_seo_bulk_sums_claim_blocked(monkeypatch):
+    from app.tasks import generation_tasks
+
+    captured = {}
+    monkeypatch.setattr(
+        generation_tasks, "update_task_status", lambda *a, **kw: captured.update(kw))
+    out = generation_tasks.finalize_seo_bulk(
+        [{"content_ids": [1, 2], "claim_blocked": 1},
+         {"content_ids": [3], "claim_blocked": 2}, None], "parent", 5)
+    assert out["status"] == "completed"
+    assert captured["result_data"]["claim_blocked_count"] == 3
+    assert captured["result_data"]["total"] == 3
+
+
 def test_current_year_and_keyword_numbers_are_not_claims():
     gen = _gen(FakeAI())
     year = datetime.now().year

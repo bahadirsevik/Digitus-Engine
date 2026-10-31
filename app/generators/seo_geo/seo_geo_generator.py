@@ -704,7 +704,8 @@ class SEOGEOGenerator:
 
     CLAIM_CRITERION = 'no_ungrounded_claims'
     _CLAIM_STR_FIELDS = (
-        'title', 'meta_description', 'url_suggestion', 'intro_paragraph',
+        # url_suggestion taranmaz: keyword'den türeyen slug, yayın metni değil
+        'title', 'meta_description', 'intro_paragraph',
         'internal_link_anchor', 'external_link_anchor',
     )
     _CLAIM_LIST_FIELDS = (
@@ -828,6 +829,8 @@ class SEOGEOGenerator:
         except Exception as e:
             logger.warning(f"İddia düzeltme turu başarısız, orijinal korunuyor: {e}")
             return None
+        # Modelin atladığı alanlar (faq_items, image_alt_texts, ...) kaybolmasın
+        repaired = {**content, **repaired}
         repaired = validate_internal_link(repaired, link_pool)
         repaired = validate_external_link(repaired)
         self._recompute_word_stats(repaired, keyword)

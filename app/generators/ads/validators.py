@@ -670,7 +670,9 @@ def _extract_numeric_claims(text: str) -> list:
     return claims
 
 
-def _lexicon_violations(lowered: str, original: str, source: GroundingSource) -> list:
+def _lexicon_violations(
+    lowered: str, original: str, source: GroundingSource, include_profile_concepts: bool = True
+) -> list:
     """Hizmet/marka, sertifika ve mutlak sonuç ihlalleri (plan_iddia_denetimi A1).
 
     lowered: _tr_lower'lı, MASKESİZ metin; original: sertifika için ham metin.
@@ -680,17 +682,18 @@ def _lexicon_violations(lowered: str, original: str, source: GroundingSource) ->
     folded_units = [_tr_lower(u).replace("ı", "i") for u in units]
     violations = []
 
-    for rx in SERVICE_RX.values():
-        m = rx.search(search)
-        if m and not any(rx.search(u) for u in folded_units):
-            violations.append("service:" + search[m.start():m.end()])
+    if include_profile_concepts:
+        for rx in SERVICE_RX.values():
+            m = rx.search(search)
+            if m and not any(rx.search(u) for u in folded_units):
+                violations.append("service:" + search[m.start():m.end()])
 
-    granted = {
-        _cert_key(cm) for u in units for cm in CERT_PATTERN.finditer(u) if cm.group(2)
-    }
-    for cm in CERT_PATTERN.finditer(original):
-        if not cm.group(2) or _cert_key(cm) not in granted:
-            violations.append("cert:" + cm.group(0).strip())
+        granted = {
+            _cert_key(cm) for u in units for cm in CERT_PATTERN.finditer(u) if cm.group(2)
+        }
+        for cm in CERT_PATTERN.finditer(original):
+            if not cm.group(2) or _cert_key(cm) not in granted:
+                violations.append("cert:" + cm.group(0).strip())
 
     for rx in ABSOLUTE_RX:
         for m in rx.finditer(search):
@@ -707,6 +710,7 @@ def find_ungrounded_claims(
     text: str,
     grounding_facts: Union[str, GroundingSource],
     exempt_keywords=None,
+    include_profile_concepts: bool = True,
 ) -> list:
     """Metindeki, grounding_facts ile desteklenmeyen iddiaları döndürür.
 
@@ -729,9 +733,9 @@ def find_ungrounded_claims(
     # Keyword muafiyeti DAR: yalnız SAYISAL taramada, asset içinde gerçekten
     # geçen tam keyword metni maskelenir. Süperlatif/garanti/hizmet/sertifika/
     # mutlak kalıplar maskesiz metinde çalışır (keyword'deki "en iyi" de yakalanır).
-    numeric_text = working
+    numeric_text = working.replace("ı", "i")  # keyword eşleşmesi ı/i farkına (Implant) takılmasın
     for kw in exempt_keywords or []:
-        kw_l = _tr_lower(str(kw)).strip()
+        kw_l = _tr_lower(str(kw)).strip().replace("ı", "i")
         if kw_l and kw_l in numeric_text:
             numeric_text = numeric_text.replace(kw_l, " ")
 
@@ -773,7 +777,7 @@ def find_ungrounded_claims(
         for m in rx.finditer(working_i):
             violations.append(m.group(0))
 
-    violations.extend(_lexicon_violations(working, text, source))
+    violations.extend(_lexicon_violations(working, text, source, include_profile_concepts))
 
     # Tekilleştir, sırayı koru
     seen = set()
@@ -1020,7 +1024,7 @@ def build_standard_report(
         short_keyword_count=len(short),
         short_keywords_in_headlines=sum(coverage[k] == "headline" for k in short),
         unused_keyword_reasons={
-            k: ("too_long" if len(k) > 30 else "claim" if find_ungrounded_claims(k, "") else "not_used")
+            k: ("too_long" if len(k) > 30 else "claim" if find_ungrounded_claims(k, "", include_profile_concepts=False) else "not_used")
             for k in target_keywords if coverage[k] != "headline"
         },
         fill_keywords=[k for k, i in zip(target_keywords, target_keyword_ids) if i in fill_ids],
