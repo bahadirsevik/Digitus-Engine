@@ -33,6 +33,7 @@ from app.schemas.brand_profile import (
     LocationFilterPreviewRequest, LocationFilterPreviewResponse,
     LocationPreviewCityCount, LocationPreviewSample, LocationPreviewExemptSample,
     MarketOptionsResponse, MarketLocationSearchResponse,
+    MarketCopyRequest, MarketCopyResponse, MarketCopySkipped,
 )
 from app.schemas.location_gate import LocationAuditResponse, LocationAuditRow
 from app.core.channel_seed import (
@@ -910,6 +911,225 @@ def create_focus(
 
     _dispatch_analysis(background_tasks, focus)
     return WorkspaceResponse.model_validate(focus)
+
+
+def _run_keyword_suggestions_for_copy(workspace_id: int) -> None:
+    """Background task (pazar kopyası): onaylı kopyaya YALNIZ `suggested_keywords` yazar.
+
+    `_run_keyword_suggestion_from_profile` status'u running -> keywords_review yaptığı için
+    kullanılmaz. Burada status, profile_data, analysis_attempt_id, policy_version ve
+    profile_approved_at'a dokunulmaz; hata halinde kopya `confirmed` kalır, öneri boş kalır.
+    İdempotent: öneri zaten varsa AI çağrılmaz.
+    """
+    from app.database.connection import SessionLocal
+    from app.generators.ai_service import get_ai_service
+    from app.core.site_analyzer.profile_extractor import (
+        ProfileExtractor,
+        resolve_site_content,
+    )
+    from app.core.policy.competitor_policy import approved_competitor_terms, match_term
+
+    def _eligible(ws: Optional[BrandProfile]) -> bool:
+        return bool(
+            ws is not None
+            and ws.deleted_at is None
+            and ws.status == "confirmed"
+            and ws.parent_brand_profile_id is None
+            and not ws.suggested_keywords
+        )
+
+    db = SessionLocal()
+    ai = None
+    try:
+        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
+        if not _eligible(workspace):
+            return
+
+        ai = get_ai_service(api_key=settings.GEMINI_API_KEY)
+        ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
+        extractor = ProfileExtractor(ai)
+        profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
+        competitor_terms = approved_competitor_terms(workspace)
+        preliminary_info = workspace.preliminary_info
+        excluded_info = workspace.excluded_info
+        output_ctx = output_context(workspace)
+        site_content, _pages, content_error = resolve_site_content(
+            extractor, workspace.company_url, workspace.crawl_content_cache,
+            crawl_scope=workspace.crawl_scope,
+        )
+        if content_error:
+            logger.warning(f"Market copy suggestions skipped for workspace_id={workspace_id}: {content_error}")
+            return
+        suggestions = extractor.suggest_keywords_from_profile(
+            site_content,
+            profile,
+            must_have_info=preliminary_info,
+            excluded_info=excluded_info,
+            competitor_terms=competitor_terms,
+            output_ctx=output_ctx,
+        )
+        suggestions = [k for k in suggestions if match_term(k, competitor_terms) is None]
+        keywords = _normalize_seed_keywords(suggestions)[:10]
+        if not keywords:
+            return
+
+        workspace = lock_workspace_row(db, workspace_id)  # AI sürerken durum değişmiş olabilir
+        if not _eligible(workspace):
+            db.rollback()
+            return
+        workspace.suggested_keywords = keywords
+        db.commit()
+    except Exception as exc:
+        logger.warning(f"Market copy keyword suggestions failed for workspace_id={workspace_id}: {exc}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        _close_ai_quietly(ai)
+        db.close()
+
+
+# Pazar kopyası (plan_pazar_dil_secimi Faz 3). capabilities / suggested_keywords /
+# validation_data / policy_version / anchor_version / pending_focus_* BİLEREK kopyalanmaz.
+_MARKET_COPY_FIELDS = (
+    "competitor_urls", "competitor_terms", "competitor_url_decisions",
+    "competitor_policy", "topic_policy", "channel_strategy",
+    "preliminary_info", "excluded_info", "source_pages", "crawl_content_cache",
+)
+
+
+def _canonical_market(geo: Any, lang: Any) -> Optional[Tuple[str, str]]:
+    """Kayıtlı (geo, dil) → kanonik çift; boş/geçersiz eski kayıt None (eşleşmez)."""
+    try:
+        g, l = markets.validate_market_input(geo, lang)
+    except HTTPException:
+        return None
+    return (g, l) if g and l else None
+
+
+def _site_key(url: str) -> str:
+    return _with_scheme(url).strip().lower().rstrip("/")
+
+
+@router.post(
+    "/workspaces/{workspace_id}/markets",
+    response_model=MarketCopyResponse,
+    status_code=201,
+)
+def create_market_copies(
+    workspace_id: int,
+    request: MarketCopyRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Onaylı markadan, seçilen her (hedef konum, dil) için bağımsız pazar kopyası aç.
+
+    Kaynak FOR UPDATE kilitli; tek transaction, tek commit. Mevcut pazarlar `skipped`
+    olur (üst düzey 409 yalnız TÜMÜ atlanırsa). Öneri kelimeler commit SONRASI kopya
+    başına arka planda üretilir (`_run_keyword_suggestions_for_copy`; status'a dokunmaz).
+    """
+    # Tüm liste önce doğrulanır (hiçbir şey yazılmadan); kanonik değerler kullanılır
+    items: List[Tuple[str, str]] = []
+    for item in request.markets:
+        geo, lang = markets.validate_market_input(item.geo_target_id, item.language_id)
+        if (geo, lang) in items:
+            raise HTTPException(
+                status_code=422,
+                detail="Aynı pazar (hedef konum + dil) listede birden fazla kez seçilmiş.",
+            )
+        items.append((geo, lang))
+
+    source = _lock_workspace_for_policy_mutation(db, workspace_id)
+    if source.parent_brand_profile_id is not None or source.status != "confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "MARKET_COPY_SOURCE_INVALID",
+                "message": "Pazar yalnız onaylanmış bir marka çalışmasından eklenebilir "
+                "(alt sayfa odağından veya onaysız çalışmadan değil).",
+            },
+        )
+
+    from urllib.parse import urlparse
+
+    source_key = _site_key(source.company_url)
+    existing: Dict[Tuple[str, str], str] = {}
+    siblings = db.query(BrandProfile).filter(
+        BrandProfile.deleted_at.is_(None),
+        BrandProfile.crawl_scope == "site",
+        BrandProfile.parent_brand_profile_id.is_(None),
+    ).all()
+    for row in siblings:
+        market = _canonical_market(row.default_geo_target_id, row.default_language_id)
+        if market and _site_key(row.company_url) == source_key:
+            existing.setdefault(market, row.name or row.company_url)
+
+    brand_label = source.name or (urlparse(_with_scheme(source.company_url)).hostname or "")
+    own = _canonical_market(source.default_geo_target_id, source.default_language_id)
+    if own:
+        own_suffix = f" — {markets.location_short_label(own[0])}/{markets.language_name(own[1])}"
+        if brand_label.endswith(own_suffix):
+            brand_label = brand_label[: -len(own_suffix)]  # kopyanın kopyasında ek üst üste binmesin
+
+    profile = source.profile_data if isinstance(source.profile_data, dict) else None
+    copies: List[BrandProfile] = []
+    skipped: List[MarketCopySkipped] = []
+    for geo, lang in items:
+        if (geo, lang) in existing:
+            skipped.append(MarketCopySkipped(
+                geo_target_id=geo,
+                language_id=lang,
+                market_label=markets.market_label(
+                    BrandProfile(default_geo_target_id=geo, default_language_id=lang)
+                ),
+                reason=f"Bu pazar için çalışma zaten var: {existing[(geo, lang)]}",
+            ))
+            continue
+        # None alanlar HİÇ verilmez (JSON kolona açık None 'null' yazar)
+        inherited = {
+            f: copy.deepcopy(getattr(source, f))
+            for f in _MARKET_COPY_FIELDS if getattr(source, f) is not None
+        }
+        if profile is not None:
+            # konum politikası alanları atılır: kopyada filtre modu 'none' (alan yok = none)
+            inherited["profile_data"] = {
+                k: copy.deepcopy(v) for k, v in profile.items() if k not in LOCATION_PROFILE_KEYS
+            }
+        suffix = f" — {markets.location_short_label(geo)}/{markets.language_name(lang)}"
+        copies.append(BrandProfile(
+            name=f"{brand_label[: 200 - len(suffix)]}{suffix}",
+            company_url=source.company_url,
+            crawl_scope=source.crawl_scope,
+            strategy_version=source.strategy_version or 0,
+            status="confirmed",
+            profile_approved_at=datetime.now(timezone.utc),
+            onboarding_flow="profile_first",
+            default_geo_target_id=geo,
+            default_language_id=lang,
+            **inherited,
+        ))
+
+    if not copies:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MARKET_COPY_ALL_EXIST",
+                "message": "Seçilen pazarların hepsi için çalışma zaten var.",
+                "skipped": [s.model_dump() for s in skipped],
+            },
+        )
+    db.add_all(copies)
+    db.commit()
+    created = []
+    for row in copies:
+        db.refresh(row)
+        response = WorkspaceResponse.model_validate(row)
+        response.market_locked = False  # yeni kopyada veri yok
+        created.append(response)
+        background_tasks.add_task(_run_keyword_suggestions_for_copy, workspace_id=row.id)
+    return MarketCopyResponse(created=created, skipped=skipped, source_id=source.id)
 
 
 _FOCUS_FIELD_LABELS = {

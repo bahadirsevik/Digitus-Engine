@@ -346,6 +346,10 @@ export const workspaceApi = {
   createFocus: (workspaceId: number, url: string) =>
     api.post<WorkspaceResponse>(`/brand-profile/workspaces/${workspaceId}/focuses`, { url }),
 
+  // Pazar kopyaları (tek/toplu): 201 {created, skipped}; hepsi mevcutsa 409 MARKET_COPY_ALL_EXIST
+  addMarkets: (workspaceId: number, markets: MarketCopyItem[]) =>
+    api.post<MarketCopyResponse>(`/brand-profile/workspaces/${workspaceId}/markets`, { markets }),
+
   // Bekleyen alt sayfa (marka onayından sonra otomatik oluşur): tekrar dene / vazgeç
   retryPendingFocus: (id: number) =>
     api.post<WorkspaceResponse>(`/brand-profile/workspaces/${id}/pending-focus/retry`),
@@ -855,6 +859,36 @@ export interface MarketOptions {
   countries: MarketCountry[]
   languages: MarketLanguage[]
   default: { geo_target_id: string; language_id: string }
+}
+
+export interface MarketCopyItem {
+  geo_target_id: string
+  language_id: string
+}
+
+export interface MarketCopySkipped extends MarketCopyItem {
+  market_label: string
+  reason: string
+}
+
+export interface MarketCopyResponse {
+  created: WorkspaceResponse[]
+  skipped: MarketCopySkipped[]
+  source_id: number
+}
+
+// 409 MARKET_COPY_ALL_EXIST: hata değil, "hepsi zaten var" bilgisi (atlananlar gövdede)
+export function marketCopyAllExistFromError(err: unknown): MarketCopySkipped[] | null {
+  const detail = detailFromError(err)
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    (detail as { code?: unknown }).code === 'MARKET_COPY_ALL_EXIST'
+  ) {
+    const skipped = (detail as { skipped?: unknown }).skipped
+    return Array.isArray(skipped) ? (skipped as MarketCopySkipped[]) : []
+  }
+  return null
 }
 
 export interface LocationItem {

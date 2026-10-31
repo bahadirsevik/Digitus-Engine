@@ -12,7 +12,7 @@
  *    içinde çalışmaya devam eder.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Check,
   CheckCircle2,
@@ -65,6 +65,7 @@ import AiCompetitorDiscovery from './brandProfile/AiCompetitorDiscovery'
 import LocationPolicyControl from '../components/LocationPolicyControl'
 import MarketSelect from '../components/MarketSelect'
 import MarketBadge from '../components/MarketBadge'
+import MarketCopyDialog from '../components/MarketCopyDialog'
 import type { MarketValue } from '../services/market'
 import {
   LocationFilterMode,
@@ -473,7 +474,12 @@ function WorkspaceModal({
   const [startingKeywords, setStartingKeywords] = useState(false)
 
   const navigate = useNavigate()
+  const location = useLocation()
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
+  // Pazar kopyası uyarısı: yalnız dialogdan gelen gezinme durumunda; kapatınca durum silinir
+  const marketCopyId = (location.state as { marketCopyId?: number } | null)?.marketCopyId
+  const dismissMarketCopy = () =>
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
 
   useEffect(() => {
     if (!marketOptions) return
@@ -1020,6 +1026,17 @@ function WorkspaceModal({
 
         {isConfirmed && !isArchived && !isFocusWorkspace(ws) && (
           <>
+            {marketCopyId === ws.id && (
+              <div className="bpx-focus-strip" role="status">
+                <span>
+                  Pazar kopyası — rakipleri ve konum ayarını bu pazar için gözden geçirin; rakip
+                  keşfini yeniden çalıştırabilirsiniz.
+                </span>
+                <button type="button" className="bpx-btn-raised" onClick={dismissMarketCopy}>
+                  Anladım
+                </button>
+              </div>
+            )}
             {unfinishedFocuses.map((f) => (
               <div className="bpx-focus-strip" key={f.id}>
                 <span>
@@ -1385,6 +1402,7 @@ function BrandCard({
   onActivate,
   onArchive,
   onRestore,
+  onAddMarket,
   nested,
 }: {
   ws: WorkspaceListRow
@@ -1397,6 +1415,7 @@ function BrandCard({
   onActivate: (ws: WorkspaceListRow) => void
   onArchive: () => void
   onRestore: () => void
+  onAddMarket: (ws: WorkspaceListRow) => void
 }) {
   const phase = getWorkspacePhase(ws)
   const tone = pillTone(phase)
@@ -1408,6 +1427,9 @@ function BrandCard({
   const activeFocus = focuses.find((f) => f.id === activeId)
   const isActive = activeId === ws.id || !!activeFocus
   const hasMenu = !ws.deleted_at && focuses.length > 0
+  // Pazar kopyası yalnız marka çalışmasından (alt sayfa ve arşivli değil); onaylı olmalı
+  const showMarketAction = !ws.deleted_at && !isFocusWorkspace(ws)
+  const canAddMarket = ws.status === 'confirmed'
 
   return (
     <div
@@ -1433,6 +1455,22 @@ function BrandCard({
           <span className={`bpx-pill is-${tone}`}>
             {busy && <Loader2 size={9} className="spin-icon" />} {statusLabel(ws)}
           </span>
+          {showMarketAction && (
+            <button
+              type="button"
+              className="bpx-btn-ghost"
+              disabled={!canAddMarket}
+              title={
+                canAddMarket ? 'Bu markadan yeni pazar çalışmaları aç' : 'Önce profili onaylayın'
+              }
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddMarket(ws)
+              }}
+            >
+              <Plus size={13} /> Pazar ekle
+            </button>
+          )}
           {!ws.deleted_at && (
             <button
               type="button"
@@ -1563,6 +1601,7 @@ export default function BrandProfile() {
   const navigate = useNavigate()
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
+  const [marketSource, setMarketSource] = useState<WorkspaceListRow | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchWorkspaces = useCallback(async () => {
@@ -1787,6 +1826,13 @@ export default function BrandProfile() {
     navigate('/keywords?tab=google-ads')
   }
 
+  // Pazar kopyasına geç: aktif yap + profil panelini aç; "kopya" bilgisi yalnız gezinme durumunda
+  const handleOpenMarketCopy = (first: WorkspaceResponse) => {
+    setMarketSource(null)
+    setActiveWorkspace(workspaceToActiveWorkspace(first))
+    navigate(`/brand-profile?workspace_id=${first.id}`, { state: { marketCopyId: first.id } })
+  }
+
   const closeModal = () => {
     setSelectedWs(null)
     setModalOpen(false)
@@ -1946,6 +1992,7 @@ export default function BrandProfile() {
               onActivate={handleActivateWorkspace}
               onArchive={() => handleArchive(ws.id)}
               onRestore={() => handleRestore(ws.id)}
+              onAddMarket={setMarketSource}
             />
           )
         })}
@@ -1956,6 +2003,15 @@ export default function BrandProfile() {
           riskine karşı bağlam açıkça görünür. */}
       {activeWorkspace?.id && (
         <PolicyPanel workspaceId={activeWorkspace.id} workspaceName={activeWorkspace.name} />
+      )}
+
+      {marketSource && (
+        <MarketCopyDialog
+          source={{ id: marketSource.id, name: marketSource.name }}
+          onClose={() => setMarketSource(null)}
+          onCreated={() => void fetchWorkspaces()}
+          onOpenFirst={handleOpenMarketCopy}
+        />
       )}
 
       {modalOpen && (

@@ -250,6 +250,11 @@ def _location_base(row: LocationRow) -> str:
     return ", ".join([row.name, *middle, country_tr])
 
 
+def location_short_label(geo_id: Any) -> str:
+    """Tür eki OLMADAN konum ("Berlin, Almanya" / "Almanya (DE)"); çalışma adları için."""
+    return _location_short(geo_id)
+
+
 def _location_short(geo_id: Any) -> str:
     gid = _clean_geo(geo_id)
     country = _COUNTRY_BY_ID.get(gid)

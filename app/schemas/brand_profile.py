@@ -3,7 +3,7 @@ Pydantic schemas for Brand Profile & Keyword Relevance.
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, ConfigDict, computed_field
+from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
 
 from app.core import markets
 
@@ -114,6 +114,28 @@ class WorkspaceCreateRequest(BaseModel):
 class FocusCreateRequest(BaseModel):
     """Marka altına alt sayfa odağı ekleme isteği."""
     url: str = Field(..., min_length=1, max_length=500, description="Odak sayfa URL'i (marka ile aynı site)")
+
+
+class MarketCopyItem(BaseModel):
+    """Pazar kopyası hedefi: hedef konum (ülke/şehir) + çıktı dili."""
+    geo_target_id: str = Field(..., min_length=1, max_length=40)
+    language_id: str = Field(..., min_length=1, max_length=40)
+
+    @field_validator("geo_target_id", "language_id", mode="before")
+    @classmethod
+    def _id_to_str(cls, value: Any) -> Any:
+        return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+
+
+class MarketCopyRequest(BaseModel):
+    markets: List[MarketCopyItem] = Field(..., min_length=1, max_length=30)
+
+
+class MarketCopySkipped(BaseModel):
+    geo_target_id: str
+    language_id: str
+    market_label: str
+    reason: str
 
 
 class FocusSettingsChange(BaseModel):
@@ -320,6 +342,12 @@ class WorkspaceResponse(BaseModel):
 
 
 
+
+
+class MarketCopyResponse(BaseModel):
+    created: List[WorkspaceResponse]
+    skipped: List[MarketCopySkipped]
+    source_id: int
 
 
 class WorkspaceListResponse(BaseModel):
