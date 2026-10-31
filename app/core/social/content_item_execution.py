@@ -217,12 +217,14 @@ def execute_social_content_work_item(
     *,
     ai_service: Any,
     work_item: SocialContentWorkItem,
+    output_ctx: Any = None,
 ) -> SocialContentItemExecutionResult:
     """Tek bir sosyal içerik work item'ını generate -> quality -> max 1 repair hattıyla yürütür.
 
     Args:
         ai_service: Yapay zeka servis nesnesi (AIService veya uyumlu adaptör).
         work_item: Doğrulanmış tekil içerik çalışma birimi (SocialContentWorkItem).
+        output_ctx: Çalışma pazarı (çıktı dili + hedef konum); None -> Türkçe.
 
     Returns:
         SocialContentItemExecutionResult: 'accepted' veya 'rejected' statülü nihai sonuç.
@@ -291,7 +293,7 @@ def execute_social_content_work_item(
     # ----------------------------------------------------
     # Faz 1: İlk İçerik Üretimi (Tam 1 AI Çağrısı)
     # ----------------------------------------------------
-    generator = SocialBriefContentGenerator(ai_service)
+    generator = SocialBriefContentGenerator(ai_service, output_ctx=output_ctx)
     try:
         initial_ai_result = generator.generate(work_item.prompt_input)
     except SocialContentGenerationError as exc:

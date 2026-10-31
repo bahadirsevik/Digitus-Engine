@@ -97,6 +97,88 @@ class TestFindUngroundedClaims:
         assert find_ungrounded_claims("9/10 puan aldık", "")  # birimli
 
 
+# Her dil: (iddialı metinler, temiz metinler, (grounded metin, TR fact)).
+# Türkçe profil gerçeği ("10 yıl", "5000 hasta") hedef dildeki iddiayı ground'lar.
+_ML_CLAIM_VECTORS = {
+    "ru": (
+        ["Лучший стоматолог города", "Более 10 лет опыта", "Гарантия результата",
+         "5 000 пациентов доверяют нам", "№1 в вашем городе"],
+        ["Запишитесь на консультацию сегодня", "Современная клиника в центре города",
+         "Гарантия на импланты по договору"],
+        ("Опыт 10 лет", "10 yıl deneyim"),
+    ),
+    "uk": (
+        ["Найкраща клініка міста", "10 років досвіду", "Гарантія результату",
+         "Понад 5000 пацієнтів", "№1 у вашому місті"],
+        ["Запишіться на консультацію сьогодні", "Сучасна клініка в центрі міста"],
+        ("Досвід 10 років", "10 yıl deneyim"),
+    ),
+    "en": (
+        ["Best dentist in town", "10 years of experience", "Guaranteed results",
+         "Over 5,000 patients", "#1 clinic in the city"],
+        ["Book a free consultation", "Modern clinic in the city centre",
+         "Money-back guarantee included"],
+        ("Experience of 10 years", "10 yıl deneyim"),
+    ),
+    "de": (
+        ["Die beste Klinik der Stadt", "10 Jahre Erfahrung", "Garantierter Erfolg",
+         "Über 5000 Patienten", "Nr. 1 in Berlin"],
+        ["Jetzt Termin vereinbaren", "Moderne Praxis im Zentrum"],
+        ("Erfahrung: 5.000 Patienten", "5000 hasta"),
+    ),
+}
+
+
+class TestMultilingualClaims:
+    """Plan pazar/dil Faz 2-g: RU/UK/EN/DE birim, süperlatif, garanti tabloları."""
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_claims_caught(self, lang):
+        for text in _ML_CLAIM_VECTORS[lang][0]:
+            assert find_ungrounded_claims(text, ""), (lang, text)
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_clean_text_passes(self, lang):
+        for text in _ML_CLAIM_VECTORS[lang][1]:
+            assert find_ungrounded_claims(text, "") == [], (lang, text)
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_turkish_fact_grounds_translated_claim(self, lang):
+        text, fact = _ML_CLAIM_VECTORS[lang][2]
+        assert find_ungrounded_claims(text, fact) == [], (lang, text)
+        # fact yoksa aynı metin iddia sayılır
+        assert find_ungrounded_claims(text, ""), (lang, text)
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_guarantee_banned_even_if_in_facts(self, lang):
+        text = _ML_CLAIM_VECTORS[lang][0][2]
+        assert find_ungrounded_claims(text, text)
+
+    def test_numeric_forms_language_independent(self):
+        # 50 тыс. / 50k / 50 Tausend / 50.000 aynı kanonik sayı
+        assert find_ungrounded_claims("50 тыс. клиентов", "50 bin müşteri") == []
+        assert find_ungrounded_claims("50k customers", "50 bin müşteri") == []
+        assert find_ungrounded_claims("50 Tausend Kunden", "50 bin müşteri") == []
+        assert find_ungrounded_claims("80% of patients", "") and find_ungrounded_claims("80 Prozent", "")
+
+    def test_english_keyword_exemption_stays_narrow(self):
+        assert find_ungrounded_claims(
+            "Best Western Hotel Berlin", "", ["best western hotel berlin"]) == []
+        assert find_ungrounded_claims(
+            "Best price for Best Western", "", ["best western"])
+
+    def test_existing_turkish_unchanged_next_to_other_languages(self):
+        assert find_ungrounded_claims("En iyi hizmet 10 yıldır", "")
+        assert find_ungrounded_claims("Randevu alın", "") == []
+
+    def test_every_catalog_language_has_claim_tables(self):
+        from app.core import markets
+        from app.generators.ads.validators import CLAIM_TERM_LANGUAGES
+
+        missing = {l["code"] for l in markets.LANGUAGES} - CLAIM_TERM_LANGUAGES
+        assert not missing, f"claim tablosu eksik dil: {missing}"
+
+
 # ==================== 2. ŞABLON TEMİZLİĞİ ====================
 
 class TestPromptTemplates:

@@ -18,6 +18,9 @@ from app.core.constants import (
     ADS_MIN_CTA_HEADLINES,
 )
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import (
+    DEFAULT_CONTEXT, DEFAULT_LANGUAGE, OutputContext, with_output_block,
+)
 from app.generators.ads.prompt_templates import (
     ADS_RSA_CANDIDATES_PROMPT,
     CLAIM_REWRITE_PROMPT,
@@ -148,6 +151,8 @@ class RSAGenerator:
         # Grounding bağlamı (Faz F) — generate_rsa çağrısında set edilir
         self._product_facts = "—"
         self._grounding_facts = ""
+        # Çalışma pazarı (çıktı dili + hedef konum) — generate_rsa'da set edilir
+        self._output_ctx = DEFAULT_CONTEXT
         # Bu üretimin KW kararları (yalnız bilgi; sonraki üretimleri etkilemez)
         self._kw_decisions: Dict[str, Dict[str, str]] = {}
     
@@ -158,6 +163,7 @@ class RSAGenerator:
         brand_usp: str = "",
         product_facts: str = "",
         grounding_facts: str = "",
+        output_ctx: Optional[OutputContext] = None,
     ) -> AdGroupFullSchema:
         """
         Generate complete RSA set for an ad group.
@@ -170,6 +176,7 @@ class RSAGenerator:
             grounding_facts: Claim whitelist kaynağı (confirmed product_facts +
                 kullanıcının İSTEKTE verdiği USP; generic fallback USP GİRMEZ).
                 Boşsa da grounding uygulanır — hiçbir sayısal iddia geçemez.
+            output_ctx: Çıktı dili + hedef konum (çalışma pazarı); None → Türkçe/Seçilmedi
 
         Returns:
             AdGroupFullSchema with validated headlines, descriptions, negatives
@@ -177,6 +184,7 @@ class RSAGenerator:
         logger.info(f"Generating RSA for group: '{group.name}' ({len(group.keywords)} keywords)")
         self._product_facts = (product_facts or "").strip() or "—"
         self._grounding_facts = (grounding_facts or "").strip()
+        self._output_ctx = output_ctx or DEFAULT_CONTEXT
         self._kw_decisions: Dict[str, Dict[str, str]] = {}
         
         # Get primary keyword for validation context
@@ -587,14 +595,14 @@ class RSAGenerator:
         if not self.enable_ai_regeneration:
             return None
         try:
-            prompt = CLAIM_REWRITE_PROMPT.format(
+            prompt = with_output_block(CLAIM_REWRITE_PROMPT.format(
                 asset_type=asset_type,
                 original=original,
                 claims="\n".join(f"- {c}" for c in claims),
                 grounding_facts=self._grounding_facts or "— (marka bilgisi yok: hiçbir iddia kullanma)",
                 keyword=keyword,
                 max_length=max_length,
-            )
+            ), self._output_ctx)
             result = (scoped(self.ai_service, "claim_rewrite").complete(prompt, max_tokens=800) or "").strip().strip('"\'')
         except Exception as e:
             logger.warning(f"Claim rewrite error: {e}")
@@ -691,7 +699,7 @@ class RSAGenerator:
         if kept is not None:  # tamamlama: yalnız henüz başlıkta geçmeyenler istenir
             asked = [(i, k) for i, k in asked
                      if not any(keyword_in_text(k, h.text) for h in kept[0])]
-        return ADS_RSA_CANDIDATES_PROMPT.format(
+        return with_output_block(ADS_RSA_CANDIDATES_PROMPT.format(
             keyword_ids_block="\n".join(f"- {i}: {k}" for i, k in asked) or "—",
             group_name=group.name,
             group_theme=group.theme,
@@ -704,7 +712,7 @@ class RSAGenerator:
             long_keywords=", ".join(long_keywords) or "—",
             cta_instruction=self.CTA_PRIMARY_INSTRUCTION if kept is None else "",
             completion_block=block,
-        )
+        ), self._output_ctx)
     
     def _parse_rsa_response(
         self,
@@ -790,7 +798,8 @@ class RSAGenerator:
                 headline=text,
                 keyword=primary_keyword,
                 ai_service=self.ai_service if self.enable_ai_regeneration else None,
-                enable_regeneration=self.enable_ai_regeneration
+                enable_regeneration=self.enable_ai_regeneration,
+                output_ctx=self._output_ctx,
             )
             
             # Track stats
@@ -843,7 +852,8 @@ class RSAGenerator:
             validated_text, action, reason = self.description_validator.validate(
                 text,
                 ai_service=ai_service if allow_ai_this_item else None,
-                enable_ai_shortening=allow_ai_this_item
+                enable_ai_shortening=allow_ai_this_item,
+                output_ctx=self._output_ctx,
             )
             ai_attempted = (
                 action == "ai_shortened" or
@@ -905,25 +915,37 @@ class RSAGenerator:
         first_keyword = keywords[0] if keywords else primary_keyword or group.name
         second_keyword = keywords[1] if len(keywords) > 1 else first_keyword
 
+        # Sabit metin Türkçedir: Türkçe dışı pazarda yalnız dil-bağımsız (marka +
+        # anahtar kelime) metin üretilir, hedef dile Türkçe sızmaz.
+        turkish = self._output_ctx.language == DEFAULT_LANGUAGE
         headline_candidates = [
             {"text": first_keyword, "type": "keyword", "position": "position_1"},
             {"text": f"{brand_name} {second_keyword}", "type": "keyword", "position": "any"},
-            {"text": "Hemen İncele", "type": "cta", "position": "position_3"},
-            {"text": f"{brand_name} Güvencesi", "type": "trust", "position": "any"},
-            {"text": "Kaliteli Ürün Seçenekleri", "type": "benefit", "position": "any"},
         ]
-        description_candidates = [
-            {
-                "text": f"{brand_name} ile {first_keyword} seçeneklerini keşfedin. Hemen inceleyin.",
-                "type": "value_prop",
-                "position": "any"
-            },
-            {
-                "text": f"{brand_usp + '. ' if brand_usp else ''}Güvenli alışveriş ve hızlı teslimat fırsatını kaçırmayın.",
-                "type": "cta",
-                "position": "any"
-            }
-        ]
+        if turkish:
+            headline_candidates += [
+                {"text": "Hemen İncele", "type": "cta", "position": "position_3"},
+                {"text": f"{brand_name} Güvencesi", "type": "trust", "position": "any"},
+                {"text": "Kaliteli Ürün Seçenekleri", "type": "benefit", "position": "any"},
+            ]
+            description_candidates = [
+                {
+                    "text": f"{brand_name} ile {first_keyword} seçeneklerini keşfedin. Hemen inceleyin.",
+                    "type": "value_prop",
+                    "position": "any"
+                },
+                {
+                    "text": f"{brand_usp + '. ' if brand_usp else ''}Güvenli alışveriş ve hızlı teslimat fırsatını kaçırmayın.",
+                    "type": "cta",
+                    "position": "any"
+                }
+            ]
+        else:
+            headline_candidates.append({"text": brand_name, "type": "keyword", "position": "any"})
+            description_candidates = [
+                {"text": f"{brand_name} — {first_keyword}", "type": "value_prop", "position": "any"},
+                {"text": f"{first_keyword} — {second_keyword} — {brand_name}", "type": "value_prop", "position": "any"},
+            ]
 
         headlines, headline_stats = self._validate_headlines(headline_candidates, first_keyword)
         descriptions, _ = self._validate_descriptions(description_candidates)
@@ -934,7 +956,7 @@ class RSAGenerator:
         while len(headlines) < self.MIN_HEADLINES and headline_fill_iterations < self.HEADLINE_FILL_MAX_ITERATIONS:
             headline_fill_iterations += 1
             idx = len(headlines) + 1
-            fallback_text = f"{brand_name} Ürünleri {idx}"
+            fallback_text = f"{brand_name} Ürünleri {idx}" if turkish else f"{brand_name} {idx}"
             validated_text, _, _ = self.headline_validator.validate(
                 fallback_text,
                 first_keyword,
@@ -965,6 +987,9 @@ class RSAGenerator:
             f"{brand_usp}. Hemen keşfedin ve hızlı teslimat fırsatından yararlanın.",
             f"{first_keyword} seçeneklerini karşılaştırın, sizin için doğru ürünü şimdi seçin.",
             f"{brand_name} kalitesiyle güvenli alışveriş deneyimini hemen başlatın."
+        ] if turkish else [
+            f"{brand_name} — {first_keyword}",
+            f"{first_keyword} — {second_keyword} — {brand_name}",
         ]
         description_fill_iterations = 0
         while len(descriptions) < self.MIN_DESCRIPTIONS and description_fill_iterations < self.DESCRIPTION_FILL_MAX_ITERATIONS:

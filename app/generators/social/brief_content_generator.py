@@ -31,6 +31,7 @@ from app.core.social.content_quality import (
     evaluate_social_content_quality,
 )
 from app.generators.ai_service import logical_request, mark_attempt_failed, scoped
+from app.generators.output_language import with_output_block
 from app.generators.social.brief_content_prompt import (
     SocialContentPromptError,
     SocialContentPromptInput,
@@ -92,8 +93,9 @@ class SocialContentRepairAIResult:
 class SocialBriefContentGenerator:
     """Sosyal brief içerik üretim adaptörü."""
 
-    def __init__(self, ai_service: Any) -> None:
+    def __init__(self, ai_service: Any, output_ctx: Any = None) -> None:
         self.ai = scoped(ai_service, "social_brief_contents")
+        self._output_ctx = output_ctx  # None -> Türkçe/Seçilmedi
 
     def generate(
         self,
@@ -112,7 +114,7 @@ class SocialBriefContentGenerator:
         """
         # 1. Girdi ve target doğrulaması (0 AI çağrısı)
         try:
-            prompt = build_social_content_prompt(prompt_input)
+            prompt = with_output_block(build_social_content_prompt(prompt_input), self._output_ctx)
         except SocialContentPromptError as exc:
             raise SocialContentGenerationError(
                 exc.message,
@@ -241,11 +243,14 @@ class SocialBriefContentGenerator:
 
         # 4. Tek birleşik repair promptunu oluştur (0 AI çağrısı)
         try:
-            repair_prompt = build_social_content_repair_prompt(
-                prompt_input=prompt_input,
-                original_content=original_content,
-                grounding_context=grounding_context,
-                quality_decision=initial_decision,
+            repair_prompt = with_output_block(
+                build_social_content_repair_prompt(
+                    prompt_input=prompt_input,
+                    original_content=original_content,
+                    grounding_context=grounding_context,
+                    quality_decision=initial_decision,
+                ),
+                self._output_ctx,
             )
         except SocialContentPromptError as p_exc:
             err_code = p_exc.error_code if p_exc.error_code.startswith("CONTENT_REPAIR_") else "CONTENT_REPAIR_PROMPT_ERROR"

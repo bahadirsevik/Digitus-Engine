@@ -13,6 +13,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.generators.ai_service import AIService
+from app.generators.output_language import output_context_for_run
 from app.generators.social.category_generator import CategoryGenerator
 from app.generators.social.idea_generator import IdeaGenerator
 from app.generators.social.content_generator import ContentGenerator
@@ -105,6 +106,7 @@ class SocialGenerator:
             brand_context=request.brand_context,
             max_categories=request.max_categories,
             excluded_topics=excluded_block,
+            output_ctx=output_context_for_run(self.db, request.scoring_run_id),
         )
 
         # Deterministik topic engeli: eşleşen kategori KAYDEDİLMEZ
@@ -237,6 +239,7 @@ class SocialGenerator:
                 ideas_per_category=request.ideas_per_category,
                 target_platforms=target_platforms,
                 excluded_topics=excluded_block,
+                output_ctx=output_context_for_run(self.db, db_category.scoring_run_id),
             )
 
             # Deterministik topic engeli: eşleşen fikir KAYDEDİLMEZ
@@ -325,6 +328,7 @@ class SocialGenerator:
         if scoring_run_id is None:
             scoring_run_id = self._run_id_from_ideas(request.idea_ids)
         product_facts, grounding_facts = self._grounding_context(scoring_run_id)
+        output_ctx = output_context_for_run(self.db, scoring_run_id)
         topic_terms, _ = self._topic_policy_context(scoring_run_id)
         assignment_snapshot = self._assignment_version(scoring_run_id)
 
@@ -368,6 +372,7 @@ class SocialGenerator:
                 brand_name=request.brand_name,
                 brand_tone=request.brand_tone,
                 product_facts=product_facts,
+                output_ctx=output_ctx,
             )
 
             if not content_schema:
@@ -376,7 +381,7 @@ class SocialGenerator:
             # Grounding kontrolü + tek regenerate şansı (Faz F3)
             content_schema, claim_warning = self._ground_or_reject(
                 content_schema, idea, request.brand_name or "Marka",
-                product_facts, grounding_facts,
+                product_facts, grounding_facts, output_ctx,
             )
             if claim_warning is not None:
                 warnings.append(claim_warning)
@@ -554,6 +559,7 @@ class SocialGenerator:
             brand_name=brand_name,
             additional_context=additional_context,
             excluded_topics=excluded_block,
+            output_ctx=output_context_for_run(self.db, db_category.scoring_run_id),
         )
 
         # Topic policy: yeni fikir dislanan konudaysa MEVCUT fikir korunur
@@ -623,6 +629,7 @@ class SocialGenerator:
             brand_name=brand_name,
             additional_context=additional_context,
             product_facts=product_facts,
+            output_ctx=output_context_for_run(self.db, run_id),
         )
 
         # Topic policy (plan B): yeni icerik dislanan konudaysa mevcut korunur
@@ -949,6 +956,7 @@ class SocialGenerator:
         brand_name: str,
         product_facts: str,
         grounding_facts: str,
+        output_ctx=None,
     ):
         """(content, None) temizse; ihlalde 1 regenerate; hâlâ ihlalliyse
         (None, SocialContentWarning) — çağıran içeriği KAYDETMEZ."""
@@ -969,6 +977,7 @@ class SocialGenerator:
                 + "; ".join(claims)
             ),
             product_facts=product_facts,
+            output_ctx=output_ctx,
         )
         if regenerated is not None:
             second_claims = self._find_content_claims(regenerated, grounding_facts)

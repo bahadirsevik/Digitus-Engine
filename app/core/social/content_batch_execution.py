@@ -409,12 +409,14 @@ def _process_single_work_item(
     accepted_results_list: list[SocialContentItemExecutionResult],
     accepted_ids_set: set[int],
     warnings_map: dict[int, SocialContentBatchWarning],
+    output_ctx: Any = None,
 ) -> None:
     """Tek bir work item'ı çalıştırır ve sonucunu accepted_results_list veya warnings_map'e yazar."""
     try:
         result = execute_social_content_work_item(
             ai_service=ai_service,
             work_item=item,
+            **({"output_ctx": output_ctx} if output_ctx is not None else {}),
         )
 
         # 1. Exact-type doğrulaması
@@ -518,6 +520,7 @@ def execute_social_content_batch(
     on_item_finished: Callable[[int], None] | None = None,
     clock: Callable[[], float] | None = None,
     time_budget_seconds: float | None = None,
+    output_ctx: Any = None,
 ) -> SocialContentBatchExecutionResult:
     """Doğrulanmış SocialContentWorkerPreparation girdisini deterministik sıra ile yürütür.
 
@@ -754,6 +757,7 @@ def execute_social_content_batch(
                 accepted_results_list=accepted_results_list,
                 accepted_ids_set=accepted_ids_set,
                 warnings_map=warnings_map,
+                output_ctx=output_ctx,
             )
         except SoftTimeLimitExceeded:
             # Savunma hattı: proaktif bütçe kontrolü zamanında yakalayamadıysa

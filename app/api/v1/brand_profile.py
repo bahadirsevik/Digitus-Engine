@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_ai
 from app.generators.ai_service import AIService
+from app.generators.output_language import output_context
 from app.config import settings
 from app.core.error_responses import safe_500_detail
 from app.database.models import (
@@ -2758,6 +2759,7 @@ def _run_keyword_suggestion(
             return
 
         crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
+        output_ctx = output_context(workspace)  # keyword dili + hedef konum (kilitli pazar)
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2780,6 +2782,7 @@ def _run_keyword_suggestion(
             crawl["site_content"],
             must_have_info=must_have_info,
             excluded_info=excluded_info,
+            output_ctx=output_ctx,
         )
 
         # Kısa süreli kilit + token kontrolü: tüm başarı yazımları tek transaction
@@ -2979,6 +2982,7 @@ def _run_keyword_suggestion_from_profile(
         excluded_info = workspace.excluded_info
         profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
         competitor_terms = approved_competitor_terms(workspace)
+        output_ctx = output_context(workspace)  # keyword dili + hedef konum (kilitli pazar)
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
             extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope
@@ -3011,6 +3015,7 @@ def _run_keyword_suggestion_from_profile(
             must_have_info=preliminary_info,
             excluded_info=excluded_info,
             competitor_terms=competitor_terms,
+            output_ctx=output_ctx,
         )
         # Prompt yonlendirmedir; deterministic policy son savunmadir.
         suggestions = [

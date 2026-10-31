@@ -11,6 +11,7 @@ import json
 import re
 
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import with_output_block
 from app.generators.seo_geo.prompt_templates import GEO_COMPLIANCE_CHECK_PROMPT
 from app.core.constants import GEO_COMPLIANCE_CRITERIA_V2
 
@@ -41,7 +42,8 @@ class GEOComplianceChecker:
     def check(
         self,
         content: Dict[str, Any],
-        keyword: str
+        keyword: str,
+        output_ctx=None,
     ) -> Dict[str, Any]:
         """
         7 GEO kriterini AI ile kontrol eder.
@@ -49,6 +51,7 @@ class GEOComplianceChecker:
         Args:
             content: İçerik verisi (ContentStructure formatında)
             keyword: Hedef anahtar kelime
+            output_ctx: çalışma pazarı (çıktı dili + hedef konum); None → Türkçe
             
         Returns:
             GEO uyumluluk raporu
@@ -59,12 +62,12 @@ class GEOComplianceChecker:
         # AI'a gönder. İlk 60 / 200 kelime deterministik KESİLİP ayrıca
         # verilir (checklist P100: 40-60 kelimede cevap, ~200 kelimede özet);
         # "cevap/özet var mı" yargısı AI'da kalır — ek çağrı yok.
-        prompt = GEO_COMPLIANCE_CHECK_PROMPT.format(
+        prompt = with_output_block(GEO_COMPLIANCE_CHECK_PROMPT.format(
             keyword=keyword,
             content=full_content,
             first_60_words=self._first_words(content, 60),
             first_200_words=self._first_words(content, 200),
-        )
+        ), output_ctx)
         
         try:
             response = self.ai_service.complete_json(prompt, max_tokens=6000)

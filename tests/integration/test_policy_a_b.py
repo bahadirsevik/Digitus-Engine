@@ -280,7 +280,8 @@ class TestSocialTopicPolicy:
             HookSchema, HookStyleEnum, SocialContentSchema,
         )
 
-        def fake_generate(self, idea, brand_name, brand_tone=None, product_facts=None):
+        def fake_generate(self, idea, brand_name, brand_tone=None, product_facts=None,
+                          output_ctx=None):
             return SocialContentSchema(
                 idea_id=idea.id or 0,
                 hooks=[HookSchema(text="Merak", style=HookStyleEnum.QUESTION)],

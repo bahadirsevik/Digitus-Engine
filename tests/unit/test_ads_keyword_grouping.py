@@ -207,7 +207,7 @@ def test_generate_ads_passes_whole_pool_to_grouper(monkeypatch):
     monkeypatch.setattr(gen, "_save_to_database", lambda *a, **k: [])
     seen = {}
 
-    def fake_group(keywords, max_groups=None):
+    def fake_group(keywords, max_groups=None, output_ctx=None):
         seen["ids"] = [k.id for k in keywords]
         seen["max_groups"] = max_groups
         return []

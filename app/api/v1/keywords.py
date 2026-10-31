@@ -584,7 +584,7 @@ def cleanup_duplicate_keywords(
 
     from app.core.keyword_dedup import deduplicate_keywords
 
-    verify_workspace(db, brand_profile_id)
+    workspace = verify_workspace(db, brand_profile_id)
 
     # Workspace'e bağlı, aktif keyword'leri çek.
     rows = (
@@ -620,8 +620,10 @@ def cleanup_duplicate_keywords(
         for kw, wk in rows
     ]
 
+    # Dil kuralı import/önizleme ile AYNI kaynaktan (workspace dili; boş = Türkçe)
     deduped, merge_details = deduplicate_keywords(
-        keyword_dicts, return_merge_details=True)
+        keyword_dicts, return_merge_details=True,
+        language_id=workspace.default_language_id)
     survived_ids = {d["_db_id"] for d in deduped}
 
     # Workspace-scoped dedup: global Keyword.is_active'e DOKUNMA. Keyword satirlari

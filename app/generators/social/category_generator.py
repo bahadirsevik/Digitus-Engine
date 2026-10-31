@@ -8,6 +8,7 @@ from loguru import logger
 
 from app.core.channel.ai_json import AIJsonParseError, parse_ai_json_list
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import with_output_block
 from app.generators.social.prompt_templates import SOCIAL_CATEGORY_PROMPT
 from app.schemas.social import SocialCategorySchema, CategoryTypeEnum
 
@@ -37,7 +38,8 @@ class CategoryGenerator:
         brand_name: str,
         brand_context: Optional[str] = None,
         excluded_topics: str = "—",
-        max_categories: int = 6
+        max_categories: int = 6,
+        output_ctx=None,
     ) -> List[SocialCategorySchema]:
         """
         Generate content categories for given keywords.
@@ -47,6 +49,7 @@ class CategoryGenerator:
             brand_name: Brand name for personalization
             brand_context: Additional brand context
             max_categories: Maximum categories to generate
+            output_ctx: çalışma pazarı (çıktı dili + hedef konum); None → Türkçe
         
         Returns:
             List of SocialCategorySchema
@@ -64,12 +67,12 @@ class CategoryGenerator:
             indent=2
         )
 
-        prompt = SOCIAL_CATEGORY_PROMPT.format(
+        prompt = with_output_block(SOCIAL_CATEGORY_PROMPT.format(
             brand_name=brand_name,
             brand_context=brand_context,
             excluded_topics=excluded_topics,
             keywords_json=keywords_json
-        )
+        ), output_ctx)
         
         try:
             # Gemini bozuk JSON dondurebilir; dayanikli parse tutmazsa

@@ -16,6 +16,9 @@ from sqlalchemy.orm import Session
 from app.core.channel.ai_json import parse_ai_json_object, AIJsonParseError
 
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import (
+    DEFAULT_CONTEXT, output_context_for_run, with_output_block,
+)
 from app.generators.seo_geo.prompt_templates import (
     SEO_GEO_GENERATION_PROMPT, SEO_GEO_REVISION_PROMPT,
     SEO_GEO_EXPANSION_PROMPT,
@@ -61,6 +64,9 @@ class SEOGEOGenerator:
         5. Sonuç döndür
     """
     
+    # Çalışma pazarı (çıktı dili + hedef konum) — generate_content'te set edilir
+    _output_ctx = DEFAULT_CONTEXT
+
     def __init__(self, db: Session, ai_service: AIService):
         """
         Args:
@@ -172,6 +178,12 @@ class SEOGEOGenerator:
         except Exception:
             pass  # Fail-open
 
+        # Çalışma pazarı: çıktı dili + hedef konum (snapshot yok, her üretimde okunur)
+        self._output_ctx = (
+            output_context_for_run(self.db, scoring_run_id)
+            if scoring_run_id else DEFAULT_CONTEXT
+        )
+
         # 1. AI ile ham içerik üret
         raw_content = self._generate_raw_content(
             keyword=keyword.keyword,
@@ -212,7 +224,8 @@ class SEOGEOGenerator:
         # 3. GEO uyumluluk kontrolü (AI ile)
         geo_result = self.geo_checker.check(
             content=raw_content,
-            keyword=keyword.keyword
+            keyword=keyword.keyword,
+            output_ctx=self._output_ctx,
         )
 
         # 3b. TEK turluk hedefli revizyon: basarisiz kriter varsa yalnizca
@@ -407,6 +420,7 @@ class SEOGEOGenerator:
         # Pre-filter context varsa prompt'a ekle
         if prefilter_context:
             prompt = prompt + prefilter_context
+        prompt = with_output_block(prompt, self._output_ctx)
 
         required_fields = ['title', 'intro_paragraph', 'subheadings', 'body_sections']
 
@@ -550,7 +564,7 @@ class SEOGEOGenerator:
         ])) or "-"
 
         try:
-            prompt = SEO_GEO_REVISION_PROMPT.format(
+            prompt = with_output_block(SEO_GEO_REVISION_PROMPT.format(
                 keyword=keyword,
                 content_json=json.dumps(content, ensure_ascii=False),
                 failed_criteria="\n".join(f"- {f}" for f in failed),
@@ -558,7 +572,7 @@ class SEOGEOGenerator:
                 word_count_min=word_count_min,
                 word_count_max=word_count_max,
                 current_year=datetime.now().year,
-            )
+            ), self._output_ctx)
             response = self.ai_service.complete_json(prompt, max_tokens=SEO_GEO_MAX_TOKENS)
             revised = self._parse_content_json(
                 response, ['title', 'intro_paragraph', 'subheadings', 'body_sections']
@@ -577,7 +591,9 @@ class SEOGEOGenerator:
             content=revised, keyword=keyword,
             word_count_min=word_count_min, word_count_max=word_count_max,
         )
-        geo2 = self.geo_checker.check(content=revised, keyword=keyword)
+        geo2 = self.geo_checker.check(
+            content=revised, keyword=keyword, output_ctx=self._output_ctx
+        )
 
         if (seo2['score'] + geo2['score']) >= (seo_result['score'] + geo_result['score']):
             return revised, seo2, geo2
@@ -609,7 +625,7 @@ class SEOGEOGenerator:
             # Hedefin ortasına nişan al — "500-600'e çıkar" serbestisi canlıda
             # +229 kelimelik aşım üretti (683/600); eklenecek miktar AÇIKÇA verilir
             target_mid = (word_count_min + word_count_max) // 2
-            prompt = SEO_GEO_EXPANSION_PROMPT.format(
+            prompt = with_output_block(SEO_GEO_EXPANSION_PROMPT.format(
                 keyword=keyword,
                 content_json=json.dumps(content, ensure_ascii=False),
                 current_words=current_words,
@@ -617,7 +633,7 @@ class SEOGEOGenerator:
                 word_count_min=word_count_min,
                 word_count_max=word_count_max,
                 current_year=datetime.now().year,
-            )
+            ), self._output_ctx)
             response = self.ai_service.complete_json(
                 prompt, max_tokens=SEO_GEO_MAX_TOKENS
             )
@@ -645,7 +661,9 @@ class SEOGEOGenerator:
             content=expanded, keyword=keyword,
             word_count_min=word_count_min, word_count_max=word_count_max,
         )
-        geo2 = self.geo_checker.check(content=expanded, keyword=keyword)
+        geo2 = self.geo_checker.check(
+            content=expanded, keyword=keyword, output_ctx=self._output_ctx
+        )
 
         if (seo2['score'] + geo2['score']) >= (seo_result['score'] + geo_result['score']):
             logger.info(

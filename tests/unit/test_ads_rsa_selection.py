@@ -605,8 +605,8 @@ def test_candidates_prompt_formats_and_lists_long_keywords():
 def test_candidates_prompt_asks_for_natural_turkish_not_forced_keywords():
     prompt = _gen(_FakeAI(EMPTY))._build_candidates_prompt(_group("ucuz laptop"), "Marka", "usp")
     assert "yazıldığı gibi" not in prompt                    # zorlayıcı eski ifade kalktı
-    assert "AKICI, DOĞAL ve dilbilgisi doğru Türkçe" in prompt
-    assert "yalnızca başlık AKICI, DOĞAL Türkçe olduğunda" in prompt
+    assert "AKICI, DOĞAL ve dilbilgisi doğru olmalı (çıktı dilinde)" in prompt
+    assert "yalnızca başlık AKICI, DOĞAL olduğunda" in prompt
     assert "YAZMA; bu kabul edilen bir sonuçtur" in prompt   # atlamak kabul
     assert "dilbilgisini ASLA bozma" in prompt
     assert "TÜM anahtar kelimelerini" not in prompt and "bulunsun" not in prompt  # kelime başına baskı yok

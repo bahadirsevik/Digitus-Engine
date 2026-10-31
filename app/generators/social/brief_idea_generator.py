@@ -28,6 +28,7 @@ from app.core.social.idea_contract import (
 )
 from app.core.social.provider_schema import to_gemini_response_schema
 from app.generators.ai_service import logical_request, mark_attempt_failed, scoped
+from app.generators.output_language import with_output_block
 from app.generators.social.brief_idea_prompt import (
     SocialIdeaPromptError,
     SocialIdeaPromptInput,
@@ -86,8 +87,9 @@ class SocialIdeaAIResult:
 class SocialBriefIdeaGenerator:
     """Sosyal brief fikir üretim adaptörü."""
 
-    def __init__(self, ai_service: Any) -> None:
+    def __init__(self, ai_service: Any, output_ctx: Any = None) -> None:
         self.ai = scoped(ai_service, "social_brief_ideas")
+        self._output_ctx = output_ctx  # None -> Türkçe/Seçilmedi
 
     def generate(
         self,
@@ -106,7 +108,7 @@ class SocialBriefIdeaGenerator:
         """
         # 1. Girdi doğrulaması (0 AI çağrısı)
         try:
-            prompt = build_social_idea_prompt(prompt_input)
+            prompt = with_output_block(build_social_idea_prompt(prompt_input), self._output_ctx)
         except SocialIdeaPromptError as exc:
             raise SocialIdeaGenerationError(
                 exc.message,

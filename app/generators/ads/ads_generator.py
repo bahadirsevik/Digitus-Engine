@@ -16,6 +16,7 @@ from app.config import settings
 from app.generators.ai_service import AIService
 from app.generators.ads.keyword_grouper import KeywordGrouper
 from app.generators.ads.rsa_generator import RSAGenerator
+from app.generators.output_language import output_context_for_run
 from app.database.models import (
     AdGroup, AdHeadline, AdDescription, NegativeKeyword,
     ChannelPool, Keyword, ScoringRun
@@ -102,7 +103,10 @@ class AdsGenerator:
             KeywordForGrouping(id=k["id"], keyword=k["keyword"])
             for k in keywords
         ]
-        groups = self.grouper.group_keywords(keyword_inputs, max_groups=request.max_groups)
+        output_ctx = output_context_for_run(self.db, request.scoring_run_id)
+        groups = self.grouper.group_keywords(
+            keyword_inputs, max_groups=request.max_groups, output_ctx=output_ctx
+        )
         
         logger.info(f"Created {len(groups)} keyword groups")
         
@@ -124,6 +128,7 @@ class AdsGenerator:
                     brand_usp=request.brand_usp or "",
                     product_facts=product_facts,
                     grounding_facts=grounding_facts,
+                    output_ctx=output_ctx,
                 )
                 ad_groups.append(ad_group)
                 
@@ -474,6 +479,7 @@ class AdsGenerator:
             brand_usp=brand_usp,
             product_facts=product_facts,
             grounding_facts=grounding_facts,
+            output_ctx=output_context_for_run(self.db, source_group.scoring_run_id),
         )
         self._save_to_database(
             [new_group],

@@ -96,3 +96,50 @@ def test_token_alignment_helper_contract():
     assert _tokens_aligned("en yuksek fiyatl hisse",
                            "en dusuk fiyatl hisse") is False
     assert _tokens_aligned("an hisse sened", "yabanc hisse sened") is False
+
+
+# ── Unicode kurali: Latin disi tabanda isaret korunur (plan_pazar_dil_secimi 2-f) ──
+
+import unicodedata
+
+
+def test_cyrillic_marks_preserved():
+    assert normalize_keyword('йод') != normalize_keyword('иод')
+    assert normalize_keyword('ёлка') != normalize_keyword('елка')
+    assert normalize_keyword('їжа') != normalize_keyword('іжа')
+    assert normalize_keyword('Йод') == 'йод'
+
+
+def test_greek_accent_preserved():
+    assert normalize_keyword('άλφα') != normalize_keyword('αλφα')
+    assert normalize_keyword('άλφα') == 'άλφα'
+
+
+def test_nfc_and_nfd_give_same_key():
+    for word in ('йод', 'ёлка', 'їжа', 'άλφα', 'Лечение Волос'):
+        nfc = unicodedata.normalize('NFC', word)
+        nfd = unicodedata.normalize('NFD', word)
+        assert normalize_keyword(nfc) == normalize_keyword(nfd)
+
+
+def test_mixed_script_latin_stripped_cyrillic_kept():
+    assert normalize_keyword('Café Йод') == 'cafe йод'
+    assert normalize_keyword('йод Kâr') == 'йод kar'
+
+
+# Eski kuralla (NFKD + tum combining mark sil) uretilen anahtarlar: BAYT-AYNI kalmali
+_LATIN_FROZEN = [
+    ('kâr', 'kar'), ('café', 'cafe'), ('İSTANBUL', 'istanbul'),
+    ('FÖN TARAĞI', 'fon taragi'), ('TIRAŞ', 'tiras'), ('tıraş', 'tiras'),
+    ('  saç    bakım   ', 'sac bakim'), ('Şampuan Fiyatları', 'sampuan fiyatlari'),
+    ('i̇stanbul', 'istanbul'), ('Çiçek Gönder', 'cicek gonder'),
+    ('naïve façade', 'naive facade'), ('Düsseldorf Straße', 'dusseldorf straße'),
+    ('crème brûlée', 'creme brulee'), ('Ñandú', 'nandu'), ('ÜLKER ÇİKOLATA', 'ulker cikolata'),
+    ('seo 2024 fiyat', 'seo 2024 fiyat'), ('E-Ticaret Ağı', 'e-ticaret agi'),
+    ('Müşteri Hizmetleri', 'musteri hizmetleri'), ('ağaç işleri', 'agac isleri'),
+]
+
+
+def test_latin_turkish_keys_byte_identical():
+    for raw, expected in _LATIN_FROZEN:
+        assert normalize_keyword(raw).encode('utf-8') == expected.encode('utf-8'), raw

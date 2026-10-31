@@ -161,3 +161,12 @@ def test_enrich_unknown_workspace_is_404(client, svc):
 
     assert r.status_code == 404
     assert svc.calls == []
+
+
+def test_url_seed_few_ideas_hint_only_for_non_turkish(client, make_workspace, svc):
+    hint = "Site metni hedef dilden farklıysa"
+    ru = make_workspace(name="hint ru", default_geo_target_id=DE, default_language_id=RU)
+    tr = make_workspace(name="hint tr", default_geo_target_id="2792", default_language_id="1037")
+
+    assert any(hint in w for w in client.post(URL_SEED, json=_url_body(ru)).json()["warnings"])
+    assert not any(hint in w for w in client.post(URL_SEED, json=_url_body(tr)).json()["warnings"])

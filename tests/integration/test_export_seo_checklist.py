@@ -87,7 +87,7 @@ def seo_export(db_session, make_workspace, make_scoring_run, monkeypatch):
     )
     monkeypatch.setattr(
         'app.compliance.geo_checker.GEOComplianceChecker.check',
-        lambda self, content, keyword: dict(PASSING_GEO),
+        lambda self, content, keyword, **kw: dict(PASSING_GEO),
     )
     monkeypatch.setattr(
         SEOGEOGenerator, '_maybe_revise_once',

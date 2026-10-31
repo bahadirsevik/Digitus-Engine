@@ -585,6 +585,12 @@ def keyword_ideas_by_url(
         for idea in ideas
     ]
 
+    if language_id != "1037" and len(out_ideas) < 10:
+        warnings.append(
+            "Site metni hedef dilden farklıysa URL tabanlı öneriler az kalır; "
+            "AI önerileri, seed kelimeler ve CSV içe aktarmayı deneyin."
+        )
+
     payload_to_cache = {
         "ideas": [idea.model_dump() for idea in out_ideas],
         "total": len(out_ideas),

@@ -43,6 +43,7 @@ from app.schemas.ads import (
 )
 from app.generators.seo_geo import SEOGEOGenerator
 from app.generators.ads import AdsGenerator
+from app.generators.output_language import output_context_for_run
 from app.tasks.generation_tasks import (
     generate_ads_task,
     social_brief_contents_task,
@@ -1776,7 +1777,14 @@ def generate_social_categories_for_brief(
         brand_profile_id=start.brand_profile_id,
     )
 
-    generator = SocialBriefCategoryGenerator(ai)
+    # Çalışma pazarı (çıktı dili + hedef konum): istek oturumunda transaction
+    # açmamak için kısa ömürlü ayrı oturumla okunur (AI çağrısı transaction dışında).
+    from app.database.connection import SessionLocal
+
+    with SessionLocal() as _ctx_db:
+        output_ctx = output_context_for_run(_ctx_db, start.scoring_run_id)
+
+    generator = SocialBriefCategoryGenerator(ai, output_ctx=output_ctx)
     try:
         ai_result = generator.generate(start)
     except SocialCategoryGenerationError as e:
