@@ -13,6 +13,7 @@ from app.compliance.publish_review import (
     geo_evaluation_source,
     publish_review_from_rows,
 )
+from app.core import markets
 from app.schemas.export import (
     ExportSectionEnum, FullReport, SummaryData, ScoringData,
     KeywordScoreData, ChannelsData, ChannelPoolData,
@@ -29,6 +30,20 @@ from app.database.models import (
     SocialCategory, SocialIdea, SocialContent, BrandProfile, KeywordRelevance,
     SocialBrief, SocialBriefKeyword, SocialBriefTarget
 )
+
+
+def market_header_fields(workspace: Optional[BrandProfile]) -> Dict[str, str]:
+    """Rapor başlığı için çalışma pazarı; çalışma yok / alan NULL → 'Seçilmedi'."""
+    lang_id = markets.clean_language_id(getattr(workspace, "default_language_id", None))
+    language = markets.language_name(lang_id) or (
+        f"Tanımlanamayan mevcut seçim ({lang_id})" if lang_id else "Seçilmedi"
+    )
+    return {
+        "market_label": markets.market_label(workspace),
+        "target_location": markets.location_label(getattr(workspace, "default_geo_target_id", None)),
+        "output_language": language,
+        "volume_source": "Google Ads",
+    }
 
 
 def collect_run_seo_contents(
@@ -386,7 +401,8 @@ class ExportDataCollector:
             source_pages=profile.source_pages or [],
             competitors=competitors,
             validation_warnings=validation_data.get("warnings") or [],
-            error_message=profile.error_message
+            error_message=profile.error_message,
+            **market_header_fields(profile),
         )
     
     def _collect_summary(self, scoring_run_id: int) -> SummaryData:
@@ -396,6 +412,12 @@ class ExportDataCollector:
         ).first()
         
         created_at = run.created_at if run else datetime.utcnow()
+        
+        workspace = None
+        if run and run.brand_profile_id:
+            workspace = self.db.query(BrandProfile).filter(
+                BrandProfile.id == run.brand_profile_id
+            ).first()
         
         # Keyword count - keywords link via KeywordScore
         total_keywords = self.db.query(KeywordScore).filter(
@@ -455,7 +477,8 @@ class ExportDataCollector:
             strategic_count=strategic_count,
             seo_content_count=seo_content_count,
             ad_group_count=ad_group_count,
-            social_content_count=social_content_count
+            social_content_count=social_content_count,
+            **market_header_fields(workspace),
         )
     
     def _collect_scoring(self, scoring_run_id: int) -> ScoringData:

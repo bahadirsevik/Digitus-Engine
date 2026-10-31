@@ -44,7 +44,12 @@ from app.core.engine_version_gate import (
     require_relevance_not_v3,
     run_algorithm_version,
 )
-from app.core.workspace import verify_scoring_run, verify_workspace
+from app.core.workspace import (
+    market_change_blocker,
+    set_workspace_market,
+    verify_scoring_run,
+    verify_workspace,
+)
 from app.core.site_analyzer.crawler import (
     CrawlContentUnusable, _is_same_site_url, _page_key,
 )
@@ -746,7 +751,9 @@ def create_workspace(
                 attempt_id=attempt_id,
             )
 
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = False  # yeni çalışmada veri yok
+    return response
 
 
 # capabilities BİLEREK yok: ürüne özgü olabilir ve hiçbir kod okumuyor
@@ -940,10 +947,22 @@ def _active_focuses(db: Session, brand_id: int) -> List[BrandProfile]:
     )
 
 
+# Pazar alanları setattr ile DEĞİL set_workspace_market ile yazılır; kıyas kanonik (1055 == 1037)
+_FOCUS_MARKET_CLEANERS = {
+    "default_geo_target_id": markets._clean_geo,
+    "default_language_id": markets._clean_language,
+}
+
+
 def _focus_setting_diff(brand: BrandProfile, focus: BrandProfile) -> List[str]:
     """Marka ile odak arasında farklı miras alanları (= ezilecek yerel düzenlemeler)."""
     diff = [
-        f for f in _FOCUS_INHERITED_FIELDS if getattr(focus, f) != getattr(brand, f)
+        f for f in _FOCUS_INHERITED_FIELDS
+        if (
+            _FOCUS_MARKET_CLEANERS[f](getattr(focus, f)) != _FOCUS_MARKET_CLEANERS[f](getattr(brand, f))
+            if f in _FOCUS_MARKET_CLEANERS
+            else getattr(focus, f) != getattr(brand, f)
+        )
     ]
     b = brand.profile_data if isinstance(brand.profile_data, dict) else {}
     f = focus.profile_data if isinstance(focus.profile_data, dict) else {}
@@ -963,13 +982,20 @@ def preview_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
         busy = focus.status in ("pending", "running") or bool(
             find_active_workspace_work(db, focus.id)
         )
+        diff = _focus_setting_diff(brand, focus)
+        # Odakta veri varsa pazar uygulanmaz (apply ile ayni kural) — degisiklik olarak gosterme
+        market_locked = bool(
+            any(f in _FOCUS_MARKET_CLEANERS for f in diff) and market_change_blocker(db, focus)
+        )
         items.append({
             "id": focus.id,
             "name": focus.name,
             "busy": busy,
+            "market_locked": market_locked,
             "changes": [
                 {"field": f, "label": _FOCUS_FIELD_LABELS[f]}
-                for f in _focus_setting_diff(brand, focus)
+                for f in diff
+                if not (market_locked and f in _FOCUS_MARKET_CLEANERS)
             ],
         })
     return {"focuses": items}
@@ -1004,8 +1030,19 @@ def apply_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
             diff = _focus_setting_diff(brand, focus)
             before = policy_effect_snapshot(focus)
             old_user_terms = parse_excluded_info(focus.excluded_info)
+            market_warning = None
+            if any(f in _FOCUS_MARKET_CLEANERS for f in diff):
+                try:
+                    set_workspace_market(
+                        db, focus, brand.default_geo_target_id, brand.default_language_id
+                    )
+                except HTTPException as exc:
+                    if not (isinstance(exc.detail, dict) and exc.detail.get("code") == "MARKET_LOCKED"):
+                        raise
+                    market_warning = "pazar değişmez (odakta veri var)"
+                    diff = [f for f in diff if f not in _FOCUS_MARKET_CLEANERS]
             for field in diff:
-                if field in _FOCUS_INHERITED_FIELDS:
+                if field in _FOCUS_INHERITED_FIELDS and field not in _FOCUS_MARKET_CLEANERS:
                     setattr(focus, field, copy.deepcopy(getattr(brand, field)))
             location_diff = [k for k in diff if k in LOCATION_PROFILE_KEYS]
             anchor_changed = False
@@ -1030,7 +1067,8 @@ def apply_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
             if not _bump_policy_version_if_changed(db, focus, before) and anchor_changed:
                 invalidate_workspace_outputs(db, focus.id)
             db.commit()
-            applied.append({"id": focus_id, "name": focus_name, "changed": bool(diff)})
+            applied.append({"id": focus_id, "name": focus_name, "changed": bool(diff),
+                            "warning": market_warning})
         except HTTPException as exc:
             db.rollback()
             if exc.status_code != 409:
@@ -1107,7 +1145,9 @@ def get_workspace(workspace_id: int, db: Session = Depends(get_db)):
     # yolunu açar (bkz. stuck_janitor.py modül docstring'i).
     if fail_if_stuck(db, workspace):
         db.refresh(workspace)
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = bool(market_change_blocker(db, workspace))
+    return response
 
 
 @router.get(
@@ -1416,6 +1456,15 @@ def approve_workspace_profile(
             detail=f"Şu an {active_work} — bitince tekrar deneyin.",
         )
 
+    # Pazar degisimi (veri yoksa serbest, varsa 409) — hicbir seyi yazmadan ONCE
+    if market_geo is not None or market_lang is not None:
+        set_workspace_market(
+            db,
+            workspace,
+            market_geo if market_geo is not None else workspace.default_geo_target_id,
+            market_lang if market_lang is not None else workspace.default_language_id,
+        )
+
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
     profile = _apply_profile_review_data(
@@ -1426,10 +1475,6 @@ def approve_workspace_profile(
 
     if request.must_have_info is not None:
         workspace.preliminary_info = request.must_have_info.strip() or None
-    if market_geo is not None:
-        workspace.default_geo_target_id = market_geo
-    if market_lang is not None:
-        workspace.default_language_id = market_lang
 
     # Rakip URL/karar + excluded_info: paylaşılan çekirdek (provenance'lı
     # exclude_themes yeniden birleşimi + topic senkronu + sürümleme + stale)
@@ -1476,7 +1521,9 @@ def approve_workspace_profile(
         db.commit()
         db.refresh(workspace)
 
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = bool(market_change_blocker(db, workspace))
+    return response
 
 
 @router.post(
@@ -2548,6 +2595,7 @@ def refresh_workspace_keywords(
     Network çağrısı DB delete+insert transaction'ından önce tamamlanır.
     """
     workspace = verify_workspace(db, workspace_id)
+    market_geo, market_lang = markets.workspace_market(workspace)  # NULL → 409
     rows = (
         db.query(WorkspaceKeyword, Keyword)
         .join(Keyword, WorkspaceKeyword.keyword_id == Keyword.id)
@@ -2597,8 +2645,8 @@ def refresh_workspace_keywords(
             customer_id=customer_id,
             seeds=chunk,
             max_results=request.max_results,
-            language_id=workspace.default_language_id,
-            geo_target_id=workspace.default_geo_target_id,
+            language_id=market_lang,
+            geo_target_id=market_geo,
         )
         if request.min_volume > 0:
             ideas = [idea for idea in ideas if idea.avg_monthly_searches >= request.min_volume]
@@ -2609,6 +2657,8 @@ def refresh_workspace_keywords(
         refreshed_ideas,
         include_new_ideas=request.include_new_ideas,
         data_source="google_ads_api",
+        geo_target_id=market_geo,
+        language_id=market_lang,
     )
 
     existing_keywords_by_norm = {
@@ -2617,6 +2667,8 @@ def refresh_workspace_keywords(
     }
 
     try:
+        # Ag cagrisi sirasinda onceki commit kilidi biraktigi icin yazimdan once yeniden tut
+        verify_workspace(db, workspace_id, lock=True)
         db.query(WorkspaceKeyword).filter(
             WorkspaceKeyword.brand_profile_id == workspace_id
         ).delete(synchronize_session=False)
@@ -2653,8 +2705,8 @@ def refresh_workspace_keywords(
                 data_source=row["data_source"],
                 sector=row["sector"],
                 target_market=row["target_market"],
-                geo_target_id=row["geo_target_id"] or workspace.default_geo_target_id,
-                language_id=row["language_id"] or workspace.default_language_id,
+                geo_target_id=row["geo_target_id"] or market_geo,
+                language_id=row["language_id"] or market_lang,
                 notes=row["notes"],
             ))
 

@@ -138,7 +138,7 @@ LANGUAGES: List[Dict[str, str]] = [
     {"language_id": "1001", "code": "de", "name_tr": "Almanca", "name_native": "Deutsch"},
 ]
 _LANGUAGE_BY_ID = {x["language_id"]: x for x in LANGUAGES}
-# google_ads.py'deki GOOGLE_ADS_LANGUAGE_ALIASES ile ayni (Faz 1'de oradaki kopya kalkar)
+# Eski Windows locale kimligi; google_ads.py'deki kopya kaldirildi (tek kaynak burasi)
 LANGUAGE_ALIASES = {
     "1055": "1037",  # Windows/Turkish locale -> Google Ads Turkish criterion ID
 }
@@ -205,6 +205,10 @@ def _clean_language(language_id: Any) -> str:
         return ""
     value = str(language_id).strip().rsplit("/", 1)[-1]
     return LANGUAGE_ALIASES.get(value, value)
+
+
+clean_geo_id = _clean_geo
+clean_language_id = _clean_language
 
 
 def get_location(geo_id: Any) -> Optional[LocationRow]:

@@ -109,7 +109,8 @@ def parse_google_ads_csv(content: bytes, filename: str = "upload.csv") -> Google
     header_index, separator, headers, matched_signals = _find_header(lines)
     if header_index is None or separator is None or headers is None:
         raise GoogleAdsCSVError(
-            "Google Ads CSV başlığı bulunamadı. Lütfen Keyword Planner export dosyası yükleyin."
+            "Google Ads CSV başlığı bulunamadı. Lütfen Keyword Planner export dosyası yükleyin. "
+            "Google Ads arayüz dilini İngilizce/Türkçe yapıp yeniden dışa aktarın."
         )
 
     col_map = _build_column_map(headers)

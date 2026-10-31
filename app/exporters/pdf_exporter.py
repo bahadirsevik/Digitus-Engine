@@ -17,7 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from app.exporters.ads_standard_format import standard_lines
-from app.exporters.base_exporter import BaseExporter
+from app.exporters.base_exporter import BaseExporter, market_header_line
 from app.exporters.safe_text import safe_paragraph_text
 from app.exporters.seo_checklist_format import (
     ALT_TEXT_HEADING, FAQ_HEADING, geo_evaluation_text, manual_check_lines,
@@ -185,9 +185,11 @@ class PdfExporter(BaseExporter):
         Toplam Kelime: {data.summary.total_keywords if data.summary else 0}
         """
         elements.append(Paragraph(info_text, self.styles['TurkishNormal']))
-        
+        if data.summary:
+            elements.append(self._p(market_header_line(data.summary)))
+
         return elements
-    
+
     def _create_summary(self, summary, scoring_run_id: int) -> list:
         """Özet bölümü."""
         elements = []

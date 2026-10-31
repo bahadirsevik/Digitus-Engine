@@ -3,12 +3,15 @@ import { AlertCircle, Globe, Info, Loader2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useBrandStore } from '../stores/brandStore'
 import {
+  apiErrorCode,
   googleAdsUrlSeedApi,
   KeywordImportResponse,
   SkippedKeywordDetail,
   UrlSeedIdea,
 } from '../services/api'
 import KeywordImportResult from './KeywordImportResult'
+import { MarketLine } from './MarketBadge'
+import { FetchedMarket, fetchedMarketFrom, marketWorkspaceLink } from '../services/market'
 import {
   LOW_VOLUME_THRESHOLD,
   selectMinVolume,
@@ -20,16 +23,17 @@ import { getExcludeThemesFromProfile, previewThemeExclusions } from './themePrev
 import './GoogleAdsKeywordSearch.css'
 
 interface Props {
-  onImport: (keywords: UrlSeedIdea[]) => Promise<KeywordImportResponse | void>
+  // market: Google'a gerçekten gönderilen pazar; yoksa import satırlarında alan atlanır
+  onImport: (
+    keywords: UrlSeedIdea[],
+    market?: FetchedMarket
+  ) => Promise<KeywordImportResponse | void>
   // Rakip URL'leri kaynak kartından hazır URL ile açılır
   initialUrl?: string
   onForceInclude?: (detail: SkippedKeywordDetail) => Promise<void>
 }
 
 const ideaVolume = (idea: UrlSeedIdea) => idea.monthly_volume || 0
-
-const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
-  languageId === '1055' ? '1037' : languageId || '1037'
 
 const errorMessageFrom = (err: unknown, fallback: string): string => {
   const e = err as {
@@ -60,6 +64,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fetchedMarket, setFetchedMarket] = useState<FetchedMarket | null>(null)
+  const [marketNotSet, setMarketNotSet] = useState(false)
   const [importResult, setImportResult] = useState<
     { kind: 'success'; data: KeywordImportResponse } | { kind: 'error'; message: string } | null
   >(null)
@@ -89,6 +95,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     setSourceStatus(null)
     setImportResult(null)
     setError(null)
+    setFetchedMarket(null)
+    setMarketNotSet(false)
     setShowThemePreview(false)
   }, [activeWorkspace?.id, activeWorkspace?.company_url, initialUrl])
 
@@ -97,6 +105,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     const normalizedUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`
     setLoading(true)
     setError(null)
+    setMarketNotSet(false)
     setWarnings([])
     setSourceStatus(null)
     setImportResult(null)
@@ -108,11 +117,10 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
         max_results: maxResults,
         min_volume: minVolume,
         include_keyword_seed: includeSeed,
-        language_id: normalizeGoogleAdsLanguageId(activeWorkspace.default_language_id),
-        geo_target_id: activeWorkspace.default_geo_target_id || '2792',
         refresh: forceRefresh,
       })
       const data = res.data
+      setFetchedMarket(fetchedMarketFrom(data))
       const sorted = sortByVolumeDesc(data.ideas || [], ideaVolume)
       setIdeas(sorted)
       setSelected(new Set(sorted.map((idea) => idea.keyword)))
@@ -142,6 +150,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
       setIdeas([])
       setTotal(0)
       setCached(false)
+      setMarketNotSet(apiErrorCode(err) === 'MARKET_NOT_SET')
       setError(
         errorMessageFrom(
           err,
@@ -158,7 +167,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     setImportResult(null)
     try {
       const chosen = ideas.filter((idea) => selected.has(idea.keyword))
-      const data = await onImport(chosen)
+      const data = await onImport(chosen, fetchedMarket ?? undefined)
       if (!data) {
         throw new Error('Aktarim sonucu alinamadi')
       }
@@ -189,6 +198,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
 
   return (
     <div className="url-extractor">
+      <MarketLine label={fetchedMarket?.market_label || activeWorkspace?.market_label} />
+
       {/* Tasarım: URL (geniş) + Max Sonuç + Min Volume tek satırda */}
       <div className="kwx-grid-url">
         <label className="kwx-field">
@@ -273,7 +284,17 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
         </div>
       )}
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          {marketNotSet && activeWorkspace && (
+            <>
+              {' '}
+              <a href={marketWorkspaceLink(activeWorkspace.id)}>Çalışma profiline git</a>
+            </>
+          )}
+        </div>
+      )}
       <KeywordImportResult result={importResult} onForceInclude={onForceInclude} />
 
       {excludeThemes.length > 0 && ideas.length > 0 && (

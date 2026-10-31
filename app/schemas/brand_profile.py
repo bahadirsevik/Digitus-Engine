@@ -3,7 +3,9 @@ Pydantic schemas for Brand Profile & Keyword Relevance.
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
+
+from app.core import markets
 
 
 # ==================== REQUEST SCHEMAS ====================
@@ -123,6 +125,7 @@ class FocusSettingsPreviewItem(BaseModel):
     id: int
     name: Optional[str] = None
     busy: bool
+    market_locked: bool = False
     changes: List[FocusSettingsChange]
 
 
@@ -134,6 +137,7 @@ class FocusSettingsApplied(BaseModel):
     id: int
     name: Optional[str] = None
     changed: bool
+    warning: Optional[str] = None  # örn. "pazar değişmez (odakta veri var)"
 
 
 class FocusSettingsSkipped(BaseModel):
@@ -293,12 +297,26 @@ class WorkspaceResponse(BaseModel):
     deleted_at: Optional[datetime] = None
     default_geo_target_id: Optional[str] = None
     default_language_id: Optional[str] = None
+    # Yalnız tek-çalışma GET / oluşturma / profil onayı cevaplarında hesaplanır (aksi halde null)
+    market_locked: Optional[bool] = None
     is_system_default: bool = False
     scoring_run_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_label(self) -> str:
+        return markets.market_label(self)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_location_label(self) -> str:
+        """Yalnız konum kısmı ("Berlin, Almanya — Şehir"); frontend birleşik etiketi bölmesin."""
+        geo = self.default_geo_target_id
+        return markets.location_label(geo) if geo else "Seçilmedi"
 
 
 
@@ -333,6 +351,18 @@ class WorkspaceListResponse(BaseModel):
     run_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_label(self) -> str:
+        return markets.market_label(self)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_location_label(self) -> str:
+        """Yalnız konum kısmı ("Berlin, Almanya — Şehir"); frontend birleşik etiketi bölmesin."""
+        geo = self.default_geo_target_id
+        return markets.location_label(geo) if geo else "Seçilmedi"
 
 
 class LocationFilterPreviewRequest(BaseModel):

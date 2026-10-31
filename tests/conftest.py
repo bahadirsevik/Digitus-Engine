@@ -158,6 +158,9 @@ def make_workspace(db_session):
             suggested_keywords=kwargs.pop("suggested_keywords", None),
             is_system_default=kwargs.pop("is_system_default", False),
             status=kwargs.pop("status", "confirmed"),
+            # Pazar plani: pazarsiz calismada kelime yazma/run 409 MARKET_NOT_SET; test varsayilani TR/TR
+            default_geo_target_id=kwargs.pop("default_geo_target_id", "2792"),
+            default_language_id=kwargs.pop("default_language_id", "1037"),
         )
         defaults.update(kwargs)
         workspace = BrandProfile(**defaults)

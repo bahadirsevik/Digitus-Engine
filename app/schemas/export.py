@@ -89,8 +89,16 @@ class ExportListResponse(BaseModel):
 
 # ==================== DATA COLLECTION SCHEMAS ====================
 
-class SummaryData(BaseModel):
-    """Özet bölümü verileri."""
+class MarketHeaderFields(BaseModel):
+    """Raporun pazar başlığı (çalışmanın hedef konumu + çıktı dili); seçilmemişse 'Seçilmedi'."""
+    market_label: str = "Seçilmedi"
+    target_location: str = "Seçilmedi"
+    output_language: str = "Seçilmedi"
+    volume_source: str = "Google Ads"
+
+
+class SummaryData(MarketHeaderFields):
+    """Özet bölümü verileri (pazar başlığı alanları dahil — özet her export'ta toplanır)."""
     scoring_run_id: int
     created_at: datetime
     total_keywords: int
@@ -333,7 +341,7 @@ class BrandProfileCompetitorData(BaseModel):
     consistency_score: Optional[float] = None
 
 
-class BrandProfileData(BaseModel):
+class BrandProfileData(MarketHeaderFields):
     """Site analizinden uretilen marka/firma profili."""
     status: str
     company_url: Optional[str] = None

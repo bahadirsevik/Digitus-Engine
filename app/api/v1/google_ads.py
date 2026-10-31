@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
 from app.config import settings
+from app.core import markets
 from app.core.keyword_normalize import normalize_keyword
 from app.integrations.google_ads.service import (
     CAMPAIGN_IMPORT_DISABLED_DETAIL,
@@ -28,26 +29,6 @@ router = APIRouter()
 
 URL_SEED_CACHE_TTL_SECONDS = 24 * 60 * 60
 GOOGLE_ADS_CAMPAIGN_CACHE_TTL_SECONDS = 10 * 60
-GOOGLE_ADS_LANGUAGE_ALIASES = {
-    "1055": "1037",  # Windows/Turkish locale -> Google Ads Turkish criterion ID
-}
-
-
-def _normalize_language_id(language_id: Optional[str]) -> Optional[str]:
-    if language_id is None:
-        return None
-    value = str(language_id).strip()
-    return GOOGLE_ADS_LANGUAGE_ALIASES.get(value, value)
-
-
-def _normalize_geo_target_id(geo_target_id: Optional[str]) -> Optional[str]:
-    """Strip any resource-path prefix from geo target IDs (e.g. 'geoTargetConstants/2792' → '2792')."""
-    if geo_target_id is None:
-        return None
-    value = str(geo_target_id).strip()
-    if "/" in value:
-        value = value.rsplit("/", 1)[-1]
-    return value or None
 
 
 def _translate_invalid_argument(raw: str) -> str:
@@ -59,14 +40,14 @@ def _translate_invalid_argument(raw: str) -> str:
     if m:
         return (
             f"Geçersiz dil kimliği: {m.group(1)}. "
-            "Türkçe için 1037 kullanın (Settings → varsayılan_dil)."
+            "Çalışmanın hedef dil seçimini kontrol edin."
         )
 
     m = re.search(r"geotargetconstants?/(\d+)", lower)
     if m:
         return (
             f"Geçersiz coğrafi hedef kimliği: {m.group(1)}. "
-            "Türkiye için 2792 kullanın (Settings → varsayılan_geo_hedef)."
+            "Çalışmanın hedef konum seçimini kontrol edin."
         )
 
     if "customer" in lower and ("not found" in lower or "invalid" in lower):
@@ -113,8 +94,9 @@ class EnrichRequest(BaseModel):
     seeds: List[str] = Field(..., min_length=1, max_length=20)  # API limiti: max 20 seed
     max_results: int = Field(300, ge=1, le=5000)
     min_volume: int = Field(0, ge=0)
-    language_id: Optional[str] = None
-    geo_target_id: Optional[str] = None
+    # Pazar (geo/dil) istekten ALINMAZ: calismanin pazari kullanilir. Eski istemcinin
+    # gonderdigi language_id/geo_target_id alanlari yok sayilir (pydantic varsayilani extra=ignore).
+    brand_profile_id: int
 
 
 class EnrichedKeywordOut(BaseModel):
@@ -134,6 +116,10 @@ class EnrichResponse(BaseModel):
     truncated_at: Optional[int]
     truncated_reason: Optional[str]
     keywords: List[EnrichedKeywordOut]
+    # Google'a GONDERILEN pazar (calisma pazari)
+    geo_target_id: str
+    language_id: str
+    market_label: str
 
 
 class CustomerIdItem(BaseModel):
@@ -173,8 +159,6 @@ class CampaignKeywordsResponse(BaseModel):
 
 class UrlSeedRequest(BaseModel):
     url: str = Field(..., min_length=1)
-    language_id: Optional[str] = None
-    geo_target_id: Optional[str] = None
     max_results: int = Field(300, ge=1, le=5000)
     min_volume: int = Field(0, ge=0)
     include_keyword_seed: bool = False
@@ -206,6 +190,10 @@ class UrlSeedResponse(BaseModel):
     quota_remaining: Optional[int] = None
     warnings: List[str] = Field(default_factory=list)
     source_status: Optional[UrlSeedSourceStatus] = None
+    # Google'a GONDERILEN pazar (calisma pazari)
+    geo_target_id: str
+    language_id: str
+    market_label: str
 
 
 def _url_seed_cache_key(
@@ -454,23 +442,28 @@ def get_customer_detail(customer_id: str):
 
 
 @router.post("/enrich", response_model=EnrichResponse)
-def enrich_keywords(payload: EnrichRequest):
+def enrich_keywords(payload: EnrichRequest, db: Session = Depends(get_db)):
     """
     Keyword onerileri al — DB'ye yazmaz, onizleme icin.
 
     Notlar:
+    - pazar (geo/dil) calismadan gelir (brand_profile_id); secilmemisse 409 MARKET_NOT_SET
     - seeds max 20 (Google Ads API limiti)
     - max_results gercek donus sayisini garanti etmez; API kendi limitini uygular
     - truncated=True ise max_results'a ulasilmistir
     """
+    from app.core.workspace import verify_workspace
+
+    workspace = verify_workspace(db, payload.brand_profile_id)
+    geo_target_id, language_id = markets.workspace_market(workspace)
     svc = _get_service()
     try:
         enriched, truncated, truncated_reason = svc.enrich_keywords(
             customer_id=payload.customer_id,
             seeds=payload.seeds,
             max_results=payload.max_results,
-            language_id=_normalize_language_id(payload.language_id),
-            geo_target_id=payload.geo_target_id,
+            language_id=language_id,
+            geo_target_id=geo_target_id,
         )
     except Exception as exc:
         _raise_google_ads_error(exc)
@@ -484,6 +477,9 @@ def enrich_keywords(payload: EnrichRequest):
         truncated=truncated,
         truncated_at=len(enriched) if truncated else None,
         truncated_reason=truncated_reason,
+        geo_target_id=geo_target_id,
+        language_id=language_id,
+        market_label=markets.market_label(workspace),
         keywords=[
             EnrichedKeywordOut(
                 keyword=e.keyword,
@@ -513,6 +509,8 @@ def keyword_ideas_by_url(
     from app.core.workspace import verify_workspace
 
     workspace = verify_workspace(db, payload.brand_profile_id)
+    geo_target_id, language_id = markets.workspace_market(workspace)
+    market_label = markets.market_label(workspace)
     customer_id = (
         payload.customer_id
         or settings.GOOGLE_ADS_CUSTOMER_ID
@@ -521,12 +519,6 @@ def keyword_ideas_by_url(
     if not customer_id:
         raise HTTPException(status_code=400, detail="customer_id gerekli")
 
-    language_id = _normalize_language_id(
-        payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
-    )
-    geo_target_id = _normalize_geo_target_id(
-        payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
-    )
     keyword_seeds = workspace.suggested_keywords or []
     seeds_hash = _keyword_seed_hash(keyword_seeds) if payload.include_keyword_seed else "none"
     workspace_token = f"ws{workspace.id}:{workspace.created_at.isoformat() if workspace.created_at else 'na'}"
@@ -551,6 +543,9 @@ def keyword_ideas_by_url(
                 total=int(cached.get("total", 0)),
                 cached=True,
                 cache_key=cache_key,
+                geo_target_id=geo_target_id,
+                language_id=language_id,
+                market_label=market_label,
                 warnings=list(cached.get("warnings") or []),
                 source_status=(
                     UrlSeedSourceStatus(**cached["source_status"])
@@ -605,6 +600,9 @@ def keyword_ideas_by_url(
         cached=False,
         cache_key=cache_key,
         quota_remaining=None,
+        geo_target_id=geo_target_id,
+        language_id=language_id,
+        market_label=market_label,
         warnings=warnings,
         source_status=source_status,
     )

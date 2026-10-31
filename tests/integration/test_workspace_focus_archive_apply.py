@@ -270,7 +270,7 @@ def test_apply_copies_fields_and_location_keeps_other_profile_keys_and_capabilit
     resp = _apply(client, brand.id)
     assert resp.status_code == 200
     assert resp.json() == {
-        "applied": [{"id": focus.id, "name": focus.name, "changed": True}],
+        "applied": [{"id": focus.id, "name": focus.name, "changed": True, "warning": None}],
         "skipped": [],
     }
     focus = _reload(db_session, focus)

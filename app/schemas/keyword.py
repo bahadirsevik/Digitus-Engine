@@ -158,6 +158,7 @@ class KeywordUploadCsvResponse(KeywordImportResponse):
     exact_duplicate_different_metrics: int = 0
     skipped_due_to_race: int = 0
     dry_run_token: Optional[str] = None
+    market_notice: str = ""
     parser_meta: dict[str, Any] = Field(default_factory=dict)
     accepted_keywords: List[KeywordImportDetail] = Field(default_factory=list)
     excluded_keywords: List[KeywordImportDetail] = Field(default_factory=list)

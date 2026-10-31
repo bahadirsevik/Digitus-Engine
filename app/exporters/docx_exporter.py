@@ -12,7 +12,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from datetime import datetime
 
 from app.exporters.ads_standard_format import standard_lines
-from app.exporters.base_exporter import BaseExporter
+from app.exporters.base_exporter import BaseExporter, market_header_line
 from app.exporters.seo_checklist_format import (
     ALT_TEXT_HEADING, FAQ_HEADING, geo_evaluation_text, manual_check_lines,
     review_failure_lines, review_required_text, review_status_text,
@@ -94,6 +94,7 @@ class DocxExporter(BaseExporter):
         info.add_run(f'Scoring Run: #{data.scoring_run_id}\n')
         if data.summary:
             info.add_run(f'Toplam Kelime: {data.summary.total_keywords}\n')
+            info.add_run(f'{market_header_line(data.summary)}\n')
         
         doc.add_page_break()
     

@@ -33,6 +33,8 @@ import {
   SkippedKeywordDetail,
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
+import MarketBadge from '../components/MarketBadge'
+import type { FetchedMarket } from '../services/market'
 import GoogleAdsKeywordSearch from '../components/GoogleAdsKeywordSearch'
 import UrlKeywordExtractor from '../components/UrlKeywordExtractor'
 import KeywordImportResult from '../components/KeywordImportResult'
@@ -505,8 +507,9 @@ export default function Keywords() {
       trend_12m: detail.trend_12m ?? 0,
       competition_score: detail.competition_score ?? 0.5,
       data_source: detail.data_source || 'manual',
-      geo_target_id: detail.geo_target_id || activeWorkspace.default_geo_target_id || undefined,
-      language_id: detail.language_id || activeWorkspace.default_language_id || undefined,
+      // Pazar alanları yoksa atlanır; sunucu çalışma pazarını damgalar
+      geo_target_id: detail.geo_target_id || undefined,
+      language_id: detail.language_id || undefined,
       force_include: true,
     }
     await keywordsApi.import([row], activeWorkspace.id)
@@ -523,8 +526,6 @@ export default function Keywords() {
       const row: KeywordCreate = {
         ...newKeyword,
         data_source: 'manual',
-        geo_target_id: activeWorkspace.default_geo_target_id || undefined,
-        language_id: activeWorkspace.default_language_id || undefined,
       }
       const res = await keywordsApi.import([row], activeWorkspace.id)
       setManualImportResult({ kind: 'success', data: res.data })
@@ -675,7 +676,8 @@ export default function Keywords() {
   }
 
   const handleGoogleAdsImport = async (
-    keywords: EnrichedKeywordOut[]
+    keywords: EnrichedKeywordOut[],
+    market?: FetchedMarket
   ): Promise<KeywordImportResponse> => {
     if (!activeWorkspace) {
       throw new Error('Önce bir marka çalışması seçin')
@@ -687,8 +689,7 @@ export default function Keywords() {
       trend_12m: kw.trend_12m,
       competition_score: kw.competition_score,
       data_source: 'google_ads_api',
-      geo_target_id: activeWorkspace.default_geo_target_id || undefined,
-      language_id: activeWorkspace.default_language_id || undefined,
+      ...(market ? { geo_target_id: market.geo_target_id, language_id: market.language_id } : {}),
     }))
     const res = await keywordsApi.import(mapped, activeWorkspace.id)
     setLastImport(res.data)
@@ -696,7 +697,7 @@ export default function Keywords() {
     return res.data
   }
 
-  const handleUrlSeedImport = async (keywords: UrlSeedIdea[]) => {
+  const handleUrlSeedImport = async (keywords: UrlSeedIdea[], market?: FetchedMarket) => {
     if (!activeWorkspace) {
       setError('Önce bir marka çalışması seçin')
       return
@@ -708,8 +709,7 @@ export default function Keywords() {
       trend_12m: idea.trend_12m,
       competition_score: idea.competition,
       data_source: 'url_seed',
-      geo_target_id: activeWorkspace.default_geo_target_id || undefined,
-      language_id: activeWorkspace.default_language_id || undefined,
+      ...(market ? { geo_target_id: market.geo_target_id, language_id: market.language_id } : {}),
     }))
     try {
       const res = await keywordsApi.import(mapped, activeWorkspace.id)
@@ -743,6 +743,7 @@ export default function Keywords() {
               <>
                 {' · '}
                 <span className="kwx-subtitle-brand">{activeWorkspace.name}</span>
+                <MarketBadge label={activeWorkspace.market_label} />
               </>
             )}
           </p>
@@ -908,6 +909,12 @@ export default function Keywords() {
                       {uploadStatus.startsWith('✓') && <CheckCircle size={16} />}
                       {uploadStatus}
                     </div>
+                  )}
+
+                  {csvDryRun?.market_notice && (
+                    <p className="form-hint" role="note">
+                      {csvDryRun.market_notice}
+                    </p>
                   )}
 
                   {csvDryRun && (

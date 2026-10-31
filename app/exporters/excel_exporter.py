@@ -111,6 +111,9 @@ class ExcelExporter(BaseExporter):
             ws.append(['Scoring Run ID', data.scoring_run_id])
             ws.append(['Tarih', data.generated_at.strftime('%Y-%m-%d %H:%M')])
             ws.append(['Toplam Kelime', data.summary.total_keywords])
+            ws.append(['Hedef Konum', _sx(data.summary.target_location)])
+            ws.append(['Çıktı Dili', _sx(data.summary.output_language)])
+            ws.append(['Hacim Kaynağı', _sx(data.summary.volume_source)])
             ws.append([])
             ws.append(['Kanal Dağılımı', ''])
             ws.append(['ADS Havuzu', data.summary.ads_count])
@@ -124,7 +127,7 @@ class ExcelExporter(BaseExporter):
             ws.append(['Sosyal İçerik', data.summary.social_content_count])
 
         ws.column_dimensions['A'].width = 25
-        ws.column_dimensions['B'].width = 20
+        ws.column_dimensions['B'].width = 40
 
     def _add_keywords_sheet(self, wb: Workbook, scoring):
         """Tüm kelimeler sheet'i."""

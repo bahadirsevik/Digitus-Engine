@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Check, Loader2, AlertTriangle } from 'lucide-react'
-import { workspaceApi, WorkspaceResponse } from '../../services/api'
+import { apiErrorCode, workspaceApi, WorkspaceResponse } from '../../services/api'
 import CompetitorReviewCard from './CompetitorReviewCard'
 import { useCompetitorReview } from './useCompetitorReview'
 import {
@@ -14,12 +14,12 @@ import {
   listToTextarea,
   splitNewlineItems,
   extractErrorMessage,
-  GEO_OPTIONS,
   HARD_EXCLUDE_HELP,
   HARD_EXCLUDE_LABEL,
-  LANGUAGE_OPTIONS,
 } from '../brandProfileState'
 import LocationPolicyControl from '../../components/LocationPolicyControl'
+import MarketSelect from '../../components/MarketSelect'
+import { MARKET_LOCKED_MESSAGE, locationPartOfMarketLabel } from '../../services/market'
 import {
   LocationFilterMode,
   readFocusCities,
@@ -61,8 +61,9 @@ export default function ProfileReviewCards({
   const [products, setProducts] = useState('')
   const [services, setServices] = useState('')
   const [targetAudience, setTargetAudience] = useState('')
-  const [geoId, setGeoId] = useState('2792')
-  const [languageId, setLanguageId] = useState('1037')
+  const [geoId, setGeoId] = useState<string | null>(null)
+  const [languageId, setLanguageId] = useState<string | null>(null)
+  const [marketLockedByServer, setMarketLockedByServer] = useState(false)
   const [mustHave, setMustHave] = useState('')
   const [excluded, setExcluded] = useState('')
   const [protectedThemes, setProtectedThemes] = useState('')
@@ -77,8 +78,9 @@ export default function ProfileReviewCards({
     setProducts(listToTextarea(profile.products))
     setServices(listToTextarea(profile.services))
     setTargetAudience(typeof profile.target_audience === 'string' ? profile.target_audience : '')
-    setGeoId(workspace.default_geo_target_id || '2792')
-    setLanguageId(workspace.default_language_id || '1037')
+    setGeoId(workspace.default_geo_target_id || null)
+    setLanguageId(workspace.default_language_id || null)
+    setMarketLockedByServer(false)
     // Plan v13 düzeltmesi: mevcut değerler forma YÜKLENİR — boş textarea ile
     // tekrar onay, kaydedilmiş must-have/konu dışlamalarını sessizce silmesin
     setMustHave(workspace.preliminary_info || '')
@@ -94,6 +96,12 @@ export default function ProfileReviewCards({
   }, [workspace.id])
 
   const singleWords = singleWordThemes(excluded)
+  const marketLocked = !!workspace.market_locked || marketLockedByServer
+  const marketIncomplete = !geoId || !languageId
+  const knownGeo = workspace.default_geo_target_id
+  // Sunucunun ayrı konum etiketi tercih edilir; eski cevaplarda birleşik etiketten kesilir
+  const knownLabel =
+    workspace.market_location_label || locationPartOfMarketLabel(workspace.market_label)
 
   const handleApprove = async () => {
     setSubmitting(true)
@@ -115,13 +123,16 @@ export default function ProfileReviewCards({
         competitor_decisions,
         must_have_info: mustHave.trim(),
         excluded_info: excluded.trim(),
-        default_geo_target_id: geoId,
-        default_language_id: languageId,
+        // Kilitli çalışmada pazar sunucuda sabit; alanlar gönderilmez
+        ...(marketLocked || marketIncomplete
+          ? {}
+          : { default_geo_target_id: geoId, default_language_id: languageId }),
         rerun_keywords: false,
       })
       onApproved(res.data)
     } catch (err: unknown) {
-      setError(extractErrorMessage(err))
+      if (apiErrorCode(err) === 'MARKET_LOCKED') setMarketLockedByServer(true)
+      else setError(extractErrorMessage(err))
     } finally {
       setSubmitting(false)
     }
@@ -211,37 +222,19 @@ export default function ProfileReviewCards({
           value={targetAudience}
           onChange={(e) => setTargetAudience(e.target.value)}
         />
-        <div className="bpx-grid-2" style={{ marginTop: 12 }}>
-          <div>
-            <label className="bpx-label">Bölge</label>
-            <select
-              className="bpx-select"
-              title="Bölge"
-              value={geoId}
-              onChange={(e) => setGeoId(e.target.value)}
-            >
-              {GEO_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="bpx-label">Dil</label>
-            <select
-              className="bpx-select"
-              title="Dil"
-              value={languageId}
-              onChange={(e) => setLanguageId(e.target.value)}
-            >
-              {LANGUAGE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={{ marginTop: 12 }}>
+          <MarketSelect
+            value={{ geo_target_id: geoId, language_id: languageId }}
+            onChange={(next) => {
+              setGeoId(next.geo_target_id)
+              setLanguageId(next.language_id)
+            }}
+            disabled={marketLocked || submitting}
+            lockedMessage={marketLocked ? MARKET_LOCKED_MESSAGE : undefined}
+            knownLocation={
+              knownGeo && knownLabel ? { geo_target_id: knownGeo, label: knownLabel } : null
+            }
+          />
         </div>
 
         <LocationPolicyControl
@@ -310,7 +303,7 @@ export default function ProfileReviewCards({
           type="button"
           className="bpx-btn-primary"
           onClick={handleApprove}
-          disabled={submitting || !review.isValid}
+          disabled={submitting || !review.isValid || (!marketLocked && marketIncomplete)}
         >
           {submitting ? (
             <Loader2 size={16} className="spin-icon" />

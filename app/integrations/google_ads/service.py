@@ -256,6 +256,7 @@ class GoogleAdsService:
         GenerateKeywordIdeas cagrisi. DB'ye yazmaz.
         Returns: (keywords, truncated, truncated_reason)
         """
+        # settings yedegi yalniz bos deger icin (baska cagiranlar); API uclari calisma pazarini HER ZAMAN verir
         lang_id = language_id or getattr(self.settings, "GOOGLE_ADS_LANGUAGE_ID", None)
         geo_id = geo_target_id or getattr(self.settings, "GOOGLE_ADS_GEO_TARGET_ID", None)
 
@@ -331,6 +332,7 @@ class GoogleAdsService:
         language_id: Optional[str] = None,
         geo_target_id: Optional[str] = None,
     ) -> Any:
+        # settings yedegi yalniz bos deger icin (baska cagiranlar); API uclari calisma pazarini HER ZAMAN verir
         lang_id = language_id or getattr(self.settings, "GOOGLE_ADS_LANGUAGE_ID", None)
         geo_id = geo_target_id or getattr(self.settings, "GOOGLE_ADS_GEO_TARGET_ID", None)
 

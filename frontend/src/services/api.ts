@@ -206,7 +206,7 @@ api.interceptors.response.use(
     } else if (status === 404) {
       message = typeof raw === 'string' ? raw : 'İstenen kaynak bulunamadı.'
     } else if (status === 400) {
-      message = typeof raw === 'string' ? raw : 'Geçersiz istek parametreleri.'
+      message = typeof raw === 'string' ? raw : detailMessage || 'Geçersiz istek parametreleri.'
     } else if (status === 503 && typeof raw === 'string') {
       message = raw
     } else if (status >= 500) {
@@ -331,6 +331,14 @@ export const workspaceApi = {
     }),
 
   get: (id: number) => api.get(`/brand-profile/workspaces/${id}`),
+
+  // Pazar seçimi (ülke/dil listesi + konum arama) — plan_pazar_dil_secimi.md Faz 1
+  marketOptions: () => api.get<MarketOptions>('/brand-profile/market-options'),
+
+  searchLocations: (q: string, country?: string) =>
+    api.get<LocationSearchResponse>('/brand-profile/market-options/locations', {
+      params: { q, ...(country ? { country } : {}) },
+    }),
 
   create: (data: WorkspaceCreateRequest) => api.post('/brand-profile/workspaces', data),
 
@@ -777,6 +785,7 @@ export interface KeywordImportDetail {
 }
 
 export interface KeywordUploadCsvResponse extends KeywordImportResponse {
+  market_notice?: string
   parsed: number
   accepted: number
   skipped_exact: number
@@ -828,6 +837,39 @@ export interface ScoringRunCreate {
   location_preview_is_saved_policy?: boolean
 }
 
+export interface MarketCountry {
+  geo_target_id: string
+  code: string
+  name_tr: string
+  label: string
+}
+
+export interface MarketLanguage {
+  language_id: string
+  code: string
+  name_tr: string
+  name_native: string
+}
+
+export interface MarketOptions {
+  countries: MarketCountry[]
+  languages: MarketLanguage[]
+  default: { geo_target_id: string; language_id: string }
+}
+
+export interface LocationItem {
+  geo_target_id: string
+  label: string
+  kind: 'country' | 'city' | 'region'
+  country_code: string
+  name: string
+}
+
+export interface LocationSearchResponse {
+  items: LocationItem[]
+  total: number
+}
+
 export interface WorkspaceCreateRequest {
   name?: string
   company_url: string
@@ -864,6 +906,9 @@ export interface WorkspaceResponse {
   excluded_info?: string | null
   default_geo_target_id?: string | null
   default_language_id?: string | null
+  market_label?: string | null
+  market_location_label?: string | null
+  market_locked?: boolean
   deleted_at: string | null
   created_at: string
   updated_at?: string
@@ -1040,8 +1085,6 @@ export interface WorkspaceKeywordRefreshResponse {
 
 export interface UrlSeedRequest {
   url: string
-  language_id?: string
-  geo_target_id?: string
   max_results?: number
   min_volume?: number
   include_keyword_seed?: boolean
@@ -1058,6 +1101,10 @@ export interface UrlSeedResponse {
   quota_remaining: number | null
   warnings?: string[]
   source_status?: UrlSeedSourceStatus | null
+  // Google'a gerçekte gönderilen pazar (sunucu çalışma pazarını kullanır)
+  geo_target_id?: string
+  language_id?: string
+  market_label?: string
 }
 
 export interface UrlSeedIdea {
@@ -1091,8 +1138,7 @@ export interface EnrichRequest {
   seeds: string[]
   max_results: number
   min_volume: number
-  language_id?: string
-  geo_target_id?: string
+  brand_profile_id: number
 }
 
 export interface EnrichedKeywordOut {
@@ -1112,6 +1158,9 @@ export interface EnrichResponse {
   truncated_at: number | null
   truncated_reason: string | null
   keywords: EnrichedKeywordOut[]
+  geo_target_id?: string
+  language_id?: string
+  market_label?: string
 }
 
 export interface CampaignInfo {

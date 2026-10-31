@@ -2,14 +2,26 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import BrandProfile from './BrandProfile'
+import { useBrandStore } from '../stores/brandStore'
 
 const create = vi.fn()
+
+const MARKET_OPTIONS = {
+  countries: [{ geo_target_id: '2276', code: 'DE', name_tr: 'Almanya', label: 'Almanya (DE)' }],
+  languages: [
+    { language_id: '1031', code: 'ru', name_tr: 'Rusça', name_native: 'Русский' },
+    { language_id: '1001', code: 'de', name_tr: 'Almanca', name_native: 'Deutsch' },
+  ],
+  default: { geo_target_id: '2276', language_id: '1031' },
+}
 
 vi.mock('../services/api', () => ({
   workspaceApi: {
     list: vi.fn(() => Promise.resolve({ data: [] })),
     get: vi.fn(() => Promise.resolve({ data: {} })),
     create: (...args: unknown[]) => create(...args),
+    marketOptions: vi.fn(() => Promise.resolve({ data: MARKET_OPTIONS })),
+    searchLocations: vi.fn(() => Promise.resolve({ data: { items: [], total: 0 } })),
   },
   brandProfileApi: {},
   apiErrorMessage: (_: unknown, fallback = 'Hata') => fallback,
@@ -26,6 +38,8 @@ async function openWizard(url: string) {
   )
   fireEvent.click((await screen.findAllByRole('button', { name: /Yeni Çalışma Oluştur/ }))[0])
   fireEvent.change(await screen.findByPlaceholderText('https://...'), { target: { value: url } })
+  // Pazar varsayılanı yüklenmeden "Analizi Başlat" pasiftir
+  await screen.findByText('Almanya (DE)')
 }
 
 const startButton = () =>
@@ -36,6 +50,7 @@ const option = (name: RegExp) => screen.getByRole('radio', { name })
 
 describe('Çalışma oluşturma: alt sayfa kapsam sorusu', () => {
   beforeEach(() => {
+    useBrandStore.setState({ marketOptions: null, marketOptionsError: null })
     create.mockReset()
     // Hiç ilerlemeyen istek: yalnız çağrı argümanları doğrulanır
     create.mockReturnValue(new Promise(() => {}))
@@ -53,6 +68,33 @@ describe('Çalışma oluşturma: alt sayfa kapsam sorusu', () => {
       expect(create.mock.calls[0][0]).not.toHaveProperty('pending_focus_url')
     }
   )
+
+  it('pazar varsayılanı market-options.default değerinden gelir ve create payload içine girer', async () => {
+    await openWizard('example.com')
+    expect((screen.getByLabelText('Çıktı dili') as HTMLSelectElement).value).toBe('1031')
+    clickCreate()
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0][0]).toMatchObject({
+      default_geo_target_id: '2276',
+      default_language_id: '1031',
+    })
+  })
+
+  it('pazar seçenekleri yüklenemezse "Analizi Başlat" pasif kalır', async () => {
+    const { workspaceApi } = await import('../services/api')
+    vi.mocked(workspaceApi.marketOptions).mockRejectedValueOnce({ message: 'Sunucu hatası' })
+    render(
+      <MemoryRouter initialEntries={['/brand-profile']}>
+        <BrandProfile />
+      </MemoryRouter>
+    )
+    fireEvent.click((await screen.findAllByRole('button', { name: /Yeni Çalışma Oluştur/ }))[0])
+    fireEvent.change(await screen.findByPlaceholderText('https://...'), {
+      target: { value: 'example.com' },
+    })
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(startButton().disabled).toBe(true)
+  })
 
   it('alt sayfa URL için soru açılır; seçim yokken "Analizi Başlat" pasif ve istek yok', async () => {
     await openWizard(SUBPAGE)

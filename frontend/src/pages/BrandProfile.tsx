@@ -63,6 +63,9 @@ import KeywordAnchorReview from './brandProfile/KeywordAnchorReview'
 import LoadingStep from './brandProfile/LoadingStep'
 import AiCompetitorDiscovery from './brandProfile/AiCompetitorDiscovery'
 import LocationPolicyControl from '../components/LocationPolicyControl'
+import MarketSelect from '../components/MarketSelect'
+import MarketBadge from '../components/MarketBadge'
+import type { MarketValue } from '../services/market'
 import {
   LocationFilterMode,
   readFocusCities,
@@ -441,6 +444,10 @@ function WorkspaceModal({
   const [competitors, setCompetitors] = useState(['', '', ''])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  // Pazar: analiz başlamadan seçilir; varsayılan market-options.default'tan gelir
+  const [market, setMarket] = useState<MarketValue>({ geo_target_id: null, language_id: null })
+  const marketOptions = useBrandStore((s) => s.marketOptions)
+  const marketIncomplete = !market.geo_target_id || !market.language_id
   // Alt sayfa URL'si için kapsam sorusu: seçim kontrolü (seçmek başlatmaz); URL değişince sıfırlanır
   const [scopeChoice, setScopeChoice] = useState<ScopeChoice | null>(null)
   // Alt sayfa / analiz tekrar deneme (şerit + başarısız analiz bandı)
@@ -467,6 +474,18 @@ function WorkspaceModal({
 
   const navigate = useNavigate()
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
+
+  useEffect(() => {
+    if (!marketOptions) return
+    setMarket((m) =>
+      m.geo_target_id || m.language_id
+        ? m
+        : {
+            geo_target_id: marketOptions.default.geo_target_id,
+            language_id: marketOptions.default.language_id,
+          }
+    )
+  }, [marketOptions])
 
   useEffect(() => {
     setWs(initialWorkspace)
@@ -542,6 +561,8 @@ function WorkspaceModal({
       const res = await workspaceApi.create({
         ...target,
         competitor_urls: competitorUrls.length > 0 ? competitorUrls : undefined,
+        default_geo_target_id: market.geo_target_id ?? undefined,
+        default_language_id: market.language_id ?? undefined,
         flow_version: 'profile_first',
       })
       const created = res.data as WorkspaceResponse
@@ -859,6 +880,8 @@ function WorkspaceModal({
               />
             ))}
           </div>
+          <div className="bpx-field-gap" />
+          <MarketSelect value={market} onChange={setMarket} disabled={creating} />
           {error && <div className="error-banner">{error}</div>}
           {scopeNeeded && (
             <div className="bpx-scope-ask" role="dialog" aria-labelledby="bpx-scope-ask-title">
@@ -911,7 +934,7 @@ function WorkspaceModal({
               type="button"
               className="bpx-btn-primary"
               onClick={handleCreate}
-              disabled={creating || !urlValid || (scopeNeeded && !scopeChoice)}
+              disabled={creating || !urlValid || marketIncomplete || (scopeNeeded && !scopeChoice)}
             >
               {creating ? (
                 <Loader2 size={15} className="spin-icon" />
@@ -1432,6 +1455,11 @@ function BrandCard({
       <div className="bpx-card-desc">
         {(ws.profile_data?.sector as string) || 'Sektör bilgisi yok'}
       </div>
+      {ws.market_label && (
+        <div className="bpx-card-desc">
+          <MarketBadge label={ws.market_label} />
+        </div>
+      )}
       {matchedFocuses.length > 0 && (
         <div className="bpx-card-match">
           Eşleşen alt sayfa: {matchedFocuses.map((f) => focusShortName(f.name)).join(', ')}

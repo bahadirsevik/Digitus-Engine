@@ -10,8 +10,8 @@ const baseWorkspace = {
   suggested_keywords: null,
   preliminary_info: null,
   excluded_info: null,
-  default_geo_target_id: '2792',
-  default_language_id: '1037',
+  default_geo_target_id: '2276',
+  default_language_id: '1001',
   created_at: '2026-01-01T00:00:00Z',
   run_count: 1,
 }

@@ -104,17 +104,6 @@ export function extractErrorMessage(error: unknown): string {
   return apiErrorMessage(error, 'Beklenmeyen hata')
 }
 
-export const GEO_OPTIONS = [
-  { value: '2792', label: 'Türkiye (2792)' },
-  { value: '2276', label: 'Almanya (2276)' },
-] as const
-
-export const LANGUAGE_OPTIONS = [
-  { value: '1037', label: 'Türkçe (1037)' },
-  { value: '1001', label: 'Almanca (1001)' },
-  { value: '1000', label: 'İngilizce (1000)' },
-] as const
-
 export interface WorkspaceListRow {
   id: number
   name: string
@@ -136,6 +125,9 @@ export interface WorkspaceListRow {
   excluded_info?: string | null
   default_geo_target_id?: string | null
   default_language_id?: string | null
+  market_label?: string | null
+  market_location_label?: string | null
+  market_locked?: boolean
   deleted_at: string | null
   created_at: string
   updated_at?: string
@@ -302,6 +294,9 @@ export function toActiveWorkspace(workspace: {
   competitor_urls?: string[] | null
   default_geo_target_id?: string | null
   default_language_id?: string | null
+  market_label?: string | null
+  market_location_label?: string | null
+  market_locked?: boolean
 }): ActiveWorkspace {
   return {
     id: workspace.id,
@@ -313,6 +308,9 @@ export function toActiveWorkspace(workspace: {
     competitor_urls: workspace.competitor_urls || null,
     default_geo_target_id: workspace.default_geo_target_id || null,
     default_language_id: workspace.default_language_id || null,
+    market_label: workspace.market_label || null,
+    market_location_label: workspace.market_location_label || null,
+    market_locked: workspace.market_locked ?? false,
   }
 }
 

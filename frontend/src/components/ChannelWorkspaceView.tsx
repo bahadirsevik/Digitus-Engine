@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, ChevronDown, RefreshCw, X } from 'lucide-react'
 import { channelsApi, scoringApi, tasksApi, tasksFromListResponse } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
+import MarketBadge from './MarketBadge'
 import type { ScoringRun } from '../types/models'
 import { AnalysisBanner } from './AnalysisProgress'
 import ExportMenu from './ExportMenu'
@@ -509,6 +510,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
           <span className="chx-brand-pill">
             <span className="muted">Aktif Marka</span>
             <b>{activeWorkspace.name}</b>
+            <MarketBadge label={activeWorkspace.market_label} />
           </span>
         )}
         <ExportMenu channel={channel} runId={selectedRunId} disabled={!canEditPool} />
