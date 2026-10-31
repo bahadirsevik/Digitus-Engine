@@ -235,19 +235,54 @@ def test_g07_hook_and_caption_claims_deduplicated_preserving_order():
     assert "50 bin" in claims[1]
 
 
-def test_g08_format_payload_not_scanned_for_claims():
-    """format_payload (scene, voiceover, slides, posts) taranmaz; hook/caption/CTA/görsel/hashtag taranır."""
-    context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
-    # Video içeriğinin payload'ında (on_screen_text ve voiceover) 100.000+ ve %80 geçiyor,
-    # ancak caption ve hook tamamen temiz
-    clean_video = _make_video_content(
-        hooks=(_make_hook(text="Cilt bakımında 3 altın adım."),),
-        caption="Günlük cilt temizliği ve bakım adımları rehberi.",
-        payload_claim=True,
+def test_g08_format_payload_visible_texts_are_scanned_for_claims():
+    """format_payload'ın görünür metinleri (on_screen_text/voiceover, headline/body, post text)
+    teslim metnidir ve taranır; scene / visual_direction yönetmen notudur, taranmaz."""
+    from app.core.social.content_contract import (
+        ValidatedCarouselPayload, ValidatedCarouselSlide,
+        ValidatedThreadPayload, ValidatedThreadPost,
     )
+    import dataclasses
 
-    claims = find_social_content_ungrounded_claims(clean_video, context)
-    assert claims == ()
+    context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
+    hooks = (_make_hook(text="Cilt bakımında 3 altın adım."),)
+    caption = "Günlük cilt temizliği ve bakım adımları rehberi."
+
+    # Video: caption/hook temiz, yalnız ekran metni + seslendirme ihlalli
+    video = _make_video_content(hooks=hooks, caption=caption, payload_claim=False)
+    seg = dataclasses.replace(
+        video.format_payload.segments[0],
+        on_screen_text="Ağrısız tedavi", voiceover="Ağrısız tedavi sunuyoruz.",
+    )
+    video = dataclasses.replace(
+        video, format_payload=dataclasses.replace(video.format_payload, segments=(seg,)))
+    claims = find_social_content_ungrounded_claims(video, context)
+    assert any(c.startswith("absolute:") for c in claims)
+
+    # scene (yönetmen notu) taranmaz
+    seg = dataclasses.replace(video.format_payload.segments[0],
+                              on_screen_text="Adım adım uygulama", voiceover="Nazikçe temizleyin.",
+                              scene="Ağrısız tedavi sahnesi, 100.000+ kare")
+    directed = dataclasses.replace(
+        video, format_payload=dataclasses.replace(video.format_payload, segments=(seg,)))
+    assert find_social_content_ungrounded_claims(directed, context) == ()
+
+    base = _make_post_content(hooks=hooks, caption=caption)
+    carousel = dataclasses.replace(base, format_payload=ValidatedCarouselPayload(
+        kind="carousel", slides=(
+            ValidatedCarouselSlide(position=1, headline="Adım 1", body="Ağrısız tedavi",
+                                   visual_direction="%80 mutlu müşteri görseli"),)))
+    carousel_claims = find_social_content_ungrounded_claims(carousel, context)
+    assert any(c.startswith("absolute:") for c in carousel_claims)
+    assert not any("%80" in c for c in carousel_claims)  # visual_direction taranmaz
+
+    thread = dataclasses.replace(base, format_payload=ValidatedThreadPayload(
+        kind="thread", posts=(ValidatedThreadPost(position=1, text="Lazer ile tedavi yapıyoruz"),)))
+    assert any(c.startswith("service:") for c in find_social_content_ungrounded_claims(thread, context))
+
+    # Temiz payload temiz kalır
+    clean = _make_video_content(hooks=hooks, caption=caption, payload_claim=False)
+    assert find_social_content_ungrounded_claims(clean, context) == ()
 
 
 def test_g08b_cta_visual_and_hashtags_scanned():
@@ -267,13 +302,13 @@ def test_g08b_cta_visual_and_hashtags_scanned():
     visual = dataclasses.replace(base, visual_suggestion="Klinikte lazer çekimi")
     assert any(c.startswith("service:") for c in find_social_content_ungrounded_claims(visual, context))
 
-    # format_payload yine taranmaz
+    # payload_claim=True: yalnız payload ihlalli (caption/hook temiz) → artık yakalanır
     payload = _make_video_content(
         hooks=(_make_hook(text="Cilt bakımında 3 altın adım."),),
         caption="Günlük cilt temizliği ve bakım adımları rehberi.",
         payload_claim=True,
     )
-    assert find_social_content_ungrounded_claims(payload, context) == ()
+    assert find_social_content_ungrounded_claims(payload, context)
 
 
 def test_g09_exact_primary_keyword_exemption_and_narrow_scope():

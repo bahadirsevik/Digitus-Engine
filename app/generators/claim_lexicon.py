@@ -7,6 +7,9 @@ Osstem != Straumann). Tüm kalıplar katlanmış metinde (Türkçe-duyarlı kü�
 
 shortcut: sözlük kısa ve sektör-bağımsız yapıda; yeni hizmet/marka sahada çıktıkça
 SERVICE_CONCEPTS'e satır eklenir (kod değişmez).
+shortcut: çıplak, niteleyicisiz TR "dolgu" belirsizdir (diş dolgusu mu estetik dolgu mu):
+ne iddia olarak işaretlenir ne de izin sayılır; yalnız "diş dolgusu", "dudak dolgusu" gibi
+nitelikli biçimler kavram eşleşmesi yapar. Gerekirse nitelikli alias eklenir.
 """
 from __future__ import annotations
 
@@ -21,8 +24,7 @@ def fold(text: str) -> str:
 
 
 # Harf olmayan karakterden sonra başlar (hashtag/noktalama önü serbest); sonu \w* ile
-# çekim ekini yutar. shortcut: TR "dolgu" diş dolgusunu da kapsar (aynı dilde kaynakla
-# eşleşir); dillerarası "пломба" eşlemesi yok.
+# çekim ekini yutar.
 _LEAD = r"(?<![^\W\d_])"
 
 SERVICE_CONCEPTS: Dict[str, Dict[str, List[str]]] = {
@@ -41,9 +43,16 @@ SERVICE_CONCEPTS: Dict[str, Dict[str, List[str]]] = {
     "botox": {
         "tr": ["botoks"], "ru": ["ботокс"], "uk": ["ботокс"], "en": ["botox"], "de": ["botox"],
     },
+    # Diş dolgusu ve estetik dolgu AYRI kavram: biri diğerine izin vermez.
+    "dental_filling": {
+        "tr": ["diş dolgu", "dolgu tedavisi", "kompozit dolgu", "amalgam dolgu"],
+        "ru": ["пломб"], "uk": ["пломб"],
+        "en": ["dental fillings?", "tooth fillings?"], "de": ["zahnfüllung", "füllung"],
+    },
     "filler": {
-        "tr": ["dolgu(?!n)"], "ru": ["филлер"], "uk": ["філер", "філлер"],
-        "en": ["fillers?"], "de": ["filler", "unterspritzung"],
+        "tr": ["dudak dolgu", "dermal dolgu", "yüz dolgu", "dolgu enjeksiyon"],
+        "ru": ["филлер"], "uk": ["філер", "філлер"],
+        "en": ["dermal fillers?", "lip fillers?", "fillers?"], "de": ["filler", "unterspritzung"],
     },
     "zirconium_crown": {
         "tr": ["zirkonyum"], "ru": ["циркони"], "uk": ["цирконі"],
@@ -96,6 +105,9 @@ ABSOLUTE_RX: Tuple[Pattern, ...] = tuple(
 NEGATION_RX = re.compile(
     rf"{_LEAD}(?:yapmiyor\w*|yapilmaz|yoktur|yok|değil|degil|hariç|haric|не|нет|без|немає|"
     r"\w+m[iuü]yor\w*|\w+(?:me|ma)(?:mektedir|maktadir)|"
+    r"\w+m[ae]z|\w+m[ae]yiz|"  # sunulmaz, uygulanmaz, verilmez, yapmayız
+    r"не предоставля\w*|не проводи\w*|не делаем|не виконуємо|не надаємо|"
+    r"not offered|not available|don'?t offer|do not offer|nicht angeboten|"
     r"not|no|kein\w*|ohne)(?![^\W\d_])"
 )
 

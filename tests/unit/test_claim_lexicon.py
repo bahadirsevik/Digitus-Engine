@@ -28,8 +28,32 @@ class TestServiceConcepts:
         assert find_ungrounded_claims("Osstem implant", "Hizmetler: Osstem implant") == []
 
     def test_botox_does_not_grant_filler(self):
-        v = find_ungrounded_claims("dolgu uygulaması", "Hizmetler: botoks")
+        v = find_ungrounded_claims("dudak dolgusu uygulaması", "Hizmetler: botoks")
         assert any(x.startswith("service:") for x in v)
+
+    def test_dental_filling_and_aesthetic_filler_are_separate(self):
+        v = find_ungrounded_claims("Dudak dolgusu uyguluyoruz", "Hizmetler: Diş dolgusu")
+        assert any(x.startswith("service:") for x in v)
+        assert find_ungrounded_claims("dudak dolgusu", "Hizmetler: Dudak dolgusu") == []
+        v = find_ungrounded_claims("Diş dolgusu yapıyoruz", "Hizmetler: Dudak dolgusu")
+        assert any(x.startswith("service:") for x in v)
+        # dil karşılığı kendi kavramında birleşir
+        assert find_ungrounded_claims("пломба за один визит", "Hizmetler: Diş dolgusu") == []
+
+    def test_bare_dolgu_is_neither_flagged_nor_granted(self):
+        assert find_ungrounded_claims("dolgu uygulaması", "") == []
+
+    def test_negated_verb_forms_do_not_grant(self):
+        for line in ("Sedasyon sunulmaz", "Sedasyon uygulanmaz", "Sedasyon verilmez",
+                     "Sedasyon yapmayız", "Sedation not offered", "Sedation not available"):
+            v = find_ungrounded_claims("Sedasyon sunuyoruz", f"Hizmetler: implant\n{line}")
+            assert any(x.startswith("service:") for x in v), line
+        v = find_ungrounded_claims("Lazer uyguluyoruz", "Hizmetler: Lazer verilmez")
+        assert any(x.startswith("service:") for x in v)
+        v = find_ungrounded_claims("Sedasyon sunuyoruz", "Hizmetler: Sedasyon sunulmaz")
+        assert any(x.startswith("service:") for x in v)
+        # olumlu kaynak çevirisi hâlâ geçer
+        assert find_ungrounded_claims("седация", "Hizmetler: Sedasyon") == []
 
     def test_target_audience_line_is_not_a_permission_source(self):
         facts = "Hedef kitle: lazer ile ilgilenenler\nHizmetler: implant"
@@ -60,7 +84,7 @@ class TestServiceConcepts:
 
     def test_dolgun_is_not_filler(self):
         assert find_ungrounded_claims("dolgun dudaklar", "") == []
-        assert find_ungrounded_claims("dolgu uygulaması", "")
+        assert find_ungrounded_claims("dudak dolgusu uygulaması", "")
 
     def test_profile_concepts_can_be_disabled_for_keyword_reports(self):
         for kw in ("botoks", "straumann implant", "lazer epilasyon", "ISO"):
@@ -135,6 +159,15 @@ class TestKeywordExemptionNarrowed:
         assert find_ungrounded_claims("20 yıllık implant", "", ["20 yıllık implant"]) == []
 
     def test_keyword_year_still_exempt(self):
+        assert find_ungrounded_claims("2026 yıl sonu hisse", "", ["2026 yıl sonu hisse"]) == []
+
+    def test_keyword_mask_respects_number_boundaries(self):
+        # "20 yıllık implant" keyword'ü "120 yıllık ..." içinden maske açmaz
+        assert find_ungrounded_claims("120 yıllık implant deneyimi", "", ["20 yıllık implant"])
+        assert find_ungrounded_claims("2020 yıllık implant", "", ["20 yıllık implant"])
+        v = find_ungrounded_claims("20 yıllık implant garantisi", "", ["20 yıllık implant"])
+        assert not any("20 yıllık" in x or "20 yillik" in x for x in v)
+        assert find_ungrounded_claims("20 Yıllık Implant Rehberi", "", ["20 yıllık implant"]) == []
         assert find_ungrounded_claims("2026 yıl sonu hisse", "", ["2026 yıl sonu hisse"]) == []
 
     def test_superlative_keyword_is_now_violation(self):

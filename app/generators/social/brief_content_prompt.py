@@ -541,7 +541,7 @@ def _build_repair_instructions(
         sections.append(
             "- DESTEKSİZ İDDİALARI DÜZELT:\n"
             "  * Orijinal içerikte tespit edilen desteksiz iddialar (\"repair_context.detected_claims\") metinden tamamen kaldırılmalı veya YALNIZCA \"product_facts\" ve \"trusted_brand_usp\" içinde teyit edilmiş doğrulanabilir gerçeklerle yeniden ifade edilmelidir.\n"
-            "  * Başlıklarda (\"hooks\"), ana metinde (\"caption\"), \"cta_text\", \"visual_suggestion\" ve \"hashtags\" içinde doğrulanmamış hiçbir sayısal veya abartılı iddia bırakma.\n"
+            "  * Başlıklarda (\"hooks\"), ana metinde (\"caption\"), \"cta_text\", \"visual_suggestion\", \"hashtags\" ve format_payload'ın görünür metinlerinde (video \"on_screen_text\" / \"voiceover\", carousel \"headline\" / \"body\", thread \"text\") doğrulanmamış hiçbir sayısal veya abartılı iddia bırakma.\n"
             f"  * {CLAIM_REPAIR_RULE}"
         )
 

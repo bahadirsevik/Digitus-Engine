@@ -736,8 +736,11 @@ def find_ungrounded_claims(
     numeric_text = working.replace("ı", "i")  # keyword eşleşmesi ı/i farkına (Implant) takılmasın
     for kw in exempt_keywords or []:
         kw_l = _tr_lower(str(kw)).strip().replace("ı", "i")
-        if kw_l and kw_l in numeric_text:
-            numeric_text = numeric_text.replace(kw_l, " ")
+        if kw_l:
+            # Sınır duyarlı: "20 yıllık implant" keyword'ü "120 yıllık ..." içinden maske açmaz
+            numeric_text = re.sub(
+                r"(?<![^\W_])" + re.escape(kw_l) + r"(?![^\W_])", " ", numeric_text
+            )
 
     facts_l = _tr_lower(source.facts_text())
     fact_numeric = {canon for _, canon in _extract_numeric_claims(facts_l)}

@@ -11,7 +11,7 @@ Kurallar (plan_social_brief_akisi.md rev.4 §6, §9):
 - Logger'a kullanıcı içeriği, iddia (claim) veya hassas veri YAZILMAZ.
 - DTO'lar dondurulmuş (frozen dataclass) ve immutable'dır.
 - app/generators/ads/validators.py içindeki find_ungrounded_claims yeniden kullanılır.
-- Hook, caption, CTA, görsel önerisi ve hashtag metinleri taranır; format_payload taranmaz.
+- Hook, caption, CTA, görsel önerisi, hashtag ve format_payload'ın görünür metinleri taranır.
 - Grounding whitelist yalnızca product_facts ve kullanıcının sağladığı trusted_brand_usp'dir.
 - brand_context whitelist'e DAHİL EDİLMEZ.
 - primary_keyword yalnızca dar ve tam kelime muafiyeti (exempt_keywords) için kullanılır.
@@ -285,15 +285,28 @@ def _validate_content_consistency(content: ValidatedSocialContent) -> None:
         )
 
 
+def _payload_visible_texts(payload: Any) -> list[str]:
+    """format_payload'ın TESLİM metinleri: video ekran metni + seslendirme, carousel
+    başlık + gövde, thread gönderileri. scene / visual_direction yönetmen notudur, taranmaz."""
+    if isinstance(payload, ValidatedVideoPayload):
+        return [t for s in payload.segments for t in (s.on_screen_text, s.voiceover)]
+    if isinstance(payload, ValidatedCarouselPayload):
+        return [t for s in payload.slides for t in (s.headline, s.body)]
+    if isinstance(payload, ValidatedThreadPayload):
+        return [p.text for p in payload.posts]
+    return []
+
+
 def find_social_content_ungrounded_claims(
     content: ValidatedSocialContent,
     context: SocialContentGroundingContext,
 ) -> tuple[str, ...]:
-    """Hook, caption, CTA, görsel önerisi ve hashtag metinlerindeki desteksiz iddiaları bulur.
+    """Teslim metinlerindeki desteksiz iddiaları bulur.
 
     Kurallar:
-    - Taranan alanlar: hook.text, caption, cta_text, visual_suggestion, hashtags.
-    - format_payload içindeki alanlar (scene, on_screen_text, voiceover, slides, posts) taranmaz.
+    - Taranan alanlar: hook.text, caption, cta_text, visual_suggestion, hashtags ve
+      format_payload'ın görünür metinleri (video on_screen_text/voiceover, carousel
+      headline/body, thread post text). scene ve visual_direction (yönetmen notu) taranmaz.
     - grounding_facts: confirmed product_facts + trusted_brand_usp (veya boş string).
     - exempt_keywords: [context.primary_keyword].
     - Çıkan iddialar ilk görülme sırasını koruyarak tekilleştirilir.
@@ -324,6 +337,7 @@ def find_social_content_ungrounded_claims(
         texts.append(content.cta_text)
         texts.append(content.visual_suggestion)
         texts.extend(content.hashtags or ())  # düz metin olarak taranır
+        texts.extend(_payload_visible_texts(content.format_payload))
 
         raw_claims: list[str] = []
         for text in texts:
