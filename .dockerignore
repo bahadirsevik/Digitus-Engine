@@ -46,6 +46,9 @@ old_working
 datas
 tests
 scripts
+# Rekey scripti dagitimda imaj icinden kosulur (plan_pazar_dil_secimi §5); gelistirme
+# scriptlerinin geri kalani disarida kalir
+!scripts/rekey_normalized_keywords.py
 uploads
 backups
 veri

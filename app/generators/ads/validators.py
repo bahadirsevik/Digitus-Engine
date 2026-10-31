@@ -852,10 +852,68 @@ _CTA_VERBS = frozenset(kw_tokens(
     "yararlanın faydalanın yaptırın kaydolun görüntüleyin tanışın"))
 
 
-def is_cta(text: str) -> bool:
-    """Başlığın son kelimesi eylem fiili mi (ya da "Göz Atın" ile mi bitiyor)?"""
+# Yabancı pazar CTA'sı: fiil cümle sonunda olmak zorunda değil. Her dil (mod, zarflar, fiiller):
+#   lead = emir fiili başta (zarflardan sonra), any = emir kipi her yerde ayırt edici,
+#   lead_or_end = Almanca (Sie-emri başta / mastar sonda). Ayıklama kw_tokens ile aynı katlanır.
+# shortcut: açık liste + konum kuralı, dilbilgisi yok; EN "Call Center" gibi isim-baş başlık yanlış
+# pozitif olabilir -> CTA sayımı yalnız tamamlama çağrısı/seçim önceliğini etkiler, upgrade: ölçümle.
+_FOREIGN_CTA = {
+    "İngilizce": ("lead", "now today please just easily simply instantly online",
+                  "book call contact get start try learn discover order buy schedule request "
+                  "sign-up shop explore find claim join visit view compare download enquire "
+                  "inquire apply reserve speak talk ask browse grab calculate subscribe register "
+                  "check-out reach"),
+    "Almanca": ("lead_or_end", "jetzt heute bitte direkt einfach sofort online kostenlos",
+                "buchen anrufen kontaktieren anfragen entdecken bestellen sichern starten "
+                "termin-vereinbaren vereinbaren anfordern testen ausprobieren erfahren berechnen "
+                "vergleichen reservieren anmelden kennenlernen mehr-erfahren "
+                "kontaktieren-sie rufen-sie fordern-sie buchen-sie sichern-sie entdecken-sie "
+                "bestellen-sie vereinbaren-sie testen-sie erfahren-sie starten-sie lassen-sie-sich "
+                "informieren-sie-sich"),
+    "Rusça": ("any", "",
+              "запишитесь позвоните звоните закажите заказывайте узнайте получите начните "
+              "свяжитесь оформите попробуйте оставьте рассчитайте выберите приходите обращайтесь "
+              "подберите забронируйте купите скачайте зарегистрируйтесь проверьте сравните "
+              "откройте заходите"),
+    "Ukraynaca": ("any", "",
+                  "запишіться записуйтесь зателефонуйте телефонуйте дзвоніть замовте замовляйте "
+                  "дізнайтеся дізнайтесь отримайте почніть зв'яжіться звʼяжіться оформіть "
+                  "спробуйте залиште розрахуйте оберіть виберіть забронюйте купіть купуйте "
+                  "скористайтеся звертайтеся підберіть завантажте зареєструйтеся перевірте "
+                  "порівняйте відкрийте приходьте"),
+}
+
+
+def _compile_foreign_cta() -> dict:
+    out = {}
+    for lang, (mode, adverbs, verbs) in _FOREIGN_CTA.items():
+        # "-" çok kelimeli ifadeyi bağlar; kw_tokens zaten tire/kesmeyi sınır yapar
+        phrases = {tuple(kw_tokens(v.replace("-", " "))) for v in verbs.split()}
+        out[lang] = (mode, frozenset(kw_tokens(adverbs)), phrases)
+    return out
+
+
+_FOREIGN_CTA_COMPILED = _compile_foreign_cta()
+
+
+def is_cta(text: str, language: Optional[str] = None) -> bool:
+    """CTA mı? Türkçe/None: başlığın son kelimesi eylem fiili ("Göz Atın" dahil) — bayt-aynı
+    eski davranış. EN/DE/RU/UK: dile özgü emir/mastar tablosu (bkz. _FOREIGN_CTA)."""
     t = kw_tokens(text)
-    return bool(t) and (t[-1] in _CTA_VERBS or t[-2:] == ["goz", "atin"])
+    rule = _FOREIGN_CTA_COMPILED.get(language or "")
+    if rule is None:
+        return bool(t) and (t[-1] in _CTA_VERBS or t[-2:] == ["goz", "atin"])
+    mode, adverbs, phrases = rule
+    lead = list(t)
+    while lead and lead[0] in adverbs:
+        lead.pop(0)
+    for p in phrases:
+        n = len(p)
+        if mode != "any" and (tuple(lead[:n]) == p or (mode == "lead_or_end" and tuple(t[-n:]) == p)):
+            return True
+        if mode == "any" and any(tuple(t[i:i + n]) == p for i in range(len(t) - n + 1)):
+            return True
+    return False
 
 
 def keyword_coverage(
@@ -879,6 +937,7 @@ def build_standard_report(
     fill_keyword_ids: Optional[List[int]],
     headlines: List[str],
     descriptions: List[str],
+    language: Optional[str] = None,
 ) -> AdGroupStandardReport:
     """15 KW teslim standardı raporu (okuma + export için TEK hesap yeri).
 
@@ -891,7 +950,7 @@ def build_standard_report(
     )
     missing_headlines = max(0, ADS_HEADLINES_PER_GROUP - len(headlines))
     missing_kw_descriptions = max(0, ADS_DESCRIPTIONS_PER_GROUP - kw_descriptions)
-    cta_count = sum(is_cta(h) for h in headlines)
+    cta_count = sum(is_cta(h, language) for h in headlines)
     missing_cta = max(0, ADS_MIN_CTA_HEADLINES - cta_count)
     fill_ids = set(fill_keyword_ids or [])
     short = [k for k in target_keywords if len(k) <= 30]

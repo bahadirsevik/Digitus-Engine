@@ -47,6 +47,47 @@ from app.schemas.ads import (
 )
 
 
+# Varsayılan negatif top-up tablosu: (kelime, kategori) — dil başına. Türkçe liste eski sabitle aynı;
+# yabancı pazarda Türkçe kelime EKLENMEZ. Hedef-kelime çakışma koruması tabloya bakmadan çalışır.
+_NEGATIVE_REASONS = {
+    "bilgi_amacli": "Bilgi amaçlı arama",
+    "ucretsiz": "Ödeme niyeti yok",
+    "dusuk_kalite": "Düşük kalite algısı",
+    "ikinci_el": "Yeni ürün satışı",
+    "sikayet": "Negatif arama",
+    "diy": "Hizmet değil bilgi arıyor",
+}
+_DEFAULT_NEGATIVES: Dict[str, List[Tuple[str, str]]] = {
+    "Türkçe": [
+        ("nedir", "bilgi_amacli"), ("nasıl", "bilgi_amacli"), ("ne demek", "bilgi_amacli"),
+        ("ücretsiz", "ucretsiz"), ("bedava", "ucretsiz"), ("free", "ucretsiz"),
+        ("ucuz", "dusuk_kalite"), ("ikinci el", "ikinci_el"),
+        ("şikayet", "sikayet"), ("tamir", "diy"),
+    ],
+    "İngilizce": [
+        ("what is", "bilgi_amacli"), ("how to", "bilgi_amacli"), ("meaning", "bilgi_amacli"),
+        ("free", "ucretsiz"), ("cheap", "dusuk_kalite"),
+        ("used", "ikinci_el"), ("second hand", "ikinci_el"),
+        ("complaints", "sikayet"), ("repair", "diy"),
+    ],
+    "Almanca": [
+        ("was ist", "bilgi_amacli"), ("wie", "bilgi_amacli"), ("bedeutung", "bilgi_amacli"),
+        ("kostenlos", "ucretsiz"), ("gratis", "ucretsiz"), ("billig", "dusuk_kalite"),
+        ("gebraucht", "ikinci_el"), ("beschwerde", "sikayet"), ("reparatur", "diy"),
+    ],
+    "Rusça": [
+        ("что такое", "bilgi_amacli"), ("как", "bilgi_amacli"), ("что значит", "bilgi_amacli"),
+        ("бесплатно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/у", "ikinci_el"),
+        ("отзывы", "sikayet"), ("жалобы", "sikayet"), ("ремонт", "diy"),
+    ],
+    "Ukraynaca": [
+        ("що таке", "bilgi_amacli"), ("як", "bilgi_amacli"), ("що означає", "bilgi_amacli"),
+        ("безкоштовно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/в", "ikinci_el"),
+        ("скарги", "sikayet"), ("ремонт", "diy"),
+    ],
+}
+
+
 class RSAGenerator:
     """
     Generates RSA components for a single ad group.
@@ -302,7 +343,7 @@ class RSAGenerator:
         missing_kw_descriptions = max(0, self.MAX_DESCRIPTIONS - sum(
             self._contains_keyword(d.text, group.keywords) for d in descriptions
         ))
-        missing_cta = max(0, self.MIN_CTA - sum(is_cta(h.text) for h in headlines))
+        missing_cta = max(0, self.MIN_CTA - sum(self._is_cta(h.text) for h in headlines))
         if missing_headlines or missing_kw_descriptions or missing_cta:
             logger.warning(
                 f"Standard shortfall | group={group.name} "
@@ -351,12 +392,15 @@ class RSAGenerator:
     def _contains_keyword(text: str, keywords: List[str]) -> bool:
         return any(keyword_in_text(kw, text) for kw in keywords)
 
+    def _is_cta(self, text: str) -> bool:
+        return is_cta(text, self._output_ctx.language)
+
     def _needs_completion(self, h_pool, d_pool, keywords: List[str]) -> bool:
         """15 başlık, 4 KW'li açıklama veya 3 CTA dolmadı mı? (sert minimum bunun içinde).
         Seçim havuzdaki CTA'lardan en çok 3'ünü alır: havuzda <3 CTA = seçimde <3 CTA."""
         kw_descriptions = sum(self._contains_keyword(d.text, keywords) for d in d_pool)
         return (len(h_pool) < self.MAX_HEADLINES or kw_descriptions < self.MAX_DESCRIPTIONS
-                or sum(is_cta(h.text) for h in h_pool) < self.MIN_CTA)
+                or sum(self._is_cta(h.text) for h in h_pool) < self.MIN_CTA)
 
     def _top_up(self, clean: list, fallback: list, minimum: int) -> list:
         """`minimum`un altındaki tipi fallback asset'leriyle, temizlerin ARKASINA ve
@@ -394,7 +438,7 @@ class RSAGenerator:
         en çok 3 CTA, kalan yerler tüm havuzdan aynı açgözlü kapsamla (CTA'yı 3'ün üstüne
         çıkarmak için kapsam feda edilmez). Sıralı indeks döner."""
         texts = [h.text for h in h_pool]
-        cta_idx = [i for i, t in enumerate(texts) if is_cta(t)]
+        cta_idx = [i for i, t in enumerate(texts) if self._is_cta(t)]
         chosen = [cta_idx[j] for j in self._greedy_pick(
             [texts[i] for i in cta_idx], keywords, self.MIN_CTA)]
         uncovered = [k for k in keywords if not any(keyword_in_text(k, texts[i]) for i in chosen)]
@@ -406,7 +450,7 @@ class RSAGenerator:
     def _selection_key(self, h_pool: List[HeadlineSchema], keywords: List[str]) -> tuple:
         """Seçimin sıralama anahtarı: (CTA şartı sağlandı mı, birebir KW kapsamı, başlık sayısı)."""
         picked = [h_pool[i].text for i in self._select_headline_indices(h_pool, keywords)]
-        return (sum(is_cta(t) for t in picked) >= self.MIN_CTA,
+        return (sum(self._is_cta(t) for t in picked) >= self.MIN_CTA,
                 sum(any(keyword_in_text(k, t) for t in picked) for k in keywords),
                 len(picked))
 
@@ -654,7 +698,7 @@ class RSAGenerator:
             need_h = max(0, self.MAX_HEADLINES - len(kept_h))
             need_d = max(0, self.MAX_DESCRIPTIONS - sum(
                 self._contains_keyword(d.text, keywords) for d in kept_d))
-            need_cta = max(0, self.MIN_CTA - sum(is_cta(h.text) for h in kept_h))
+            need_cta = max(0, self.MIN_CTA - sum(self._is_cta(h.text) for h in kept_h))
             n_h = need_h + self.HEADLINE_SPARE if need_h else 0
             if need_cta:
                 n_cta = need_cta + self.CTA_SPARE
@@ -1028,18 +1072,10 @@ class RSAGenerator:
         eklenmez.
         """
         defaults = [
-            ("nedir", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
-            ("nasıl", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
-            ("ne demek", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
-            ("ücretsiz", "phrase", "ucretsiz", "Ödeme niyeti yok"),
-            ("bedava", "phrase", "ucretsiz", "Ödeme niyeti yok"),
-            ("free", "phrase", "ucretsiz", "Ödeme niyeti yok"),
-            ("ucuz", "phrase", "dusuk_kalite", "Düşük kalite algısı"),
-            ("ikinci el", "phrase", "ikinci_el", "Yeni ürün satışı"),
-            ("şikayet", "phrase", "sikayet", "Negatif arama"),
-            ("tamir", "phrase", "diy", "Hizmet değil bilgi arıyor"),
+            (kw, "phrase", cat, _NEGATIVE_REASONS[cat])
+            for kw, cat in _DEFAULT_NEGATIVES.get(self._output_ctx.language, _DEFAULT_NEGATIVES[DEFAULT_LANGUAGE])
         ]
-        
+
         seen = {tuple(_negative_tokens(n.keyword)) for n in existing}
         seen.update(tuple(_negative_tokens(x)) for x in (excluded or []))
 

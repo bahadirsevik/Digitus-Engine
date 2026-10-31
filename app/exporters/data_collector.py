@@ -701,7 +701,11 @@ class ExportDataCollector:
                 (AdGroup.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
             )
         groups = groups.all()
-        
+
+        # Standart rapor (CTA sayimi) uretimle AYNI dil kuralini kullansin (Codex Faz 0-3 #2)
+        from app.generators.output_language import output_context_for_run
+        report_language = output_context_for_run(self.db, scoring_run_id).language
+
         group_data = []
         for g in groups:
             headlines = self.db.query(AdHeadline).filter(
@@ -728,6 +732,7 @@ class ExportDataCollector:
                     g.fill_keyword_ids,
                     [h.headline_text for h in headlines],
                     [d.description_text for d in descriptions],
+                    report_language,
                 ),
                 headlines=[HeadlineData(
                     headline_text=h.headline_text,

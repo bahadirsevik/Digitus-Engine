@@ -39,9 +39,19 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 - CANLI (dev, Playwright + gercek Gemini, ~0,002 $): Noksel → "Pazar ekle" → Almanya (DE)/Almanca → 201 "1 olusturuldu, 0 atlandi" → ws76 confirmed 2276/1001 parentsiz, konum anahtarlari yok, policy_version 1, arka plan isi 10 ALMANCA oneri kelime yazdi ("stahlrohre hersteller", "spiralgeschweisste stahlrohre", …) → Faz 2 cikti dili canlida dogrulandi; profil sayfasinda serit + "Sehir filtresi yok" secili; konsol hatasi 0.
 - Bilinen/borc: "germany" aramasi kanonik ad eslesmesi yuzunden ulkeden sonra 19 Alman sehri getiriyor (ulke daraltma ile asilir; arama yalniz Name'e indirgenebilir); farkli kaynaklardan ayni markaya es zamanli ayni pazar kopyasi serilesmez (unique constraint yok, kabul); oneri isi ~20 satir kurulum tekrari; validation_data kopyalanmiyor.
 
+## Just completed (01.11 — Codex Faz 0-3 incelemesi (bd87a6b) 4 bulgu KAPANDI; lead + 1 Backend Dev Sonnet)
+
+- #1 Yenileme yarisi: saglayici donusunde `db.expire_all()` + `verify_workspace(lock=True)` ile TAZE kilitli satirdan pazar yeniden okunur; olcum pazarindan farkliysa 409 MARKET_CHANGED, 0 satir (Codex'in senaryosu `test_market_consistency.py::test_refresh_rejects_results_if_market_changed_while_provider_was_running` olarak eklendi, gecti).
+- #2 CTA tespiti: `is_cta(text, language=None)` — TR/None bayt-ayni; EN/DE/RU/UK tablo+konum kurali (EN fiil basta, DE mastar sonda ya da Sie-emir basta, RU/UK emir herhangi yerde); `rsa_generator` 5 cagri `self._is_cta`; `build_standard_report(..., language)` okuma (`ads_generator._model_to_schema`) VE export (`data_collector._collect_ads`, lead) ayni dil; yabanci dolu havuz artik gereksiz ucretli tamamlama cagrisi tetiklemiyor. Bilinen: "Call Center Services" gibi yanlis pozitifler mumkun (shortcut yorumu).
+- #3 Varsayilan negatifler: `_DEFAULT_NEGATIVES` 5 dil (TR degismedi; EN/DE/RU/UK listeleri; kategori + Turkce reason metadata ortak); cakisma korumasi ayni; yabanci pazarda Turkce liste eklenmez.
+- #4 `.dockerignore`: `scripts` dislamasina `!scripts/rekey_normalized_keywords.py` istisnasi; busybox COPY deneme build'i ile dosyanin baglama girdigi dogrulandi (dislanan dosyada COPY basarisiz olurdu).
+- Testler: yeni `tests/unit/test_ads_cta_language.py` (37); hedefli 293 + 30 + 69 + 33 gecti; TAM PAKET **5514 gecti / 2 bilinen / 112 atlandi** (sure 4 s 50 dk — anormal, makine uykusu/yuk; sonuc gecerli). FE degismedi.
+- Dev `celery_worker` yeniden baslatildi (calisan gorev 0) → Faz 2/3 kodu yuklu; `celery_beat` dokunulmadi.
+
 ## Currently in progress (01.11)
 
-- Faz 3 Codex incelemesi bekleniyor. Faz 4 (canli dogrulama: TR/tr, Berlin/ru, DE/ru, RU/ru, UA/uk, UA/ru, GB/en, DE/de; skorlama+kanal v3 + 1 RSA + 1 SEO + 1 sosyal + export goz kontrolu) UCRETLI: v3 run basina ~2 $ (bellek: 16 paralel 2,02 $) → plan tahmini (<1 $) gecerli DEGIL; kullanici butce onayi gerekiyor. Rusca/Ukraynaca insan degerlendirmesi ve sunucu envanteri olmadan "dogrulandi" denmez.
+- Faz 4 kademeli plan (Codex onerisi): (a) ucretsiz: RU/ru calismada tek enrich cagrisiyla Rusya Google verisi var mi? (yalniz API kotasi); (b) 1 kontrollu tam zincir (Berlin/ru) gercek kullanim olcumu; (c) olcume gore kalan ornekler (UA/uk + UA/ru dahil). Butce rakami bellekteki run fiyatindan garanti sayilmaz. Font rebuild yapilmadan Kiril PDF kontrolu yapilmaz.
+- (eski not) Faz 4 (canli dogrulama: TR/tr, Berlin/ru, DE/ru, RU/ru, UA/uk, UA/ru, GB/en, DE/de; skorlama+kanal v3 + 1 RSA + 1 SEO + 1 sosyal + export goz kontrolu) UCRETLI: v3 run basina ~2 $ (bellek: 16 paralel 2,02 $) → plan tahmini (<1 $) gecerli DEGIL; kullanici butce onayi gerekiyor. Rusca/Ukraynaca insan degerlendirmesi ve sunucu envanteri olmadan "dogrulandi" denmez.
 
 ## Arsiv: Faz 2 durdurulma notu (31.10 gece)
 

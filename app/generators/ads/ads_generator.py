@@ -203,10 +203,11 @@ class AdsGenerator:
                 if gen_set is not None else []
             )
 
+        language = output_context_for_run(self.db, scoring_run_id).language
         return AdGroupListResponse(
             scoring_run_id=scoring_run_id,
             total_groups=len(groups),
-            ad_groups=[self._model_to_schema(g) for g in groups],
+            ad_groups=[self._model_to_schema(g, language) for g in groups],
             generation_set=(
                 AdGenerationSetSummary.model_validate(gen_set)
                 if gen_set is not None else None
@@ -220,7 +221,9 @@ class AdsGenerator:
         if not group:
             return None
         
-        return self._model_to_schema(group)
+        return self._model_to_schema(
+            group, output_context_for_run(self.db, group.scoring_run_id).language
+        )
     
     # NOT (codex bulgusu): eski yerinde-degistiren regenerate_group +
     # _update_group_in_db KALDIRILDI — versiyon degismezligi ve grounding
@@ -489,7 +492,7 @@ class AdsGenerator:
         )
         return new_group
     
-    def _model_to_schema(self, group: AdGroup) -> AdGroupDBSchema:
+    def _model_to_schema(self, group: AdGroup, language: Optional[str] = None) -> AdGroupDBSchema:
         """Convert database model to schema."""
         return AdGroupDBSchema(
             id=group.id,
@@ -504,6 +507,7 @@ class AdsGenerator:
                 group.fill_keyword_ids,
                 [h.headline_text for h in group.headlines],
                 [d.description_text for d in group.descriptions],
+                language,
             ),
             headlines=[HeadlineDBSchema(
                 id=h.id,

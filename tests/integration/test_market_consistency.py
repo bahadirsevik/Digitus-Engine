@@ -337,6 +337,46 @@ def test_refresh_writes_workspace_market_not_null(client, db_session, de_ws, mon
     assert {(w.geo_target_id, w.language_id) for w in rows} == {(DE, RU)}
 
 
+def test_refresh_rejects_results_if_market_changed_while_provider_was_running(
+    client, db_session, de_ws, monkeypatch
+):
+    """Codex Faz 0-3 #1: saglayici beklenirken kelimeler silinip pazar degisirse eski
+    pazarin olcumleri yeni pazarli calismaya GERI YAZILMAZ (409 MARKET_CHANGED, 0 satir)."""
+    from app.core.site_analyzer.analysis_attempt import lock_workspace_row
+    from app.core.workspace import set_workspace_market
+
+    ws_id = de_ws.id
+    _wk(db_session, ws_id, keyword="clinic", geo=DE, lang=RU)
+    calls = []
+
+    class FakeSvc:
+        def enrich_keywords(self, customer_id, seeds, max_results, language_id, geo_target_id):
+            calls.append((geo_target_id, language_id))
+            # Refresh transaction'i commit edilmisken iki mesru mutasyon: kelimeler silinir,
+            # bos calismanin pazari kilitli yoldan TR/Turkce yapilir.
+            with SessionLocal() as other:
+                other.query(WorkspaceKeyword).filter(
+                    WorkspaceKeyword.brand_profile_id == ws_id
+                ).delete(synchronize_session=False)
+                other.commit()
+                locked = lock_workspace_row(other, ws_id)
+                set_workspace_market(other, locked, "2792", "1037")
+                other.commit()
+            return [SimpleNamespace(keyword="clinic", avg_monthly_searches=321, trend_3m=1.0,
+                                    trend_12m=2.0, competition_score=0.3)], False, None
+
+    monkeypatch.setattr("app.api.v1.google_ads._get_service", lambda: FakeSvc())
+    r = client.post(f"{BP}/workspaces/{ws_id}/keywords/refresh",
+                    json={"customer_id": "123", "min_volume": 0})
+    assert calls == [(DE, RU)]
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "MARKET_CHANGED"
+    db_session.expire_all()
+    current = db_session.get(BrandProfile, ws_id)
+    assert (current.default_geo_target_id, current.default_language_id) == ("2792", "1037")
+    assert _wk_rows(db_session, ws_id) == []
+
+
 # ── CSV ───────────────────────────────────────────────────────────────────────
 
 

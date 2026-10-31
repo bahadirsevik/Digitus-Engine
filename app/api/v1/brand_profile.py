@@ -2888,8 +2888,22 @@ def refresh_workspace_keywords(
     }
 
     try:
-        # Ag cagrisi sirasinda onceki commit kilidi biraktigi icin yazimdan once yeniden tut
-        verify_workspace(db, workspace_id, lock=True)
+        # Ag cagrisi sirasinda onceki commit kilidi biraktigi icin yazimdan once yeniden tut.
+        # Bu arada kelimeler silinip pazar degistiyse ESKI pazarin olcumleri yazilmaz
+        # (Codex Faz 0-3 #1): kilitli TAZE satirdan pazar yeniden okunur ve karsilastirilir.
+        db.expire_all()
+        locked = verify_workspace(db, workspace_id, lock=True)
+        if markets.workspace_market(locked) != (market_geo, market_lang):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "MARKET_CHANGED",
+                    "message": (
+                        "Yenileme sürerken çalışmanın hedef konumu/dili değişti; "
+                        "yenilemeyi tekrar başlatın."
+                    ),
+                },
+            )
         db.query(WorkspaceKeyword).filter(
             WorkspaceKeyword.brand_profile_id == workspace_id
         ).delete(synchronize_session=False)
