@@ -104,7 +104,7 @@ def test_expected_words_per_language():
     expect = {
         EN: {"what is", "how to", "free", "cheap", "used", "second hand", "complaints", "repair"},
         DE: {"was ist", "wie", "kostenlos", "gratis", "billig", "gebraucht", "beschwerde", "reparatur"},
-        RU: {"что такое", "как", "бесплатно", "дешево", "б/у", "отзывы", "жалобы", "ремонт"},
+        RU: {"что такое", "как", "бесплатно", "дешево", "б/у", "жалобы", "ремонт"},
         UK: {"що таке", "як", "безкоштовно", "дешево", "скарги", "ремонт"},
     }
     for lang, words in expect.items():

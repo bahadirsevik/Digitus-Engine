@@ -78,7 +78,7 @@ _DEFAULT_NEGATIVES: Dict[str, List[Tuple[str, str]]] = {
     "Rusça": [
         ("что такое", "bilgi_amacli"), ("как", "bilgi_amacli"), ("что значит", "bilgi_amacli"),
         ("бесплатно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/у", "ikinci_el"),
-        ("отзывы", "sikayet"), ("жалобы", "sikayet"), ("ремонт", "diy"),
+        ("жалобы", "sikayet"), ("ремонт", "diy"),
     ],
     "Ukraynaca": [
         ("що таке", "bilgi_amacli"), ("як", "bilgi_amacli"), ("що означає", "bilgi_amacli"),
