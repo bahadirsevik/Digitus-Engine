@@ -169,6 +169,9 @@ class TestKeywordExemptionNarrowed:
         assert not any("20 yıllık" in x or "20 yillik" in x for x in v)
         assert find_ungrounded_claims("20 Yıllık Implant Rehberi", "", ["20 yıllık implant"]) == []
         assert find_ungrounded_claims("2026 yıl sonu hisse", "", ["2026 yıl sonu hisse"]) == []
+        # Sondaki Türkçe ek muafiyeti bozmaz (yalnız bitişik rakam bozar)
+        assert find_ungrounded_claims("2026 yıl sonu hisseleri", "", ["2026 yıl sonu hisse"]) == []
+        assert find_ungrounded_claims("20 yıllık implantlar", "", ["20 yıllık implant"]) == []
 
     def test_superlative_keyword_is_now_violation(self):
         # Belgelenmiş davranış değişikliği: keyword maskesi artık süperlatifi aklamaz.

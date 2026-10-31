@@ -737,9 +737,10 @@ def find_ungrounded_claims(
     for kw in exempt_keywords or []:
         kw_l = _tr_lower(str(kw)).strip().replace("ı", "i")
         if kw_l:
-            # Sınır duyarlı: "20 yıllık implant" keyword'ü "120 yıllık ..." içinden maske açmaz
+            # Sınır duyarlı: "20 yıllık implant" keyword'ü "120 yıllık ..." içinden maske açmaz;
+            # sondaki Türkçe ek ("implantları", "hisseleri") serbest, bitişik rakam değil
             numeric_text = re.sub(
-                r"(?<![^\W_])" + re.escape(kw_l) + r"(?![^\W_])", " ", numeric_text
+                r"(?<![^\W_])" + re.escape(kw_l) + r"(?!\d)", " ", numeric_text
             )
 
     facts_l = _tr_lower(source.facts_text())
