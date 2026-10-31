@@ -68,24 +68,38 @@ _DEFAULT_NEGATIVES: Dict[str, List[Tuple[str, str]]] = {
         ("what is", "bilgi_amacli"), ("how to", "bilgi_amacli"), ("meaning", "bilgi_amacli"),
         ("free", "ucretsiz"), ("cheap", "dusuk_kalite"),
         ("used", "ikinci_el"), ("second hand", "ikinci_el"),
-        ("complaints", "sikayet"), ("repair", "diy"),
+        ("complaint", "sikayet"), ("complaints", "sikayet"), ("repair", "diy"),
     ],
     "Almanca": [
         ("was ist", "bilgi_amacli"), ("wie", "bilgi_amacli"), ("bedeutung", "bilgi_amacli"),
         ("kostenlos", "ucretsiz"), ("gratis", "ucretsiz"), ("billig", "dusuk_kalite"),
-        ("gebraucht", "ikinci_el"), ("beschwerde", "sikayet"), ("reparatur", "diy"),
+        ("gebraucht", "ikinci_el"), ("beschwerde", "sikayet"), ("beschwerden", "sikayet"),
+        ("reparatur", "diy"),
     ],
     "Rusça": [
         ("что такое", "bilgi_amacli"), ("как", "bilgi_amacli"), ("что значит", "bilgi_amacli"),
         ("бесплатно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/у", "ikinci_el"),
-        ("жалобы", "sikayet"), ("ремонт", "diy"),
+        ("жалоба", "sikayet"), ("жалобы", "sikayet"), ("ремонт", "diy"),
     ],
     "Ukraynaca": [
         ("що таке", "bilgi_amacli"), ("як", "bilgi_amacli"), ("що означає", "bilgi_amacli"),
         ("безкоштовно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/в", "ikinci_el"),
-        ("скарги", "sikayet"), ("ремонт", "diy"),
+        ("скарга", "sikayet"), ("скарги", "sikayet"), ("ремонт", "diy"),
     ],
 }
+
+
+# Çekimli/yabancı çıktı dilleri için aday prompt'una eklenen satırlar (Türkçe prompt DEĞİŞMEZ).
+_NON_TR_PROMPT_RULES = (
+    "# HEDEF DİLE ÖZEL KURALLAR",
+    "- Çekimli dillerde anahtar kelime hâl eki alabilir; arama sorgusunun kelime sırasını ve "
+    "biçimini yapıştırma, başlığı/açıklamayı hedef dilde doğal ve dilbilgisi doğru yaz "
+    "(yukarıdaki 'ek almadan' kısıtı bu dilde uygulanmaz).",
+    "- Dinamik (dynamic) başlık YALNIZCA çıplak {KeyWord:Varsayılan} makrosu olabilir; "
+    "makronun etrafına kelime ekleme.",
+    "- Negatif anahtar kelimelerde 'phrase' ifadeleri hedef dilde doğal kelime sırasıyla yaz; "
+    "'keyword' hedef dilde, 'reason' Türkçe olsun.",
+)
 
 
 class RSAGenerator:
@@ -545,6 +559,19 @@ class RSAGenerator:
             valid, st = self._validate_headlines([{"text": text, "type": "keyword", "position": "any"}], primary_keyword)
             for k, v in st.items():
                 headline_stats[k] = headline_stats.get(k, 0) + v
+            if valid and not keyword_in_text(kw, valid[0].text) and self._output_ctx.language != DEFAULT_LANGUAGE:
+                # Çekimli dil: doğal çekimli başlık ELENMEZ, `benefit` olarak havuza girer;
+                # kapsam (keyword_in_text) birebir kalır — bu başlık kapsama SAYILMAZ.
+                inflected = HeadlineSchema(
+                    text=valid[0].text, type="benefit",
+                    position_preference=valid[0].position_preference, is_dki=valid[0].is_dki,
+                )
+                if tuple(kw_tokens(inflected.text)) not in keys:
+                    keys.add(tuple(kw_tokens(inflected.text)))
+                    headlines = headlines + [inflected]
+                if self._kw_decisions.get(kw, {}).get("status") != "headline":
+                    self._kw_decisions[kw] = {"status": "invalid", "reason": "başlık anahtar kelimeyi birebir içermiyor"}
+                continue
             if not valid or not keyword_in_text(kw, valid[0].text):
                 logger.warning(f"keyword_headlines dropped | group={group.name} keyword='{kw}' headline='{text}'")
                 if self._kw_decisions.get(kw, {}).get("status") != "headline":
@@ -738,6 +765,9 @@ class RSAGenerator:
                         )
             block = "\n".join([""] + lines) if lines else ""
 
+        if self._output_ctx.language != DEFAULT_LANGUAGE:
+            block = "\n".join([block, *_NON_TR_PROMPT_RULES])
+
         long_keywords = [k for k in keywords if len(k) > self.headline_validator.MAX_LENGTH]
         asked = list(zip(group.keyword_ids, keywords))
         if kept is not None:  # tamamlama: yalnız henüz başlıkta geçmeyenler istenir
@@ -836,6 +866,13 @@ class RSAGenerator:
                 if dki_reason:
                     stats["dki_converted"] += 1
                     h_type = "keyword"  # Downgrade type if DKI was invalid
+                elif (is_dki and self._output_ctx.language != DEFAULT_LANGUAGE
+                      and not re.fullmatch(DKIValidator.VALID_PATTERN, text.strip())):
+                    # Yabancı dilde DKI yalnız çıplak makro olabilir: etrafında kelime varsa
+                    # varsayılan metne açılır; uzunluk + iddia kontrolü aşağıda/sonrasında yeniden yapılır
+                    text, is_dki = self.dki_validator._convert_to_plain(text), False
+                    stats["dki_converted"] += 1
+                    h_type = "keyword"
             
             # Step 2: Character limit validation
             validated_text, action, reason = self.headline_validator.validate(
@@ -889,6 +926,10 @@ class RSAGenerator:
             
             if not text:
                 continue
+            if "{" in text and self._output_ctx.language != DEFAULT_LANGUAGE:
+                text = self.dki_validator._convert_to_plain(text)  # açıklamada makro kalmaz
+                if not text:
+                    continue
             
             allow_ai_this_item = bool(
                 ai_service and enable_ai_shortening and ai_attempts_remaining > 0
