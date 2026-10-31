@@ -20,7 +20,7 @@ from app.core.engine_version_gate import (
 from app.core.workspace import require_fresh_channel_pool, verify_scoring_run
 from app.compliance.publish_review import (
     geo_evaluation_source,
-    legacy_seo_checks,
+    seo_checks_from_row,
     publish_review_from_rows,
 )
 from app.core.site_analyzer.brand_defaults import BrandDefaultsResolver, BrandResolveError
@@ -350,7 +350,7 @@ def get_compliance_report(
         # 'checks': yeni checklist kriterleri dahil kalici liste (checks_json).
         # Eski satirlarda null -> kolon-bazli AYNI formatta kurulur (codex),
         # frontend tek format gorur.
-        checks = seo_compliance.checks_json or legacy_seo_checks(seo_compliance)
+        checks = seo_checks_from_row(seo_compliance)
         seo_result = {
             'title_has_keyword': seo_compliance.title_has_keyword,
             'title_length_ok': seo_compliance.title_length_ok,

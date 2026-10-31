@@ -77,10 +77,13 @@ def build_publish_review(
         if item.get('importance') != 'critical':
             continue
         if item.get('status') == 'fail':
+            detail = item.get('details') or ''
+            if item.get('criterion') == CLAIM_CRITERION:
+                detail = f"Dayanaksız iddia: {detail}"  # export/panel okunur metin
             failures.append({
                 'criterion': item.get('criterion', ''),
                 'source': 'seo_auto',
-                'detail': item.get('details') or '',
+                'detail': detail,
             })
         elif item.get('status') == 'not_evaluated':
             failures.append({
@@ -165,6 +168,30 @@ def legacy_seo_checks(seo_row: Any) -> List[Dict[str, Any]]:
     ]
 
 
+CLAIM_CRITERION = 'no_ungrounded_claims'
+
+
+def ensure_claim_criterion(checks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """İddia denetimi öncesi üretilmiş kayıtlarda kriter satırda yoksa 'not_evaluated' ekler.
+
+    Eski içerik 'geçti' SAYILMAZ: kritik not_evaluated yayın öncesi incelemeye düşer.
+    """
+    checks = list(checks or [])
+    if any(c.get('criterion') == CLAIM_CRITERION for c in checks):
+        return checks
+    return [*checks, {
+        'criterion': CLAIM_CRITERION,
+        'status': 'not_evaluated',
+        'importance': 'critical',
+        'details': "İddia denetimi yapılmadı",
+    }]
+
+
+def seo_checks_from_row(seo_row: Any) -> List[Dict[str, Any]]:
+    """Satırın kalıcı checks_json'u (yoksa legacy) + iddia kriteri garantisi."""
+    return ensure_claim_criterion(seo_row.checks_json or legacy_seo_checks(seo_row))
+
+
 def _bool_status(value: Any) -> str:
     """True -> pass, False -> fail, None/eksik -> not_evaluated."""
     if value is True:
@@ -202,6 +229,7 @@ CRITERION_LABELS: Dict[str, str] = {
     'has_steps_or_table': "Adım adım anlatım / tablo",
     'mentions_current_year': "Güncel yıl",
     'has_alt_texts': "Görsel alt metni önerileri (görsele uygulanmadı)",
+    CLAIM_CRITERION: "Dayanaksız iddia yok",
     'seo_checks': "SEO kontrolleri",
     'intro_answers_question': "Giriş soruya doğrudan yanıt veriyor",
     'snippet_extractable': "Giriş bağımsız alıntılanabilir",
@@ -249,7 +277,7 @@ def checklist_items_from_rows(seo_row: Any, geo_row: Any) -> List[Dict[str, Any]
             'detail': "SEO kontrol sonucu bulunamadı",
         })
     else:
-        for check in seo_row.checks_json or legacy_seo_checks(seo_row):
+        for check in seo_checks_from_row(seo_row):
             status = check.get('status')
             if status not in STATUS_LABELS:
                 status = 'not_evaluated'
@@ -286,7 +314,7 @@ def publish_review_from_rows(seo_row: Any, geo_row: Any) -> Dict[str, Any]:
     """DB satırlarından (SEOComplianceResult / GEOComplianceResult) özet."""
     seo_checks: List[Dict[str, Any]] = []
     if seo_row is not None:
-        seo_checks = seo_row.checks_json or legacy_seo_checks(seo_row)
+        seo_checks = seo_checks_from_row(seo_row)
     geo_flags = None
     if geo_row is not None:
         geo_flags = {c: getattr(geo_row, c, None) for c in GEO_CRITICAL_CRITERIA}

@@ -162,6 +162,7 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
         generator = SEOGeoGenerator(db, ai)
 
         results = []
+        claim_blocked = 0  # son-metin iddia kapısı fail → publish_review: review_required
         for i, kw_id in enumerate(keyword_ids):
             kw = db.query(Keyword).filter(Keyword.id == kw_id).first()
             if not kw:
@@ -181,13 +182,16 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
                 
                 if content:
                     results.append(content.get('id'))
+                    if (content.get('claim_check') or {}).get('status') == 'fail':
+                        claim_blocked += 1
                     logger.info(f"SEO content generated for: {kw.keyword}")
             except Exception as e:
                 logger.error(f"SEO content failed for {kw.keyword}: {e}")
                 continue
         
         usage = collector.finalize()
-        return {'chunk_id': task_id, 'content_ids': results, 'count': len(results), 'usage': usage}
+        return {'chunk_id': task_id, 'content_ids': results, 'count': len(results),
+                'claim_blocked': claim_blocked, 'usage': usage}
 
     except SoftTimeLimitExceeded as e:
         logger.error(f"SEO chunk soft time limit exceeded: {e}")
@@ -251,7 +255,10 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
         parent_task_id,
         status='completed',
         progress=100,
-        result_data={'content_ids': total_ids, 'total': len(total_ids)}
+        result_data={
+            'content_ids': total_ids, 'total': len(total_ids),
+            'claim_blocked_count': sum(int((r or {}).get('claim_blocked') or 0) for r in results),
+        }
     )
 
     logger.info(f"SEO bulk completed: {len(total_ids)} contents")
