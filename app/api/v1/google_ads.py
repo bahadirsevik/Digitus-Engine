@@ -50,6 +50,14 @@ def _translate_invalid_argument(raw: str) -> str:
             "Çalışmanın hedef konum seçimini kontrol edin."
         )
 
+    # Konum katalogda "Active" olsa da Google hedeflemeyi kapatmis olabilir (or. Rusya,
+    # 2022'den beri): API resource path degil alan adi doner.
+    if "geo_target_constants" in lower and "invalid_value" in lower:
+        return (
+            "Google Ads bu hedef konumda arama verisi sunmuyor (ör. Rusya'da reklam "
+            "hizmetleri askıda). Kelimeleri CSV ile içe aktarın veya başka bir konum seçin."
+        )
+
     if "customer" in lower and ("not found" in lower or "invalid" in lower):
         return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. customer_id değerini kontrol edin."
 
