@@ -20,6 +20,7 @@ from app.core.dashboard.next_action import (
     build_next_action,
 )
 from app.database.models import (
+    AdGenerationSet,
     AdGroup,
     BrandProfile,
     ChannelPool,
@@ -174,8 +175,28 @@ def _generation_counts(db: Session, run_id: int) -> dict:
     return {"ADS": int(ads), "SEO": int(seo), "SOCIAL": int(social)}
 
 
+def _ads_review_set_id(db: Session, run_id: int) -> Optional[int]:
+    """Aktif non-stale set YOK ve en yeni non-stale set iddia incelemesi bekleyen taslaksa onun id'si."""
+    from app.generators.claim_review import set_needs_review
+
+    sets = (
+        db.query(AdGenerationSet)
+        .filter(
+            AdGenerationSet.scoring_run_id == run_id,
+            AdGenerationSet.is_stale.is_(False),
+            AdGenerationSet.status.in_(("active", "draft", "archived")),
+        )
+        .order_by(AdGenerationSet.version_number.desc())
+        .all()
+    )
+    if not sets or any(s.status == "active" for s in sets):
+        return None
+    newest = sets[0]
+    return newest.id if newest.status == "draft" and set_needs_review(newest.warnings) else None
+
+
 def _build_channel_group(
-    pool_counts: dict, gen_counts: dict
+    pool_counts: dict, gen_counts: dict, ads_review_set_id: Optional[int] = None
 ) -> ChannelGroup:
     # MVP: expected_count = pool_count fallback (plan2 §"Expected/generated
     # kararlari"). When AI grouping/templating yields a precise target the
@@ -198,6 +219,8 @@ def _build_channel_group(
             expected_count=expected,
             generated_count=gen,
             status=status,
+            review_pending=channel == "ADS" and ads_review_set_id is not None,
+            review_set_id=ads_review_set_id if channel == "ADS" else None,
         )
 
     return ChannelGroup(
@@ -476,6 +499,7 @@ def build_summary(
     blocking_task: Optional[TaskSummary] = None
     latest_export = None
     latest_full_export = None
+    ads_review_set_id = None
 
     if run is not None:
         relevance_exists = db.query(
@@ -483,11 +507,12 @@ def build_summary(
         ).scalar() or False
         pool_counts = _channel_counts(db, run.id)
         gen_counts = _generation_counts(db, run.id)
+        ads_review_set_id = _ads_review_set_id(db, run.id)
         active_task_summaries, blocking_task = _active_tasks(db, run.id)
         latest_export = _latest_export(db, workspace.id, run.id)
         latest_full_export = _latest_full_export(db, workspace.id, run.id)
 
-    channels = _build_channel_group(pool_counts, gen_counts)
+    channels = _build_channel_group(pool_counts, gen_counts, ads_review_set_id)
     has_any_content = sum(gen_counts.values()) > 0
 
     pipeline = _pipeline(
@@ -533,6 +558,7 @@ def build_summary(
                 pool_count=channels.ADS.pool_count,
                 expected_count=channels.ADS.expected_count,
                 generated_count=channels.ADS.generated_count,
+                review_pending=channels.ADS.review_pending,
             ),
             "SEO": ChannelContext(
                 pool_count=channels.SEO.pool_count,

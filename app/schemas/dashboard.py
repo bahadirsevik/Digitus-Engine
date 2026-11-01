@@ -40,6 +40,9 @@ class ChannelProgress(BaseModel):
     expected_count: int = 0
     generated_count: int = 0
     status: ChannelStatus = "empty"
+    # ADS (additive): en yeni non-stale RSA seti taslak + iddia incelemesi bekliyor, aktif set yok
+    review_pending: bool = False
+    review_set_id: Optional[int] = None
 
 
 class ChannelGroup(BaseModel):

@@ -125,6 +125,30 @@ def test_single_ready_channel_returns_tabbed_generation():
     assert action.path == "/ads?run_id=11"
 
 
+def test_ads_draft_review_pending_returns_review_action():
+    run = RunContext(id=11, status="channel_assigned")
+    channels = {
+        "ADS": ChannelContext(pool_count=5, expected_count=5, generated_count=0, review_pending=True),
+        "SEO": ChannelContext(pool_count=3, expected_count=3, generated_count=3),
+        "SOCIAL": ChannelContext(),
+    }
+    action = build_next_action(_ctx(active_run=run, relevance_exists=True, channels=channels))
+    assert action.key == "review_ads_draft"
+    assert action.path == "/ads?run_id=11"
+    assert "aktifleştirin" in action.reason
+
+
+def test_ads_review_not_pending_keeps_generation_flow():
+    run = RunContext(id=11, status="channel_assigned")
+    channels = {
+        "ADS": ChannelContext(pool_count=5, expected_count=5, generated_count=0),
+        "SEO": ChannelContext(),
+        "SOCIAL": ChannelContext(),
+    }
+    action = build_next_action(_ctx(active_run=run, relevance_exists=True, channels=channels))
+    assert action.key == "generate_ads"
+
+
 def test_multiple_ready_channels_returns_generic_generation():
     run = RunContext(id=12, status="channel_assigned")
     channels = {

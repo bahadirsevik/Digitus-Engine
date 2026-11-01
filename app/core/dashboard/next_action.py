@@ -38,6 +38,7 @@ class ChannelContext:
     pool_count: int = 0
     expected_count: int = 0
     generated_count: int = 0
+    review_pending: bool = False  # yalnız ADS: taslak RSA seti inceleme bekliyor
 
     @property
     def status(self) -> str:
@@ -258,6 +259,15 @@ def build_next_action(ctx: NextActionContext) -> NextAction:
         )
 
     if ctx.any_pool:
+        if ctx.channel("ADS").review_pending:
+            return _na(
+                "review_ads_draft",
+                "RSA Taslağını İncele",
+                _channel_path("ads", active.id),
+                "warning",
+                "RSA taslağı inceleme bekliyor — gerekçeleri kontrol edip aktifleştirin.",
+            )
+
         if ctx.total_generated == 0:
             ready = ctx.ready_channels
             if len(ready) == 1:
