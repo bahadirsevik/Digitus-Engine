@@ -13,6 +13,7 @@ from app.generators.ads.validators import (
 from app.generators.claim_review import (
     MAX_HISTORY,
     ads_set_warnings,
+    changed_items,
     make_current,
     push_review,
     refresh_review,
@@ -198,3 +199,13 @@ def test_risk_failure_text_carries_readable_reason_like_unverified():
     assert text == (
         "risk: ağrisiz (Açık sonuç/kazanç vaadi — yayın öncesi düzelt); "
         "unverified: lazer (Profilde doğrulanamadı — kontrol gerekli)")
+
+
+def test_changed_items_keep_full_text_no_truncation():
+    """Codex rev.4: kayit TAM metni tutar (400 kesmesi kaldirildi); kisaltma yalniz gosterimde."""
+    long_old = "A" * 691
+    long_new = "B" * 650
+    out = changed_items({"caption": long_old, "hook[0]": "ayni"}, {"caption": long_new, "hook[0]": "ayni"})
+    assert out == [{"field": "caption", "original": long_old, "suggestion": long_new}]
+    cur = make_current([], changed=out)
+    assert len(cur["changed"][0]["original"]) == 691

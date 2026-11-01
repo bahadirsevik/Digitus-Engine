@@ -428,6 +428,29 @@ def test_repaired_risk_keeps_original_and_suggestion():
     assert applied["suggestion"] == "Doğal adımlarla cildinize özen gösterin."
 
 
+def test_long_original_text_is_kept_in_full_when_risk_remains():
+    """Codex rev.4: 400 karakter kesmesi ilk metni kaybettiriyordu. Onarım metni değiştirip
+    aynı riski çözemediğinde 691 karakterlik ilk caption kayıtta TAM olarak durur."""
+    first_caption = ("Ağrısız tedavi için ilk özgün açıklama. " + ("Detay cümlesi burada. " * 40))[:691]
+    second_caption = "Ağrısız tedavi için tamamen farklı ikinci açıklama. " + ("Yeni cümle. " * 10)
+    assert len(first_caption) == 691
+    fake_ai = FakeAIService([
+        json.dumps(_make_valid_video_response_dict(end_sec=24, caption=first_caption)),
+        json.dumps(_make_valid_video_response_dict(end_sec=24, caption=second_caption)),
+    ])
+
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=_make_work_item())
+
+    assert result.status == "accepted"
+    warnings = result.quality_decision.warnings
+    assert any(w.startswith("claim_risk:") for w in warnings)  # risk çözülmedi
+    record = json.loads(next(w for w in warnings if w.startswith("claim_review:"))[len("claim_review:"):])
+    changed = {c["field"]: c for c in record["current"].get("changed") or []}
+    assert changed["caption"]["original"] == first_caption  # tam metin, kesme yok
+    assert changed["caption"]["suggestion"] == second_caption.strip()  # sözleşme caption'ı kırpar
+    assert record["history"], "onarım öncesi kayıt history'de"
+
+
 def test_combined_claim_and_duration_repair_accepted():
     """Hem iddia hem süre hatalı içerik tek repair ile ikisini de düzelttiğinde accept edilir."""
     # 1. response: 10s (mismatch) + claim ("kazanç garantisi")

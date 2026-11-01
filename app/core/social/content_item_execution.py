@@ -239,9 +239,9 @@ def _with_claim_review(
             idx = next((i for i, t in enumerate(before) if fold(f.span) in fold(str(t))), None)  # span ı→i katlı metinden gelir
             entry = f.as_dict()
             if idx is not None:
-                entry["original"] = str(before[idx])[:400]
+                entry["original"] = str(before[idx])  # tam metin; kısaltma yalnız gösterimde
                 if len(after) == len(before):
-                    entry["suggestion"] = str(after[idx])[:400]
+                    entry["suggestion"] = str(after[idx])
             applied.append(entry)
     changed: list[dict] = []
     record = None

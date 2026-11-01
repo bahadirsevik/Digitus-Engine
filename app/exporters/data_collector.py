@@ -769,6 +769,10 @@ class ExportDataCollector:
 
     @staticmethod
     def _set_warning_rows(active_set) -> list:
+        def _clip(text, limit=400):
+            text = str(text or '')
+            return text if len(text) <= limit else text[:limit - 1] + '…'
+
         """Aktif setin claim_review kaydından "Set uyarıları" satırları (açık bulgu + uygulanan düzeltme)."""
         from app.generators.claim_review import KIND_LABEL_TR, set_review
 
@@ -782,7 +786,8 @@ class ExportDataCollector:
                     asset_text=str(f.get('asset_text') or f.get('original') or ''),
                     kind=KIND_LABEL_TR.get(f.get('kind'), ''),
                     span=str(f.get('span') or ''), reason=str(f.get('reason') or ''),
-                    original=str(f.get('original') or ''), suggestion=str(f.get('suggestion') or ''),
+                    # Gösterim kısaltması (kayıt tam metin tutar)
+                    original=_clip(f.get('original')), suggestion=_clip(f.get('suggestion')),
                     status=status,
                 ))
         return rows

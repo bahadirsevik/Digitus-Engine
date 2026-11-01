@@ -61,7 +61,8 @@ def changed_items(before: dict, after: dict) -> list:
         old, new = before.get(label), after.get(label)
         if old != new:
             out.append({
-                "field": label, "original": str(old or "")[:400], "suggestion": str(new or "")[:400],
+                # TAM metin saklanır (Codex: 400 kesmesi ilk metni kaybettiriyordu); kısaltma yalnız gösterimde
+                "field": label, "original": str(old or ""), "suggestion": str(new or ""),
             })
     return out
 
