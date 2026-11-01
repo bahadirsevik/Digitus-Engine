@@ -89,7 +89,7 @@ export default function MarketSelect({
           </p>
           <LocationSearch inputId={searchId} onPick={pick} disabled={disabled} />
         </div>
-        <div>
+        <div className="msel-col-lang">
           <label className="bpx-label" htmlFor={langId}>
             Çıktı dili
           </label>

@@ -11,6 +11,7 @@
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 12px;
+  align-items: start;
 }
 @media (max-width: 720px) {
   .mcd-grid {

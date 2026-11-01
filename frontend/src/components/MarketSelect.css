@@ -7,16 +7,41 @@
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 12px;
+  align-items: start;
+}
+/* Konum ve dil kontrolleri aynı yükseklikte (arama kutusu + ülke + dil hizalı) */
+.msel .bpx-input,
+.msel .bpx-select,
+.mcd-grid .bpx-input,
+.mcd-grid .bpx-select {
+  box-sizing: border-box;
+  height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-radius: 9px;
 }
 @media (max-width: 720px) {
   .msel-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* Tek satır + sabit yükseklik: dil seçicisi bu kadar aşağıdan başlayıp arama kutusuyla hizalanır */
 .msel-current {
   font-size: 13px;
+  line-height: 20px;
   color: var(--text-secondary);
   margin: 0 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msel-col-lang .bpx-select {
+  margin-top: 26px; /* = .msel-current satırı (20px) + alt boşluk (6px) */
+}
+@media (max-width: 720px) {
+  .msel-col-lang .bpx-select {
+    margin-top: 0;
+  }
 }
 .msel-current strong {
   color: var(--text-strong);
