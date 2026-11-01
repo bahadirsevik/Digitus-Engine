@@ -14,7 +14,7 @@ from datetime import datetime
 from app.exporters.ads_standard_format import standard_lines
 from app.exporters.base_exporter import BaseExporter, market_header_line
 from app.exporters.seo_checklist_format import (
-    ALT_TEXT_HEADING, FAQ_HEADING, REVIEW_TEXT, geo_evaluation_text, manual_check_lines,
+    ALT_TEXT_HEADING, FAQ_HEADING, REVIEW_TEXT, SET_WARNING_HEADERS, set_warning_cells, geo_evaluation_text, manual_check_lines,
     review_failure_lines, review_required_text, review_status_text,
     status_counts_text,
 )
@@ -503,7 +503,17 @@ class DocxExporter(BaseExporter):
                 doc.add_paragraph(negatives)
             
             doc.add_paragraph()
-        
+
+        if ads.set_warnings:
+            doc.add_heading('SET UYARILARI (İDDİA İNCELEMESİ)', level=2)
+            w_table = doc.add_table(rows=1, cols=len(SET_WARNING_HEADERS))
+            w_table.style = 'Table Grid'
+            for cell, title in zip(w_table.rows[0].cells, SET_WARNING_HEADERS):
+                cell.text = title
+            for w in ads.set_warnings:
+                for cell, value in zip(w_table.add_row().cells, set_warning_cells(w)):
+                    cell.text = value
+
         doc.add_page_break()
     
     def _add_social_section(self, doc: Document, social):

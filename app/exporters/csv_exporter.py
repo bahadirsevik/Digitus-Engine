@@ -15,7 +15,7 @@ from datetime import datetime
 from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.seo_checklist_format import (
-    CHECK_ROW_HEADERS, REVIEW_TEXT, check_rows, geo_evaluation_text, review_status_text,
+    CHECK_ROW_HEADERS, REVIEW_TEXT, SET_WARNING_HEADERS, check_rows, set_warning_cells, geo_evaluation_text, review_status_text,
 )
 from app.schemas.export import ExportSectionEnum, FullReport
 
@@ -252,6 +252,12 @@ class CsvExporter(BaseExporter):
             for n in g.negative_keywords:
                 rows.append([g.group_name, n.keyword, n.match_type, n.reason])
         files.append(self._write_csv(filepath, headers, rows))
+
+        # Set uyarıları (iddia incelemesi) — yalnız varsa
+        if ads.set_warnings:
+            filepath = os.path.join(temp_dir, 'set_uyarilari.csv')
+            files.append(self._write_csv(
+                filepath, SET_WARNING_HEADERS, [set_warning_cells(w) for w in ads.set_warnings]))
         
         return files
     

@@ -16,6 +16,7 @@ from app.compliance.publish_review import (
 from app.core import markets
 from app.generators.claim_review import social_warning_display
 from app.schemas.export import (
+    AdSetWarningData,
     ExportSectionEnum, FullReport, SummaryData, ScoringData,
     KeywordScoreData, ChannelsData, ChannelPoolData,
     SEOContentsData, SEOContentData, AdsData, AdGroupData,
@@ -763,7 +764,28 @@ class ExportDataCollector:
         )
         return AdsData(
             ad_groups=group_data, total=len(group_data), claim_review_summary=review_line,
+            set_warnings=self._set_warning_rows(active_set),
         )
+
+    @staticmethod
+    def _set_warning_rows(active_set) -> list:
+        """Aktif setin claim_review kaydından "Set uyarıları" satırları (açık bulgu + uygulanan düzeltme)."""
+        from app.generators.claim_review import KIND_LABEL_TR, set_review
+
+        current = ((set_review(active_set.warnings if active_set else None) or {}).get('current')) or {}
+        rows = []
+        for key, status in (('findings', 'İnceleme gerekli'), ('applied', 'Düzeltme uygulandı')):
+            for f in current.get(key) or []:
+                rows.append(AdSetWarningData(
+                    group_name=str(f.get('group_name') or ''),
+                    asset_type={'headline': 'Başlık', 'description': 'Açıklama'}.get(f.get('asset_type'), ''),
+                    asset_text=str(f.get('asset_text') or f.get('original') or ''),
+                    kind=KIND_LABEL_TR.get(f.get('kind'), ''),
+                    span=str(f.get('span') or ''), reason=str(f.get('reason') or ''),
+                    original=str(f.get('original') or ''), suggestion=str(f.get('suggestion') or ''),
+                    status=status,
+                ))
+        return rows
     
     def _collect_social(self, scoring_run_id: int) -> SocialData:
         """Sosyal medya verilerini toplar.

@@ -15,6 +15,7 @@ from app.generators.claim_review import (
     ads_set_warnings,
     make_current,
     push_review,
+    refresh_review,
     review_summary,
     set_needs_review,
     set_review,
@@ -164,7 +165,10 @@ def test_set_warnings_keep_other_entries_and_flag_review():
     drop = {"group": "g", "negative": "n"}
     warnings = ads_set_warnings([drop], [{"kind": "unverified", "span": "x"}], [])
     assert warnings[0] == drop and set_needs_review(warnings)
-    assert review_summary(warnings) == {"review_required": True, "claim_risk_count": 0, "claim_unverified_count": 1}
+    summary = review_summary(warnings)
+    assert (summary["review_required"], summary["claim_risk_count"], summary["claim_unverified_count"]) == (True, 0, 1)
+    assert summary["claim_review"]["findings"] == [{"kind": "unverified", "span": "x"}]
+    assert review_summary([drop])["claim_review"] is None
     # claim_review yalnız uygulanan düzeltme içeriyorsa (findings boş) işaret değildir
     assert not set_needs_review(ads_set_warnings([], [], [{"kind": "risk", "original": "a", "suggestion": "b"}]))
     # değiştirme diğer uyarıları korur
@@ -175,3 +179,22 @@ def test_set_warnings_keep_other_entries_and_flag_review():
 def test_social_warning_display_hides_record_and_translates_flags():
     shown = social_warning_display(["claim_risk:x", "claim_unverified:y", 'claim_review:{"a":1}', "duration_mismatch"])
     assert shown == ["Risk — yayın öncesi düzelt: x", "Profilde doğrulanamadı — kontrol gerekli: y", "duration_mismatch"]
+
+
+def test_refresh_review_noop_when_finding_keys_unchanged_else_push():
+    f1 = {"kind": "risk", "category": "guarantee", "span": "garanti"}
+    f2 = {"kind": "unverified", "category": "service", "span": "lazer"}
+    record = push_review(None, make_current([f1, f2], evaluated_at="t0"))
+    same = refresh_review(record, make_current([f2, f1], evaluated_at="t1"))
+    assert same["history"] == [] and same["current"]["evaluated_at"] == "t1"   # no-op: yalnız zaman damgası
+    changed = refresh_review(same, make_current([f1], evaluated_at="t2"))
+    assert len(changed["history"]) == 1 and changed["history"][0]["evaluated_at"] == "t1"
+
+
+def test_risk_failure_text_carries_readable_reason_like_unverified():
+    from app.generators.claim_review import failure_text
+
+    text = failure_text([{"kind": "risk", "span": "ağrisiz"}, {"kind": "unverified", "span": "lazer"}])
+    assert text == (
+        "risk: ağrisiz (Açık sonuç/kazanç vaadi — yayın öncesi düzelt); "
+        "unverified: lazer (Profilde doğrulanamadı — kontrol gerekli)")

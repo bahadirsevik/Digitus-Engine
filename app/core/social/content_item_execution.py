@@ -43,6 +43,7 @@ from app.core.social.content_quality import (
     social_scan_texts,
 )
 from app.core.social.content_worker_input import SocialContentWorkItem
+from app.generators.claim_lexicon import fold
 from app.generators.claim_review import (
     make_current, push_review, social_replace_review,
 )
@@ -234,7 +235,7 @@ def _with_claim_review(
         for f in initial.findings:
             if f.kind != "risk" or f.raw in open_raw:
                 continue
-            idx = next((i for i, t in enumerate(before) if f.span in str(t).lower()), None)
+            idx = next((i for i, t in enumerate(before) if fold(f.span) in fold(str(t))), None)  # span ı→i katlı metinden gelir
             entry = f.as_dict()
             if idx is not None:
                 entry["original"] = str(before[idx])[:400]

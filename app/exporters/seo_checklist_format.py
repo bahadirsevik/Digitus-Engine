@@ -15,6 +15,19 @@ from typing import Any, Dict, List, Optional
 FAQ_HEADING = "FAQ soru-cevap (schema'ya hazır veri — FAQ schema uygulanmadı)"
 ALT_TEXT_HEADING = "Görsel alt metni önerileri (görsellere uygulanmadı)"
 NOT_EVALUATED = "Değerlendirilmedi"
+SET_WARNING_HEADERS = [
+    'Grup', 'Tür', 'Metin', 'Sınıf', 'İfade', 'Gerekçe', 'Orijinal', 'Öneri', 'Durum',
+]
+
+
+def set_warning_cells(w) -> List[str]:
+    """ADS "Set uyarıları" satırı (4 exporter ortak)."""
+    return [
+        w.group_name, w.asset_type, w.asset_text, w.kind, w.span, w.reason,
+        w.original, w.suggestion, w.status,
+    ]
+
+
 REVIEW_TEXT = "İnceleme gerekli"  # iddia incelemesi işaretli RSA asset'i (validation_action)
 
 CHECK_ROW_HEADERS = [

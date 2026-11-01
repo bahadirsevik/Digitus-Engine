@@ -19,6 +19,7 @@ from app.core.constants import (
 )
 from app.core.site_analyzer.turkish_normalizer import normalize_turkish
 from app.generators.ai_service import scoped
+from app.generators.claim_review import REASON_RISK_TR, REASON_UNVERIFIED_TR
 from app.generators.claim_lexicon import (
     ABSOLUTE_RX,
     CERT_PATTERN,
@@ -709,8 +710,6 @@ def _cert_key(m) -> tuple:
     return org, m.group(2).split(":")[0]
 
 
-REASON_RISK_TR = "Açık sonuç/kazanç vaadi — yayın öncesi düzelt"
-REASON_UNVERIFIED_TR = "Profilde doğrulanamadı — kontrol gerekli"
 _RISK_CATEGORIES = frozenset({"guarantee", "absolute"})
 
 

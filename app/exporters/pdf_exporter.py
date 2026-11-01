@@ -20,7 +20,7 @@ from app.exporters.ads_standard_format import standard_lines
 from app.exporters.base_exporter import BaseExporter, market_header_line
 from app.exporters.safe_text import safe_paragraph_text
 from app.exporters.seo_checklist_format import (
-    ALT_TEXT_HEADING, FAQ_HEADING, REVIEW_TEXT, geo_evaluation_text, manual_check_lines,
+    ALT_TEXT_HEADING, FAQ_HEADING, REVIEW_TEXT, SET_WARNING_HEADERS, set_warning_cells, geo_evaluation_text, manual_check_lines,
     review_failure_lines, review_required_text, review_status_text,
     status_counts_text,
 )
@@ -518,6 +518,13 @@ class PdfExporter(BaseExporter):
                 elements.append(Spacer(1, 0.2*cm))
                 elements.append(self._p(f'Negatif Kelimeler ({len(g.negative_keywords)})', bold=True))
                 elements.append(self._p(', '.join(n.keyword for n in g.negative_keywords)))
+
+        if ads.set_warnings:
+            elements.append(Spacer(1, 0.4*cm))
+            elements.append(self._p('Set Uyarilari (iddia incelemesi)', bold=True))
+            for w in ads.set_warnings:
+                cells = set_warning_cells(w)
+                elements.append(self._p(' | '.join(f'{h}: {c}' for h, c in zip(SET_WARNING_HEADERS, cells) if c)))
 
         elements.append(PageBreak())
         return elements

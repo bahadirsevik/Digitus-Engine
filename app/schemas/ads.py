@@ -262,6 +262,7 @@ class AdGenerationSetSummary(BaseModel):
     review_required: bool = False
     claim_risk_count: int = 0
     claim_unverified_count: int = 0
+    claim_review: Optional[Dict[str, Any]] = None  # {findings: [...], applied: [...]}
 
     model_config = {"from_attributes": True}
 

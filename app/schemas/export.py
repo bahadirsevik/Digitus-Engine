@@ -254,11 +254,25 @@ class AdGroupData(BaseModel):
     negative_keywords: List[NegativeKeywordData] = []
 
 
+class AdSetWarningData(BaseModel):
+    """Aktif ADS setinin iddia incelemesi satırı (açık bulgu veya uygulanmış düzeltme)."""
+    group_name: str = ''
+    asset_type: str = ''      # Başlık | Açıklama
+    asset_text: str = ''
+    kind: str = ''            # okunur sınıf metni (Risk — … | Profilde doğrulanamadı — …)
+    span: str = ''
+    reason: str = ''
+    original: str = ''
+    suggestion: str = ''
+    status: str = ''          # İnceleme gerekli | Düzeltme uygulandı
+
+
 class AdsData(BaseModel):
     """Tüm reklam grupları."""
     ad_groups: List[AdGroupData]
     total: int
     claim_review_summary: str = ''  # aktif setin iddia incelemesi tek satırı (yoksa boş)
+    set_warnings: List[AdSetWarningData] = []  # "Set uyarıları" tablosu (boşsa gösterilmez)
 
 
 class HookData(BaseModel):

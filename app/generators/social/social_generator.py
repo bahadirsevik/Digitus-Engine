@@ -52,7 +52,8 @@ from app.schemas.social import (
 )
 from app.generators.ads.validators import classify_claims
 from app.generators.claim_review import (
-    finding_dict, make_current, push_review, social_flag_entries, social_record_entry,
+    finding_dict, make_current, push_review, social_flag_entries, social_record,
+    social_record_entry, social_replace_review,
 )
 from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 
@@ -644,19 +645,20 @@ class SocialGenerator:
             if topic_match:
                 raise ValueError(f"EXCLUDED_TOPIC: {topic_match}")
 
-        # Grounding (Faz F + rev.4): yeni içerik RİSKLİ iddia taşıyorsa MEVCUT İÇERİK
-        # OVERWRITE EDİLMEZ; yalnız profilde doğrulanamayan iddia ise benimsenir + işaretlenir
+        # Grounding (rev.4): yeni içerik risk/unverified taşısa da BENİMSENİR ve işaretlenir;
+        # önceki inceleme kaydı history'ye itilir. İçerik kaybolmaz.
         review_warnings = None
         if new_content is not None:
             new_findings = self._classify_content_claims(new_content, grounding_facts)
-            if any(f.kind == "risk" for f in new_findings):
+            old_warnings = list(db_content.validation_warnings or [])
+            prev = social_record(old_warnings)
+            record = push_review(prev, make_current(new_findings, [])) if (new_findings or prev) else None
+            review_warnings = social_replace_review(old_warnings, new_findings, record) or None
+            if new_findings:
                 logger.warning(
-                    f"Regenerated social content rejected (content={content_id}): "
-                    f"riskli iddia — mevcut içerik korunuyor. claims={[f.raw for f in new_findings]}"
+                    f"Regenerated social content kept for claim review (content={content_id}): "
+                    f"claims={[f.raw for f in new_findings]}"
                 )
-                return None
-            # Yalnız profilde doğrulanamayan iddia: yeni içerik benimsenir, işaretlenir
-            review_warnings = self._review_warnings(new_findings, [])
 
         if new_content:
             # Update in DB

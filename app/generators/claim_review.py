@@ -21,6 +21,8 @@ SET_KEY = "claim_review"  # AdGenerationSet.warnings öğesi anahtarı
 SOCIAL_RISK_PREFIX = "claim_risk:"
 SOCIAL_UNVERIFIED_PREFIX = "claim_unverified:"
 SOCIAL_RECORD_PREFIX = "claim_review:"
+REASON_RISK_TR = "Açık sonuç/kazanç vaadi — yayın öncesi düzelt"
+REASON_UNVERIFIED_TR = "Profilde doğrulanamadı — kontrol gerekli"
 KIND_LABEL_TR = {
     "risk": "Risk — yayın öncesi düzelt",
     "unverified": "Profilde doğrulanamadı — kontrol gerekli",
@@ -56,6 +58,23 @@ def push_review(record: Optional[dict], new_current: dict) -> dict:
     return {"current": new_current, "history": history[-MAX_HISTORY:]}
 
 
+def _finding_keys(findings: Optional[Iterable[dict]]) -> list:
+    return sorted(
+        (str(f.get("kind")), str(f.get("category")), str(f.get("span")),
+         str(f.get("group_id")), str(f.get("asset_text")))
+        for f in findings or []
+    )
+
+
+def refresh_review(record: Optional[dict], new_current: dict) -> dict:
+    """Re-evaluate için: bulgu kümesi (kind+category+span [+grup/asset]) DEĞİŞMEDİYSE yalnız
+    `evaluated_at` yenilenir (history'ye boş kayıt itilmez); değiştiyse push_review."""
+    cur = (record or {}).get("current")
+    if cur and _finding_keys(cur.get("findings")) == _finding_keys(new_current.get("findings")):
+        return {**record, "current": {**cur, "evaluated_at": new_current["evaluated_at"]}}
+    return push_review(record, new_current)
+
+
 def open_findings(record: Optional[dict]) -> list:
     return list(((record or {}).get("current") or {}).get("findings") or [])
 
@@ -76,11 +95,9 @@ def failure_text(findings: Iterable[dict]) -> str:
             spans[f["kind"]].append(f.get("span") or "")
     parts = []
     if spans["risk"]:
-        parts.append(f"risk: {', '.join(spans['risk'])}")
+        parts.append(f"risk: {', '.join(spans['risk'])} ({REASON_RISK_TR})")
     if spans["unverified"]:
-        parts.append(
-            f"unverified: {', '.join(spans['unverified'])} ({KIND_LABEL_TR['unverified']})"
-        )
+        parts.append(f"unverified: {', '.join(spans['unverified'])} ({REASON_UNVERIFIED_TR})")
     return "; ".join(parts)
 
 
@@ -124,11 +141,18 @@ def set_needs_review(warnings: Any) -> bool:
 
 def review_summary(warnings: Any) -> dict:
     """AdGenerationSetSummary'ye eklenen additive alanlar."""
-    counts = kind_counts(open_findings(set_review(warnings)))
+    record = set_review(warnings)
+    counts = kind_counts(open_findings(record))
+    current = (record or {}).get("current") or {}
     return {
         "review_required": bool(counts["risk"] or counts["unverified"]),
         "claim_risk_count": counts["risk"],
         "claim_unverified_count": counts["unverified"],
+        # Okuma yüzeyi: güncel bulgular + otomatik düzeltmeler (orijinal/öneri dahil)
+        "claim_review": (
+            {"findings": list(current.get("findings") or []), "applied": list(current.get("applied") or [])}
+            if record else None
+        ),
     }
 
 

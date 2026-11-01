@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.compliance.publish_review import CLAIM_CRITERION, legacy_seo_checks
-from app.core.channel.brand_defense import load_grounding_facts
+from app.core.channel.brand_defense import load_grounding_facts, load_product_definition
 from app.database.models import (
     AdGenerationSet,
     AdGroup,
@@ -24,6 +24,7 @@ from app.database.models import (
     SEOGeoContent,
     SocialBrief,
     SocialContent,
+    SocialGenerationAttempt,
     SocialIdea,
 )
 from app.generators.ads.generation_sets import SET_ACTIVE, SET_DRAFT
@@ -33,7 +34,7 @@ from app.generators.claim_review import (
     finding_dict,
     make_current,
     open_findings,
-    push_review,
+    refresh_review,
     set_review,
     social_record,
     social_replace_review,
@@ -72,7 +73,7 @@ def _applied(record: Optional[dict]) -> list:
 
 # ── ADS ──
 
-def _reevaluate_rsa(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
+def _reevaluate_rsa(db: Session, run: ScoringRun) -> Dict[str, int]:
     sets = (
         db.query(AdGenerationSet)
         .filter(
@@ -84,6 +85,9 @@ def _reevaluate_rsa(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
     )
     cleared = still_flagged = 0
     for gen_set in sets:
+        # Üretimle AYNI kurucu: profil + o setin istekte verdiği güvenilir USP (request_snapshot)
+        usp = ((gen_set.request_snapshot or {}).get("trusted_brand_usp") or "").strip()
+        facts = load_grounding_facts(db, run, usp)
         prev = set_review(gen_set.warnings)
         before = open_findings(prev)
         findings: List[dict] = []
@@ -108,7 +112,7 @@ def _reevaluate_rsa(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
                     elif asset.validation_action == "claim_review":
                         asset.validation_action = None
         if prev or findings:
-            record = push_review(prev, make_current(findings, _applied(prev)))
+            record = refresh_review(prev, make_current(findings, _applied(prev)))
             gen_set.warnings = with_set_review(gen_set.warnings, record)
         cleared += _count_cleared(before, findings)
         still_flagged += len(findings)
@@ -117,8 +121,10 @@ def _reevaluate_rsa(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
 
 # ── SEO ──
 
-def _reevaluate_seo(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
+def _reevaluate_seo(db: Session, run: ScoringRun) -> Dict[str, int]:
     from datetime import datetime
+
+    facts = load_grounding_facts(db, run)  # SEO üretimiyle aynı (USP yok)
 
     rows = (
         db.query(SEOGeoContent)
@@ -155,11 +161,8 @@ def _reevaluate_seo(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
             "details": failure_text(findings),
         }
         if findings or prev:
-            current = make_current(findings, _applied(prev))
-            prev_orig = (((prev or {}).get("current")) or {}).get("original")
-            if prev_orig:
-                current["original"] = prev_orig
-            item["claim_review"] = push_review(prev, current)
+            # `original` yalnız onarımın uygulandığı kayıtta kalır (history'de); yenisine kopyalanmaz
+            item["claim_review"] = refresh_review(prev, make_current(findings, _applied(prev)))
         checks = [c for c in checks if c.get("criterion") != CLAIM_CRITERION] + [item]
         seo_row.checks_json = checks  # yeni liste: JSON değişimi izlenir
         evaluated += 1
@@ -184,7 +187,24 @@ def _social_texts(row: SocialContent) -> List[str]:
     return [t for t in texts if isinstance(t, str)]
 
 
-def _reevaluate_social(db: Session, run: ScoringRun, facts: str) -> Dict[str, int]:
+def _brief_facts(db: Session, run: ScoringRun, brief_id: int) -> str:
+    """Brief içeriklerinin üretimdeki dayanağının ÜST KÜMESİ: güncel profil listeleri +
+    brief'in 'contents' attempt'lerinin snapshot'larındaki ürün tanımı ve güvenilir USP.
+    Üretimde bağlam product_facts + trusted_brand_usp idi (content_flow); burada hiçbiri
+    eksik kalmaz, bu yüzden re-evaluate üretimde temiz geçen içeriğe YENİ bulgu ekleyemez."""
+    parts = [load_grounding_facts(db, run), load_product_definition(db, run) or ""]
+    attempts = (
+        db.query(SocialGenerationAttempt)
+        .filter(SocialGenerationAttempt.brief_id == brief_id, SocialGenerationAttempt.stage == "contents")
+        .all()
+    )
+    for attempt in attempts:
+        request = (attempt.coverage or {}).get("request") or {}
+        parts += [request.get("product_facts") or "", request.get("trusted_brand_usp") or ""]
+    return "\n".join(p for p in parts if p)
+
+
+def _reevaluate_social(db: Session, run: ScoringRun) -> Dict[str, int]:
     rows = (
         db.query(SocialContent)
         .join(SocialBrief, SocialContent.brief_id == SocialBrief.id)
@@ -192,7 +212,11 @@ def _reevaluate_social(db: Session, run: ScoringRun, facts: str) -> Dict[str, in
         .all()
     )
     cleared = still_flagged = 0
+    facts_by_brief: Dict[int, str] = {}
     for row in rows:
+        if row.brief_id not in facts_by_brief:
+            facts_by_brief[row.brief_id] = _brief_facts(db, run, row.brief_id)
+        facts = facts_by_brief[row.brief_id]
         idea = db.query(SocialIdea).filter(SocialIdea.id == row.idea_id).first()
         keyword = (
             db.query(Keyword).filter(Keyword.id == idea.keyword_id).first()
@@ -210,7 +234,7 @@ def _reevaluate_social(db: Session, run: ScoringRun, facts: str) -> Dict[str, in
         before = open_findings(prev)
         findings = [finding_dict(f) for f in found]
         if prev or findings:
-            record = push_review(prev, make_current(findings, _applied(prev)))
+            record = refresh_review(prev, make_current(findings, _applied(prev)))
             row.validation_warnings = social_replace_review(old_warnings, found, record)
         cleared += _count_cleared(before, findings)
         still_flagged += len(findings)
@@ -218,10 +242,12 @@ def _reevaluate_social(db: Session, run: ScoringRun, facts: str) -> Dict[str, in
 
 
 def reevaluate_claims(db: Session, run: ScoringRun) -> Dict[str, Dict[str, int]]:
-    """Run'ın RSA (active+draft, non-stale), SEO ve brief sosyal içeriklerini yeniden değerlendirir."""
-    facts = load_grounding_facts(db, run)
+    """Run'ın RSA (active+draft, non-stale), SEO ve brief sosyal içeriklerini yeniden değerlendirir.
+
+    Dayanak her kanalda ÜRETİMLE aynı kurucudan gelir (RSA: set snapshot USP'si; SEO: profil;
+    sosyal: brief snapshot'ları) — re-evaluate üretimde temiz olana yeni bulgu eklemez."""
     return {
-        "rsa": _reevaluate_rsa(db, run, facts),
-        "seo": _reevaluate_seo(db, run, facts),
-        "social": _reevaluate_social(db, run, facts),
+        "rsa": _reevaluate_rsa(db, run),
+        "seo": _reevaluate_seo(db, run),
+        "social": _reevaluate_social(db, run),
     }

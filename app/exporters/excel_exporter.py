@@ -20,7 +20,7 @@ from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.safe_text import safe_excel_text as _sx
 from app.exporters.seo_checklist_format import (
-    CHECK_ROW_HEADERS, REVIEW_TEXT, check_rows, geo_evaluation_text, review_status_text,
+    CHECK_ROW_HEADERS, REVIEW_TEXT, SET_WARNING_HEADERS, check_rows, set_warning_cells, geo_evaluation_text, review_status_text,
 )
 from app.schemas.export import ExportSectionEnum, FullReport, BrandProfileData
 
@@ -445,6 +445,16 @@ class ExcelExporter(BaseExporter):
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 25
         ws.column_dimensions['D'].width = 40
+
+        # Set uyarıları (iddia incelemesi) — yalnız varsa
+        if ads.set_warnings:
+            ws = wb.create_sheet("Set Uyarıları")
+            ws.append(SET_WARNING_HEADERS)
+            self._style_header(ws, 1, len(SET_WARNING_HEADERS))
+            for w in ads.set_warnings:
+                ws.append([_sx(c) for c in set_warning_cells(w)])
+            ws.column_dimensions['C'].width = 40
+            ws.column_dimensions['F'].width = 40
 
     def _add_social_sheets(self, wb: Workbook, social):
         """Sosyal medya sheetleri — TAM alan matrisi (kesme yok, plan §8)."""
