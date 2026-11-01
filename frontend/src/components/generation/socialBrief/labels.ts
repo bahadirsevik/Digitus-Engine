@@ -59,6 +59,63 @@ export function reasonText(code: string | null | undefined): string {
   return REASON_TEXT[code] ?? `Gerekçe kodu: ${code}`
 }
 
+// Onarım öncesi/sonrası metin: claim_review:<json> kaydındaki `current.changed` (yoksa `applied`)
+export interface ClaimRepairItem {
+  field: string
+  original: string
+  suggestion: string
+}
+
+const CLAIM_FIELD_LABEL: Record<string, string> = {
+  caption: 'Açıklama',
+  cta_text: 'CTA',
+  visual_suggestion: 'Görsel',
+  scenario: 'Senaryo',
+  video_concept: 'Video konsepti',
+  platform_notes: 'Platform notları',
+  industry_posting_suggestion: 'Paylaşım önerisi',
+}
+const CLAIM_INDEXED_LABEL: Record<string, string> = {
+  hook: 'Kanca',
+  hashtag: 'Etiket',
+  payload: 'Format metni',
+}
+
+export function claimFieldLabel(field: string): string {
+  const m = /^(\w+)\[(\d+)\]$/.exec(field)
+  if (m && CLAIM_INDEXED_LABEL[m[1]]) {
+    const n = Number(m[2]) + 1
+    return `${CLAIM_INDEXED_LABEL[m[1]]} ${n}`
+  }
+  return CLAIM_FIELD_LABEL[field] ?? field
+}
+
+export function parseClaimRepairs(warnings: string[]): ClaimRepairItem[] {
+  const raw = warnings.find((w) => w.startsWith('claim_review:'))
+  if (!raw) return []
+  try {
+    const current = (JSON.parse(raw.slice('claim_review:'.length)) as { current?: unknown })
+      .current as
+      | {
+          changed?: Partial<ClaimRepairItem>[]
+          applied?: (Partial<ClaimRepairItem> & { span?: string })[]
+        }
+      | undefined
+    const rows = current?.changed?.length
+      ? current.changed
+      : (current?.applied ?? []).map((a) => ({ ...a, field: a.span ?? '' }))
+    return rows
+      .filter((r) => r.original || r.suggestion)
+      .map((r) => ({
+        field: r.field ?? '',
+        original: r.original ?? '',
+        suggestion: r.suggestion ?? '',
+      }))
+  } catch {
+    return []
+  }
+}
+
 // Tipli hata kodları → açıklayıcı Türkçe metin
 const ERROR_TEXT: Record<string, string> = {
   FEATURE_DISABLED: 'Sosyal brief akışı bu ortamda kapalı.',

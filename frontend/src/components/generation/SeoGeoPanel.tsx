@@ -26,6 +26,7 @@ import {
   setStoredTaskId,
 } from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import { useBrandStore } from '../../stores/brandStore'
 import { apiErrorMessage, generationApi, policyStaleFromError } from '../../services/api'
 import type { ScoringRun, SEOGeoItem } from '../../types/models'
@@ -526,6 +527,17 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
             error={polling.errorMessage || 'SEO içerik üretimi başarısız oldu.'}
             onDismiss={() => setTaskId(null)}
             onRetry={() => setTaskId(null)}
+          />
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <div className="adsx-span">
+          <ClaimReevaluateButton
+            runId={runId}
+            workspaceId={activeWorkspace?.id}
+            disabled={generating}
+            onDone={() => void fetchResults()}
           />
         </div>
       )}

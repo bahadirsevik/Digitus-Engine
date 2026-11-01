@@ -95,6 +95,26 @@ export interface AdsValidationSummary {
 }
 
 // ADS üretim seti özeti (versiyonlama — Faz E)
+// İddia incelemesi bulgusu (rev.4): kind = risk | unverified
+export interface ClaimFinding {
+  kind: 'risk' | 'unverified'
+  category?: string
+  span: string
+  reason?: string
+  asset_type?: 'headline' | 'description'
+  asset_text?: string
+  group_id?: number | null
+  group_name?: string | null
+  // yalnız applied (otomatik düzeltilen) kayıtlarda
+  original?: string
+  suggestion?: string
+}
+
+export interface ClaimReview {
+  findings: ClaimFinding[]
+  applied: ClaimFinding[]
+}
+
 export interface AdGenerationSetSummary {
   id: number
   scoring_run_id: number
@@ -110,6 +130,7 @@ export interface AdGenerationSetSummary {
   review_required?: boolean
   claim_risk_count?: number
   claim_unverified_count?: number
+  claim_review?: ClaimReview | null
 }
 
 export interface AdsSetListResult {

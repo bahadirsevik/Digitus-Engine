@@ -581,6 +581,18 @@ export const exportApi = {
 }
 
 // Generation API
+export interface ClaimReevaluateChannel {
+  cleared: number
+  still_flagged: number
+}
+
+export interface ClaimReevaluateResult {
+  rsa: ClaimReevaluateChannel
+  seo: ClaimReevaluateChannel
+  social: ClaimReevaluateChannel
+  note?: string
+}
+
 export const generationApi = {
   generateSeoGeo: (keywordIds: number[], contentType?: string, wordCount?: number) =>
     api.post('/generation/seo-geo', {
@@ -610,6 +622,12 @@ export const generationApi = {
   activateAdsSet: (setId: number, brand_profile_id?: number) =>
     api.post(`/generation/ads/sets/${setId}/activate`, undefined, {
       params: { brand_profile_id },
+    }),
+
+  // İddia incelemesini güncel profille yeniden değerlendirir (ücretsiz; metin değişmez)
+  reevaluateClaims: (scoringRunId: number, brandProfileId: number) =>
+    api.post<ClaimReevaluateResult>('/generation/claims/re-evaluate', undefined, {
+      params: { scoring_run_id: scoringRunId, brand_profile_id: brandProfileId },
     }),
 
   regenerateAdGroup: (groupId: number, brand_profile_id?: number) =>
@@ -1381,6 +1399,9 @@ export interface ChannelProgress {
   expected_count: number
   generated_count: number
   status: ChannelStatus
+  // ADS (additive): taslak RSA seti iddia incelemesi bekliyor, aktif set yok
+  review_pending?: boolean
+  review_set_id?: number | null
 }
 
 export interface ChannelGroup {

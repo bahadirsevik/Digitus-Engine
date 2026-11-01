@@ -23,6 +23,7 @@ import {
   useBriefKeywordSelection,
   type BriefKeywordSelection,
 } from './socialBrief/useBriefKeywordSelection'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import './SocialBriefWorkspace.css'
 
 export interface SocialBriefWorkspaceProps {
@@ -842,6 +843,12 @@ export default function SocialBriefWorkspace({
                 Geçmiş Sosyal İçerikler
               </button>
             )}
+            <ClaimReevaluateButton
+              runId={runId}
+              workspaceId={currentWorkspaceId}
+              disabled={disabled}
+              onDone={() => void fetchBriefs()}
+            />
           </div>
         </div>
 

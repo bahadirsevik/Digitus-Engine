@@ -154,6 +154,41 @@ describe('DashboardCockpit', () => {
     expect(screen.getByText('Skorlamayı Kontrol Et')).toBeInTheDocument()
   })
 
+  it('shows the RSA draft review cue in the main action and the ADS row', () => {
+    const summary = makeSummary({
+      channels: group({
+        ADS: {
+          pool_count: 5,
+          expected_count: 5,
+          generated_count: 0,
+          status: 'ready',
+          review_pending: true,
+          review_set_id: 7,
+        },
+      }),
+      next_action: {
+        key: 'review_ads_draft',
+        label: 'RSA Taslağını İncele',
+        path: '/ads?run_id=42',
+        severity: 'warning',
+        reason: 'RSA taslağı inceleme bekliyor — gerekçeleri kontrol edip aktifleştirin.',
+      },
+    })
+    const { container } = render(
+      <MemoryRouter>
+        <DashboardCockpit
+          summary={summary}
+          loading={false}
+          onChangeRun={() => {}}
+          onRefresh={() => {}}
+        />
+      </MemoryRouter>
+    )
+    expect(container.querySelector('.cockpit-main-action.cta-warning')).toBeTruthy()
+    expect(screen.getByText('RSA Taslağını İncele')).toBeInTheDocument()
+    expect(screen.getByText('Taslak inceleme bekliyor')).toBeInTheDocument()
+  })
+
   it('shows pipeline steps as links carrying run_id', () => {
     const summary = makeSummary()
     render(

@@ -1,7 +1,14 @@
 import { useState, type ReactNode } from 'react'
 import { AlertTriangle, Check, Clock, Copy } from 'lucide-react'
 import type { SocialFormatPayload } from '../../../services/api'
-import { DURATION_STATUS_TEXT, formatSeconds, hookStyleLabel, reasonText } from './labels'
+import {
+  DURATION_STATUS_TEXT,
+  claimFieldLabel,
+  formatSeconds,
+  hookStyleLabel,
+  parseClaimRepairs,
+  reasonText,
+} from './labels'
 import './SocialBriefFlow.css'
 
 export interface SocialContentView {
@@ -175,6 +182,7 @@ function FormatBody({ view }: { view: SocialContentView }) {
 export default function SocialContentCard({ view }: { view: SocialContentView }) {
   // claim_review:<json> kaydı ekranda gösterilmez; claim_risk:/claim_unverified: öğeleri okunur metne çevrilir
   const shownWarnings = view.validationWarnings.filter((w) => !w.startsWith('claim_review:'))
+  const repairs = parseClaimRepairs(view.validationWarnings)
   const captionWithTags = [
     view.caption,
     view.hashtags.map((h) => `#${h.replace(/^#/, '')}`).join(' '),
@@ -262,6 +270,25 @@ export default function SocialContentCard({ view }: { view: SocialContentView })
           </>
         )}
       </dl>
+
+      {repairs.length > 0 && (
+        <details className="sb-repair-list">
+          <summary>Onarım öncesi metin ({repairs.length})</summary>
+          <ul>
+            {repairs.map((r, i) => (
+              <li key={i}>
+                <b>{claimFieldLabel(r.field)}</b>
+                <div>
+                  <span className="sb-content-label">Orijinal:</span> {r.original}
+                </div>
+                <div>
+                  <span className="sb-content-label">Öneri:</span> {r.suggestion}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {shownWarnings.length > 0 && (
         <ul className="sb-warning-list" aria-label="Doğrulama uyarıları">
