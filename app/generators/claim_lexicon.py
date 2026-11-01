@@ -90,7 +90,8 @@ CERT_PATTERN = re.compile(
 ABSOLUTE_OUTCOME: Dict[str, List[str]] = {
     "tr": [r"ağrısız", r"acısız", r"hiçbir (?:ağrı|risk)", r"sıfır risk", r"%\s*100(?!\d)",
            r"yüzde yüz", r"kesin (?:sonuç|çözüm)", r"garantili (?:sonuç|tedavi)"],
-    "ru": [r"безболезн\w*", r"без\s?боли", r"никакой боли", r"абсолютно безопасн\w*",
+# (?<!о) без боли: обезболивающий = agri kesici, iddia degil (ws77 canli SEO)
+    "ru": [r"безболезн\w*", r"(?<!о)без\s?боли", r"никакой боли", r"абсолютно безопасн\w*",
            r"(?<!\d)100\s*%", r"полностью (?:восстанавливает|безопасн\w*)"],
     "uk": [r"безболісн\w*", r"без\s?болю", r"абсолютно безпечн\w*",
            r"повністю (?:відновлює|безпечн\w*)"],

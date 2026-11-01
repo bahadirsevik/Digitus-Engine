@@ -210,6 +210,12 @@ def generate_seo_geo_content(
         )
     verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
     _guard_generation_dispatch(db, request.scoring_run_id)
+    # Kilidi (brand_profiles FOR UPDATE) uretim boyunca TUTMA: senkron uretim
+    # dakikalar surer ve UsageCollector ayri oturumdan flush ederken (FK ->
+    # brand_profiles, 8. cagri) kendi kilidimize takilip kilitleniyordu
+    # (iddia onarim turu cagri sayisini 6'dan 8'e cikarinca gorunur oldu).
+    # Async uclar gibi: stale kontrolu kilit altinda yapildi, sonra birakilir.
+    db.commit()
     _scope_usage(ai, scoring_run_id=request.scoring_run_id,
                  brand_profile_id=brand_profile_id)
     try:

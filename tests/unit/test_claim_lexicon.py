@@ -152,6 +152,16 @@ class TestAbsoluteOutcome:
         assert find_ungrounded_claims("полностью цифровая запись", "") == []
         assert find_ungrounded_claims("completely online booking", "") == []
 
+    def test_russian_false_positives_from_live_run(self):
+        # ws77 canli SEO (01.11): "обезболивающими" icindeki "безболи" ve
+        # "самого импланта" ("implantin kendisi") iddia DEGIL
+        assert find_ungrounded_claims("благодаря современным обезболивающим препаратам", "") == []
+        assert find_ungrounded_claims("состоит из самого импланта, абатмента и коронки", "") == []
+        # gercek superlatif ve bitisik hashtag yakalanmaya devam eder
+        assert find_ungrounded_claims("самый лучший имплант в городе", "")
+        assert find_ungrounded_claims("самая низкая цена", "")
+        assert "absolute" in _kinds(find_ungrounded_claims("#лечениезубовбезболи", ""))
+
 
 class TestKeywordExemptionNarrowed:
     def test_keyword_number_is_exempt_in_numeric_scan(self):
