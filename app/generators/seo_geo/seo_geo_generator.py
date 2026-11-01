@@ -5,7 +5,7 @@ Roadmap2.md - Bölüm 6
 Tek içerik üretir, hem SEO hem GEO kurallarına uygun.
 Sonrasında aynı metin üzerinde iki ayrı kontrol çalıştırılır.
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from decimal import Decimal
 import json
 from datetime import datetime
@@ -85,7 +85,8 @@ class SEOGEOGenerator:
     def generate_content(
         self,
         request: SEOGEOGenerateRequest,
-        scoring_run_id: Optional[int] = None
+        scoring_run_id: Optional[int] = None,
+        before_save: Optional[Callable[[], None]] = None,
     ) -> Dict[str, Any]:
         """
         Tek anahtar kelime için içerik üretir.
@@ -268,6 +269,14 @@ class SEOGEOGenerator:
             word_count_max=request.word_count_max,
             link_pool=link_pool,
         )
+
+        # 3e. Kayit oncesi guncellik kapisi (Codex ca2c2f5 P2): senkron uc kilidi
+        # uretim boyunca tutmaz; AI beklerken politika/profil degismis olabilir.
+        # Cagiran burada kisa kilit altinda stale kontrolunu yeniden yapar; kilit
+        # _save_to_database'in commit'ine kadar ayni transaction'da kalir. Bu
+        # noktadan sonra AI cagrisi veya collector flush YOKTUR.
+        if before_save is not None:
+            before_save()
 
         # 4. Veritabanına kaydet
         saved_content = self._save_to_database(

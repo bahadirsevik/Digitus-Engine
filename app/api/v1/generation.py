@@ -177,6 +177,14 @@ def _guard_generation_dispatch(db: Session, run_id: int) -> None:
     require_fresh_channel_pool(db, run)
 
 
+def _recheck_dispatch_guard(db: Session, run_id: int) -> None:
+    """Kayit oncesi guncellik kapisi (senkron uretim). ORM onbellegi bosaltilip
+    ayni guard taze satirlarla kosar; FOR UPDATE kilidi cagiranin commit'ine
+    kadar kalir (kontrol + kayit tek transaction)."""
+    db.expire_all()
+    _guard_generation_dispatch(db, run_id)
+
+
 def _scope_usage(ai, *, scoring_run_id=None, brand_profile_id=None) -> None:
     """İstek collector'ına run/workspace kimliği bağlar (Codex v8-3).
 
@@ -220,8 +228,18 @@ def generate_seo_geo_content(
                  brand_profile_id=brand_profile_id)
     try:
         generator = SEOGEOGenerator(db, ai)
-        result = generator.generate_content(request, scoring_run_id=request.scoring_run_id)
+        result = generator.generate_content(
+            request,
+            scoring_run_id=request.scoring_run_id,
+            # Kayittan hemen once ayni kapi, kisa kilit altinda: AI beklerken
+            # politika/profil degistiyse tipli 409 (POLICY_STALE), kayit YOK.
+            # expire_all: identity map'teki run/workspace nesneleri bu transaction
+            # icinde yuklendi; TAZE satir okunmazsa degisiklik gorulmez.
+            before_save=lambda: _recheck_dispatch_guard(db, request.scoring_run_id),
+        )
         return result
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
