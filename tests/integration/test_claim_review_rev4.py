@@ -66,11 +66,11 @@ def _full_group():
     )
 
 
-def _flagged_set(db, run_id, task_id):
+def _flagged_set(db, run_id, task_id, group=None):
     """Dispatch → AdsGenerator kayıt → finalize (worker akışının DB kısmı)."""
     gen_set = dispatch_ads_generation(
         db, run_id, task_id=task_id, request_snapshot={"operation": "full"})
-    group = _full_group()
+    group = group or _full_group()
     AdsGenerator(db, ai_service=object())._save_to_database(
         [group], run_id, generation_set_id=gen_set.id, commit=False)
     status = finalize_ads_success(
@@ -572,3 +572,97 @@ def test_reevaluate_social_producing_attempt_usp_grounds_its_own_content(
     assert res.json()["social"] == {"contents": 1, "cleared": 0, "still_flagged": 0}
     _, warnings = _orch._persisted_warnings(db_session, ctx["brief"].id)
     assert not any(w.startswith("claim_") for w in warnings)
+
+
+# ==================== Codex UI P2: onarım çiftleri re-evaluate'te taşınır ====================
+
+
+def test_reevaluate_carries_social_changed_when_findings_change(
+    client, db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
+):
+    """Sosyal: onarım metni değiştirdi (changed), risk + hizmet kaldı; profile hizmet eklenince bulgular
+    değişir → current.changed AYNEN kalır, önceki current history'ye iner."""
+    ctx = _orch._setup_content_orchestration_env(
+        db_session, make_workspace, make_scoring_run, make_keyword, num_ideas=1, task_id="task-r4-carry")
+    _orch.run_social_content_generation(
+        session_factory=_orch.SessionLocal,
+        ai_service=_orch.SmartMockAIService(responses=[
+            _orch._make_valid_post_dict(caption="Ağrısız lazer tedavisi ilk açıklama."),
+            _orch._make_valid_post_dict(caption="Ağrısız lazer tedavisi ikinci açıklama."),
+        ]),
+        attempt_id=ctx["attempt"].id, task_id="task-r4-carry", now_provider=lambda: _orch.T0,
+    )
+    _, warnings = _orch._persisted_warnings(db_session, ctx["brief"].id)
+    before = json.loads(next(w for w in warnings if w.startswith("claim_review:"))[len("claim_review:"):])
+    changed = before["current"]["changed"]
+    assert any(c["field"] == "caption" and "ilk" in c["original"] for c in changed)
+
+    ws, run = ctx["workspace"], ctx["scoring_run"]
+    ws.profile_data = {"services": ["Lazer epilasyon"]}  # lazer tanınır → bulgu kümesi değişir
+    db_session.commit()
+    res = client.post(
+        f"/api/v1/generation/claims/re-evaluate?scoring_run_id={run.id}&brand_profile_id={ws.id}")
+
+    assert res.status_code == 200, res.text
+    _, warnings = _orch._persisted_warnings(db_session, ctx["brief"].id)
+    after = json.loads(next(w for w in warnings if w.startswith("claim_review:"))[len("claim_review:"):])
+    assert [f["kind"] for f in after["current"]["findings"]] == ["risk"]  # hizmet kalktı, risk sürüyor
+    assert after["current"]["changed"] == changed  # onarım çiftleri değişmedi
+    assert len(after["history"]) == len(before["history"]) + 1  # önceki current geçmişe indi
+
+
+def test_reevaluate_carries_rsa_applied_when_findings_change(client, db_session, make_workspace, make_scoring_run):
+    ws = make_workspace("CarryRsa WS", status="confirmed", profile_data={"services": []})
+    run = make_scoring_run(brand_profile_id=ws.id)
+    group = _full_group()
+    group.claim_applied = [{
+        "kind": "risk", "category": "guarantee", "span": "kazanç garanti", "asset_type": "headline",
+        "original": "Kazanç Garantisi Veriyoruz", "suggestion": "Güvenilir Hizmet",
+    }]
+    gen_set, _ = _flagged_set(db_session, run.id, "task-rev4-carry-rsa", group)
+    url = f"/api/v1/generation/claims/re-evaluate?scoring_run_id={run.id}&brand_profile_id={ws.id}"
+    client.post(url)  # gerçek metne göre ilk yenileme
+    db_session.expire_all()
+    first = set_review(db_session.get(AdGenerationSet, gen_set.id).warnings)
+    assert first["current"]["applied"][0]["original"] == "Kazanç Garantisi Veriyoruz"
+
+    ws.profile_data = {"services": ["Diş dolgusu"]}  # tanınan alias → service bulgusu kalkar
+    db_session.commit()
+    client.post(url)
+
+    db_session.expire_all()
+    after = set_review(db_session.get(AdGenerationSet, gen_set.id).warnings)
+    assert [f["kind"] for f in after["current"]["findings"]] == ["risk"]
+    assert after["current"]["applied"] == first["current"]["applied"]
+    assert len(after["history"]) == len(first["history"]) + 1
+
+
+def test_reevaluate_carries_seo_original_when_findings_change(
+    client, db_session, make_workspace, make_scoring_run, monkeypatch
+):
+    """SEO: onarım uygulandı (current.original), kalan unverified; profile hizmet eklenince bulgular değişir →
+    current.original AYNEN kalır."""
+    from integration.test_seo_claim_persistence import _generate
+
+    risky = "Hisse takip, ağrısız lazer hizmetidir. Hisse takip anlik calisir."
+    repaired = "Hisse takip, lazer hizmetidir. Hisse takip anlik calisir."
+    ws, run, result, ai = _generate(db_session, make_workspace, make_scoring_run, monkeypatch, risky, repaired)
+    assert ai.calls == 1
+    row = db_session.query(SEOComplianceResult).filter_by(seo_geo_content_id=result["id"]).one()
+    item = next(c for c in row.checks_json if c["criterion"] == "no_ungrounded_claims")
+    original = item["claim_review"]["current"]["original"]
+    assert original["intro_paragraph"] == risky
+
+    ws.status = "confirmed"
+    ws.profile_data = {"services": ["Lazer epilasyon"]}
+    db_session.commit()
+    res = client.post(
+        f"/api/v1/generation/claims/re-evaluate?scoring_run_id={run.id}&brand_profile_id={ws.id}")
+
+    assert res.status_code == 200, res.text
+    db_session.expire_all()
+    row = db_session.query(SEOComplianceResult).filter_by(seo_geo_content_id=result["id"]).one()
+    item = next(c for c in row.checks_json if c["criterion"] == "no_ungrounded_claims")
+    assert item["status"] == "pass"  # lazer tanındı, risk onarımla gitmişti
+    assert item["claim_review"]["current"]["original"] == original
+    assert len(item["claim_review"]["history"]) == 1

@@ -90,6 +90,13 @@ def refresh_review(record: Optional[dict], new_current: dict) -> dict:
     cur = (record or {}).get("current")
     if cur and _finding_keys(cur.get("findings")) == _finding_keys(new_current.get("findings")):
         return {**record, "current": {**cur, "evaluated_at": new_current["evaluated_at"]}}
+    # Onarım bilgisi (applied/changed/SEO original) üretim anı verisidir ve DEĞİŞMEZ: re-evaluate
+    # yalnız `findings` (+ evaluated_at) değiştirir. Yeni kayıt açıkça vermediyse önceki current'tan taşınır.
+    if cur:
+        new_current = {**new_current}
+        for key in ("applied", "changed", "original"):
+            if not new_current.get(key) and cur.get(key):
+                new_current[key] = cur[key]
     return push_review(record, new_current)
 
 

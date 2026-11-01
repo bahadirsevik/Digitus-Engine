@@ -209,3 +209,23 @@ def test_changed_items_keep_full_text_no_truncation():
     assert out == [{"field": "caption", "original": long_old, "suggestion": long_new}]
     cur = make_current([], changed=out)
     assert len(cur["changed"][0]["original"]) == 691
+
+
+def test_refresh_review_carries_repair_facts_when_findings_change():
+    f1 = {"kind": "risk", "category": "guarantee", "span": "garanti"}
+    f2 = {"kind": "unverified", "category": "service", "span": "lazer"}
+    first = make_current([f1, f2], [{"original": "a", "suggestion": "b"}], evaluated_at="t0",
+                         changed=[{"field": "caption", "original": "x", "suggestion": "y"}])
+    first["original"] = {"intro_paragraph": "eski"}
+    record = push_review(None, first)
+
+    changed = refresh_review(record, make_current([f1], evaluated_at="t1"))
+
+    cur = changed["current"]
+    assert [f["kind"] for f in cur["findings"]] == ["risk"]
+    assert cur["applied"] == first["applied"] and cur["changed"] == first["changed"]
+    assert cur["original"] == {"intro_paragraph": "eski"}
+    assert changed["history"][0]["evaluated_at"] == "t0"
+    # açıkça verilen değer taşınanı ezer
+    explicit = refresh_review(changed, make_current([], [{"original": "yeni"}], evaluated_at="t2"))
+    assert explicit["current"]["applied"] == [{"original": "yeni"}]
