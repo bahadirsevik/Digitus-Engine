@@ -124,6 +124,11 @@ describe('Pazar ekle: kart eylemi', () => {
 
     const ok = within(cardOf(container, 'Klinik X')!).getByRole('button', { name: /Pazar ekle/ })
     expect(ok).toBeEnabled()
+    // Küçük "+" simgesi: metin yok, ipucu var; kart rozeti hacim kaynağını yazmaz
+    expect(ok).toHaveAttribute('title', 'Pazar ekle')
+    expect(ok).toHaveTextContent('')
+    expect(cardOf(container, 'Klinik X')!).toHaveTextContent('Türkiye · Türkçe')
+    expect(cardOf(container, 'Klinik X')!).not.toHaveTextContent('Hacim: Google Ads')
 
     const pending = within(cardOf(container, 'Taslak Marka')!).getByRole('button', {
       name: /Pazar ekle/,

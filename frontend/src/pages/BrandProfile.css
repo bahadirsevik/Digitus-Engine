@@ -1024,7 +1024,7 @@
 
 .bpx-card-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   justify-content: space-between;
 }
@@ -1132,6 +1132,7 @@
   cursor: not-allowed;
 }
 .bpx-card-actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2162,6 +2163,43 @@
 }
 .bpx-card-name {
   font-size: 15.5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.bpx-card-market {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.bpx-card-market .market-badge {
+  margin-left: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+.bpx-icon-btn.is-add {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+.bpx-icon-btn.is-add:hover:not(:disabled) {
+  color: var(--accent-hover);
+  border-color: rgba(45, 212, 191, 0.4);
+  background: var(--accent-soft);
+}
+.bpx-icon-btn.is-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .bpx-card-url {
   margin-top: 10px;

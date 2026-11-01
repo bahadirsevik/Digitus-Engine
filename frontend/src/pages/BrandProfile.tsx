@@ -64,7 +64,6 @@ import LoadingStep from './brandProfile/LoadingStep'
 import AiCompetitorDiscovery from './brandProfile/AiCompetitorDiscovery'
 import LocationPolicyControl from '../components/LocationPolicyControl'
 import MarketSelect from '../components/MarketSelect'
-import MarketBadge from '../components/MarketBadge'
 import MarketCopyDialog from '../components/MarketCopyDialog'
 import type { MarketValue } from '../services/market'
 import {
@@ -1444,7 +1443,7 @@ function BrandCard({
       }}
     >
       <div className="bpx-card-top">
-        <div className="bpx-card-name">
+        <div className="bpx-card-name" title={ws.name}>
           {ws.name}
           {isFocusWorkspace(ws) && <span className="bpx-focus-tag">Alt sayfa</span>}
           {!isFocusWorkspace(ws) && ws.crawl_scope === 'page' && (
@@ -1455,22 +1454,6 @@ function BrandCard({
           <span className={`bpx-pill is-${tone}`}>
             {busy && <Loader2 size={9} className="spin-icon" />} {statusLabel(ws)}
           </span>
-          {showMarketAction && (
-            <button
-              type="button"
-              className="bpx-btn-ghost"
-              disabled={!canAddMarket}
-              title={
-                canAddMarket ? 'Bu markadan yeni pazar çalışmaları aç' : 'Önce profili onaylayın'
-              }
-              onClick={(e) => {
-                e.stopPropagation()
-                onAddMarket(ws)
-              }}
-            >
-              <Plus size={13} /> Pazar ekle
-            </button>
-          )}
           {!ws.deleted_at && (
             <button
               type="button"
@@ -1493,9 +1476,24 @@ function BrandCard({
       <div className="bpx-card-desc">
         {(ws.profile_data?.sector as string) || 'Sektör bilgisi yok'}
       </div>
-      {ws.market_label && (
-        <div className="bpx-card-desc">
-          <MarketBadge label={ws.market_label} />
+      {(ws.market_label || showMarketAction) && (
+        <div className="bpx-card-market">
+          {ws.market_label && <span className="market-badge">{ws.market_label}</span>}
+          {showMarketAction && (
+            <button
+              type="button"
+              className="bpx-icon-btn is-add"
+              disabled={!canAddMarket}
+              title={canAddMarket ? 'Pazar ekle' : 'Önce profili onaylayın'}
+              aria-label="Pazar ekle"
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddMarket(ws)
+              }}
+            >
+              <Plus size={14} />
+            </button>
+          )}
         </div>
       )}
       {matchedFocuses.length > 0 && (
