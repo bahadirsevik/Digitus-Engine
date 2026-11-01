@@ -52,6 +52,10 @@ const REASON_TEXT: Record<string, string> = {
 
 export function reasonText(code: string | null | undefined): string {
   if (!code) return ''
+  if (code.startsWith('claim_risk:'))
+    return `Risk — yayın öncesi düzelt: ${code.slice('claim_risk:'.length)}`
+  if (code.startsWith('claim_unverified:'))
+    return `Profilde doğrulanamadı — kontrol gerekli: ${code.slice('claim_unverified:'.length)}`
   return REASON_TEXT[code] ?? `Gerekçe kodu: ${code}`
 }
 

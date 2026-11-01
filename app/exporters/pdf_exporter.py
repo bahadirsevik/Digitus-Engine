@@ -20,7 +20,7 @@ from app.exporters.ads_standard_format import standard_lines
 from app.exporters.base_exporter import BaseExporter, market_header_line
 from app.exporters.safe_text import safe_paragraph_text
 from app.exporters.seo_checklist_format import (
-    ALT_TEXT_HEADING, FAQ_HEADING, geo_evaluation_text, manual_check_lines,
+    ALT_TEXT_HEADING, FAQ_HEADING, REVIEW_TEXT, geo_evaluation_text, manual_check_lines,
     review_failure_lines, review_required_text, review_status_text,
     status_counts_text,
 )
@@ -489,6 +489,8 @@ class PdfExporter(BaseExporter):
 
         elements.append(Paragraph('5. GOOGLE ADS REKLAM SETLERI', self.styles['TurkishHeading']))
 
+        if ads.claim_review_summary:
+            elements.append(self._p(ads.claim_review_summary))
         for g in ads.ad_groups:
             elements.append(Spacer(1, 0.5*cm))
             elements.append(self._p(f'REKLAM GRUBU: {g.group_name}', bold=True))
@@ -504,13 +506,13 @@ class PdfExporter(BaseExporter):
                 elements.append(self._p(f'Basliklar ({len(g.headlines)})', bold=True))
                 for i, h in enumerate(g.headlines, 1):
                     suffix = f' [{h.headline_type}]' if h.headline_type else ''
-                    elements.append(self._p(f'{i}. {h.headline_text}{suffix}'))
+                    elements.append(self._p(f'{i}. {h.headline_text}{suffix}' + (f' [{REVIEW_TEXT}]' if h.review else '')))
 
             if g.descriptions:
                 elements.append(Spacer(1, 0.2*cm))
                 elements.append(self._p(f'Aciklamalar ({len(g.descriptions)})', bold=True))
                 for i, d in enumerate(g.descriptions, 1):
-                    elements.append(self._p(f'{i}. {d.description_text}'))
+                    elements.append(self._p(f'{i}. {d.description_text}' + (f' [{REVIEW_TEXT}]' if d.review else '')))
 
             if g.negative_keywords:
                 elements.append(Spacer(1, 0.2*cm))

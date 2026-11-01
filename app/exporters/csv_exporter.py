@@ -15,7 +15,7 @@ from datetime import datetime
 from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.seo_checklist_format import (
-    CHECK_ROW_HEADERS, check_rows, geo_evaluation_text, review_status_text,
+    CHECK_ROW_HEADERS, REVIEW_TEXT, check_rows, geo_evaluation_text, review_status_text,
 )
 from app.schemas.export import ExportSectionEnum, FullReport
 
@@ -226,20 +226,22 @@ class CsvExporter(BaseExporter):
 
         # Başlıklar
         filepath = os.path.join(temp_dir, 'basliklar.csv')
-        headers = ['Grup', 'Başlık', 'Tip', 'DKI']
+        headers = ['Grup', 'Başlık', 'Tip', 'DKI', 'İnceleme']
         rows = []
         for g in ads.ad_groups:
             for h in g.headlines:
-                rows.append([g.group_name, h.headline_text, h.headline_type, 'Evet' if h.is_dki else ''])
+                rows.append([g.group_name, h.headline_text, h.headline_type, 'Evet' if h.is_dki else '',
+                             REVIEW_TEXT if h.review else ''])
         files.append(self._write_csv(filepath, headers, rows))
         
         # Açıklamalar
         filepath = os.path.join(temp_dir, 'aciklamalar.csv')
-        headers = ['Grup', 'Açıklama', 'Tip']
+        headers = ['Grup', 'Açıklama', 'Tip', 'İnceleme']
         rows = []
         for g in ads.ad_groups:
             for d in g.descriptions:
-                rows.append([g.group_name, d.description_text, d.description_type])
+                rows.append([g.group_name, d.description_text, d.description_type,
+                             REVIEW_TEXT if d.review else ''])
         files.append(self._write_csv(filepath, headers, rows))
         
         # Negatifler

@@ -106,6 +106,10 @@ export interface AdGenerationSetSummary {
   task_id?: string | null
   created_at?: string | null
   completed_at?: string | null
+  // İddia incelemesi (rev.4, additive): işaretli set otomatik aktif olmaz
+  review_required?: boolean
+  claim_risk_count?: number
+  claim_unverified_count?: number
 }
 
 export interface AdsSetListResult {

@@ -322,13 +322,20 @@ function AdGroupCard({
           headlines.map((headline, hIdx) => (
             <div key={headline.id ?? hIdx} className="adsx-line">
               {headline.text}
-              {headline.validation_action && <small>{headline.validation_action}</small>}
+              {headline.validation_action && (
+                <small>
+                  {headline.validation_action === 'claim_review'
+                    ? 'İnceleme gerekli'
+                    : headline.validation_action}
+                </small>
+              )}
             </div>
           ))}
         {tab === 'descs' &&
           descriptions.map((description, dIdx) => (
             <div key={description.id ?? dIdx} className="adsx-line is-desc">
               {description.text}
+              {description.validation_action === 'claim_review' && <small>İnceleme gerekli</small>}
             </div>
           ))}
         {tab === 'neg' && (
@@ -716,6 +723,9 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                     {SET_STATUS_LABELS[s.status]}
                   </span>
                   {s.is_stale && <span className="adsx-set-badge is-stale">Bayat</span>}
+                  {s.review_required && (
+                    <span className="adsx-set-badge is-draft">İnceleme gerekli</span>
+                  )}
                   {typeof s.groups_count === 'number' && (
                     <span className="adsx-set-count">{s.groups_count} grup</span>
                   )}

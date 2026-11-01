@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 FAQ_HEADING = "FAQ soru-cevap (schema'ya hazır veri — FAQ schema uygulanmadı)"
 ALT_TEXT_HEADING = "Görsel alt metni önerileri (görsellere uygulanmadı)"
 NOT_EVALUATED = "Değerlendirilmedi"
+REVIEW_TEXT = "İnceleme gerekli"  # iddia incelemesi işaretli RSA asset'i (validation_action)
 
 CHECK_ROW_HEADERS = [
     'Kelime', 'İçerik ID', 'Kanal', 'Kriter Kodu', 'Kriter', 'Kaynak',

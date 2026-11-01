@@ -14,7 +14,7 @@ from datetime import datetime
 from app.exporters.ads_standard_format import standard_lines
 from app.exporters.base_exporter import BaseExporter, market_header_line
 from app.exporters.seo_checklist_format import (
-    ALT_TEXT_HEADING, FAQ_HEADING, geo_evaluation_text, manual_check_lines,
+    ALT_TEXT_HEADING, FAQ_HEADING, REVIEW_TEXT, geo_evaluation_text, manual_check_lines,
     review_failure_lines, review_required_text, review_status_text,
     status_counts_text,
 )
@@ -454,6 +454,8 @@ class DocxExporter(BaseExporter):
         """Google Ads bölümü ekler."""
         doc.add_heading('5. GOOGLE ADS REKLAM SETLERİ', level=1)
         
+        if ads.claim_review_summary:
+            doc.add_paragraph(ads.claim_review_summary)
         for g in ads.ad_groups:
             doc.add_heading(f'REKLAM GRUBU: {g.group_name}', level=2)
             
@@ -485,14 +487,14 @@ class DocxExporter(BaseExporter):
                 for i, h in enumerate(g.headlines, 1):
                     row = h_table.add_row().cells
                     row[0].text = str(i)
-                    row[1].text = h.headline_text
+                    row[1].text = h.headline_text + (f' [{REVIEW_TEXT}]' if h.review else '')
                     row[2].text = h.headline_type or '-'
             
             # Açıklamalar
             if g.descriptions:
                 doc.add_heading(f'AÇIKLAMALAR ({len(g.descriptions)})', level=3)
                 for i, d in enumerate(g.descriptions, 1):
-                    doc.add_paragraph(f'{i}. {d.description_text}')
+                    doc.add_paragraph(f'{i}. {d.description_text}' + (f' [{REVIEW_TEXT}]' if d.review else ''))
             
             # Negatifler
             if g.negative_keywords:

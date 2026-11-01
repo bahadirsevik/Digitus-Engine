@@ -173,6 +173,8 @@ function FormatBody({ view }: { view: SocialContentView }) {
 }
 
 export default function SocialContentCard({ view }: { view: SocialContentView }) {
+  // claim_review:<json> kaydı ekranda gösterilmez; claim_risk:/claim_unverified: öğeleri okunur metne çevrilir
+  const shownWarnings = view.validationWarnings.filter((w) => !w.startsWith('claim_review:'))
   const captionWithTags = [
     view.caption,
     view.hashtags.map((h) => `#${h.replace(/^#/, '')}`).join(' '),
@@ -261,9 +263,9 @@ export default function SocialContentCard({ view }: { view: SocialContentView })
         )}
       </dl>
 
-      {view.validationWarnings.length > 0 && (
+      {shownWarnings.length > 0 && (
         <ul className="sb-warning-list" aria-label="Doğrulama uyarıları">
-          {view.validationWarnings.map((w, i) => (
+          {shownWarnings.map((w, i) => (
             <li key={i}>
               <AlertTriangle size={12} />
               {reasonText(w)}

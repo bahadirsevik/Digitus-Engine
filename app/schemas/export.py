@@ -222,12 +222,14 @@ class HeadlineData(BaseModel):
     headline_text: str
     headline_type: Optional[str] = None
     is_dki: bool = False
+    review: bool = False  # iddia incelemesi gerekli (validation_action == 'claim_review')
 
 
 class DescriptionData(BaseModel):
     """Reklam açıklaması."""
     description_text: str
     description_type: Optional[str] = None
+    review: bool = False  # iddia incelemesi gerekli
 
 
 class NegativeKeywordData(BaseModel):
@@ -256,6 +258,7 @@ class AdsData(BaseModel):
     """Tüm reklam grupları."""
     ad_groups: List[AdGroupData]
     total: int
+    claim_review_summary: str = ''  # aktif setin iddia incelemesi tek satırı (yoksa boş)
 
 
 class HookData(BaseModel):

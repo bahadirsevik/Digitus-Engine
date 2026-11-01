@@ -20,7 +20,7 @@ from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.safe_text import safe_excel_text as _sx
 from app.exporters.seo_checklist_format import (
-    CHECK_ROW_HEADERS, check_rows, geo_evaluation_text, review_status_text,
+    CHECK_ROW_HEADERS, REVIEW_TEXT, check_rows, geo_evaluation_text, review_status_text,
 )
 from app.schemas.export import ExportSectionEnum, FullReport, BrandProfileData
 
@@ -406,26 +406,28 @@ class ExcelExporter(BaseExporter):
 
         # Başlıklar
         ws = wb.create_sheet("Başlıklar")
-        headers = ['Grup', 'Başlık', 'Tip', 'DKI']
+        headers = ['Grup', 'Başlık', 'Tip', 'DKI', 'İnceleme']
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
         for g in ads.ad_groups:
             for h in g.headlines:
-                ws.append([_sx(g.group_name), _sx(h.headline_text), _sx(h.headline_type), '✔' if h.is_dki else ''])
+                ws.append([_sx(g.group_name), _sx(h.headline_text), _sx(h.headline_type), '✔' if h.is_dki else '',
+                           REVIEW_TEXT if h.review else ''])
 
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 35
 
         # Açıklamalar
         ws = wb.create_sheet("Açıklamalar")
-        headers = ['Grup', 'Açıklama', 'Tip']
+        headers = ['Grup', 'Açıklama', 'Tip', 'İnceleme']
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
         for g in ads.ad_groups:
             for d in g.descriptions:
-                ws.append([_sx(g.group_name), _sx(d.description_text), _sx(d.description_type)])
+                ws.append([_sx(g.group_name), _sx(d.description_text), _sx(d.description_type),
+                           REVIEW_TEXT if d.review else ''])
 
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 80

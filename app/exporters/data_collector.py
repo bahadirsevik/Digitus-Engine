@@ -14,6 +14,7 @@ from app.compliance.publish_review import (
     publish_review_from_rows,
 )
 from app.core import markets
+from app.generators.claim_review import social_warning_display
 from app.schemas.export import (
     ExportSectionEnum, FullReport, SummaryData, ScoringData,
     KeywordScoreData, ChannelsData, ChannelPoolData,
@@ -689,8 +690,9 @@ class ExportDataCollector:
         Versiyonlama (Faz E): export YALNIZ aktif + non-stale setin
         gruplarını kullanır (ortak active_ad_groups filtresi).
         """
-        from app.generators.ads.generation_sets import active_ad_groups
+        from app.generators.ads.generation_sets import active_ad_groups, get_active_set
         from app.generators.ads.validators import build_standard_report
+        from app.generators.claim_review import review_summary
 
         groups = (
             active_ad_groups(self.db, scoring_run_id)
@@ -737,11 +739,13 @@ class ExportDataCollector:
                 headlines=[HeadlineData(
                     headline_text=h.headline_text,
                     headline_type=h.headline_type,
-                    is_dki=h.is_dki or False
+                    is_dki=h.is_dki or False,
+                    review=h.validation_action == 'claim_review',
                 ) for h in headlines],
                 descriptions=[DescriptionData(
                     description_text=d.description_text,
-                    description_type=d.description_type
+                    description_type=d.description_type,
+                    review=d.validation_action == 'claim_review',
                 ) for d in descriptions],
                 negative_keywords=[NegativeKeywordData(
                     keyword=n.keyword,
@@ -750,7 +754,16 @@ class ExportDataCollector:
                 ) for n in negatives]
             ))
         
-        return AdsData(ad_groups=group_data, total=len(group_data))
+        active_set = get_active_set(self.db, scoring_run_id)
+        summary = review_summary(active_set.warnings if active_set else None)
+        review_line = (
+            f"İnceleme gerekli: {summary['claim_risk_count']} risk, "
+            f"{summary['claim_unverified_count']} profilde doğrulanamadı — kontrol gerekli"
+            if summary['review_required'] else ''
+        )
+        return AdsData(
+            ad_groups=group_data, total=len(group_data), claim_review_summary=review_line,
+        )
     
     def _collect_social(self, scoring_run_id: int) -> SocialData:
         """Sosyal medya verilerini toplar.
@@ -877,7 +890,7 @@ class ExportDataCollector:
                 duration_max_sec=dur_max,
                 actual_duration_sec=c.actual_duration_sec,
                 duration_status=c.duration_status,
-                validation_warnings=list(c.validation_warnings or []),
+                validation_warnings=social_warning_display(c.validation_warnings),
                 format_payload=c.format_payload,
             )
             content_data.append(item)

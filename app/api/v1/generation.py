@@ -673,6 +673,7 @@ def list_ads_generation_sets(
     """Run'a ait ADS set geçmişi (status, is_stale, version, sayılar)."""
     from app.database.models import AdGenerationSet
     from app.generators.ads.generation_sets import get_active_set
+    from app.generators.claim_review import review_summary
     from app.schemas.ads import AdGenerationSetListResponse, AdGenerationSetSummary
 
     try:
@@ -686,7 +687,10 @@ def list_ads_generation_sets(
         active = get_active_set(db, scoring_run_id)
         return AdGenerationSetListResponse(
             scoring_run_id=scoring_run_id,
-            sets=[AdGenerationSetSummary.model_validate(s) for s in sets],
+            sets=[
+                AdGenerationSetSummary.model_validate(s).model_copy(update=review_summary(s.warnings))
+                for s in sets
+            ],
             active_set_id=active.id if active else None,
         )
     except HTTPException:
@@ -711,6 +715,7 @@ def activate_ads_generation_set(
     from app.database.models import AdGenerationSet
     from app.schemas.ads import AdGenerationSetSummary
     from app.generators.ads.generation_sets import activate_set
+    from app.generators.claim_review import review_summary
 
     try:
         gen_set = (
@@ -727,13 +732,50 @@ def activate_ads_generation_set(
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
-        return AdGenerationSetSummary.model_validate(activated)
+        return AdGenerationSetSummary.model_validate(activated).model_copy(
+            update=review_summary(activated.warnings)
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Set aktive edilemedi"),
+        )
+
+
+@router.post("/claims/re-evaluate")
+def re_evaluate_claims(
+    scoring_run_id: int = Query(..., description="Scoring run"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """İddia incelemesini GÜNCEL profille yeniden değerlendirir (ücretsiz, AI yok).
+
+    RSA (active+draft, non-stale), SEO ve brief sosyal içerikleri için bulgu kayıtlarını
+    yeniler; önceki kayıt `history`'ye iner. İçerik metni değişmez, set aktifleştirilmez.
+    Profile eklenen ifade mevcut eşleştirmenin tanımadığı bir eş anlamsa uyarı KORUNUR.
+    """
+    from app.core.claim_reevaluate import reevaluate_claims
+
+    try:
+        run = verify_scoring_run(db, scoring_run_id, brand_profile_id)
+        result = reevaluate_claims(db, run)
+        db.commit()
+        return {
+            **result,
+            "note": (
+                "Yeniden değerlendirildi: temizlenen ve hâlâ kontrol gerektiren sayılar "
+                "kanal bazında verilmiştir."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "İddia yeniden değerlendirmesi başarısız oldu"),
         )
 
 
