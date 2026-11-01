@@ -12,7 +12,8 @@ Bu modül SocialContentWorkItem birimi için izole ve DB'siz içerik üretim hat
    - repair_once adaptörü çalıştırılır.
 5. İkinci otoriter kalite değerlendirmesi (repair_attempted=True):
    - accept: Düzeltilmiş içerik kabul edilir (repaired=True, ai_calls_used=2).
-   - reject: Reddedilir, content=None güvencesiyle döner (repaired=True, ai_calls_used=2).
+   - reject: yalnız teknik tutarsızlıkta (iddia artık reddetmez: kalan bulgu claim_risk:/
+     claim_unverified: + claim_review:<json> ile işaretlenip kabul edilir — rev.4).
    - repair: İkinci tamir kesinlikle yasaktır (fail-closed hata).
 6. Kesinlikle en fazla 2 AI çağrısı yapılabilir; otomatik retry veya döngü bulunmaz.
 7. DB, ORM veya HTTP katmanlarına dokunmaz (yalnız tip tespiti için
@@ -28,7 +29,7 @@ Bu modül SocialContentWorkItem birimi için izole ve DB'siz içerik üretim hat
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from celery.exceptions import SoftTimeLimitExceeded
@@ -39,8 +40,12 @@ from app.core.social.content_quality import (
     SocialContentQualityDecision,
     SocialContentQualityError,
     evaluate_social_content_quality,
+    social_scan_texts,
 )
 from app.core.social.content_worker_input import SocialContentWorkItem
+from app.generators.claim_review import (
+    make_current, push_review, social_replace_review,
+)
 from app.generators.social.brief_content_generator import (
     SocialBriefContentGenerator,
     SocialContentGenerationError,
@@ -210,6 +215,41 @@ class SocialContentItemExecutionResult:
                 )
 
 
+def _with_claim_review(
+    decision: SocialContentQualityDecision,
+    *,
+    initial: SocialContentQualityDecision | None = None,
+    original: ValidatedSocialContent | None = None,
+    repaired: ValidatedSocialContent | None = None,
+) -> SocialContentQualityDecision:
+    """Kabul kararına N3 inceleme kaydını (`claim_review:<json>`) ekler (rev.4).
+
+    findings = hâlâ açık bulgular; applied = repair'in çözdüğü RİSK bulguları (orijinal
+    metin + aynı konumdaki yeni metin korunur). Bulgu ve düzeltme yoksa karar aynen döner.
+    """
+    applied: list[dict] = []
+    if initial is not None and original is not None and repaired is not None:
+        open_raw = {f.raw for f in decision.findings}
+        before, after = social_scan_texts(original), social_scan_texts(repaired)
+        for f in initial.findings:
+            if f.kind != "risk" or f.raw in open_raw:
+                continue
+            idx = next((i for i, t in enumerate(before) if f.span in str(t).lower()), None)
+            entry = f.as_dict()
+            if idx is not None:
+                entry["original"] = str(before[idx])[:400]
+                if len(after) == len(before):
+                    entry["suggestion"] = str(after[idx])[:400]
+            applied.append(entry)
+    if not decision.findings and not applied:
+        return decision
+    record = push_review(None, make_current(decision.findings, applied))
+    return replace(
+        decision,
+        warnings=tuple(social_replace_review(decision.warnings, decision.findings, record)),
+    )
+
+
 # ==================== ORCHESTRATOR ====================
 
 
@@ -364,7 +404,7 @@ def execute_social_content_work_item(
             idea_id=work_item.idea_id,
             status="accepted",
             content=initial_ai_result.content,
-            quality_decision=initial_decision,
+            quality_decision=_with_claim_review(initial_decision),
             repaired=False,
             ai_calls_used=1,
         )
@@ -408,7 +448,9 @@ def execute_social_content_work_item(
             # mismatch uyarısıyla KORUNUR — tamamen kaybedilmez. Grounding
             # veya başka bir sert sorun varsa bu dal uygulanmaz (aşağı
             # fail-closed hata akışı devam eder).
-            if initial_decision.reason_codes == ("duration_mismatch",):
+            # rev.4: riskli iddia için repair çağrısı başarısız olsa da içerik KAYBOLMAZ;
+            # orijinal içerik claim_risk işaretiyle korunur (K1).
+            if initial_decision.reason_codes:
                 fallback_decision = evaluate_social_content_quality(
                     initial_ai_result.content,
                     work_item.grounding_context,
@@ -420,7 +462,7 @@ def execute_social_content_work_item(
                         idea_id=work_item.idea_id,
                         status="accepted",
                         content=initial_ai_result.content,
-                        quality_decision=fallback_decision,
+                        quality_decision=_with_claim_review(fallback_decision),
                         repaired=True,
                         ai_calls_used=2,
                     )
@@ -521,7 +563,12 @@ def execute_social_content_work_item(
             idea_id=work_item.idea_id,
             status="accepted",
             content=repair_ai_result.content,
-            quality_decision=authoritative_repaired_decision,
+            quality_decision=_with_claim_review(
+                authoritative_repaired_decision,
+                initial=initial_decision,
+                original=initial_ai_result.content,
+                repaired=repair_ai_result.content,
+            ),
             repaired=True,
             ai_calls_used=2,
         )

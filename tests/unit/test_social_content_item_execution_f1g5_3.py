@@ -268,10 +268,10 @@ def test_clean_initial_generation_accepted():
 
 def test_ungrounded_claim_repair_accepted():
     """İddia içeren ilk üretim tek repair ile düzeltilip accept edilir (repaired=True, ai_calls=2)."""
-    # 1. response: ungrounded claim ("%80 başarı")
+    # 1. response: ungrounded claim ("kazanç garantisi")
     first_resp = _make_valid_video_response_dict(
         end_sec=24,
-        caption="Bu krem ile %80 başarı sağlayan formüle sahip olun!",
+        caption="Bu krem ile kazanç garantisi sağlayan formüle sahip olun!",
     )
     # 2. response: temiz düzeltilmiş içerik
     second_resp = _make_valid_video_response_dict(
@@ -288,7 +288,7 @@ def test_ungrounded_claim_repair_accepted():
 
     assert result.status == "accepted"
     assert result.content is not None
-    assert "%80" not in result.content.caption
+    assert "kazanç garantisi" not in result.content.caption
     assert result.quality_decision.action == "accept"
     assert result.quality_decision.repair_attempted is True
     assert result.repaired is True
@@ -348,12 +348,13 @@ def test_duration_mismatch_repair_tolerated_accepted():
     assert fake_ai.call_count == 2
 
 
-def test_ungrounded_claim_repair_still_dirty_rejected():
-    """İddia içeren içerik repair sonrasında da iddia barındırıyorsa kesinlikle rejected ve content=None döner."""
-    # 1. response: "1 numara cilt bakım ürünü"
+def test_ungrounded_claim_repair_still_dirty_accepted_flagged():
+    """rev.4: riskli iddia repair sonrasında da duruyorsa içerik REDDEDİLMEZ (eski: rejected/content=None);
+    kabul edilir, claim_risk + claim_review ile işaretlenir."""
+    # 1. response: kazanç garantisi (RİSK → repair tetikler)
     first_resp = _make_valid_video_response_dict(
         end_sec=24,
-        caption="Türkiye'nin 1 numara organik bakım ürünü!",
+        caption="Platformumuz kazanç garantisi sunmaktadır.",
     )
     # 2. response: "%100 kesin sonuç garantisi"
     second_resp = _make_valid_video_response_dict(
@@ -368,22 +369,71 @@ def test_ungrounded_claim_repair_still_dirty_rejected():
         work_item=work_item,
     )
 
-    assert result.status == "rejected"
-    assert result.content is None  # Güvenlik gereği içerik temizlenir
-    assert result.quality_decision.action == "reject"
+    assert result.status == "accepted"
+    assert result.content is not None
+    assert result.quality_decision.action == "accept"
     assert "ungrounded_claim" in result.quality_decision.reason_codes
     assert len(result.quality_decision.claims) > 0
+    assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)
+    assert any(w.startswith("claim_review:") for w in result.quality_decision.warnings)
     assert result.repaired is True
     assert result.ai_calls_used == 2
     assert fake_ai.call_count == 2
 
 
+def test_unverified_claim_accepted_without_repair_call():
+    """rev.4: profilde doğrulanamayan iddia ('1 numara') AI çağrısı AÇMAZ; 1 çağrıda kabul + claim_unverified."""
+    first_resp = _make_valid_video_response_dict(
+        end_sec=24,
+        caption="Türkiye'nin 1 numara organik bakım ürünü!",
+    )
+    fake_ai = FakeAIService([json.dumps(first_resp)])
+
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=_make_work_item())
+
+    assert result.status == "accepted"
+    assert result.repaired is False
+    assert result.ai_calls_used == 1
+    assert fake_ai.call_count == 1
+    assert result.content.caption == "Türkiye'nin 1 numara organik bakım ürünü!"  # metin aynen
+    warnings = result.quality_decision.warnings
+    assert any(w.startswith("claim_unverified:") for w in warnings)
+    assert not any(w.startswith("claim_risk:") for w in warnings)
+    record = json.loads(next(w for w in warnings if w.startswith("claim_review:"))[len("claim_review:"):])
+    assert record["current"]["findings"][0]["kind"] == "unverified"
+    assert record["history"] == []
+
+
+def test_repaired_risk_keeps_original_and_suggestion():
+    """rev.4 N3: repair riski çözdüyse orijinal metin + yeni metin kayıtta (applied) korunur."""
+    first_resp = _make_valid_video_response_dict(
+        end_sec=24, caption="Platformumuz kazanç garantisi sunmaktadır.",
+    )
+    second_resp = _make_valid_video_response_dict(
+        end_sec=24, caption="Doğal adımlarla cildinize özen gösterin.",
+    )
+    fake_ai = FakeAIService([json.dumps(first_resp), json.dumps(second_resp)])
+
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=_make_work_item())
+
+    assert result.status == "accepted" and result.repaired is True
+    assert result.quality_decision.claims == ()
+    record = json.loads(
+        next(w for w in result.quality_decision.warnings if w.startswith("claim_review:"))[len("claim_review:"):]
+    )
+    assert record["current"]["findings"] == []
+    applied = record["current"]["applied"][0]
+    assert applied["kind"] == "risk"
+    assert "kazanç garantisi" in applied["original"]
+    assert applied["suggestion"] == "Doğal adımlarla cildinize özen gösterin."
+
+
 def test_combined_claim_and_duration_repair_accepted():
     """Hem iddia hem süre hatalı içerik tek repair ile ikisini de düzelttiğinde accept edilir."""
-    # 1. response: 10s (mismatch) + claim ("50 bin kullanıcı")
+    # 1. response: 10s (mismatch) + claim ("kazanç garantisi")
     first_resp = _make_valid_video_response_dict(
         end_sec=10,
-        caption="50 bin kullanıcı yanılıyor olamaz!",
+        caption="kazanç garantisi yanılıyor olamaz!",
     )
     # 2. response: 24s (valid) + temiz metin
     second_resp = _make_valid_video_response_dict(
@@ -407,16 +457,17 @@ def test_combined_claim_and_duration_repair_accepted():
     assert fake_ai.call_count == 2
 
 
-def test_combined_claim_and_duration_repair_claim_persists_rejected():
-    """Hem iddia hem süre hatalı içerikte süre düzelse bile iddia kalırsa rejected döner."""
+def test_combined_claim_and_duration_repair_claim_persists_accepted_flagged():
+    """rev.4: hem iddia hem süre hatalı içerikte süre düzelse ve iddia kalsa da içerik kabul edilir
+    (eski beklenti: rejected); claim_risk ile işaretlenir."""
     first_resp = _make_valid_video_response_dict(
         end_sec=10,
-        caption="50 bin kullanıcı yanılıyor olamaz!",
+        caption="kazanç garantisi yanılıyor olamaz!",
     )
-    # 2. response: süre düzeldi (22s) ama iddia devam ediyor ("%80 başarı")
+    # 2. response: süre düzeldi (22s) ama iddia devam ediyor ("kazanç garantisi")
     second_resp = _make_valid_video_response_dict(
         end_sec=22,
-        caption="Yine de %80 başarı sağlayan formül!",
+        caption="Yine de kazanç garantisi sağlayan formül!",
     )
     fake_ai = FakeAIService([json.dumps(first_resp), json.dumps(second_resp)])
     work_item = _make_work_item()
@@ -426,9 +477,10 @@ def test_combined_claim_and_duration_repair_claim_persists_rejected():
         work_item=work_item,
     )
 
-    assert result.status == "rejected"
-    assert result.content is None
-    assert result.quality_decision.action == "reject"
+    assert result.status == "accepted"
+    assert result.content is not None
+    assert result.quality_decision.action == "accept"
+    assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)
     assert result.repaired is True
     assert result.ai_calls_used == 2
 
@@ -559,11 +611,12 @@ def test_initial_generation_output_invalid():
     assert fake_ai.call_count == 1
 
 
-def test_repair_provider_error():
-    """Repair sırasında sağlayıcı hatası olduğunda 2 AI çağrısı ile content_repair_provider_error verilir."""
+def test_repair_provider_error_keeps_risky_content_flagged():
+    """rev.4 K1: riskli içerikte repair sağlayıcı hatası verse de içerik KAYBOLMAZ (eski beklenti:
+    content_repair_provider_error istisnası); orijinal içerik claim_risk ile kabul edilir."""
     first_resp = _make_valid_video_response_dict(
         end_sec=24,
-        caption="En iyi sonuç için 100 bin kişi gibi siz de deneyin.",
+        caption="Platformumuz kazanç garantisi sunmaktadır.",
     )
     fake_ai = FakeAIService([
         json.dumps(first_resp),
@@ -571,23 +624,23 @@ def test_repair_provider_error():
     ])
     work_item = _make_work_item()
 
-    with pytest.raises(SocialContentItemExecutionError) as exc_info:
-        execute_social_content_work_item(
-            ai_service=fake_ai,
-            work_item=work_item,
-        )
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=work_item)
 
-    assert exc_info.value.reason_code == CONTENT_REPAIR_PROVIDER_ERROR
-    assert exc_info.value.ai_calls_used == 2
+    assert result.status == "accepted"
+    assert result.repaired is True
+    assert result.ai_calls_used == 2
     assert fake_ai.call_count == 2
-    assert "Network timeout" not in str(exc_info.value)
+    assert result.content.caption == "Platformumuz kazanç garantisi sunmaktadır."
+    assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)
+    assert "Network timeout" not in str(result.quality_decision.warnings)
 
 
-def test_repair_output_invalid():
-    """Repair sırasında çıktı doğrulanamadığında 2 AI çağrısı ile content_repair_output_invalid verilir."""
+def test_repair_output_invalid_keeps_risky_content_flagged():
+    """rev.4 K1: riskli içerikte repair çıktısı doğrulanamasa da içerik KAYBOLMAZ (eski beklenti:
+    content_repair_output_invalid istisnası)."""
     first_resp = _make_valid_video_response_dict(
         end_sec=24,
-        caption="En iyi sonuç için 100 bin kişi gibi siz de deneyin.",
+        caption="Platformumuz kazanç garantisi sunmaktadır.",
     )
     broken_repair_resp = {"hooks": "invalid"}  # liste değil
     fake_ai = FakeAIService([
@@ -596,22 +649,20 @@ def test_repair_output_invalid():
     ])
     work_item = _make_work_item()
 
-    with pytest.raises(SocialContentItemExecutionError) as exc_info:
-        execute_social_content_work_item(
-            ai_service=fake_ai,
-            work_item=work_item,
-        )
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=work_item)
 
-    assert exc_info.value.reason_code == CONTENT_REPAIR_OUTPUT_INVALID
-    assert exc_info.value.ai_calls_used == 2
+    assert result.status == "accepted"
+    assert result.repaired is True
+    assert result.ai_calls_used == 2
     assert fake_ai.call_count == 2
+    assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)
 
 
 def test_forged_generator_quality_decision_detected():
     """repair_once tarafından döndürülen sahte veya uyuşmayan karar fail-closed engellenir."""
     first_resp = _make_valid_video_response_dict(
         end_sec=24,
-        caption="%80 başarı sağlayan formül!",
+        caption="kazanç garantisi sağlayan formül!",
     )
     # 2. yanıtta iddia hâlâ var ("yüzde 100 garanti")
     second_resp = _make_valid_video_response_dict(
@@ -659,7 +710,7 @@ def test_second_repair_request_strictly_forbidden():
     """Post-repair sonrasında kalite kararı 'repair' gelirse fail-closed durulur (2. repair yasak)."""
     first_resp = _make_valid_video_response_dict(
         end_sec=24,
-        caption="%80 başarı sağlayan formül!",
+        caption="kazanç garantisi sağlayan formül!",
     )
     second_resp = _make_valid_video_response_dict(
         end_sec=24,
@@ -984,14 +1035,13 @@ def test_duration_only_repair_output_invalid_saved_with_mismatch():
     assert result.ai_calls_used == 2
 
 
-def test_claim_and_duration_repair_provider_error_still_fails():
-    """Grounding sorunu da varsa (yalnız süre değil), repair provider error'da
-    K8 kurtarması UYGULANMAZ; mevcut fail-closed davranış (rejected/exception) korunur.
-    """
+def test_claim_and_duration_repair_provider_error_keeps_content_flagged():
+    """rev.4 K1: grounding sorunu da varsa repair provider error'da içerik KAYBOLMAZ
+    (eski beklenti: exception). Orijinal içerik duration_mismatch + claim_risk ile kabul edilir."""
     # 1. çağrı: hem süre mismatch (10s) hem ungrounded claim.
     first_resp = _make_valid_video_response_dict(
         end_sec=10,
-        caption="50 bin kullanıcı yanılıyor olamaz!",
+        caption="kazanç garantisi yanılıyor olamaz!",
     )
     fake_ai = FakeAIService([
         json.dumps(first_resp),
@@ -999,8 +1049,9 @@ def test_claim_and_duration_repair_provider_error_still_fails():
     ])
     work_item = _make_work_item()
 
-    with pytest.raises(SocialContentItemExecutionError) as exc:
-        execute_social_content_work_item(ai_service=fake_ai, work_item=work_item)
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=work_item)
 
-    assert exc.value.reason_code == CONTENT_REPAIR_PROVIDER_ERROR
-    assert exc.value.ai_calls_used == 2
+    assert result.status == "accepted"
+    assert result.ai_calls_used == 2
+    assert "duration_mismatch" in result.quality_decision.warnings
+    assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)

@@ -69,8 +69,10 @@ def _expand_then_gate(gen, content):
 
 
 def test_expansion_adds_claim_gate_catches_single_repair_cleans():
+    # rev.4: yalnız RİSK (mutlak sonuç/garanti) onarım tetikler; eski girdi 'ISO ve CE belgeli'
+    # artık unverified (onarım yok) — bkz. test_unverified_only_triggers_no_repair_and_is_review_required
     short = _content(words=410)
-    expanded = _content(intro="ISO ve CE belgeli hizmet.", words=550)
+    expanded = _content(intro="Ağrısız hizmet sunuyoruz.", words=550)
     repaired = _content(title="BIST 100 Rehberi (düzeltildi)", words=550)
     ai = FakeAI(expanded, repaired)
     gen = _gen(ai)
@@ -86,29 +88,37 @@ def test_expansion_adds_claim_gate_catches_single_repair_cleans():
     # Madde kalıcı listede, skor ağırlığına girmedi
     assert seo["checks"][-1] == claim
     assert seo["score"] == 0.9
+    # N3: benimsenen onarımın orijinal alan metni + çözülen risk kayıtta
+    current = claim["claim_review"]["current"]
+    assert current["findings"] == []
+    assert current["applied"][0]["kind"] == "risk"
+    assert current["original"]["intro_paragraph"] == "Ağrısız hizmet sunuyoruz."
+    assert claim["claim_review"]["history"] == []
 
 
 def test_unresolved_claim_is_saved_as_fail_and_review_required():
     short = _content(words=410)
-    expanded = _content(intro="ISO ve CE belgeli hizmet.", words=550)
-    still_bad = _content(intro="ISO ve CE belgeli hizmet.", words=550)
+    expanded = _content(intro="Ağrısız hizmet sunuyoruz.", words=550)
+    still_bad = _content(intro="Ağrısız hizmet sunuyoruz.", words=550)
     ai = FakeAI(expanded, still_bad)
     gen = _gen(ai)
 
     content, seo, geo, claim = _expand_then_gate(gen, short)
 
     assert claim["status"] == "fail"
-    assert "cert:" in claim["details"]
+    assert claim["details"].startswith("risk:") and "ağrisiz" in claim["details"]
     assert len(ai.repair_calls) == 1  # tek tur, döngü yok
     # Daha iyi olmayan onarım benimsenmedi: orijinal (genişletilmiş) metin kaldı
-    assert content["intro_paragraph"] == "ISO ve CE belgeli hizmet."
+    assert content["intro_paragraph"] == "Ağrısız hizmet sunuyoruz."
     review = publish_review_from_results(seo, {"score": 0.9, "evaluation_source": "ai"})
     assert review["status"] == "review_required"
     assert "no_ungrounded_claims" in [f["criterion"] for f in review["critical_failures"]]
+    detail = review["critical_failures"][0]["detail"]
+    assert detail.startswith("Risk — yayın öncesi düzelt")
 
 
 def test_partial_repair_is_adopted_but_remains_fail():
-    expanded = _content(intro="ISO 9001 ve CE belgeli hizmet.", words=550)
+    expanded = _content(intro="Ağrısız ve ISO 9001 belgeli hizmet.", words=550)
     partial = _content(intro="ISO 9001 belgeli hizmet.", words=550)
     gen = _gen(FakeAI(partial))
 
@@ -117,7 +127,31 @@ def test_partial_repair_is_adopted_but_remains_fail():
         scoring_run_id=None, word_count_min=500, word_count_max=600, link_pool=[])
 
     assert content is not expanded and content["intro_paragraph"] == "ISO 9001 belgeli hizmet."
-    assert claim["status"] == "fail"  # kaynak yok → ISO 9001 de dayanaksız
+    assert claim["status"] == "fail"  # kaynak yok → ISO 9001 de dayanaksız (unverified kalır)
+    assert claim["details"].startswith("unverified:")
+    assert "Profilde doğrulanamadı — kontrol gerekli" in claim["details"]
+    assert "risk" not in claim["details"].split("unverified")[0] or claim["details"].startswith("unverified")
+    assert claim["claim_review"]["current"]["applied"][0]["kind"] == "risk"  # çözülen risk kayıtlı
+
+
+def test_unverified_only_triggers_no_repair_and_is_review_required():
+    """rev.4: profilde doğrulanamayan iddia AI açmaz, içerik/metin AYNEN kalır, kayıt fail + review_required."""
+    ai = FakeAI()
+    gen = _gen(ai)
+    content_in = _content(intro="ISO ve CE belgeli hizmet.", words=550)
+
+    content, seo, geo, claim = gen._claim_gate(
+        KEYWORD, content_in, {"score": 0.9, "checks": []}, {"score": 0.9, "evaluation_source": "ai"},
+        scoring_run_id=None, word_count_min=500, word_count_max=600, link_pool=[])
+
+    assert ai.prompts == []  # ek AI çağrısı yok
+    assert content is content_in and content["intro_paragraph"] == "ISO ve CE belgeli hizmet."
+    assert claim["status"] == "fail"
+    assert claim["details"].startswith("unverified:")
+    assert {f["kind"] for f in claim["claim_review"]["current"]["findings"]} == {"unverified"}
+    review = publish_review_from_results(seo, {"score": 0.9, "evaluation_source": "ai"})
+    assert review["status"] == "review_required"
+    assert "Profilde doğrulanamadı — kontrol gerekli" in review["critical_failures"][0]["detail"]
 
 
 def test_clean_content_makes_no_repair_call_and_keeps_scores():

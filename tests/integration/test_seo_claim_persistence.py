@@ -122,7 +122,7 @@ def _claim_check(row):
 
 def test_unresolved_claim_persisted_and_review_required(client, db_session, blocked):
     ws, _, result, ai = blocked
-    assert ai.calls == 1  # tek onarım turu
+    assert ai.calls == 0  # rev.4: unverified (profilde doğrulanamadı) için onarım/AI çağrısı YOK
     assert result['claim_check']['status'] == 'fail'
     assert result['publish_review']['status'] == 'review_required'
 
@@ -130,7 +130,10 @@ def test_unresolved_claim_persisted_and_review_required(client, db_session, bloc
         SEOComplianceResult.seo_geo_content_id == result['id']).one()
     stored = _claim_check(row)
     assert stored['status'] == 'fail' and stored['importance'] == 'critical'
-    assert 'cert:' in stored['details'] and 'service:' in stored['details']
+    assert stored['details'].startswith('unverified:')
+    assert 'ISO' in stored['details'] and 'lazer' in stored['details']
+    assert 'Profilde doğrulanamadı — kontrol gerekli' in stored['details']
+    assert {f['kind'] for f in stored['claim_review']['current']['findings']} == {'unverified'}
 
     # İçerik silinmedi; okuma uçları aynı özeti görür
     res = client.get(
@@ -140,7 +143,7 @@ def test_unresolved_claim_persisted_and_review_required(client, db_session, bloc
     review = body['publish_review']
     assert review['status'] == 'review_required'
     failure = next(f for f in review['critical_failures'] if f['criterion'] == 'no_ungrounded_claims')
-    assert 'cert:' in failure['detail']
+    assert 'Profilde doğrulanamadı — kontrol gerekli' in failure['detail']
     assert any(c['criterion'] == 'no_ungrounded_claims' for c in body['seo_compliance']['checks'])
 
     assert client.get(
@@ -148,6 +151,25 @@ def test_unresolved_claim_persisted_and_review_required(client, db_session, bloc
     listed = client.get(
         f"/api/v1/generation/seo-geo/list/{blocked[1].id}?brand_profile_id={ws.id}").json()
     assert listed['items'][0]['publish_review']['status'] == 'review_required'
+
+
+def test_risk_unresolved_persisted_as_risk_kept_and_review_required(
+    db_session, make_workspace, make_scoring_run, monkeypatch,
+):
+    """rev.4: çözülmeyen RİSK: 1 onarım turu, içerik silinmez, kriter fail + 'risk:' + review_required."""
+    risky = 'Hisse takip, ağrısız bir panel sunar. Hisse takip anlik calisir.'
+    _, _, result, ai = _generate(
+        db_session, make_workspace, make_scoring_run, monkeypatch, risky, risky)
+    assert ai.calls == 1
+    assert result['claim_check']['status'] == 'fail'
+    assert result['claim_check']['details'].startswith('risk:')
+    assert result['publish_review']['status'] == 'review_required'
+    assert 'Risk — yayın öncesi düzelt' in result['publish_review']['critical_failures'][0]['detail']
+    row = db_session.query(SEOComplianceResult).filter(
+        SEOComplianceResult.seo_geo_content_id == result['id']).one()
+    stored = _claim_check(row)
+    assert {f['kind'] for f in stored['claim_review']['current']['findings']} == {'risk'}
+    assert stored['claim_review']['history'] == []
 
 
 def test_clean_content_passes_without_repair(db_session, clean):
@@ -199,7 +221,7 @@ def test_exports_carry_claim_text(db_session, blocked, tmp_path):
     claim = next(r for r in rows if r['Kriter Kodu'] == 'no_ungrounded_claims')
     assert claim['Durum Kodu'] == 'fail'
     assert claim['Kriter'] == 'Dayanaksız iddia yok'
-    assert 'cert:' in claim['Detay']
+    assert 'Profilde doğrulanamadı — kontrol gerekli' in claim['Detay']
     assert rows[0]['Yayın Öncesi İnceleme'] == 'Gerekli'
 
     docx_path = str(tmp_path / 'seo.docx')

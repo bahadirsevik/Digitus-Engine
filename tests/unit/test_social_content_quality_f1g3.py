@@ -364,9 +364,10 @@ def test_d02_clean_and_not_applicable_post_accepted():
 
 
 def test_d03_initial_generation_claim_triggers_repair():
-    """İlk üretimde (repair_attempted=False) desteksiz iddia repair tetikler."""
+    """İlk üretimde (repair_attempted=False) RİSK iddiası (kazanç garantisi) repair tetikler.
+    rev.4: eski girdi '50 bin kullanıcı' artık unverified (repair açmaz) — bkz. d03b."""
     context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
-    content = _make_video_content(caption="Tam 50 bin kullanıcı memnun kaldı.", duration_status="valid", payload_claim=False)
+    content = _make_video_content(caption="Platformumuz kazanç garantisi sunmaktadır.", duration_status="valid", payload_claim=False)
 
     decision = evaluate_social_content_quality(content, context, repair_attempted=False)
 
@@ -376,6 +377,21 @@ def test_d03_initial_generation_claim_triggers_repair():
     assert decision.grounding_clean is False
     assert decision.duration_acceptable is True
     assert decision.repair_attempted is False
+
+
+def test_d03b_initial_unverified_claim_accepted_without_repair():
+    """rev.4: profilde doğrulanamayan iddia ('50 bin kullanıcı') repair AÇMAZ; içerik kabul edilir ve işaretlenir."""
+    context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
+    content = _make_video_content(caption="Tam 50 bin kullanıcı memnun kaldı.", duration_status="valid", payload_claim=False)
+
+    decision = evaluate_social_content_quality(content, context, repair_attempted=False)
+
+    assert decision.action == "accept"
+    assert decision.reason_codes == ("ungrounded_claim",)
+    assert decision.claims and decision.grounding_clean is False
+    assert [f.kind for f in decision.findings] == ["unverified"]
+    assert any(w.startswith("claim_unverified:") for w in decision.warnings)
+    assert not any(w.startswith("claim_risk:") for w in decision.warnings)
 
 
 def test_d04_initial_generation_duration_mismatch_triggers_repair():
@@ -395,7 +411,7 @@ def test_d04_initial_generation_duration_mismatch_triggers_repair():
 def test_d05_initial_generation_both_claim_and_mismatch_single_unified_repair():
     """İlk üretimde hem claim hem duration mismatch varsa TEK birleşik repair kararı ve 2 reason code üretilir."""
     context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
-    content = _make_video_content(caption="Yüzde 80 indirim fırsatı!", duration_status="mismatch", payload_claim=False)
+    content = _make_video_content(caption="Kazanç garantisi sunan fırsat!", duration_status="mismatch", payload_claim=False)
 
     decision = evaluate_social_content_quality(content, context, repair_attempted=False)
 
@@ -443,28 +459,42 @@ def test_d07_repaired_clean_but_duration_still_mismatch_accepted_with_warning():
     assert decision.warnings.count("duration_mismatch") == 1
 
 
-def test_d08_repaired_claim_persists_rejected():
-    """Repair sonrasında desteksiz iddia devam ediyorsa KESİNLİKLE reject edilir."""
+def test_d08_repaired_claim_persists_accepted_and_flagged():
+    """rev.4: repair sonrası iddia devam etse de içerik REDDEDİLMEZ; kabul + inceleme işareti.
+    (Eski beklenti: action == 'reject'.)"""
     context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
     content = _make_video_content(caption="Hâlâ 1 numara organik marka!", duration_status="valid", payload_claim=False)
 
     decision = evaluate_social_content_quality(content, context, repair_attempted=True)
 
-    assert decision.action == "reject"
+    assert decision.action == "accept"
     assert decision.reason_codes == ("ungrounded_claim",)
     assert len(decision.claims) > 0
     assert decision.grounding_clean is False
     assert decision.duration_acceptable is True
+    assert any(w.startswith("claim_unverified:") for w in decision.warnings)
 
 
-def test_d09_repaired_claim_and_mismatch_rejected_with_both_reason_codes():
-    """Repair sonrasında hem claim hem mismatch varsa reject edilir ve iki reason code korunur."""
+def test_d08b_repaired_risk_claim_persists_accepted_with_claim_risk():
+    """rev.4: repair sonrası kalan RİSK iddiası claim_risk: ile işaretlenip kabul edilir."""
+    context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
+    content = _make_video_content(caption="Platformumuz kazanç garantisi sunmaktadır.", duration_status="valid", payload_claim=False)
+
+    decision = evaluate_social_content_quality(content, context, repair_attempted=True)
+
+    assert decision.action == "accept"
+    assert any(w.startswith("claim_risk:") for w in decision.warnings)
+    assert [f.kind for f in decision.findings] == ["risk"]
+
+
+def test_d09_repaired_claim_and_mismatch_accepted_with_both_reason_codes():
+    """rev.4: repair sonrası hem claim hem mismatch: kabul (eski beklenti: reject); iki reason code korunur."""
     context = SocialContentGroundingContext(primary_keyword="cilt bakımı")
     content = _make_video_content(caption="1 numara organik marka!", duration_status="mismatch", payload_claim=False)
 
     decision = evaluate_social_content_quality(content, context, repair_attempted=True)
 
-    assert decision.action == "reject"
+    assert decision.action == "accept"
     assert decision.reason_codes == ("ungrounded_claim", "duration_mismatch")
     assert decision.grounding_clean is False
     assert decision.duration_acceptable is False
@@ -587,13 +617,13 @@ def test_t05_inconsistent_content_duration_status_or_payload():
 
 
 def test_t06_find_ungrounded_claims_unexpected_exception_fails_closed(monkeypatch):
-    """find_ungrounded_claims beklenmedik bir hata verirse fail-closed CONTENT_QUALITY_GROUNDING_ERROR fırlatılır."""
+    """classify_claims beklenmedik bir hata verirse fail-closed CONTENT_QUALITY_GROUNDING_ERROR fırlatılır."""
     from app.core.social import content_quality
 
     def _broken_finder(*args, **kwargs):
         raise RuntimeError("Internal parser crash")
 
-    monkeypatch.setattr(content_quality, "find_ungrounded_claims", _broken_finder)
+    monkeypatch.setattr(content_quality, "classify_claims", _broken_finder)
 
     context = SocialContentGroundingContext(primary_keyword="test")
     content = _make_post_content()

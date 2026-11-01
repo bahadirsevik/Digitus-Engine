@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, Query
 
 from app.core.constants import ADS_TASK_STALE_SECONDS
 from app.database.models import AdGenerationSet, AdGroup, ScoringRun, TaskResult
+from app.generators.claim_review import set_needs_review
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +324,11 @@ def finalize_ads_success(
         is not None
     )
     new_status = SET_DRAFT if prior_success else SET_ACTIVE
+
+    # N1 (plan_iddia_denetimi rev.4): inceleme isareti tasiyan set ilk uretim olsa bile
+    # otomatik active OLMAZ; kullanici activate ile acikca degerlendirir.
+    if set_needs_review(warnings):
+        new_status = SET_DRAFT
 
     # Staleness yarışı (codex bulgusu): üretim SÜRERKEN kanal ataması
     # yenilendiyse set is_stale=True işaretlenmiştir. is_stale ASLA burada

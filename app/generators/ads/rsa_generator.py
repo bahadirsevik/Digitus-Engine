@@ -29,7 +29,7 @@ from app.generators.ads.validators import (
     HeadlineValidator,
     DescriptionValidator,
     DKIValidator,
-    find_ungrounded_claims,
+    classify_claims,
     is_cta,
     keyword_coverage,
     keyword_in_text,
@@ -38,6 +38,7 @@ from app.generators.ads.validators import (
     partition_negatives,
     _negative_tokens,
 )
+from app.generators.claim_review import finding_dict
 from app.schemas.ads import (
     KeywordGroupSchema,
     HeadlineSchema,
@@ -210,6 +211,8 @@ class RSAGenerator:
         self._output_ctx = DEFAULT_CONTEXT
         # Bu üretimin KW kararları (yalnız bilgi; sonraki üretimleri etkilemez)
         self._kw_decisions: Dict[str, Dict[str, str]] = {}
+        # (asset_type, metin) -> {findings, applied}: iddia incelemesi (rev.4)
+        self._asset_review: Dict[Tuple[str, str], Dict[str, list]] = {}
     
     def generate_rsa(
         self,
@@ -241,6 +244,7 @@ class RSAGenerator:
         self._grounding_facts = (grounding_facts or "").strip()
         self._output_ctx = output_ctx or DEFAULT_CONTEXT
         self._kw_decisions: Dict[str, Dict[str, str]] = {}
+        self._asset_review = {}
         
         # Get primary keyword for validation context
         primary_keyword = group.keywords[0] if group.keywords else ""
@@ -371,6 +375,8 @@ class RSAGenerator:
         for asset in (*headlines, *descriptions):
             asset.position_preference = "any"
 
+        claim_findings, claim_applied = self._collect_claim_review(headlines, descriptions)
+
         return AdGroupFullSchema(
             name=group.name,
             theme=group.theme,
@@ -393,6 +399,8 @@ class RSAGenerator:
                 {"keyword": k, **self._kw_decisions[k]}
                 for k in group.keywords if k in self._kw_decisions
             ],
+            claim_findings=claim_findings,
+            claim_applied=claim_applied,
         )
 
     def _below_minimum(
@@ -591,67 +599,66 @@ class RSAGenerator:
         group: KeywordGroupSchema,
         headline_stats: Dict[str, int],
     ) -> Tuple[List[HeadlineSchema], List[DescriptionSchema]]:
-        """Claim grounding zinciri (Faz F3, kesin sıra 2-4).
+        """Iddia denetimi (plan_iddia_denetimi rev.4): asset ASLA elenmez.
 
-        TÜM headline+description'lar taranır; ihlalli asset için en fazla
-        1 kez CLAIM_REWRITE denenir; çözülmeyen asset ELENİR. Deterministik
-        fallback asset'leri de bu yoldan geçer (çağıran uygular).
+        TÜM headline+description'lar taranır. Risk (garanti/mutlak sonuç) → en fazla 1
+        CLAIM_REWRITE; temizse yeniden yazılan benimsenir (orijinal kayıtta), çözülmezse
+        orijinal KALIR. Profilde doğrulanamayan (unverified) iddia → AI çağrısı YOK,
+        asset aynen kalır. Kalan bulgu `validation_action='claim_review'` + set kaydı.
+        Deterministik fallback asset'leri de bu yoldan geçer (çağıran uygular).
         """
         exempt = group.keywords or []
         primary_keyword = exempt[0] if exempt else group.name
-
-        kept_headlines: List[HeadlineSchema] = []
-        for h in headlines:
-            claims = find_ungrounded_claims(h.text, self._grounding_facts, exempt)
-            if not claims:
-                kept_headlines.append(h)
-                continue
-            rewritten = self._rewrite_claim_asset(
-                h.text, claims, "headline", primary_keyword,
-                self.headline_validator.MAX_LENGTH, exempt,
-            )
-            if rewritten:
-                logger.info(
-                    f"Headline claim-rewritten: '{h.text}' -> '{rewritten}' "
-                    f"(claims={claims})"
-                )
-                kept_headlines.append(HeadlineSchema(
-                    text=rewritten, type=h.type,
-                    position_preference=h.position_preference, is_dki=False,
-                ))
-            else:
-                logger.warning(
-                    f"Headline eliminated (ungrounded claim): '{h.text}' "
-                    f"claims={claims}"
-                )
-                headline_stats["eliminated"] = headline_stats.get("eliminated", 0) + 1
-
-        kept_descriptions: List[DescriptionSchema] = []
-        for d in descriptions:
-            claims = find_ungrounded_claims(d.text, self._grounding_facts, exempt)
-            if not claims:
-                kept_descriptions.append(d)
-                continue
-            rewritten = self._rewrite_claim_asset(
-                d.text, claims, "description", primary_keyword,
-                self.description_validator.MAX_LENGTH, exempt,
-            )
-            if rewritten:
-                logger.info(
-                    f"Description claim-rewritten: '{d.text}' -> '{rewritten}' "
-                    f"(claims={claims})"
-                )
-                kept_descriptions.append(DescriptionSchema(
-                    text=rewritten, type=d.type,
-                    position_preference=d.position_preference,
-                ))
-            else:
-                logger.warning(
-                    f"Description eliminated (ungrounded claim): '{d.text}' "
-                    f"claims={claims}"
-                )
-
+        kept_headlines = [
+            self._review_asset(h, "headline", self.headline_validator.MAX_LENGTH, exempt, primary_keyword)
+            for h in headlines
+        ]
+        kept_descriptions = [
+            self._review_asset(d, "description", self.description_validator.MAX_LENGTH, exempt, primary_keyword)
+            for d in descriptions
+        ]
         return kept_headlines, kept_descriptions
+
+    def _review_asset(self, asset, asset_type: str, max_length: int, exempt: List[str], primary_keyword: str):
+        findings = classify_claims(asset.text, self._grounding_facts, exempt)
+        if not findings:
+            return asset
+        original, applied = asset.text, []
+        risks = [f for f in findings if f.kind == "risk"]
+        if risks:
+            rewritten = self._rewrite_claim_asset(
+                original, [f.raw for f in risks], asset_type, primary_keyword, max_length, exempt,
+            )
+            if rewritten:
+                logger.info(f"{asset_type} claim-rewritten: '{original}' -> '{rewritten}'")
+                applied = [
+                    finding_dict(f, asset_type=asset_type, original=original, suggestion=rewritten)
+                    for f in risks
+                ]
+                update = {"text": rewritten}
+                if asset_type == "headline":
+                    update["is_dki"] = False
+                asset = asset.model_copy(update=update)
+                findings = classify_claims(rewritten, self._grounding_facts, exempt)
+        if findings:
+            logger.warning(f"{asset_type} kept for claim review: '{asset.text}' ({[f.raw for f in findings]})")
+            asset = asset.model_copy(update={"validation_action": "claim_review"})
+        self._asset_review[(asset_type, asset.text)] = {
+            "findings": [finding_dict(f, asset_type=asset_type, asset_text=asset.text) for f in findings],
+            "applied": applied,
+        }
+        return asset
+
+    def _collect_claim_review(self, headlines, descriptions) -> Tuple[List[dict], List[dict]]:
+        """Seçilen (nihai) asset'lerin inceleme kayıtları; havuzda kalıp seçilmeyenler girmez."""
+        findings, applied = [], []
+        for asset_type, assets in (("headline", headlines), ("description", descriptions)):
+            for a in assets:
+                rec = self._asset_review.get((asset_type, a.text))
+                if rec:
+                    findings += [dict(f) for f in rec["findings"]]
+                    applied += [dict(f) for f in rec["applied"]]
+        return findings, applied
 
     def _rewrite_claim_asset(
         self,
@@ -662,7 +669,8 @@ class RSAGenerator:
         max_length: int,
         exempt_keywords: Optional[List[str]] = None,
     ) -> Optional[str]:
-        """İhlalli asset'i 1 kez yeniden yazdırır; sonuç yine ihlalliyse None."""
+        """Riskli asset'i 1 kez yeniden yazdırır; sonuç yine risk taşıyorsa None
+        (orijinal korunur). Yeni metindeki yalnız-unverified bulgu reddetmez, işaretlenir."""
         if not self.enable_ai_regeneration:
             return None
         try:
@@ -680,9 +688,8 @@ class RSAGenerator:
             return None
         if not result or len(result) > max_length:
             return None
-        # Rewrite sonrası ikinci kontrol — keyword muafiyeti KORUNUR (codex):
-        # keyword'deki doğal sayı ("2026") rewrite'ta yanlış eleme üretmesin
-        if find_ungrounded_claims(result, self._grounding_facts, exempt_keywords):
+        # Rewrite sonrası ikinci kontrol — keyword muafiyeti KORUNUR (codex)
+        if any(f.kind == "risk" for f in classify_claims(result, self._grounding_facts, exempt_keywords)):
             return None
         return result
     

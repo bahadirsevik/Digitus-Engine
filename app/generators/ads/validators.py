@@ -7,6 +7,7 @@ Contains:
 - DKIValidator: Regex-based DKI format validation
 """
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 from loguru import logger
 
@@ -708,20 +709,52 @@ def _cert_key(m) -> tuple:
     return org, m.group(2).split(":")[0]
 
 
-def find_ungrounded_claims(
+REASON_RISK_TR = "Açık sonuç/kazanç vaadi — yayın öncesi düzelt"
+REASON_UNVERIFIED_TR = "Profilde doğrulanamadı — kontrol gerekli"
+_RISK_CATEGORIES = frozenset({"guarantee", "absolute"})
+
+
+@dataclass(frozen=True)
+class ClaimFinding:
+    """İddia bulgusu (plan_iddia_denetimi rev.4). kind: 'risk' (dar açık risk: garanti +
+    mutlak sonuç) | 'unverified' (profilde doğrulanamadı: hizmet/sertifika/sayı/süperlatif)."""
+
+    kind: str
+    category: str
+    span: str
+    reason_tr: str
+    raw: str  # find_ungrounded_claims'in eski string biçimi ('service:x', 'absolute:y', düz span)
+
+    def as_dict(self) -> dict:
+        return {
+            "kind": self.kind,
+            "category": self.category,
+            "span": self.span,
+            "reason": self.reason_tr,
+        }
+
+
+def _finding(category: str, span: str, raw: str = "") -> ClaimFinding:
+    kind = "risk" if category in _RISK_CATEGORIES else "unverified"
+    return ClaimFinding(
+        kind, category, span, REASON_RISK_TR if kind == "risk" else REASON_UNVERIFIED_TR,
+        raw or span,
+    )
+
+
+def classify_claims(
     text: str,
     grounding_facts: Union[str, GroundingSource],
     exempt_keywords=None,
     include_profile_concepts: bool = True,
 ) -> list:
-    """Metindeki, grounding_facts ile desteklenmeyen iddiaları döndürür.
+    """Metindeki iddiaları sınıflandırır (list[ClaimFinding], tekilleştirilmiş, sıralı).
 
-    Dönüş: okunur iddia string listesi (boş liste = temiz).
     Dil-bağımsız: TR + RU/UK/EN/DE tabloları birlikte taranır (hedef dil
     parametresi yok); sayı biçimi dilden bağımsızdır.
     grounding_facts: düz metin (etiketli satırlar GroundingSource.from_text ile
     ayrıştırılır) veya GroundingSource. Hizmet/marka ve sertifika dayanağı yalnız
-    olumlu kaynak birimlerinden gelir; mutlak sonuç kalıpları kaynağa bakılmaz.
+    olumlu kaynak birimlerinden gelir; garanti/mutlak sonuç kaynağa bakılmaz.
     """
     if not text or not text.strip():
         return []
@@ -751,20 +784,20 @@ def find_ungrounded_claims(
     # sayı bazında ground'lanır (+ eki abartı sayılmaz)
     fact_numbers = {c.split()[0].lstrip("%").rstrip("+") for c in fact_numeric}
 
-    violations = []
+    found = []
 
     for span, canon in _extract_numeric_claims(numeric_text):
         if canon in fact_numeric:
             continue
         if canon.endswith("+") and canon.rstrip("+") in fact_numbers:
             continue
-        violations.append(span)
+        found.append(_finding("numeric", span))
 
     for pattern in _SUPERLATIVE_PATTERNS:
         for m in re.finditer(pattern, working):
             phrase = m.group(0)
             if phrase not in facts_l:
-                violations.append(phrase)
+                found.append(_finding("superlative", phrase))
 
     # RU/UK/EN/DE: 'ı'→'i' normalize metin (büyük I'lı İngilizce/Almanca sözcükler)
     working_i = working.replace("ı", "i")
@@ -773,26 +806,40 @@ def find_ungrounded_claims(
         for m in rx.finditer(working_i):
             phrase = m.group(0)
             if phrase not in facts_i:
-                violations.append(phrase)
+                found.append(_finding("superlative", phrase))
 
     # Kazanç garantisi HER DURUMDA yasak (grounding'e bakılmaz)
     for pattern in _GUARANTEE_PATTERNS:
         for m in re.finditer(pattern, working):
-            violations.append(m.group(0))
+            found.append(_finding("guarantee", m.group(0)))
     for rx in _ML_GUARANTEE_COMPILED:
         for m in rx.finditer(working_i):
-            violations.append(m.group(0))
+            found.append(_finding("guarantee", m.group(0)))
 
-    violations.extend(_lexicon_violations(working, text, source, include_profile_concepts))
+    for raw in _lexicon_violations(working, text, source, include_profile_concepts):
+        prefix, _, span = raw.partition(":")
+        found.append(_finding(prefix, span.strip(), raw))
 
     # Tekilleştir, sırayı koru
     seen = set()
     unique = []
-    for v in violations:
-        if v not in seen:
-            seen.add(v)
-            unique.append(v)
+    for f in found:
+        if f.raw not in seen:
+            seen.add(f.raw)
+            unique.append(f)
     return unique
+
+
+def find_ungrounded_claims(
+    text: str,
+    grounding_facts: Union[str, GroundingSource],
+    exempt_keywords=None,
+    include_profile_concepts: bool = True,
+) -> list:
+    """Geriye dönük: classify_claims'in okunur string listesi (boş = temiz)."""
+    return [
+        f.raw for f in classify_claims(text, grounding_facts, exempt_keywords, include_profile_concepts)
+    ]
 
 
 # ==================== NEGATİF ↔ HEDEF ÇAKIŞMASI (plan 2.1) ====================
@@ -1030,7 +1077,7 @@ def build_standard_report(
         short_keyword_count=len(short),
         short_keywords_in_headlines=sum(coverage[k] == "headline" for k in short),
         unused_keyword_reasons={
-            k: ("too_long" if len(k) > 30 else "claim" if find_ungrounded_claims(k, "", include_profile_concepts=False) else "not_used")
+            k: ("too_long" if len(k) > 30 else "claim" if any(f.kind == "risk" for f in classify_claims(k, "", include_profile_concepts=False)) else "not_used")
             for k in target_keywords if coverage[k] != "headline"
         },
         fill_keywords=[k for k, i in zip(target_keywords, target_keyword_ids) if i in fill_ids],

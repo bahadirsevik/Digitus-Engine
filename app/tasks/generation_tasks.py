@@ -386,6 +386,7 @@ def generate_ads_task(
     AI'a başlamadan VE sonuç yazmadan önce set 'generating' doğrulanır.
     """
     from app.generators.ads.ads_generator import AdsGenerator
+    from app.generators.claim_review import ads_set_warnings
     from app.generators.ads.generation_sets import (
         SET_GENERATING,
         finalize_ads_failure,
@@ -495,7 +496,12 @@ def generate_ads_task(
                 brand_name=brand_name or "", brand_usp=brand_usp or "",
                 trusted_brand_usp=trusted_brand_usp or "",
             )
-            set_warnings = list(regenerated.dropped_negatives or [])
+            cloned_review = generator.cloned_claim_review
+            set_warnings = ads_set_warnings(
+                regenerated.dropped_negatives,
+                [*cloned_review["findings"], *regenerated.claim_findings],
+                [*cloned_review["applied"], *regenerated.claim_applied],
+            )
             groups_count = cloned + 1
             failed_groups = 0
             extra = {"operation": "group_regenerate",
@@ -521,9 +527,11 @@ def generate_ads_task(
             )
             groups_count = result.total_groups
             failed_groups = result.failed_groups
-            set_warnings = [
-                w for g in result.ad_groups for w in (g.dropped_negatives or [])
-            ]
+            set_warnings = ads_set_warnings(
+                [w for g in result.ad_groups for w in (g.dropped_negatives or [])],
+                [f for g in result.ad_groups for f in g.claim_findings],
+                [f for g in result.ad_groups for f in g.claim_applied],
+            )
             extra = {
                 "operation": "full",
                 "headline_count": result.total_headlines,

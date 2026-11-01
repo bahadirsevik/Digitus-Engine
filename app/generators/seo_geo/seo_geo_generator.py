@@ -23,7 +23,8 @@ from app.generators.seo_geo.prompt_templates import (
     SEO_GEO_GENERATION_PROMPT, SEO_GEO_REVISION_PROMPT,
     SEO_GEO_EXPANSION_PROMPT, SEO_GEO_CLAIM_REPAIR_PROMPT,
 )
-from app.generators.ads.validators import find_ungrounded_claims
+from app.generators.ads.validators import classify_claims
+from app.generators.claim_review import failure_text, make_current, push_review
 from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 from app.core.channel.brand_defense import load_grounding_facts
 from app.generators.seo_geo.content_quality import (
@@ -734,19 +735,27 @@ class SEOGEOGenerator:
             return [t for v in value for t in SEOGEOGenerator._flatten_text(v)]
         return [str(value)]
 
-    def _scan_claims(
+    def _classify_content_claims(
         self, content: Dict[str, Any], grounding_facts: str, exempt: List[str]
-    ) -> List[str]:
-        """Nihai metin alanlarını tarar; tekilleştirilmiş ihlal listesi döner."""
+    ) -> list:
+        """Nihai metin alanlarını sınıflandırır; tekilleştirilmiş ClaimFinding listesi."""
         texts: List[str] = []
         for field in (*self._CLAIM_STR_FIELDS, *self._CLAIM_LIST_FIELDS):
             texts.extend(self._flatten_text(content.get(field)))
-        found: List[str] = []
+        found: list = []
+        seen = set()
         for text in texts:
-            for claim in find_ungrounded_claims(text, grounding_facts, exempt):
-                if claim not in found:
-                    found.append(claim)
+            for f in classify_claims(text, grounding_facts, exempt):
+                if f.raw not in seen:
+                    seen.add(f.raw)
+                    found.append(f)
         return found
+
+    def _scan_claims(
+        self, content: Dict[str, Any], grounding_facts: str, exempt: List[str]
+    ) -> List[str]:
+        """Geriye dönük: ihlal string listesi (boş = temiz)."""
+        return [f.raw for f in self._classify_content_claims(content, grounding_facts, exempt)]
 
     def _claim_gate(
         self,
@@ -759,12 +768,14 @@ class SEOGEOGenerator:
         word_count_max: int,
         link_pool: List[Dict[str, str]],
     ):
-        """Dayanaksız iddia kapısı: tara → en fazla 1 onarım → yeniden tara.
+        """İddia kapısı (rev.4): tara → RİSK varsa en fazla 1 onarım → yeniden tara.
 
-        Onarılmış metin iddia sayısını AZALTIYORSA benimsenir ve SEO/GEO
-        nihai metinde yeniden hesaplanır (skor düştü diye ihlalli metne
-        dönülmez; genişletme bu adımdan sonra YAPILMAZ). Çözülmeyen ihlal
-        içeriği silmez: kayıt `no_ungrounded_claims` = fail ile kalır ve
+        Yalnız risk (garanti/mutlak sonuç) onarım tetikler ve yalnız risk span'ları
+        prompt'a gider; profilde doğrulanamayan (unverified) iddia AI açmaz. Onarılmış
+        metin RİSK sayısını AZALTIYORSA benimsenir (orijinal alan metinleri kayıtta
+        kalır) ve SEO/GEO nihai metinde yeniden hesaplanır; genişletme bu adımdan
+        sonra YAPILMAZ. İçerik HİÇBİR durumda silinmez: kalan bulgu
+        `no_ungrounded_claims` = fail (details risk:/unverified:) ile kalır ve
         publish_review `review_required` olur.
         """
         run = (
@@ -775,16 +786,24 @@ class SEOGEOGenerator:
         # Güncel yıl SEO checklist'inin parçası ("2026 yılında" iddia sayılmasın)
         exempt = [keyword, str(datetime.now().year)]
 
-        violations = self._scan_claims(content, grounding_facts, exempt)
-        if violations:
+        findings = self._classify_content_claims(content, grounding_facts, exempt)
+        risks = [f for f in findings if f.kind == 'risk']
+        applied: list = []
+        original_fields: Dict[str, Any] = {}
+        if risks:
             repaired = self._repair_claims(
-                keyword, content, violations, grounding_facts,
+                keyword, content, [f.raw for f in risks], grounding_facts,
                 word_count_min, word_count_max, link_pool,
             )
             if repaired is not None:
-                remaining = self._scan_claims(repaired, grounding_facts, exempt)
-                if len(remaining) < len(violations):
-                    content, violations = repaired, remaining
+                after = self._classify_content_claims(repaired, grounding_facts, exempt)
+                if sum(f.kind == 'risk' for f in after) < len(risks):
+                    still = {f.raw for f in after}
+                    applied = [f for f in risks if f.raw not in still]
+                    for field in (*self._CLAIM_STR_FIELDS, *self._CLAIM_LIST_FIELDS):
+                        if content.get(field) != repaired.get(field):
+                            original_fields[field] = content.get(field)
+                    content, findings = repaired, after
                     seo_result = self.seo_checker.check(
                         content=content, keyword=keyword,
                         word_count_min=word_count_min, word_count_max=word_count_max,
@@ -795,10 +814,15 @@ class SEOGEOGenerator:
 
         item = {
             'criterion': self.CLAIM_CRITERION,
-            'status': 'fail' if violations else 'pass',
+            'status': 'fail' if findings else 'pass',
             'importance': 'critical',
-            'details': '; '.join(violations),
+            'details': failure_text(f.as_dict() for f in findings),
         }
+        if findings or applied:
+            current = make_current(findings, applied)
+            if original_fields:
+                current['original'] = original_fields  # yalnız değişen alanların ÖNCEKİ metni
+            item['claim_review'] = push_review(None, current)
         # Skora/CRITERIA_WEIGHTS'e GİRMEZ: eski içerikle skor karşılaştırılabilirliği korunur
         checks = [
             c for c in seo_result.get('checks') or []

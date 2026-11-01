@@ -16,6 +16,8 @@ Madde kaynakları üç sınıftır:
 """
 from typing import Any, Dict, Iterable, List, Optional
 
+from app.generators.claim_review import readable_failure_text
+
 # Checklist P100 maddelerinin GEO karşılıkları (AI değerlendirir):
 # ilk 40-60 kelimede net cevap / ilk ~200 kelimede konu özeti.
 GEO_CRITICAL_CRITERIA = {
@@ -79,7 +81,7 @@ def build_publish_review(
         if item.get('status') == 'fail':
             detail = item.get('details') or ''
             if item.get('criterion') == CLAIM_CRITERION:
-                detail = f"Dayanaksız iddia: {detail}"  # export/panel okunur metin
+                detail = _claim_detail(item)  # export/panel okunur metin
             failures.append({
                 'criterion': item.get('criterion', ''),
                 'source': 'seo_auto',
@@ -173,6 +175,15 @@ def legacy_seo_checks(seo_row: Any) -> List[Dict[str, Any]]:
 
 
 CLAIM_CRITERION = 'no_ungrounded_claims'
+
+
+def _claim_detail(item: Dict[str, Any]) -> str:
+    """İddia maddesinin okunur metni: rev.4 kayıtta sınıfa göre (Risk | Profilde doğrulanamadı),
+    eski kayıtta (claim_review yok) önceki 'Dayanaksız iddia: …' biçimi."""
+    findings = (((item.get('claim_review') or {}).get('current')) or {}).get('findings')
+    if findings:
+        return readable_failure_text(findings)
+    return f"Dayanaksız iddia: {item.get('details') or ''}"
 
 
 def ensure_claim_criterion(checks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

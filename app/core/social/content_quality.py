@@ -15,8 +15,9 @@ Kurallar (plan_social_brief_akisi.md rev.4 §6, §9):
 - Grounding whitelist yalnızca product_facts ve kullanıcının sağladığı trusted_brand_usp'dir.
 - brand_context whitelist'e DAHİL EDİLMEZ.
 - primary_keyword yalnızca dar ve tam kelime muafiyeti (exempt_keywords) için kullanılır.
-- İlk üretimde ungrounded claim veya duration mismatch varsa TEK birleşik "repair" kararı üretilir.
-- Repair sonrasında claim devam ediyorsa "reject" edilir.
+- İlk üretimde RİSK iddiası (garanti/mutlak sonuç) veya duration mismatch varsa TEK birleşik "repair" kararı üretilir.
+- Profilde doğrulanamayan (unverified) iddia repair açmaz; repair sonrası kalan iddia da REDDEDİLMEZ:
+  içerik "accept" edilir ve claim_risk:/claim_unverified: uyarısıyla incelemeye işaretlenir (rev.4).
 - Repair sonrasında grounding temiz ancak süre hâlâ tutmuyorsa "accept" edilir ve "duration_mismatch" warning'e eklenir.
 """
 from __future__ import annotations
@@ -30,7 +31,8 @@ from app.core.social.content_contract import (
     ValidatedThreadPayload,
     ValidatedVideoPayload,
 )
-from app.generators.ads.validators import find_ungrounded_claims
+from app.generators.ads.validators import ClaimFinding, classify_claims
+from app.generators.claim_review import social_flag_entries
 
 
 # ==================== HATA SINIFI ====================
@@ -166,6 +168,8 @@ class SocialContentQualityDecision:
     grounding_clean: bool
     duration_acceptable: bool
     repair_attempted: bool
+    # Kalan iddia bulgulari (plan_iddia_denetimi rev.4): accept + bulgu = incelemeli kabul
+    findings: tuple[ClaimFinding, ...] = ()
 
     def __post_init__(self) -> None:
         if self.action not in ("accept", "repair", "reject"):
@@ -297,11 +301,25 @@ def _payload_visible_texts(payload: Any) -> list[str]:
     return []
 
 
-def find_social_content_ungrounded_claims(
+def social_scan_texts(content: ValidatedSocialContent) -> list[str]:
+    """İddia taramasının baktığı teslim metinleri (sıra sabit: hook'lar, caption, CTA, görsel, hashtag, payload)."""
+    texts: list[str] = [
+        hook.text for hook in content.hooks
+        if hasattr(hook, "text") and isinstance(hook.text, str)
+    ]
+    texts.append(content.caption)
+    texts.append(content.cta_text)
+    texts.append(content.visual_suggestion)
+    texts.extend(content.hashtags or ())  # düz metin olarak taranır
+    texts.extend(_payload_visible_texts(content.format_payload))
+    return texts
+
+
+def classify_social_content_claims(
     content: ValidatedSocialContent,
     context: SocialContentGroundingContext,
-) -> tuple[str, ...]:
-    """Teslim metinlerindeki desteksiz iddiaları bulur.
+) -> tuple[ClaimFinding, ...]:
+    """Teslim metinlerindeki desteksiz iddiaları sınıflandırır (risk | unverified).
 
     Kurallar:
     - Taranan alanlar: hook.text, caption, cta_text, visual_suggestion, hashtags ve
@@ -329,20 +347,12 @@ def find_social_content_ungrounded_claims(
     exempt_keywords = [context.primary_keyword]
 
     try:
-        texts: list[str] = [
-            hook.text for hook in content.hooks
-            if hasattr(hook, "text") and isinstance(hook.text, str)
-        ]
-        texts.append(content.caption)
-        texts.append(content.cta_text)
-        texts.append(content.visual_suggestion)
-        texts.extend(content.hashtags or ())  # düz metin olarak taranır
-        texts.extend(_payload_visible_texts(content.format_payload))
+        texts = social_scan_texts(content)
 
-        raw_claims: list[str] = []
+        raw_claims: list[ClaimFinding] = []
         for text in texts:
             if isinstance(text, str):
-                raw_claims.extend(find_ungrounded_claims(
+                raw_claims.extend(classify_claims(
                     text,
                     grounding_facts=grounding_facts,
                     exempt_keywords=exempt_keywords,
@@ -356,13 +366,21 @@ def find_social_content_ungrounded_claims(
 
     # Tekilleştir ve sırayı koru
     seen: set[str] = set()
-    unique_claims: list[str] = []
+    unique_claims: list[ClaimFinding] = []
     for c in raw_claims:
-        if c not in seen:
-            seen.add(c)
+        if c.raw not in seen:
+            seen.add(c.raw)
             unique_claims.append(c)
 
     return tuple(unique_claims)
+
+
+def find_social_content_ungrounded_claims(
+    content: ValidatedSocialContent,
+    context: SocialContentGroundingContext,
+) -> tuple[str, ...]:
+    """Geriye dönük: classify_social_content_claims'in okunur string tuple'ı."""
+    return tuple(f.raw for f in classify_social_content_claims(content, context))
 
 
 def evaluate_social_content_quality(
@@ -373,16 +391,17 @@ def evaluate_social_content_quality(
 ) -> SocialContentQualityDecision:
     """Doğrulanmış sosyal içerik için saf grounding, süre ve birleşik repair kararını üretir.
 
-    Karar Matrisi:
+    Karar Matrisi (plan_iddia_denetimi rev.4 — belirsiz içerik KAYBOLMAZ):
     - İlk üretim (repair_attempted=False):
-      - Clean + valid/not_applicable -> action="accept", reason_codes=()
-      - Ungrounded claim var -> action="repair", reason_codes=("ungrounded_claim",)
-      - Duration mismatch var -> action="repair", reason_codes=("duration_mismatch",)
-      - Hem claim hem mismatch -> action="repair", reason_codes=("ungrounded_claim", "duration_mismatch")
-    - Repair sonrası (repair_attempted=True):
-      - Clean + valid/not_applicable -> action="accept", reason_codes=()
-      - Clean + duration mismatch -> action="accept", reason_codes=("duration_mismatch",), warnings'e "duration_mismatch" eklenir
-      - Ungrounded claim devam ediyor -> action="reject", reason_codes=("ungrounded_claim",) veya ("ungrounded_claim", "duration_mismatch")
+      - RİSK iddiası (garanti/mutlak sonuç) -> action="repair", reason_codes=("ungrounded_claim",)
+      - Duration mismatch -> action="repair", reason_codes=("duration_mismatch",)
+      - İkisi birden -> action="repair", reason_codes=("ungrounded_claim", "duration_mismatch")
+      - Yalnız unverified (profilde doğrulanamadı) veya temiz -> action="accept"; unverified
+        bulgular warnings'e claim_unverified:<span> olarak yazılır (AI çağrısı yok)
+    - Repair sonrası (repair_attempted=True): HER ZAMAN action="accept"
+      - Kalan risk/unverified bulgu -> warnings'e claim_risk:/claim_unverified: eklenir
+      - Süre hâlâ mismatch -> reason_codes=("duration_mismatch",), warnings'e "duration_mismatch"
+      - "reject" artık yalnız teknik tutarsızlıkta (burada üretilmez)
     """
     if type(content) is not ValidatedSocialContent:
         raise SocialContentQualityError(
@@ -405,64 +424,45 @@ def evaluate_social_content_quality(
 
     _validate_content_consistency(content)
 
-    claims = find_social_content_ungrounded_claims(content, context)
-    grounding_clean = (len(claims) == 0)
+    findings = classify_social_content_claims(content, context)
+    risk_claims = tuple(f.raw for f in findings if f.kind == "risk")
     is_duration_mismatch = (content.duration_status == "mismatch")
 
     # Mevcut soft warning'leri koru (örn. voiceover_duration_mismatch)
     warnings_list = list(content.validation_warnings or ())
 
-    if not repair_attempted:
-        # İLK ÜRETİM (repair_attempted=False)
-        if grounding_clean and not is_duration_mismatch:
-            action = "accept"
-            reason_codes: tuple[str, ...] = ()
-            duration_acceptable = True
-        elif not grounding_clean and not is_duration_mismatch:
-            action = "repair"
-            reason_codes = ("ungrounded_claim",)
-            duration_acceptable = True
-        elif grounding_clean and is_duration_mismatch:
-            action = "repair"
-            reason_codes = ("duration_mismatch",)
-            duration_acceptable = False
-        else:
-            action = "repair"
-            reason_codes = ("ungrounded_claim", "duration_mismatch")
-            duration_acceptable = False
+    # rev.4: yalnız RİSK (garanti/mutlak sonuç) repair tetikler; profilde doğrulanamayan
+    # (unverified) iddia AI çağrısı açmaz. Repair sonrası kalan bulgu REDDEDİLMEZ: içerik
+    # kabul edilir ve claim_risk:/claim_unverified: ile incelemeye işaretlenir.
+    if not repair_attempted and (risk_claims or is_duration_mismatch):
+        action = "repair"
+        reason_codes = (
+            *(("ungrounded_claim",) if risk_claims else ()),
+            *(("duration_mismatch",) if is_duration_mismatch else ()),
+        )
+        claims = risk_claims  # repair prompt'una yalnız risk span'ları gider
+        duration_acceptable = not is_duration_mismatch
     else:
-        # REPAIR SONRASI (repair_attempted=True)
-        if not grounding_clean:
-            # Claim devam ediyor -> kesinlikle reject
-            action = "reject"
-            if is_duration_mismatch:
-                reason_codes = ("ungrounded_claim", "duration_mismatch")
-                duration_acceptable = False
-                if "duration_mismatch" not in warnings_list:
-                    warnings_list.append("duration_mismatch")
-            else:
-                reason_codes = ("ungrounded_claim",)
-                duration_acceptable = True
-        else:
-            # Grounding temiz
-            if not is_duration_mismatch:
-                action = "accept"
-                reason_codes = ()
-                duration_acceptable = True
-            else:
-                # Süre hâlâ mismatch -> accept + warning
-                action = "accept"
-                reason_codes = ("duration_mismatch",)
-                duration_acceptable = False
-                if "duration_mismatch" not in warnings_list:
-                    warnings_list.append("duration_mismatch")
+        action = "accept"
+        claims = tuple(f.raw for f in findings)
+        duration_acceptable = not is_duration_mismatch
+        reason_codes = (
+            *(("ungrounded_claim",) if findings else ()),
+            *(("duration_mismatch",) if is_duration_mismatch else ()),
+        )
+        if is_duration_mismatch and repair_attempted and "duration_mismatch" not in warnings_list:
+            warnings_list.append("duration_mismatch")
+        warnings_list.extend(
+            w for w in social_flag_entries(findings) if w not in warnings_list
+        )
 
     return SocialContentQualityDecision(
         action=action,
         reason_codes=reason_codes,
         claims=claims,
         warnings=tuple(warnings_list),
-        grounding_clean=grounding_clean,
+        grounding_clean=not findings,
         duration_acceptable=duration_acceptable,
         repair_attempted=repair_attempted,
+        findings=tuple(findings),
     )

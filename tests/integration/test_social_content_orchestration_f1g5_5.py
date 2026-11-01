@@ -514,6 +514,7 @@ def test_02_multiple_accepted_items_canonical_order_persisted_and_completed(
     assert count == 3
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_03_accepted_and_rejected_mix_partial_status_and_warnings(
     db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
 ):
@@ -561,6 +562,7 @@ def test_03_accepted_and_rejected_mix_partial_status_and_warnings(
     assert count == 1
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_04_all_rejected_failed_status_zero_content(
     db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
 ):
@@ -638,6 +640,7 @@ def test_05_already_present_plus_accepted_completed(
     assert db_attempt.status == "completed"
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_06_already_present_plus_rejected_partial(
     db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
 ):
@@ -1182,6 +1185,7 @@ def test_20_failure_finalizer_error_does_not_mask_original_exception(
             assert "Asıl persistence hatası" in str(exc_info.value)
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_21_warning_json_contains_exact_fields(
     db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
 ):
@@ -1239,6 +1243,7 @@ def test_22_provider_sql_raw_exception_does_not_leak(
     assert "secret_table" not in str(db_attempt.warnings)
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_23_content_rejected_claims_preserved(
     db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
 ):
@@ -1592,6 +1597,7 @@ def test_33_non_ascending_snapshot_order_orchestrated_successfully(
     assert result.unresolved_idea_ids == ()
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_34_result_dto_preserves_snapshot_order_for_all_partition_fields(
     db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
 ):
@@ -1622,8 +1628,8 @@ def test_34_result_dto_preserves_snapshot_order_for_all_partition_fields(
 
     # id1 accepted, id2 rejected olacak
     resp_clean = _make_valid_post_dict(caption="Doğal ve temiz içerik.")
-    resp_dirty1 = _make_valid_post_dict(caption="%80 başarı formülü!")
-    resp_dirty2 = _make_valid_post_dict(caption="Hala %80 başarı!")
+    resp_dirty1 = _make_valid_post_dict(caption="kazanç garantisi formülü!")
+    resp_dirty2 = _make_valid_post_dict(caption="Hala kazanç garantisi!")
     ai = SmartMockAIService(responses=[resp_clean, resp_dirty1, resp_dirty2])
 
     result = run_social_content_generation(
@@ -1944,3 +1950,62 @@ def test_41_contents_request_v1_request_snapshot_untouched_after_orchestration(
     assert db_attempt.coverage["schema_version"] == "contents_request_v1"
     assert db_attempt.coverage["request"]["idea_ids"] == [ctx["ideas"][0].id]
 
+
+
+# ==================== rev.4: belirsiz içerik KAYBOLMAZ, incelemeye işaretlenir ====================
+
+
+def _persisted_warnings(db_session, brief_id):
+    db_session.expire_all()
+    row = db_session.query(SocialContent).filter_by(brief_id=brief_id).one()
+    return row, list(row.validation_warnings or [])
+
+
+def test_rev4_unverified_claim_saved_with_flags_zero_extra_ai_call(
+    db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
+):
+    """Kabul 1+5: profilde doğrulanamayan hizmet → içerik KAYDEDİLİR (+claim_unverified), ek AI çağrısı yok."""
+    ctx = _setup_content_orchestration_env(
+        db_session, make_workspace, make_scoring_run, make_keyword, num_ideas=1, task_id="task-r4-1"
+    )
+    caption = "Lazer ile Пломбування каналів rehberi."
+    ai = SmartMockAIService(responses=[_make_valid_post_dict(caption=caption)])
+
+    result = run_social_content_generation(
+        session_factory=SessionLocal, ai_service=ai, attempt_id=ctx["attempt"].id,
+        task_id="task-r4-1", now_provider=lambda: T0,
+    )
+
+    assert result.status == "completed"
+    assert result.persisted_idea_ids == (ctx["ideas"][0].id,)
+    assert result.ai_calls_used == 1 and ai.call_count == 1  # repair/ek çağrı yok
+    row, warnings = _persisted_warnings(db_session, ctx["brief"].id)
+    assert row.caption == caption  # metin aynen
+    assert any(w.startswith("claim_unverified:") for w in warnings)
+    assert not any(w.startswith("claim_risk:") for w in warnings)
+    record = json.loads(next(w for w in warnings if w.startswith("claim_review:"))[len("claim_review:"):])
+    assert record["current"]["findings"] and record["history"] == []
+
+
+def test_rev4_unresolved_risk_saved_with_claim_risk_instead_of_reject(
+    db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
+):
+    """Kabul 3+5: risk repair sonrası da sürerse içerik kaydedilir (eski: reject, kayıt yok)."""
+    ctx = _setup_content_orchestration_env(
+        db_session, make_workspace, make_scoring_run, make_keyword, num_ideas=1, task_id="task-r4-2"
+    )
+    ai = SmartMockAIService(responses=[
+        _make_valid_post_dict(caption="Ürünümüz kazanç garantisi sunar."),
+        _make_valid_post_dict(caption="Hala kazanç garantisi veriyoruz."),
+    ])
+
+    result = run_social_content_generation(
+        session_factory=SessionLocal, ai_service=ai, attempt_id=ctx["attempt"].id,
+        task_id="task-r4-2", now_provider=lambda: T0,
+    )
+
+    assert result.status == "completed" and result.unresolved_idea_ids == ()
+    assert result.ai_calls_used == 2
+    row, warnings = _persisted_warnings(db_session, ctx["brief"].id)
+    assert row.caption == "Hala kazanç garantisi veriyoruz."
+    assert any(w.startswith("claim_risk:") for w in warnings)

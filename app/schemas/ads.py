@@ -56,6 +56,8 @@ class HeadlineSchema(BaseModel):
     type: str = Field(..., description="keyword|cta|benefit|trust|dynamic")
     position_preference: str = Field(default="any", description="any|position_1|position_2|position_3")
     is_dki: bool = Field(default=False, description="Dynamic Keyword Insertion iÃ§eriyor mu?")
+    # 'claim_review' = iddia incelemesi gerekli (plan_iddia_denetimi rev.4); DB'ye yazilir
+    validation_action: Optional[str] = None
 
 
 class HeadlineValidationResult(BaseModel):
@@ -85,6 +87,7 @@ class DescriptionSchema(BaseModel):
     text: str = Field(..., max_length=90, description="AÃ§Ä±klama (max 90 karakter)")
     type: str = Field(..., description="value_prop|features|cta|trust")
     position_preference: str = Field(default="any")
+    validation_action: Optional[str] = None
 
 
 class DescriptionValidationResult(BaseModel):
@@ -155,6 +158,11 @@ class AdGroupFullSchema(BaseModel):
     # KW başına AI değerlendirmesi [{keyword, status: headline|declined|invalid, reason}] —
     # yalnız bu üretim için bilgi; worker result_data'ya taşınır, API/DB'ye girmez.
     keyword_decisions: List[Dict[str, str]] = Field(default_factory=list, exclude=True)
+
+    # Iddia incelemesi (rev.4): kalan bulgular / otomatik duzeltmeler (asset+grup kimlikli);
+    # yalniz worker'a tasinir (set.warnings["claim_review"]), API/DB satirina girmez.
+    claim_findings: List[Dict[str, Any]] = Field(default_factory=list, exclude=True)
+    claim_applied: List[Dict[str, Any]] = Field(default_factory=list, exclude=True)
 
 
 class AdGroupStandardReport(BaseModel):
@@ -250,6 +258,10 @@ class AdGenerationSetSummary(BaseModel):
     task_id: Optional[str] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    # Iddia incelemesi (additive): set.warnings["claim_review"].current.findings'ten turetilir
+    review_required: bool = False
+    claim_risk_count: int = 0
+    claim_unverified_count: int = 0
 
     model_config = {"from_attributes": True}
 

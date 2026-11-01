@@ -34,6 +34,7 @@ from app.schemas.ads import (
     NegativeKeywordDBSchema,
 )
 from app.generators.ads.validators import build_standard_report
+from app.generators.claim_review import review_summary, set_review
 
 
 class AdsGenerator:
@@ -50,6 +51,7 @@ class AdsGenerator:
         self.ai_service = ai_service
         self.grouper = KeywordGrouper(ai_service)
         self.rsa_generator = None  # Created per request for enable_ai_regeneration flag
+        self.cloned_claim_review: dict = {"findings": [], "applied": []}
     
     def generate_ads(
         self,
@@ -209,7 +211,7 @@ class AdsGenerator:
             total_groups=len(groups),
             ad_groups=[self._model_to_schema(g, language) for g in groups],
             generation_set=(
-                AdGenerationSetSummary.model_validate(gen_set)
+                AdGenerationSetSummary.model_validate(gen_set).model_copy(update=review_summary(gen_set.warnings))
                 if gen_set is not None else None
             ),
         )
@@ -329,6 +331,8 @@ class AdsGenerator:
                 )
                 self.db.add(db_group)
                 self.db.flush()  # Get ID
+                for f in (*group.claim_findings, *group.claim_applied):
+                    f["group_id"], f["group_name"] = db_group.id, group.name
                 
                 # Create Headlines
                 for i, h in enumerate(group.headlines):
@@ -338,6 +342,7 @@ class AdsGenerator:
                         headline_type=h.type,
                         position_preference=h.position_preference,
                         is_dki=h.is_dki,
+                        validation_action=h.validation_action,
                         sort_order=i,
                     )
                     self.db.add(db_headline)
@@ -349,6 +354,7 @@ class AdsGenerator:
                         description_text=d.text,
                         description_type=d.type,
                         position_preference=d.position_preference,
+                        validation_action=d.validation_action,
                         sort_order=i,
                     )
                     self.db.add(db_desc)
@@ -407,6 +413,7 @@ class AdsGenerator:
             .all()
         )
         cloned = 0
+        id_map: dict = {}
         for src in source_groups:
             if exclude_group_id is not None and src.id == exclude_group_id:
                 continue
@@ -431,6 +438,7 @@ class AdsGenerator:
                     headline_type=h.headline_type,
                     position_preference=h.position_preference,
                     is_dki=h.is_dki, sort_order=h.sort_order,
+                    validation_action=h.validation_action,
                 ))
             for d in src.descriptions:
                 self.db.add(AdDescription(
@@ -438,6 +446,7 @@ class AdsGenerator:
                     description_type=d.description_type,
                     position_preference=d.position_preference,
                     sort_order=d.sort_order,
+                    validation_action=d.validation_action,
                 ))
             for n in src.negative_keywords:
                 self.db.add(NegativeKeyword(
@@ -445,7 +454,18 @@ class AdsGenerator:
                     match_type=n.match_type, category=n.category,
                     reason=n.reason,
                 ))
+            id_map[src.id] = clone.id
             cloned += 1
+        # Kaynak setin iddia incelemesi: klonlanan gruplar icin group_id yeniden eslenir
+        src_set = self.db.query(AdGenerationSet).filter(AdGenerationSet.id == source_set_id).first()
+        cur = (set_review(src_set.warnings if src_set else None) or {}).get("current") or {}
+        self.cloned_claim_review = {
+            key: [
+                {**f, "group_id": id_map[f["group_id"]]}
+                for f in cur.get(key) or [] if f.get("group_id") in id_map
+            ]
+            for key in ("findings", "applied")
+        }
         return cloned
 
     def regenerate_group_into_set(

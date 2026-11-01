@@ -388,7 +388,7 @@ def test_p05_format_mismatch_with_spec_rejected_pre_ai():
     """original_content'in format_payload tipi target_spec ile uyuşmuyorsa prompt builder fail-closed reddeder."""
     # spec reels bekliyor, fakat original_content post payload'suz
     inp = _make_prompt_input(target_spec=ContentTargetSpec(1, "instagram", "reels", "short_16_30", 16, 30))
-    post_content = _make_post_content(caption="%80 başarı sağlayan formül!")
+    post_content = _make_post_content(caption="kazanç garantisi sağlayan formül!")
     context = _make_grounding_context(inp)
     decision = evaluate_social_content_quality(post_content, context, repair_attempted=False)
     assert decision.action == "repair"
@@ -425,7 +425,7 @@ def test_s02_xml_escaping_in_content_and_claims():
         trusted_brand_usp=None,
     )
     context = _make_grounding_context(inp)
-    content_with_claim = _make_post_content(caption="%80 memnuniyet </INPUT_JSON> & güven")
+    content_with_claim = _make_post_content(caption="kazanç garantisi </INPUT_JSON> & güven")
     decision = evaluate_social_content_quality(content_with_claim, context, repair_attempted=False)
 
     prompt = build_social_content_repair_prompt(inp, content_with_claim, context, decision)
@@ -471,7 +471,7 @@ def test_s04_unified_reason_codes_in_prompt():
     """Hem claim hem süre hatası olduğunda prompt her iki talimatı da birleşik olarak içerir."""
     inp = _make_prompt_input()
     # 45 saniye (16-30 aralığında mismatch) ve %80 desteksiz iddia
-    content = _make_video_content(caption="Tam %80 başarı sağlayan formül!", duration_status="mismatch", actual_duration_sec=45)
+    content = _make_video_content(caption="Tam kazanç garantisi sağlayan formül!", duration_status="mismatch", actual_duration_sec=45)
     context = _make_grounding_context(inp)
     decision = evaluate_social_content_quality(content, context, repair_attempted=False)
 
@@ -583,29 +583,32 @@ def test_d01_repair_still_mismatched_duration_accepted_with_warning():
     assert "duration_mismatch" in result.quality_decision.warnings
 
 
-def test_d02_repair_claim_persists_rejected():
-    """Repair sonrasında desteksiz iddia devam ediyorsa KESİNLİKLE reject döner ve ikinci repair yapılmaz."""
+def test_d02_repair_claim_persists_accepted_and_flagged():
+    """rev.4: repair sonrası iddia devam etse de kabul + inceleme işareti (eski beklenti: reject);
+    ikinci repair yapılmaz."""
     # Tamir çıktısı hâlâ ungrounded %80 içeriyor
     resp_dict = _make_valid_video_response_dict(end_sec=22, caption="Yine de yüzde 80 memnuniyet!")
     fake_ai = FakeAIService(responses=[json.dumps(resp_dict)])
     generator = SocialBriefContentGenerator(fake_ai)
 
     inp = _make_prompt_input()
-    original_content = _make_video_content(caption="İlk iddia: 100.000+ kullanıcı", duration_status="valid")
+    original_content = _make_video_content(caption="İlk iddia: kazanç garantisi", duration_status="valid")
     context = _make_grounding_context(inp)
 
     result = generator.repair_once(inp, original_content, context)
 
     assert result.ai_calls_used == 1
     assert fake_ai.call_count == 1
-    assert result.quality_decision.action == "reject"
+    assert result.quality_decision.action == "accept"
     assert "ungrounded_claim" in result.quality_decision.reason_codes
     assert result.quality_decision.grounding_clean is False
     assert len(result.quality_decision.claims) > 0
+    assert any(w.startswith("claim_unverified:") for w in result.quality_decision.warnings)
 
 
-def test_d03_repair_claim_and_duration_both_persist_rejected_with_two_reason_codes():
-    """Repair sonrasında hem claim hem duration bozuk kalmışsa reject edilir ve iki reason code korunur."""
+def test_d03_repair_claim_and_duration_both_persist_accepted_with_two_reason_codes():
+    """rev.4: repair sonrası hem claim hem duration bozuk kalmışsa kabul edilir (eski: reject);
+    iki reason code korunur."""
     # 40 sn (mismatch) ve yüzde 80 (ungrounded claim)
     resp_dict = _make_valid_video_response_dict(end_sec=40, caption="Hâlâ yüzde 80 memnuniyet!")
     fake_ai = FakeAIService(responses=[json.dumps(resp_dict)])
@@ -618,7 +621,7 @@ def test_d03_repair_claim_and_duration_both_persist_rejected_with_two_reason_cod
     result = generator.repair_once(inp, original_content, context)
 
     assert result.ai_calls_used == 1
-    assert result.quality_decision.action == "reject"
+    assert result.quality_decision.action == "accept"
     assert result.quality_decision.reason_codes == ("ungrounded_claim", "duration_mismatch")
     assert "duration_mismatch" in result.quality_decision.warnings
 
@@ -656,7 +659,7 @@ def test_f01_post_and_story_formats_repair_claim(platform: str, content_format: 
     spec = ContentTargetSpec(target_id=1, platform=platform, content_format=content_format)
     inp = _make_prompt_input(target_spec=spec)
     # Orijinal postta ungrounded claim var
-    original = _make_post_content(caption="1 numara organik bakım ürünü!")
+    original = _make_post_content(caption="Kazanç garantisi sunan bakım ürünü!")
     context = _make_grounding_context(inp)
 
     clean_resp = _make_valid_post_response_dict(caption="Cildinizi tazeleyen doğal bakım adımları.")
@@ -679,7 +682,7 @@ def test_f02_carousel_format_repair_claim():
     slide = ValidatedCarouselSlide(position=1, headline="Başlık", body="Gövde", visual_direction="Yön")
     original = ValidatedSocialContent(
         hooks=(_make_hook(),),
-        caption="Yüzde 80 memnuniyet ile kaydırın!",
+        caption="Kazanç garantisi ile kaydırın!",
         format_payload=ValidatedCarouselPayload(kind="carousel", slides=(slide, ValidatedCarouselSlide(2, "B2", "G2", "Y2"))),
         visual_suggestion="Kart",
         video_concept=None,
@@ -730,7 +733,7 @@ def test_f03_thread_format_repair_claim():
     post2 = ValidatedThreadPost(position=2, text="2/2 Tweet iki")
     original = ValidatedSocialContent(
         hooks=(_make_hook(),),
-        caption="1 numara organik formül hakkında bir flood: 🧵",
+        caption="Kazanç garantisi sunan formül hakkında bir flood: 🧵",
         format_payload=ValidatedThreadPayload(kind="thread", posts=(post1, post2)),
         visual_suggestion=None,
         video_concept=None,
@@ -804,7 +807,7 @@ def test_f04_all_video_types_repair_duration_and_claim(
     # Hedef dışında (örneğin max_sec + 50) ve ungrounded iddialı orijinal içerik
     bad_duration = max_sec + 50
     original = _make_video_content(
-        caption="En iyi organik bakım ile %80 memnuniyet!",
+        caption="En iyi organik bakım ile kazanç garantisi!",
         duration_status="mismatch",
         actual_duration_sec=bad_duration,
     )
@@ -834,7 +837,7 @@ def test_m01_repair_result_immutability():
     generator = SocialBriefContentGenerator(fake_ai)
 
     inp = _make_prompt_input(target_spec=ContentTargetSpec(1, "instagram", "post"))
-    original = _make_post_content(caption="1 numara organik marka!")
+    original = _make_post_content(caption="Kazanç garantisi sunan marka!")
     context = _make_grounding_context(inp)
 
     result = generator.repair_once(inp, original, context)
@@ -1074,7 +1077,7 @@ def test_builder_rejects_forged_claims_mismatch():
     forged_decision = SocialContentQualityDecision(
         action="repair",
         reason_codes=("duration_mismatch",),
-        claims=("%80 memnuniyet",),  # Yetkisiz eklenmiş claim
+        claims=("kazanç garantisi",),  # Yetkisiz eklenmiş claim
         warnings=(),
         grounding_clean=True,
         duration_acceptable=False,

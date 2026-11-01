@@ -276,7 +276,7 @@ def test_01_all_items_accepted_first_try_completed():
 def test_02_one_item_accepted_after_repair_completed():
     """Bir item tek repair sonrası accepted olduğunda batch status 'completed' döner."""
     # Item 101: 1st response iddia (%80), 2nd response temiz
-    resp101_dirty = _make_valid_video_response_dict(caption="%80 başarı sağlayan formül!")
+    resp101_dirty = _make_valid_video_response_dict(caption="kazanç garantisi sağlayan formül!")
     resp101_clean = _make_valid_video_response_dict(caption="Doğal adımlarla cildinize özen gösterin.")
     # Item 102: ilk seferde temiz
     resp102_clean = _make_valid_video_response_dict(caption="2. temiz video metni.")
@@ -299,11 +299,12 @@ def test_02_one_item_accepted_after_repair_completed():
     assert fake_ai.call_count == 3
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_03_one_accepted_one_rejected_partial():
     """Bir accepted, bir rejected olduğunda batch status 'partial' döner ve rejected warning oluşur."""
     resp101_clean = _make_valid_video_response_dict(caption="101 temiz video.")
-    resp102_dirty1 = _make_valid_video_response_dict(caption="%80 başarı sağlayan formül!")
-    resp102_dirty2 = _make_valid_video_response_dict(caption="Yine de %80 başarı formülü!")
+    resp102_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi sağlayan formül!")
+    resp102_dirty2 = _make_valid_video_response_dict(caption="Yine de kazanç garantisi formülü!")
 
     fake_ai = FakeAIService([
         json.dumps(resp101_clean),
@@ -349,10 +350,11 @@ def test_04_one_accepted_one_provider_error_partial():
     assert result.ai_calls_used == 2
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_05_all_items_rejected_or_error_failed():
     """Tüm item'lar başarısız olduğunda batch status 'failed' döner."""
-    resp101_dirty1 = _make_valid_video_response_dict(caption="%80 başarı formülü!")
-    resp101_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı formülü!")
+    resp101_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi formülü!")
+    resp101_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi formülü!")
     fake_ai = FakeAIService([
         json.dumps(resp101_dirty1),
         json.dumps(resp101_dirty2),
@@ -395,10 +397,11 @@ def test_06_already_present_plus_accepted_completed():
     assert fake_ai.call_count == 1
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_07_already_present_plus_rejected_partial():
     """already_present mevcutken work item rejected olursa batch partial döner."""
-    resp102_dirty1 = _make_valid_video_response_dict(caption="%80 başarı formülü!")
-    resp102_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı formülü!")
+    resp102_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi formülü!")
+    resp102_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi formülü!")
     fake_ai = FakeAIService([
         json.dumps(resp102_dirty1),
         json.dumps(resp102_dirty2),
@@ -495,8 +498,8 @@ def test_10_deterministic_ordering_preserved():
 
 def test_11_max_two_ai_calls_per_item():
     """Herhangi bir work item için en fazla iki AI çağrısı yapılabilir."""
-    resp_dirty1 = _make_valid_video_response_dict(caption="%80 başarı!")
-    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı!")
+    resp_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi!")
+    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi!")
     fake_ai = FakeAIService([json.dumps(resp_dirty1), json.dumps(resp_dirty2)])
 
     prep = _make_preparation(requested_idea_ids=(101,))
@@ -508,9 +511,9 @@ def test_11_max_two_ai_calls_per_item():
 
 def test_12_batch_total_calls_ceiling():
     """Batch genelinde toplam çağrı sayısı 2 × work_items sayısını kesinlikle aşamaz."""
-    resp1_d = _make_valid_video_response_dict(caption="%80 başarı!")
+    resp1_d = _make_valid_video_response_dict(caption="kazanç garantisi!")
     resp1_c = _make_valid_video_response_dict(caption="Temiz 1")
-    resp2_d = _make_valid_video_response_dict(caption="%80 başarı!")
+    resp2_d = _make_valid_video_response_dict(caption="kazanç garantisi!")
     resp2_c = _make_valid_video_response_dict(caption="Temiz 2")
 
     fake_ai = FakeAIService([
@@ -545,10 +548,11 @@ def test_13_item_error_does_not_halt_batch():
     assert result.warnings[0].reason_code == "content_output_invalid"
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_14_rejected_content_never_in_accepted_results():
     """Reddedilen içerik nesnesi accepted_results içine kesinlikle giremez."""
-    resp_dirty1 = _make_valid_video_response_dict(caption="%80 başarı!")
-    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı!")
+    resp_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi!")
+    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi!")
     fake_ai = FakeAIService([json.dumps(resp_dirty1), json.dumps(resp_dirty2)])
 
     prep = _make_preparation(requested_idea_ids=(101,))
@@ -559,10 +563,11 @@ def test_14_rejected_content_never_in_accepted_results():
     assert result.accepted_idea_ids == ()
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_15_rejected_warning_contains_claims():
     """Kalite nedeniyle reddedilen uyarının claims alanı otoriter iddiaları içerir."""
-    resp_dirty1 = _make_valid_video_response_dict(caption="%80 başarı formülü!")
-    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı formülü!")
+    resp_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi formülü!")
+    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi formülü!")
     fake_ai = FakeAIService([json.dumps(resp_dirty1), json.dumps(resp_dirty2)])
 
     prep = _make_preparation(requested_idea_ids=(101,))
@@ -572,7 +577,7 @@ def test_15_rejected_warning_contains_claims():
     w = result.warnings[0]
     assert w.reason_code == "content_rejected"
     assert len(w.claims) > 0
-    assert any("%80" in c for c in w.claims)
+    assert any("kazanç" in c for c in w.claims)
 
 
 def test_16_provider_warning_claims_empty_no_leak():
@@ -794,7 +799,7 @@ def test_25_repair_input_prompt_error_item_calls_one():
     """Repair tarafında AI öncesi hata oluştuğunda toplam ai_calls_used=1 kalır."""
     work_item = _make_work_item(idea_id=101)
     # İlk çağrı ungrounded claim ile repair tetikler
-    resp_dirty = _make_valid_video_response_dict(caption="%80 başarı formülü!")
+    resp_dirty = _make_valid_video_response_dict(caption="kazanç garantisi formülü!")
     fake_ai = FakeAIService([json.dumps(resp_dirty)])
 
     # repair_once'ın CONTENT_REPAIR_INVALID_INPUT veya PROMPT_ERROR vermesini simüle et
@@ -997,7 +1002,7 @@ def test_30_forged_rejected_result_wrong_idea_id():
     quality = SocialContentQualityDecision(
         action="reject",
         reason_codes=("ungrounded_claim",),
-        claims=("%80 başarı",),
+        claims=("kazanç garantisi",),
         warnings=(),
         grounding_clean=False,
         duration_acceptable=True,
@@ -1143,7 +1148,7 @@ def test_35_warning_rejects_non_empty_claims_for_error_reasons():
             SocialContentBatchWarning(
                 idea_id=101,
                 reason_code=reason,
-                claims=("%80 başarı",),
+                claims=("kazanç garantisi",),
                 ai_calls_used=1,
             )
         assert exc_info.value.field == "claims"
@@ -1154,19 +1159,20 @@ def test_36_content_rejected_warning_carries_claims():
     w = SocialContentBatchWarning(
         idea_id=101,
         reason_code="content_rejected",
-        claims=("%80 başarı", "en iyi"),
+        claims=("kazanç garantisi", "en iyi"),
         ai_calls_used=2,
     )
     assert w.reason_code == "content_rejected"
-    assert w.claims == ("%80 başarı", "en iyi")
+    assert w.claims == ("kazanç garantisi", "en iyi")
     assert w.ai_calls_used == 2
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_37_mixed_accepted_rejected_unexpected_calls_accounting():
     """accepted + rejected + unexpected exception karışımında toplam çağrı birebir eşleşir ve üst sınırı aşmaz."""
     resp101 = _make_valid_video_response_dict(caption="101 temiz")
-    resp102_dirty1 = _make_valid_video_response_dict(caption="%80 başarı formülü!")
-    resp102_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı!")
+    resp102_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi formülü!")
+    resp102_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi!")
     fake_ai = FakeAIService([
         json.dumps(resp101),
         json.dumps(resp102_dirty1),
@@ -1231,9 +1237,9 @@ def test_38_child_parity_failure_does_not_halt_subsequent_items():
 
 def test_39_temperature_none_across_multiple_calls_regression():
     """Tüm AI çağrılarında (ilk üretim ve tamir) temperature parametresi None olmalıdır (temperature=0 yasaktır)."""
-    resp1_d = _make_valid_video_response_dict(caption="%80 başarı!")
+    resp1_d = _make_valid_video_response_dict(caption="kazanç garantisi!")
     resp1_c = _make_valid_video_response_dict(caption="Temiz 1")
-    resp2_d = _make_valid_video_response_dict(caption="%80 başarı!")
+    resp2_d = _make_valid_video_response_dict(caption="kazanç garantisi!")
     resp2_c = _make_valid_video_response_dict(caption="Temiz 2")
 
     fake_ai = FakeAIService([
@@ -1317,10 +1323,11 @@ def test_42_callback_called_exactly_once_on_wrong_idea_id():
     assert callbacks == [101]
 
 
+@pytest.mark.usefixtures("legacy_claim_reject")
 def test_43_callback_called_exactly_once_on_rejected_item():
     """Rejected item sonrasında callback tam bir kez çağrılır."""
-    resp_dirty1 = _make_valid_video_response_dict(caption="%80 başarı formülü!")
-    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ %80 başarı!")
+    resp_dirty1 = _make_valid_video_response_dict(caption="kazanç garantisi formülü!")
+    resp_dirty2 = _make_valid_video_response_dict(caption="Hâlâ kazanç garantisi!")
     fake_ai = FakeAIService([json.dumps(resp_dirty1), json.dumps(resp_dirty2)])
 
     prep = _make_preparation(requested_idea_ids=(101,))
