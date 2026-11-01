@@ -40,13 +40,30 @@ def finding_dict(finding: Any, **extra: Any) -> dict:
 
 
 def make_current(
-    findings: Iterable[Any], applied: Iterable[Any] = (), evaluated_at: Optional[str] = None
+    findings: Iterable[Any], applied: Iterable[Any] = (), evaluated_at: Optional[str] = None,
+    changed: Iterable[dict] = (),
 ) -> dict:
-    return {
+    current = {
         "evaluated_at": evaluated_at or now_iso(),
         "findings": [finding_dict(f) for f in list(findings)[:MAX_FINDINGS]],
         "applied": [finding_dict(f) for f in list(applied)[:MAX_FINDINGS]],
     }
+    changed = list(changed)[:MAX_FINDINGS]
+    if changed:  # onarımın DEĞİŞTİRDİĞİ her metin öğesi: risk çözülsün çözülmesin ilk metin korunur
+        current["changed"] = changed
+    return current
+
+
+def changed_items(before: dict, after: dict) -> list:
+    """{etiket: metin} iki sözlüğü karşılaştırır; değişen her öğe için {field, original, suggestion}."""
+    out = []
+    for label in [*before, *[k for k in after if k not in before]]:
+        old, new = before.get(label), after.get(label)
+        if old != new:
+            out.append({
+                "field": label, "original": str(old or "")[:400], "suggestion": str(new or "")[:400],
+            })
+    return out
 
 
 def push_review(record: Optional[dict], new_current: dict) -> dict:

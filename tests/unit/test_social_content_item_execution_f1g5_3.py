@@ -1055,3 +1055,46 @@ def test_claim_and_duration_repair_provider_error_keeps_content_flagged():
     assert result.ai_calls_used == 2
     assert "duration_mismatch" in result.quality_decision.warnings
     assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)
+
+
+def _claim_record(result):
+    return json.loads(
+        next(w for w in result.quality_decision.warnings if w.startswith("claim_review:"))[len("claim_review:"):]
+    )
+
+
+def test_repair_changes_text_but_same_risk_remains_keeps_original_and_repaired_text():
+    """Codex P2: onarım metni değiştirdi ama aynı risk kaldı → ilk + onarılmış caption kayıtta,
+    onarım öncesi kayıt history'de; risk işareti sürer."""
+    first_resp = _make_valid_video_response_dict(
+        end_sec=24, caption="Ağrısız tedavi için ilk özgün açıklama.")
+    second_resp = _make_valid_video_response_dict(
+        end_sec=24, caption="Ağrısız tedavi için tamamen farklı ikinci açıklama.")
+    fake_ai = FakeAIService([json.dumps(first_resp), json.dumps(second_resp)])
+
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=_make_work_item())
+
+    assert result.status == "accepted" and result.repaired is True
+    assert result.content.caption == "Ağrısız tedavi için tamamen farklı ikinci açıklama."
+    assert any(w.startswith("claim_risk:") for w in result.quality_decision.warnings)
+    record = _claim_record(result)
+    caption = next(c for c in record["current"]["changed"] if c["field"] == "caption")
+    assert caption["original"] == "Ağrısız tedavi için ilk özgün açıklama."
+    assert caption["suggestion"] == "Ağrısız tedavi için tamamen farklı ikinci açıklama."
+    assert len(record["history"]) == 1  # onarım öncesi kayıt
+    assert record["history"][0]["findings"][0]["kind"] == "risk"
+
+
+def test_repair_changed_hook_is_captured_too():
+    first_resp = _make_valid_video_response_dict(
+        end_sec=24, caption="Ağrısız tedavi rehberi.", hook_text="Ağrısız tedavi mümkün mü?")
+    second_resp = _make_valid_video_response_dict(
+        end_sec=24, caption="Ağrısız tedavi rehberi.", hook_text="Bu yöntemi biliyor muydunuz?")
+    fake_ai = FakeAIService([json.dumps(first_resp), json.dumps(second_resp)])
+
+    result = execute_social_content_work_item(ai_service=fake_ai, work_item=_make_work_item())
+
+    changed = {c["field"]: c for c in _claim_record(result)["current"]["changed"]}
+    assert "caption" not in changed  # değişmeyen öğe kayda girmez
+    assert changed["hook[0]"]["original"] == "Ağrısız tedavi mümkün mü?"
+    assert changed["hook[0]"]["suggestion"] == "Bu yöntemi biliyor muydunuz?"

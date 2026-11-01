@@ -301,18 +301,24 @@ def _payload_visible_texts(payload: Any) -> list[str]:
     return []
 
 
-def social_scan_texts(content: ValidatedSocialContent) -> list[str]:
-    """İddia taramasının baktığı teslim metinleri (sıra sabit: hook'lar, caption, CTA, görsel, hashtag, payload)."""
-    texts: list[str] = [
-        hook.text for hook in content.hooks
+def social_labeled_texts(content: ValidatedSocialContent) -> list[tuple[str, str]]:
+    """İddia taramasının baktığı teslim metinleri, etiketli: hook[i], caption, cta_text,
+    visual_suggestion, hashtag[i], payload[i] (sıra sabit)."""
+    items: list[tuple[str, str]] = [
+        (f"hook[{i}]", hook.text) for i, hook in enumerate(content.hooks)
         if hasattr(hook, "text") and isinstance(hook.text, str)
     ]
-    texts.append(content.caption)
-    texts.append(content.cta_text)
-    texts.append(content.visual_suggestion)
-    texts.extend(content.hashtags or ())  # düz metin olarak taranır
-    texts.extend(_payload_visible_texts(content.format_payload))
-    return texts
+    items.append(("caption", content.caption))
+    items.append(("cta_text", content.cta_text))
+    items.append(("visual_suggestion", content.visual_suggestion))
+    items.extend((f"hashtag[{i}]", h) for i, h in enumerate(content.hashtags or ()))
+    items.extend((f"payload[{i}]", t) for i, t in enumerate(_payload_visible_texts(content.format_payload)))
+    return items
+
+
+def social_scan_texts(content: ValidatedSocialContent) -> list[str]:
+    """İddia taramasının baktığı teslim metinleri (sıra sabit: hook'lar, caption, CTA, görsel, hashtag, payload)."""
+    return [text for _, text in social_labeled_texts(content)]
 
 
 def classify_social_content_claims(

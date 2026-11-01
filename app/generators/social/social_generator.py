@@ -52,7 +52,7 @@ from app.schemas.social import (
 )
 from app.generators.ads.validators import classify_claims
 from app.generators.claim_review import (
-    finding_dict, make_current, push_review, social_flag_entries, social_record,
+    changed_items, finding_dict, make_current, push_review, social_flag_entries, social_record,
     social_record_entry, social_replace_review,
 )
 from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
@@ -652,7 +652,11 @@ class SocialGenerator:
             new_findings = self._classify_content_claims(new_content, grounding_facts)
             old_warnings = list(db_content.validation_warnings or [])
             prev = social_record(old_warnings)
-            record = push_review(prev, make_current(new_findings, [])) if (new_findings or prev) else None
+            changed = changed_items(self._labeled_texts(old_content), self._labeled_texts(new_content))
+            record = (
+                push_review(prev, make_current(new_findings, [], changed=changed))
+                if (new_findings or prev or changed) else None
+            )
             review_warnings = social_replace_review(old_warnings, new_findings, record) or None
             if new_findings:
                 logger.warning(
@@ -969,11 +973,26 @@ class SocialGenerator:
         return [f.raw for f in self._classify_content_claims(content, grounding_facts)]
 
     @staticmethod
-    def _review_warnings(findings: list, applied: list) -> Optional[list]:
-        """SocialContent.validation_warnings: claim_risk:/claim_unverified: + claim_review:<json>."""
-        if not findings and not applied:
+    def _labeled_texts(content: SocialContentSchema) -> dict:
+        """Legacy içeriğin TÜM metin öğeleri {etiket: metin} (değişiklik kaydı için)."""
+        items = {f"hook[{i}]": h.text for i, h in enumerate(content.hooks or [])}
+        for field in ("caption", "cta_text", "visual_suggestion", "scenario", "video_concept",
+                      "industry_posting_suggestion", "platform_notes"):
+            items[field] = getattr(content, field, None)
+        items.update({f"hashtag[{i}]": h for i, h in enumerate(content.hashtags or [])})
+        return items
+
+    @staticmethod
+    def _review_warnings(findings: list, applied: list, changed: Optional[list] = None,
+                         initial_findings: Optional[list] = None) -> Optional[list]:
+        """SocialContent.validation_warnings: claim_risk:/claim_unverified: + claim_review:<json>.
+
+        changed: onarımın değiştirdiği her metin öğesi (ilk + onarılmış hali); initial_findings verilirse
+        onarım öncesi kayıt history'ye iner."""
+        if not findings and not applied and not changed:
             return None
-        record = push_review(None, make_current(findings, applied))
+        base = push_review(None, make_current(initial_findings, ())) if initial_findings is not None else None
+        record = push_review(base, make_current(findings, applied, changed=changed or ()))
         return [*social_flag_entries(findings), social_record_entry(record)]
 
     def _ground_or_reject(
@@ -996,6 +1015,8 @@ class SocialGenerator:
             return content, None, None
 
         applied: list = []
+        changed: list = []
+        initial_findings = None
         risks = [f for f in findings if f.kind == "risk"]
         if risks:
             logger.warning(
@@ -1020,11 +1041,14 @@ class SocialGenerator:
                     finding_dict(f, original=content.caption, suggestion=regenerated.caption)
                     for f in risks if f.raw not in still
                 ]
+                # Değişen HER metin öğesinin ilk hali kayıtta kalır (risk çözülsün çözülmesin)
+                changed = changed_items(self._labeled_texts(content), self._labeled_texts(regenerated))
+                initial_findings = findings
                 content = regenerated
                 findings = self._classify_content_claims(content, grounding_facts)
 
         if not findings:
-            return content, None, self._review_warnings([], applied)
+            return content, None, self._review_warnings([], applied, changed, initial_findings)
 
         kinds = {f.kind for f in findings}
         logger.warning(
@@ -1037,7 +1061,7 @@ class SocialGenerator:
             claims=[f.raw for f in findings],
             kind="risk" if "risk" in kinds else "unverified",
         )
-        return content, warning, self._review_warnings(findings, applied)
+        return content, warning, self._review_warnings(findings, applied, changed, initial_findings)
 
     # ==================== PRIVATE METHODS ====================
 

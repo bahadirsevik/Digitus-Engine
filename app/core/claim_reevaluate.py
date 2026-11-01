@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.compliance.publish_review import CLAIM_CRITERION, legacy_seo_checks
-from app.core.channel.brand_defense import load_grounding_facts, load_product_definition
+from app.core.channel.brand_defense import load_grounding_facts
 from app.database.models import (
     AdGenerationSet,
     AdGroup,
@@ -187,18 +187,28 @@ def _social_texts(row: SocialContent) -> List[str]:
     return [t for t in texts if isinstance(t, str)]
 
 
-def _brief_facts(db: Session, run: ScoringRun, brief_id: int) -> str:
-    """Brief içeriklerinin üretimdeki dayanağının ÜST KÜMESİ: güncel profil listeleri +
-    brief'in 'contents' attempt'lerinin snapshot'larındaki ürün tanımı ve güvenilir USP.
-    Üretimde bağlam product_facts + trusted_brand_usp idi (content_flow); burada hiçbiri
-    eksik kalmaz, bu yüzden re-evaluate üretimde temiz geçen içeriğe YENİ bulgu ekleyemez."""
-    parts = [load_grounding_facts(db, run), load_product_definition(db, run) or ""]
-    attempts = (
-        db.query(SocialGenerationAttempt)
-        .filter(SocialGenerationAttempt.brief_id == brief_id, SocialGenerationAttempt.stage == "contents")
-        .all()
-    )
+def _producing_attempt(attempts: list, idea_id: int):
+    """İçeriği ÜRETEN contents attempt'i: idea_id'yi isteyen, tamamlanmış/kısmi (completed|partial) ve
+    o fikri çözülmemiş bırakmamış İLK attempt (içerik fikir başına tekildir; ilk kaydeden en eski
+    attempt'tir, sonrakiler already_present sayar). Başarısız/devam eden/başka fikirli attempt
+    sayılmaz. Belirlenemezse None → yalnız güncel profilin verdiği dayanak kullanılır."""
     for attempt in attempts:
+        if attempt.status not in ("completed", "partial"):
+            continue
+        if idea_id not in (attempt.requested_idea_ids or []):
+            continue
+        unresolved = {w.get("idea_id") for w in (attempt.warnings or []) if isinstance(w, dict)}
+        if idea_id in unresolved:
+            continue
+        return attempt
+    return None
+
+
+def _content_facts(db: Session, run: ScoringRun, attempt) -> str:
+    """Güncel yetkili profil + (varsa) o içeriği üreten isteğin ürün tanımı ve güvenilir USP'si.
+    Başka istek/fikir veya başarısız deneme izin kapsamını GENİŞLETMEZ."""
+    parts = [load_grounding_facts(db, run)]
+    if attempt is not None:
         request = (attempt.coverage or {}).get("request") or {}
         parts += [request.get("product_facts") or "", request.get("trusted_brand_usp") or ""]
     return "\n".join(p for p in parts if p)
@@ -212,11 +222,17 @@ def _reevaluate_social(db: Session, run: ScoringRun) -> Dict[str, int]:
         .all()
     )
     cleared = still_flagged = 0
-    facts_by_brief: Dict[int, str] = {}
+    attempts_by_brief: Dict[int, list] = {}
     for row in rows:
-        if row.brief_id not in facts_by_brief:
-            facts_by_brief[row.brief_id] = _brief_facts(db, run, row.brief_id)
-        facts = facts_by_brief[row.brief_id]
+        if row.brief_id not in attempts_by_brief:
+            attempts_by_brief[row.brief_id] = (
+                db.query(SocialGenerationAttempt)
+                .filter(SocialGenerationAttempt.brief_id == row.brief_id,
+                        SocialGenerationAttempt.stage == "contents")
+                .order_by(SocialGenerationAttempt.id)
+                .all()
+            )
+        facts = _content_facts(db, run, _producing_attempt(attempts_by_brief[row.brief_id], row.idea_id))
         idea = db.query(SocialIdea).filter(SocialIdea.id == row.idea_id).first()
         keyword = (
             db.query(Keyword).filter(Keyword.id == idea.keyword_id).first()

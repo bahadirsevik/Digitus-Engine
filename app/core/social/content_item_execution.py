@@ -40,12 +40,13 @@ from app.core.social.content_quality import (
     SocialContentQualityDecision,
     SocialContentQualityError,
     evaluate_social_content_quality,
+    social_labeled_texts,
     social_scan_texts,
 )
 from app.core.social.content_worker_input import SocialContentWorkItem
 from app.generators.claim_lexicon import fold
 from app.generators.claim_review import (
-    make_current, push_review, social_replace_review,
+    changed_items, make_current, push_review, social_replace_review,
 )
 from app.generators.social.brief_content_generator import (
     SocialBriefContentGenerator,
@@ -242,9 +243,16 @@ def _with_claim_review(
                 if len(after) == len(before):
                     entry["suggestion"] = str(after[idx])[:400]
             applied.append(entry)
-    if not decision.findings and not applied:
+    changed: list[dict] = []
+    record = None
+    if initial is not None and original is not None and repaired is not None:
+        # Onarım benimsendi: DEĞİŞEN her metin öğesinin ilk hali + onarılmış hali kayıtta kalır
+        # (risk çözülsün çözülmesin); onarım öncesi kayıt history'ye iner.
+        changed = changed_items(dict(social_labeled_texts(original)), dict(social_labeled_texts(repaired)))
+        record = push_review(None, make_current(initial.findings, ()))
+    if not decision.findings and not applied and not changed:
         return decision
-    record = push_review(None, make_current(decision.findings, applied))
+    record = push_review(record, make_current(decision.findings, applied, changed=changed))
     return replace(
         decision,
         warnings=tuple(social_replace_review(decision.warnings, decision.findings, record)),

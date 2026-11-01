@@ -526,3 +526,19 @@ class TestSocialGroundOrReject:
         assert warning is not None
         assert warning.reason_code == "ungrounded_claim"
         assert warning.kind == "risk"
+
+
+    def test_legacy_changed_regeneration_keeps_all_original_text_even_if_risk_remains(self):
+        """Codex P2 (legacy): aynı risk kalsa da değişen hook + caption'ın ilk hali kayıtta; önceki kayıt history'de."""
+        regenerated = _content("Ağrısız tedavi için tamamen farklı ikinci açıklama.", hook_text="Yeni kanca")
+        gen = self._generator(regenerated=regenerated)
+        content, warning, review = gen._ground_or_reject(
+            _content("Ağrısız tedavi için ilk özgün açıklama.", hook_text="İlk kanca"), _idea(), "Marka", "", ""
+        )
+        assert content.caption == "Ağrısız tedavi için tamamen farklı ikinci açıklama."
+        assert warning.kind == "risk"
+        record = json.loads(next(w for w in review if w.startswith("claim_review:"))[len("claim_review:"):])
+        changed = {c["field"]: c for c in record["current"]["changed"]}
+        assert changed["caption"]["original"] == "Ağrısız tedavi için ilk özgün açıklama."
+        assert changed["hook[0]"]["original"] == "İlk kanca" and changed["hook[0]"]["suggestion"] == "Yeni kanca"
+        assert len(record["history"]) == 1

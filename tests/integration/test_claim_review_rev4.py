@@ -498,3 +498,77 @@ def test_legacy_social_regenerate_adopts_flagged_content_and_pushes_history(
     record = social_record(row.validation_warnings)
     assert [f["kind"] for f in record["current"]["findings"]] == ["risk"]
     assert record["history"][0]["findings"][0]["span"] == "lazer"
+
+
+# ==================== Codex P2: sosyal dayanak kapsamı ====================
+
+
+def _add_contents_attempt(db_session, brief_id, idea_ids, status, usp, key):
+    from app.database.models import SocialGenerationAttempt
+
+    attempt = SocialGenerationAttempt(
+        brief_id=brief_id, stage="contents", idempotency_key=key, status=status,
+        requested_idea_ids=idea_ids,
+        coverage={"schema_version": "contents_request_v1",
+                  "request": {"idea_ids": idea_ids, "product_facts": None, "trusted_brand_usp": usp}},
+        created_at=_orch.T0,
+    )
+    db_session.add(attempt)
+    db_session.commit()
+    return attempt
+
+
+def test_reevaluate_social_ignores_failed_and_other_idea_attempts(
+    client, db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
+):
+    """Başarısız / başka fikre ait attempt'in USP'si bu içeriğin dayanağı DEĞİL: uyarı korunur."""
+    ctx = _orch._setup_content_orchestration_env(
+        db_session, make_workspace, make_scoring_run, make_keyword, num_ideas=2, task_id="task-r4-scope")
+    id1, id2 = ctx["ideas"][0].id, ctx["ideas"][1].id
+    _orch.run_social_content_generation(
+        session_factory=_orch.SessionLocal,
+        ai_service=_orch.SmartMockAIService(responses=[
+            _orch._make_valid_post_dict(caption="Lazer ile bakım rehberi."),
+            _orch._make_valid_post_dict(caption="Doğal bakım rutini önerileri."),
+        ]),
+        attempt_id=ctx["attempt"].id, task_id="task-r4-scope", now_provider=lambda: _orch.T0,
+    )
+    brief_id, ws, run = ctx["brief"].id, ctx["workspace"], ctx["scoring_run"]
+    # profil yalnız cilt bakımı; ilgisiz attempt'ler 'Lazer hizmeti' USP'si taşıyor
+    _add_contents_attempt(db_session, brief_id, [id1, id2], "failed", "Lazer hizmeti", "k-failed")
+    _add_contents_attempt(db_session, brief_id, [id2], "completed", "Lazer hizmeti", "k-other-idea")
+
+    res = client.post(
+        f"/api/v1/generation/claims/re-evaluate?scoring_run_id={run.id}&brand_profile_id={ws.id}")
+
+    assert res.status_code == 200, res.text
+    assert res.json()["social"] == {"contents": 2, "cleared": 0, "still_flagged": 1}
+    db_session.expire_all()
+    from app.database.models import SocialContent
+    row1 = db_session.query(SocialContent).filter_by(brief_id=brief_id, idea_id=id1).one()
+    assert any(w.startswith("claim_unverified:") for w in row1.validation_warnings)
+
+
+def test_reevaluate_social_producing_attempt_usp_grounds_its_own_content(
+    client, db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
+):
+    """İçeriği üreten attempt'in USP'si hâlâ o içeriği temiz tutar (üretimde temiz geçtiği için)."""
+    ctx = _orch._setup_content_orchestration_env(
+        db_session, make_workspace, make_scoring_run, make_keyword, num_ideas=1, task_id="task-r4-own",
+        trusted_brand_usp="Lazer hizmeti")
+    _orch.run_social_content_generation(
+        session_factory=_orch.SessionLocal,
+        ai_service=_orch.SmartMockAIService(
+            responses=[_orch._make_valid_post_dict(caption="Lazer ile bakım rehberi.")]),
+        attempt_id=ctx["attempt"].id, task_id="task-r4-own", now_provider=lambda: _orch.T0,
+    )
+    _, warnings = _orch._persisted_warnings(db_session, ctx["brief"].id)
+    assert not any(w.startswith("claim_") for w in warnings)  # üretimde USP ile temiz
+
+    ws, run = ctx["workspace"], ctx["scoring_run"]
+    res = client.post(
+        f"/api/v1/generation/claims/re-evaluate?scoring_run_id={run.id}&brand_profile_id={ws.id}")
+
+    assert res.json()["social"] == {"contents": 1, "cleared": 0, "still_flagged": 0}
+    _, warnings = _orch._persisted_warnings(db_session, ctx["brief"].id)
+    assert not any(w.startswith("claim_") for w in warnings)
