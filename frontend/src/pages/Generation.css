@@ -397,6 +397,11 @@
   line-height: 1.5;
 }
 
+.seox-review-top {
+  margin: 10px 0 0;
+  color: var(--text-primary);
+}
+
 .seox-review-list.is-manual {
   color: var(--text-muted);
 }
