@@ -21,6 +21,7 @@ testler ucretli cagri yapmadan butun tekrar topolojisini kosabilir.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from app.core.telemetry.ai_cost_budget import BudgetExceeded
@@ -78,10 +79,24 @@ def classify_provider_error(exc: BaseException) -> str:
     return "transient"
 
 
+_REDACT_PATTERNS = (
+    re.compile(r"https?://\S+"),                                   # URL (query'de anahtar olabilir)
+    re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),                        # e-posta
+    re.compile(r"(?i)\b(api[_-]?key|key|token|secret|authorization|bearer)\b\s*[=:]?\s*\S+"),
+    re.compile(r"\b[A-Za-z0-9_\-]{32,}\b"),                         # uzun anahtar/kimlik dizileri
+    re.compile(r"(?i)\bprojects?/[\w-]+"),                           # saglayici proje kimligi
+)
+
+
 def _provider_error_text(exc: BaseException) -> str:
     """'TypeAdi: ilk 160 karakter' — hata mesajina ve WARNING log'a eklenir.
-    Gercek neden (429/503/baglanti/400) onceden hicbir yerde gorunmuyordu."""
-    text = " ".join(str(exc).split())[:160]
+    Gercek neden (429/503/baglanti/400) onceden hicbir yerde gorunmuyordu.
+    Kullaniciya giden metinden URL, e-posta, anahtar/token ve proje kimligi
+    REDAKTE edilir (Codex dagitim incelemesi #12); ham istisna log'da kalir."""
+    text = " ".join(str(exc).split())
+    for rx in _REDACT_PATTERNS:
+        text = rx.sub("[gizlendi]", text)
+    text = text[:160]
     return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
 
 
