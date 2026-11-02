@@ -133,12 +133,13 @@ def test_full_schema_carries_fill_ids_unlike_shortfall_fields():
 
 def test_short_keyword_counts_and_unused_reasons_keep_totals():
     long_kw = "kurumsal e-ticaret sitesi kurulum hizmeti"
-    claim_kw = "en iyi 1 numara seo"
-    kws = ["ucuz laptop", "ofis laptop", long_kw, claim_kw]
-    r = build_standard_report(kws, [1, 2, 3, 4], None, GENERIC_H[:14] + ["Ucuz Laptop Fırsatı"], GENERIC_D)
-    assert (r.keyword_count, r.short_keyword_count, r.short_keywords_in_headlines) == (4, 3, 1)
+    claim_kw = "kazanç garantili seo"           # sınıf B (risk) → "claim"
+    unverified_kw = "en iyi 1 numara seo"       # K2: süperlatif = sınıf C (doğrulanamadı) → "claim" DEĞİL
+    kws = ["ucuz laptop", "ofis laptop", long_kw, claim_kw, unverified_kw]
+    r = build_standard_report(kws, [1, 2, 3, 4, 5], None, GENERIC_H[:14] + ["Ucuz Laptop Fırsatı"], GENERIC_D)
+    assert (r.keyword_count, r.short_keyword_count, r.short_keywords_in_headlines) == (5, 4, 1)
     assert r.unused_keyword_reasons == {
-        "ofis laptop": "not_used", long_kw: "too_long", claim_kw: "claim"}
+        "ofis laptop": "not_used", long_kw: "too_long", claim_kw: "claim", unverified_kw: "not_used"}
 
 
 def test_word_order_variant_does_not_change_denominators():

@@ -16,6 +16,7 @@ from app.config import settings
 from app.generators.ai_service import AIService
 from app.generators.ads.keyword_grouper import KeywordGrouper
 from app.generators.ads.rsa_generator import RSAGenerator
+from app.generators.output_language import output_context_for_run
 from app.database.models import (
     AdGroup, AdHeadline, AdDescription, NegativeKeyword,
     ChannelPool, Keyword, ScoringRun
@@ -33,6 +34,7 @@ from app.schemas.ads import (
     NegativeKeywordDBSchema,
 )
 from app.generators.ads.validators import build_standard_report
+from app.generators.claim_review import review_summary, set_review
 
 
 class AdsGenerator:
@@ -49,6 +51,7 @@ class AdsGenerator:
         self.ai_service = ai_service
         self.grouper = KeywordGrouper(ai_service)
         self.rsa_generator = None  # Created per request for enable_ai_regeneration flag
+        self.cloned_claim_review: dict = {"findings": [], "applied": []}
     
     def generate_ads(
         self,
@@ -102,7 +105,10 @@ class AdsGenerator:
             KeywordForGrouping(id=k["id"], keyword=k["keyword"])
             for k in keywords
         ]
-        groups = self.grouper.group_keywords(keyword_inputs, max_groups=request.max_groups)
+        output_ctx = output_context_for_run(self.db, request.scoring_run_id)
+        groups = self.grouper.group_keywords(
+            keyword_inputs, max_groups=request.max_groups, output_ctx=output_ctx
+        )
         
         logger.info(f"Created {len(groups)} keyword groups")
         
@@ -124,6 +130,7 @@ class AdsGenerator:
                     brand_usp=request.brand_usp or "",
                     product_facts=product_facts,
                     grounding_facts=grounding_facts,
+                    output_ctx=output_ctx,
                 )
                 ad_groups.append(ad_group)
                 
@@ -198,12 +205,13 @@ class AdsGenerator:
                 if gen_set is not None else []
             )
 
+        language = output_context_for_run(self.db, scoring_run_id).language
         return AdGroupListResponse(
             scoring_run_id=scoring_run_id,
             total_groups=len(groups),
-            ad_groups=[self._model_to_schema(g) for g in groups],
+            ad_groups=[self._model_to_schema(g, language) for g in groups],
             generation_set=(
-                AdGenerationSetSummary.model_validate(gen_set)
+                AdGenerationSetSummary.model_validate(gen_set).model_copy(update=review_summary(gen_set.warnings))
                 if gen_set is not None else None
             ),
         )
@@ -215,7 +223,9 @@ class AdsGenerator:
         if not group:
             return None
         
-        return self._model_to_schema(group)
+        return self._model_to_schema(
+            group, output_context_for_run(self.db, group.scoring_run_id).language
+        )
     
     # NOT (codex bulgusu): eski yerinde-degistiren regenerate_group +
     # _update_group_in_db KALDIRILDI — versiyon degismezligi ve grounding
@@ -233,7 +243,10 @@ class AdsGenerator:
         istekte AÇIKÇA verdiği USP. Sistemin ürettiği generic fallback USP
         kullanıcı doğrulamalı gerçek DEĞİLDİR ve whitelist'e girmez.
         """
-        from app.core.channel.brand_defense import load_product_definition
+        from app.core.channel.brand_defense import (
+            load_grounding_facts,
+            load_product_definition,
+        )
 
         run = (
             self.db.query(ScoringRun)
@@ -241,8 +254,7 @@ class AdsGenerator:
             .first()
         )
         product_facts = load_product_definition(self.db, run) or ""
-        trusted = (trusted_brand_usp or "").strip()
-        grounding_facts = "\n".join(p for p in (product_facts, trusted) if p)
+        grounding_facts = load_grounding_facts(self.db, run, trusted_brand_usp)
         return product_facts, grounding_facts
 
     def _get_ads_keywords(self, scoring_run_id: int) -> List[dict]:
@@ -319,6 +331,8 @@ class AdsGenerator:
                 )
                 self.db.add(db_group)
                 self.db.flush()  # Get ID
+                for f in (*group.claim_findings, *group.claim_applied):
+                    f["group_id"], f["group_name"] = db_group.id, group.name
                 
                 # Create Headlines
                 for i, h in enumerate(group.headlines):
@@ -328,6 +342,7 @@ class AdsGenerator:
                         headline_type=h.type,
                         position_preference=h.position_preference,
                         is_dki=h.is_dki,
+                        validation_action=h.validation_action,
                         sort_order=i,
                     )
                     self.db.add(db_headline)
@@ -339,6 +354,7 @@ class AdsGenerator:
                         description_text=d.text,
                         description_type=d.type,
                         position_preference=d.position_preference,
+                        validation_action=d.validation_action,
                         sort_order=i,
                     )
                     self.db.add(db_desc)
@@ -397,6 +413,7 @@ class AdsGenerator:
             .all()
         )
         cloned = 0
+        id_map: dict = {}
         for src in source_groups:
             if exclude_group_id is not None and src.id == exclude_group_id:
                 continue
@@ -421,6 +438,7 @@ class AdsGenerator:
                     headline_type=h.headline_type,
                     position_preference=h.position_preference,
                     is_dki=h.is_dki, sort_order=h.sort_order,
+                    validation_action=h.validation_action,
                 ))
             for d in src.descriptions:
                 self.db.add(AdDescription(
@@ -428,6 +446,7 @@ class AdsGenerator:
                     description_type=d.description_type,
                     position_preference=d.position_preference,
                     sort_order=d.sort_order,
+                    validation_action=d.validation_action,
                 ))
             for n in src.negative_keywords:
                 self.db.add(NegativeKeyword(
@@ -435,7 +454,18 @@ class AdsGenerator:
                     match_type=n.match_type, category=n.category,
                     reason=n.reason,
                 ))
+            id_map[src.id] = clone.id
             cloned += 1
+        # Kaynak setin iddia incelemesi: klonlanan gruplar icin group_id yeniden eslenir
+        src_set = self.db.query(AdGenerationSet).filter(AdGenerationSet.id == source_set_id).first()
+        cur = (set_review(src_set.warnings if src_set else None) or {}).get("current") or {}
+        self.cloned_claim_review = {
+            key: [
+                {**f, "group_id": id_map[f["group_id"]]}
+                for f in cur.get(key) or [] if f.get("group_id") in id_map
+            ]
+            for key in ("findings", "applied")
+        }
         return cloned
 
     def regenerate_group_into_set(
@@ -474,6 +504,7 @@ class AdsGenerator:
             brand_usp=brand_usp,
             product_facts=product_facts,
             grounding_facts=grounding_facts,
+            output_ctx=output_context_for_run(self.db, source_group.scoring_run_id),
         )
         self._save_to_database(
             [new_group],
@@ -483,7 +514,7 @@ class AdsGenerator:
         )
         return new_group
     
-    def _model_to_schema(self, group: AdGroup) -> AdGroupDBSchema:
+    def _model_to_schema(self, group: AdGroup, language: Optional[str] = None) -> AdGroupDBSchema:
         """Convert database model to schema."""
         return AdGroupDBSchema(
             id=group.id,
@@ -498,6 +529,7 @@ class AdsGenerator:
                 group.fill_keyword_ids,
                 [h.headline_text for h in group.headlines],
                 [d.description_text for d in group.descriptions],
+                language,
             ),
             headlines=[HeadlineDBSchema(
                 id=h.id,

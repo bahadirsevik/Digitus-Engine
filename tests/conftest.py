@@ -158,6 +158,9 @@ def make_workspace(db_session):
             suggested_keywords=kwargs.pop("suggested_keywords", None),
             is_system_default=kwargs.pop("is_system_default", False),
             status=kwargs.pop("status", "confirmed"),
+            # Pazar plani: pazarsiz calismada kelime yazma/run 409 MARKET_NOT_SET; test varsayilani TR/TR
+            default_geo_target_id=kwargs.pop("default_geo_target_id", "2792"),
+            default_language_id=kwargs.pop("default_language_id", "1037"),
         )
         defaults.update(kwargs)
         workspace = BrandProfile(**defaults)
@@ -320,3 +323,25 @@ def make_keyword_score(db_session):
         return score
 
     return _make
+
+
+@pytest.fixture
+def legacy_claim_reject(monkeypatch):
+    """Batch toplama mantığının 'rejected item' yolunu sınamak için: repair sonrası iddia kalan karar
+    'reject'e çevrilir. rev.4'te gerçek akış iddiayla reddetmez (kabul + işaret); bu fixture yalnız
+    teknik ret (action='reject') geldiğinde batch'in doğru agregasyon yaptığını korur."""
+    import dataclasses
+
+    from app.core.social import content_item_execution as cie
+    from app.generators.social import brief_content_generator as bcg
+
+    real = cie.evaluate_social_content_quality
+
+    def forced(content, context, *, repair_attempted):
+        decision = real(content, context, repair_attempted=repair_attempted)
+        if repair_attempted and decision.claims:
+            return dataclasses.replace(decision, action="reject")
+        return decision
+
+    monkeypatch.setattr(cie, "evaluate_social_content_quality", forced)
+    monkeypatch.setattr(bcg, "evaluate_social_content_quality", forced)

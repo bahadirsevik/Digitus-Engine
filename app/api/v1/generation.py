@@ -20,7 +20,7 @@ from app.core.engine_version_gate import (
 from app.core.workspace import require_fresh_channel_pool, verify_scoring_run
 from app.compliance.publish_review import (
     geo_evaluation_source,
-    legacy_seo_checks,
+    seo_checks_from_row,
     publish_review_from_rows,
 )
 from app.core.site_analyzer.brand_defaults import BrandDefaultsResolver, BrandResolveError
@@ -43,6 +43,7 @@ from app.schemas.ads import (
 )
 from app.generators.seo_geo import SEOGEOGenerator
 from app.generators.ads import AdsGenerator
+from app.generators.output_language import output_context_for_run
 from app.tasks.generation_tasks import (
     generate_ads_task,
     social_brief_contents_task,
@@ -176,6 +177,21 @@ def _guard_generation_dispatch(db: Session, run_id: int) -> None:
     require_fresh_channel_pool(db, run)
 
 
+def _recheck_dispatch_guard(db: Session, run_id: int) -> None:
+    """Kayit oncesi guncellik kapisi (senkron uretim). ORM onbellegi bosaltilip
+    ayni guard taze satirlarla kosar; FOR UPDATE kilidi cagiranin commit'ine
+    kadar kalir (kontrol + kayit tek transaction)."""
+    db.expire_all()
+    try:
+        _guard_generation_dispatch(db, run_id)
+    except BaseException:
+        # 409/hata: brand_profiles FOR UPDATE kilidi BIRAKILMALI. Aksi halde istek sonunda
+        # get_ai (collector.finalize -> ayri oturumdan ai_usage_events, FK -> brand_profiles)
+        # get_db'den ONCE kapanir, tuttugumuz kilide takilir ve istek sonsuza dek asili kalir.
+        db.rollback()
+        raise
+
+
 def _scope_usage(ai, *, scoring_run_id=None, brand_profile_id=None) -> None:
     """İstek collector'ına run/workspace kimliği bağlar (Codex v8-3).
 
@@ -209,15 +225,34 @@ def generate_seo_geo_content(
         )
     verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
     _guard_generation_dispatch(db, request.scoring_run_id)
+    # Kilidi (brand_profiles FOR UPDATE) uretim boyunca TUTMA: senkron uretim
+    # dakikalar surer ve UsageCollector ayri oturumdan flush ederken (FK ->
+    # brand_profiles, 8. cagri) kendi kilidimize takilip kilitleniyordu
+    # (iddia onarim turu cagri sayisini 6'dan 8'e cikarinca gorunur oldu).
+    # Async uclar gibi: stale kontrolu kilit altinda yapildi, sonra birakilir.
+    db.commit()
     _scope_usage(ai, scoring_run_id=request.scoring_run_id,
                  brand_profile_id=brand_profile_id)
     try:
         generator = SEOGEOGenerator(db, ai)
-        result = generator.generate_content(request, scoring_run_id=request.scoring_run_id)
+        result = generator.generate_content(
+            request,
+            scoring_run_id=request.scoring_run_id,
+            # Kayittan hemen once ayni kapi, kisa kilit altinda: AI beklerken
+            # politika/profil degistiyse tipli 409 (POLICY_STALE), kayit YOK.
+            # expire_all: identity map'teki run/workspace nesneleri bu transaction
+            # icinde yuklendi; TAZE satir okunmazsa degisiklik gorulmez.
+            before_save=lambda: _recheck_dispatch_guard(db, request.scoring_run_id),
+        )
         return result
+    except HTTPException:
+        db.rollback()  # before_save kilidi (FOR UPDATE) hata yolunda tutulmasin
+        raise
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "İçerik üretimi başarısız oldu")
@@ -349,7 +384,7 @@ def get_compliance_report(
         # 'checks': yeni checklist kriterleri dahil kalici liste (checks_json).
         # Eski satirlarda null -> kolon-bazli AYNI formatta kurulur (codex),
         # frontend tek format gorur.
-        checks = seo_compliance.checks_json or legacy_seo_checks(seo_compliance)
+        checks = seo_checks_from_row(seo_compliance)
         seo_result = {
             'title_has_keyword': seo_compliance.title_has_keyword,
             'title_length_ok': seo_compliance.title_length_ok,
@@ -648,6 +683,7 @@ def list_ads_generation_sets(
     """Run'a ait ADS set geçmişi (status, is_stale, version, sayılar)."""
     from app.database.models import AdGenerationSet
     from app.generators.ads.generation_sets import get_active_set
+    from app.generators.claim_review import review_summary
     from app.schemas.ads import AdGenerationSetListResponse, AdGenerationSetSummary
 
     try:
@@ -661,7 +697,10 @@ def list_ads_generation_sets(
         active = get_active_set(db, scoring_run_id)
         return AdGenerationSetListResponse(
             scoring_run_id=scoring_run_id,
-            sets=[AdGenerationSetSummary.model_validate(s) for s in sets],
+            sets=[
+                AdGenerationSetSummary.model_validate(s).model_copy(update=review_summary(s.warnings))
+                for s in sets
+            ],
             active_set_id=active.id if active else None,
         )
     except HTTPException:
@@ -686,6 +725,7 @@ def activate_ads_generation_set(
     from app.database.models import AdGenerationSet
     from app.schemas.ads import AdGenerationSetSummary
     from app.generators.ads.generation_sets import activate_set
+    from app.generators.claim_review import review_summary
 
     try:
         gen_set = (
@@ -702,13 +742,50 @@ def activate_ads_generation_set(
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
-        return AdGenerationSetSummary.model_validate(activated)
+        return AdGenerationSetSummary.model_validate(activated).model_copy(
+            update=review_summary(activated.warnings)
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Set aktive edilemedi"),
+        )
+
+
+@router.post("/claims/re-evaluate")
+def re_evaluate_claims(
+    scoring_run_id: int = Query(..., description="Scoring run"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """İddia incelemesini GÜNCEL profille yeniden değerlendirir (ücretsiz, AI yok).
+
+    RSA (active+draft, non-stale), SEO ve brief sosyal içerikleri için bulgu kayıtlarını
+    yeniler; önceki kayıt `history`'ye iner. İçerik metni değişmez, set aktifleştirilmez.
+    Profile eklenen ifade mevcut eşleştirmenin tanımadığı bir eş anlamsa uyarı KORUNUR.
+    """
+    from app.core.claim_reevaluate import reevaluate_claims
+
+    try:
+        run = verify_scoring_run(db, scoring_run_id, brand_profile_id)
+        result = reevaluate_claims(db, run)
+        db.commit()
+        return {
+            **result,
+            "note": (
+                "Yeniden değerlendirildi: temizlenen ve hâlâ kontrol gerektiren sayılar "
+                "kanal bazında verilmiştir."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "İddia yeniden değerlendirmesi başarısız oldu"),
         )
 
 
@@ -917,8 +994,10 @@ def generate_social_categories(
         generator = SocialGenerator(db, ai)
         return generator.generate_categories(effective_request)
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal kategoriler üretilemedi")
@@ -956,8 +1035,10 @@ def generate_social_ideas(
             # BRIEF_SCOPED: brief'e ait kategori legacy uctan islenemez (K11/§7-8)
             raise HTTPException(status_code=409, detail=str(policy_error))
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal fikirler üretilemedi")
@@ -998,8 +1079,10 @@ def generate_social_contents(
             # BRIEF_SCOPED: brief'e ait fikir legacy uctan islenemez (§7-8)
             raise HTTPException(status_code=409, detail=str(policy_error))
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal içerikler üretilemedi")
@@ -1120,8 +1203,10 @@ def generate_social_bulk(
         generator = SocialGenerator(db, ai)
         return generator.generate_full_pipeline(effective_request)
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal medya içeriği üretilemedi")
@@ -1776,7 +1861,14 @@ def generate_social_categories_for_brief(
         brand_profile_id=start.brand_profile_id,
     )
 
-    generator = SocialBriefCategoryGenerator(ai)
+    # Çalışma pazarı (çıktı dili + hedef konum): istek oturumunda transaction
+    # açmamak için kısa ömürlü ayrı oturumla okunur (AI çağrısı transaction dışında).
+    from app.database.connection import SessionLocal
+
+    with SessionLocal() as _ctx_db:
+        output_ctx = output_context_for_run(_ctx_db, start.scoring_run_id)
+
+    generator = SocialBriefCategoryGenerator(ai, output_ctx=output_ctx)
     try:
         ai_result = generator.generate(start)
     except SocialCategoryGenerationError as e:
@@ -3247,8 +3339,10 @@ def regenerate_social_idea(
             raise HTTPException(status_code=404, detail="Idea not found")
         return result
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Fikir yeniden üretilemedi")
@@ -3298,8 +3392,10 @@ def regenerate_social_content(
             raise HTTPException(status_code=404, detail="Content not found")
         return result
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "İçerik yeniden üretilemedi")

@@ -92,7 +92,8 @@ def test_csv_excel_docx_pdf_show_report_without_percentages(
     xlsx_path = str(tmp_path / "ads.xlsx")
     ExcelExporter(db_session).export(run.id, ADS, xlsx_path)
     sheet = [list(r) for r in load_workbook(xlsx_path)["Reklam Grupları"].iter_rows(values_only=True)]
-    assert sheet[0] == header
+    assert header[-3:] == ["Hedef Konum", "Çıktı Dili", "Hacim Kaynağı"]  # CSV'ye pazar kolonları (Excel'e değil)
+    assert sheet[0] == header[:-3]
     assert sheet[1][5:] == [3, 1, 1, f"{STATUS}; {POOL}", "laptop uno", "laptop dos",
                             "laptop tres", "laptop tres"]
 

@@ -5,7 +5,7 @@ Roadmap2.md - Bölüm 6
 Tek içerik üretir, hem SEO hem GEO kurallarına uygun.
 Sonrasında aynı metin üzerinde iki ayrı kontrol çalıştırılır.
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from decimal import Decimal
 import json
 from datetime import datetime
@@ -16,10 +16,17 @@ from sqlalchemy.orm import Session
 from app.core.channel.ai_json import parse_ai_json_object, AIJsonParseError
 
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import (
+    DEFAULT_CONTEXT, output_context_for_run, with_output_block,
+)
 from app.generators.seo_geo.prompt_templates import (
     SEO_GEO_GENERATION_PROMPT, SEO_GEO_REVISION_PROMPT,
-    SEO_GEO_EXPANSION_PROMPT,
+    SEO_GEO_EXPANSION_PROMPT, SEO_GEO_CLAIM_REPAIR_PROMPT,
 )
+from app.generators.ads.validators import classify_claims
+from app.generators.claim_review import failure_text, make_current, push_review
+from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
+from app.core.channel.brand_defense import load_grounding_facts
 from app.generators.seo_geo.content_quality import (
     build_internal_link_pool, build_link_pool_context,
     validate_internal_link, validate_external_link,
@@ -61,6 +68,9 @@ class SEOGEOGenerator:
         5. Sonuç döndür
     """
     
+    # Çalışma pazarı (çıktı dili + hedef konum) — generate_content'te set edilir
+    _output_ctx = DEFAULT_CONTEXT
+
     def __init__(self, db: Session, ai_service: AIService):
         """
         Args:
@@ -76,7 +86,8 @@ class SEOGEOGenerator:
     def generate_content(
         self,
         request: SEOGEOGenerateRequest,
-        scoring_run_id: Optional[int] = None
+        scoring_run_id: Optional[int] = None,
+        before_save: Optional[Callable[[], None]] = None,
     ) -> Dict[str, Any]:
         """
         Tek anahtar kelime için içerik üretir.
@@ -172,6 +183,12 @@ class SEOGEOGenerator:
         except Exception:
             pass  # Fail-open
 
+        # Çalışma pazarı: çıktı dili + hedef konum (snapshot yok, her üretimde okunur)
+        self._output_ctx = (
+            output_context_for_run(self.db, scoring_run_id)
+            if scoring_run_id else DEFAULT_CONTEXT
+        )
+
         # 1. AI ile ham içerik üret
         raw_content = self._generate_raw_content(
             keyword=keyword.keyword,
@@ -212,7 +229,8 @@ class SEOGEOGenerator:
         # 3. GEO uyumluluk kontrolü (AI ile)
         geo_result = self.geo_checker.check(
             content=raw_content,
-            keyword=keyword.keyword
+            keyword=keyword.keyword,
+            output_ctx=self._output_ctx,
         )
 
         # 3b. TEK turluk hedefli revizyon: basarisiz kriter varsa yalnizca
@@ -240,6 +258,27 @@ class SEOGEOGenerator:
             link_pool=link_pool,
         )
 
+        # 3d. SON METİN İDDİA KAPISI: revizyon + genişletme sonrası, kayıttan önce.
+        # Tek insertion noktası (generate_bulk ve Celery chunk bu yolu kullanır).
+        raw_content, seo_result, geo_result, claim_check = self._claim_gate(
+            keyword=keyword.keyword,
+            content=raw_content,
+            seo_result=seo_result,
+            geo_result=geo_result,
+            scoring_run_id=scoring_run_id,
+            word_count_min=request.word_count_min,
+            word_count_max=request.word_count_max,
+            link_pool=link_pool,
+        )
+
+        # 3e. Kayit oncesi guncellik kapisi (Codex ca2c2f5 P2): senkron uc kilidi
+        # uretim boyunca tutmaz; AI beklerken politika/profil degismis olabilir.
+        # Cagiran burada kisa kilit altinda stale kontrolunu yeniden yapar; kilit
+        # _save_to_database'in commit'ine kadar ayni transaction'da kalir. Bu
+        # noktadan sonra AI cagrisi veya collector flush YOKTUR.
+        if before_save is not None:
+            before_save()
+
         # 4. Veritabanına kaydet
         saved_content = self._save_to_database(
             keyword=keyword,
@@ -263,6 +302,7 @@ class SEOGEOGenerator:
             # Kritik checklist maddesi başarısızsa "yayın öncesi inceleme
             # gerekli" — yalnız etiket; üretim başarısız sayılmaz, ek tur yok
             'publish_review': publish_review_from_results(seo_result, geo_result),
+            'claim_check': claim_check,
             'generated_at': saved_content.created_at.isoformat()
         }
     
@@ -304,7 +344,8 @@ class SEOGEOGenerator:
                 'errors': [],
                 'average_seo_score': 0,
                 'average_geo_score': 0,
-                'average_combined_score': 0
+                'average_combined_score': 0,
+                'claim_blocked_count': 0,
             }
         
         results = []
@@ -350,7 +391,10 @@ class SEOGEOGenerator:
             'errors': errors,
             'average_seo_score': round(avg_seo, 2),
             'average_geo_score': round(avg_geo, 2),
-            'average_combined_score': round(avg_combined, 2)
+            'average_combined_score': round(avg_combined, 2),
+            'claim_blocked_count': sum(
+                1 for r in results if (r.get('claim_check') or {}).get('status') == 'fail'
+            ),
         }
     
     @staticmethod
@@ -407,6 +451,7 @@ class SEOGEOGenerator:
         # Pre-filter context varsa prompt'a ekle
         if prefilter_context:
             prompt = prompt + prefilter_context
+        prompt = with_output_block(prompt, self._output_ctx)
 
         required_fields = ['title', 'intro_paragraph', 'subheadings', 'body_sections']
 
@@ -550,7 +595,7 @@ class SEOGEOGenerator:
         ])) or "-"
 
         try:
-            prompt = SEO_GEO_REVISION_PROMPT.format(
+            prompt = with_output_block(SEO_GEO_REVISION_PROMPT.format(
                 keyword=keyword,
                 content_json=json.dumps(content, ensure_ascii=False),
                 failed_criteria="\n".join(f"- {f}" for f in failed),
@@ -558,7 +603,7 @@ class SEOGEOGenerator:
                 word_count_min=word_count_min,
                 word_count_max=word_count_max,
                 current_year=datetime.now().year,
-            )
+            ), self._output_ctx)
             response = self.ai_service.complete_json(prompt, max_tokens=SEO_GEO_MAX_TOKENS)
             revised = self._parse_content_json(
                 response, ['title', 'intro_paragraph', 'subheadings', 'body_sections']
@@ -577,7 +622,9 @@ class SEOGEOGenerator:
             content=revised, keyword=keyword,
             word_count_min=word_count_min, word_count_max=word_count_max,
         )
-        geo2 = self.geo_checker.check(content=revised, keyword=keyword)
+        geo2 = self.geo_checker.check(
+            content=revised, keyword=keyword, output_ctx=self._output_ctx
+        )
 
         if (seo2['score'] + geo2['score']) >= (seo_result['score'] + geo_result['score']):
             return revised, seo2, geo2
@@ -609,7 +656,7 @@ class SEOGEOGenerator:
             # Hedefin ortasına nişan al — "500-600'e çıkar" serbestisi canlıda
             # +229 kelimelik aşım üretti (683/600); eklenecek miktar AÇIKÇA verilir
             target_mid = (word_count_min + word_count_max) // 2
-            prompt = SEO_GEO_EXPANSION_PROMPT.format(
+            prompt = with_output_block(SEO_GEO_EXPANSION_PROMPT.format(
                 keyword=keyword,
                 content_json=json.dumps(content, ensure_ascii=False),
                 current_words=current_words,
@@ -617,7 +664,7 @@ class SEOGEOGenerator:
                 word_count_min=word_count_min,
                 word_count_max=word_count_max,
                 current_year=datetime.now().year,
-            )
+            ), self._output_ctx)
             response = self.ai_service.complete_json(
                 prompt, max_tokens=SEO_GEO_MAX_TOKENS
             )
@@ -645,7 +692,9 @@ class SEOGEOGenerator:
             content=expanded, keyword=keyword,
             word_count_min=word_count_min, word_count_max=word_count_max,
         )
-        geo2 = self.geo_checker.check(content=expanded, keyword=keyword)
+        geo2 = self.geo_checker.check(
+            content=expanded, keyword=keyword, output_ctx=self._output_ctx
+        )
 
         if (seo2['score'] + geo2['score']) >= (seo_result['score'] + geo_result['score']):
             logger.info(
@@ -660,6 +709,165 @@ class SEOGEOGenerator:
             f"{seo2['score']}+{geo2['score']}), orijinal korunuyor"
         )
         return content, seo_result, geo_result
+
+    # ── Son metin iddia kapısı (tek onarım turu) ──────────────────
+
+    CLAIM_CRITERION = 'no_ungrounded_claims'
+    _CLAIM_STR_FIELDS = (
+        # url_suggestion taranmaz: keyword'den türeyen slug, yayın metni değil
+        'title', 'meta_description', 'intro_paragraph',
+        'internal_link_anchor', 'external_link_anchor',
+    )
+    _CLAIM_LIST_FIELDS = (
+        'subheadings', 'body_sections', 'bullet_points', 'image_alt_texts',
+        'faq_items',  # soru + cevap
+    )
+
+    @staticmethod
+    def _flatten_text(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            return [t for v in value.values() for t in SEOGEOGenerator._flatten_text(v)]
+        if isinstance(value, (list, tuple)):
+            return [t for v in value for t in SEOGEOGenerator._flatten_text(v)]
+        return [str(value)]
+
+    def _classify_content_claims(
+        self, content: Dict[str, Any], grounding_facts: str, exempt: List[str]
+    ) -> list:
+        """Nihai metin alanlarını sınıflandırır; tekilleştirilmiş ClaimFinding listesi."""
+        texts: List[str] = []
+        for field in (*self._CLAIM_STR_FIELDS, *self._CLAIM_LIST_FIELDS):
+            texts.extend(self._flatten_text(content.get(field)))
+        found: list = []
+        seen = set()
+        for text in texts:
+            for f in classify_claims(text, grounding_facts, exempt):
+                if f.raw not in seen:
+                    seen.add(f.raw)
+                    found.append(f)
+        return found
+
+    def _scan_claims(
+        self, content: Dict[str, Any], grounding_facts: str, exempt: List[str]
+    ) -> List[str]:
+        """Geriye dönük: ihlal string listesi (boş = temiz)."""
+        return [f.raw for f in self._classify_content_claims(content, grounding_facts, exempt)]
+
+    def _claim_gate(
+        self,
+        keyword: str,
+        content: Dict[str, Any],
+        seo_result: Dict[str, Any],
+        geo_result: Dict[str, Any],
+        scoring_run_id: Optional[int],
+        word_count_min: int,
+        word_count_max: int,
+        link_pool: List[Dict[str, str]],
+    ):
+        """İddia kapısı (rev.4): tara → RİSK varsa en fazla 1 onarım → yeniden tara.
+
+        Yalnız risk (garanti/mutlak sonuç) onarım tetikler ve yalnız risk span'ları
+        prompt'a gider; profilde doğrulanamayan (unverified) iddia AI açmaz. Onarılmış
+        metin RİSK sayısını AZALTIYORSA benimsenir (orijinal alan metinleri kayıtta
+        kalır) ve SEO/GEO nihai metinde yeniden hesaplanır; genişletme bu adımdan
+        sonra YAPILMAZ. İçerik HİÇBİR durumda silinmez: kalan bulgu
+        `no_ungrounded_claims` = fail (details risk:/unverified:) ile kalır ve
+        publish_review `review_required` olur.
+        """
+        run = (
+            self.db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+            if scoring_run_id else None
+        )
+        grounding_facts = load_grounding_facts(self.db, run)
+        # Güncel yıl SEO checklist'inin parçası ("2026 yılında" iddia sayılmasın)
+        exempt = [keyword, str(datetime.now().year)]
+
+        findings = self._classify_content_claims(content, grounding_facts, exempt)
+        risks = [f for f in findings if f.kind == 'risk']
+        applied: list = []
+        original_fields: Dict[str, Any] = {}
+        if risks:
+            repaired = self._repair_claims(
+                keyword, content, [f.raw for f in risks], grounding_facts,
+                word_count_min, word_count_max, link_pool,
+            )
+            if repaired is not None:
+                after = self._classify_content_claims(repaired, grounding_facts, exempt)
+                if sum(f.kind == 'risk' for f in after) < len(risks):
+                    still = {f.raw for f in after}
+                    applied = [f for f in risks if f.raw not in still]
+                    for field in (*self._CLAIM_STR_FIELDS, *self._CLAIM_LIST_FIELDS):
+                        if content.get(field) != repaired.get(field):
+                            original_fields[field] = content.get(field)
+                    content, findings = repaired, after
+                    seo_result = self.seo_checker.check(
+                        content=content, keyword=keyword,
+                        word_count_min=word_count_min, word_count_max=word_count_max,
+                    )
+                    geo_result = self.geo_checker.check(
+                        content=content, keyword=keyword, output_ctx=self._output_ctx
+                    )
+
+        item = {
+            'criterion': self.CLAIM_CRITERION,
+            'status': 'fail' if findings else 'pass',
+            'importance': 'critical',
+            'details': failure_text(f.as_dict() for f in findings),
+        }
+        if findings or applied:
+            current = make_current(findings, applied)
+            if original_fields:
+                current['original'] = original_fields  # yalnız değişen alanların ÖNCEKİ metni
+            item['claim_review'] = push_review(None, current)
+        # Skora/CRITERIA_WEIGHTS'e GİRMEZ: eski içerikle skor karşılaştırılabilirliği korunur
+        checks = [
+            c for c in seo_result.get('checks') or []
+            if c.get('criterion') != self.CLAIM_CRITERION
+        ]
+        seo_result = {**seo_result, 'checks': [*checks, item]}
+        return content, seo_result, geo_result, item
+
+    def _repair_claims(
+        self,
+        keyword: str,
+        content: Dict[str, Any],
+        violations: List[str],
+        grounding_facts: str,
+        word_count_min: int,
+        word_count_max: int,
+        link_pool: List[Dict[str, str]],
+    ) -> Optional[Dict[str, Any]]:
+        """TEK iddia düzeltme çağrısı; başarısızsa None (fail-open: orijinal kalır)."""
+        try:
+            prompt = with_output_block(SEO_GEO_CLAIM_REPAIR_PROMPT.format(
+                keyword=keyword,
+                content_json=json.dumps(content, ensure_ascii=False),
+                claims="\n".join(f"- {v}" for v in violations),
+                grounding_facts=(
+                    grounding_facts
+                    or "— (marka bilgisi yok: hiçbir hizmet/sertifika/iddia kullanma)"
+                ),
+                claim_rule=CLAIM_REPAIR_RULE,
+                word_count_min=word_count_min,
+                word_count_max=word_count_max,
+            ), self._output_ctx)
+            response = self.ai_service.complete_json(prompt, max_tokens=SEO_GEO_MAX_TOKENS)
+            repaired = self._parse_content_json(
+                response, ['title', 'intro_paragraph', 'subheadings', 'body_sections']
+            )
+        except Exception as e:
+            logger.warning(f"İddia düzeltme turu başarısız, orijinal korunuyor: {e}")
+            return None
+        # Modelin atladığı alanlar (faq_items, image_alt_texts, ...) kaybolmasın
+        repaired = {**content, **repaired}
+        repaired = validate_internal_link(repaired, link_pool)
+        repaired = validate_external_link(repaired)
+        self._recompute_word_stats(repaired, keyword)
+        return repaired
 
     def _save_to_database(
         self,

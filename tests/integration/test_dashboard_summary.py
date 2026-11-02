@@ -137,3 +137,55 @@ def test_summary_unknown_workspace_returns_404(client):
 def test_summary_health_field_includes_google_ads(client):
     res = client.get("/api/v1/dashboard/workspace-summary")
     assert res.json()["health"]["google_ads"] == "ok"
+
+
+def _ads_review_setup(db_session, make_workspace, make_keyword, make_scoring_run, *, set_status):
+    from decimal import Decimal
+
+    from app.database.models import AdGenerationSet, ChannelPool
+    from app.generators.claim_review import ads_set_warnings
+
+    ws = make_workspace(status="confirmed", profile_data={"anchor_texts": ["x"]})
+    kw = make_keyword("kw1", brand_profile_id=ws.id)
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+    db_session.add(
+        ChannelPool(
+            scoring_run_id=run.id, keyword_id=kw.id, channel="ADS",
+            final_rank=1, adjusted_score=Decimal("1.0"),
+        )
+    )
+    gen_set = AdGenerationSet(
+        scoring_run_id=run.id, version_number=1, status=set_status, groups_count=1,
+        warnings=ads_set_warnings([], [{"kind": "risk", "category": "guarantee", "span": "garanti"}], []),
+    )
+    db_session.add(gen_set)
+    db_session.commit()
+    return ws, run, gen_set
+
+
+def test_summary_ads_draft_in_review_sets_cue_and_next_action(
+    client, db_session, make_workspace, make_keyword, make_scoring_run
+):
+    ws, run, gen_set = _ads_review_setup(
+        db_session, make_workspace, make_keyword, make_scoring_run, set_status="draft"
+    )
+    body = client.get(
+        f"/api/v1/dashboard/workspace-summary?brand_profile_id={ws.id}&active_run_id={run.id}"
+    ).json()
+    assert body["channels"]["ADS"]["review_pending"] is True
+    assert body["channels"]["ADS"]["review_set_id"] == gen_set.id
+    assert body["channels"]["SEO"]["review_pending"] is False
+    assert body["next_action"]["key"] == "review_ads_draft"
+
+
+def test_summary_ads_active_flagged_set_has_no_review_cue(
+    client, db_session, make_workspace, make_keyword, make_scoring_run
+):
+    ws, run, _ = _ads_review_setup(
+        db_session, make_workspace, make_keyword, make_scoring_run, set_status="active"
+    )
+    body = client.get(
+        f"/api/v1/dashboard/workspace-summary?brand_profile_id={ws.id}&active_run_id={run.id}"
+    ).json()
+    assert body["channels"]["ADS"]["review_pending"] is False
+    assert body["next_action"]["key"] != "review_ads_draft"

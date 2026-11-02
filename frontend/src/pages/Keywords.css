@@ -1690,9 +1690,9 @@ select.kwx-input {
   cursor: pointer;
 }
 
-.kwx-grid-5 {
+.kwx-grid-3 {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-top: 14px;
 }
@@ -1704,7 +1704,7 @@ select.kwx-input {
 }
 
 @media (max-width: 900px) {
-  .kwx-grid-5 {
+  .kwx-grid-3 {
     grid-template-columns: repeat(2, 1fr);
   }
 

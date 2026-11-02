@@ -12,6 +12,7 @@ from app.core.channel.ai_json import (
     parse_ai_json_object,
 )
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import with_output_block
 from app.generators.social.prompt_templates import SOCIAL_IDEA_PROMPT, IDEA_REGENERATE_PROMPT
 from app.schemas.social import (
     SocialIdeaSchema,
@@ -55,6 +56,7 @@ class IdeaGenerator:
         ideas_per_category: int = 5,
         target_platforms: Optional[List[PlatformEnum]] = None,
         excluded_topics: str = "—",
+        output_ctx=None,
     ) -> List[SocialIdeaSchema]:
         """
         Generate ideas for a category.
@@ -71,7 +73,7 @@ class IdeaGenerator:
         brand_name = (brand_name or "Marka").strip() or "Marka"
         ideas_count = min(max(ideas_per_category, self.MIN_IDEAS), self.MAX_IDEAS)
 
-        prompt = SOCIAL_IDEA_PROMPT.format(
+        prompt = with_output_block(SOCIAL_IDEA_PROMPT.format(
             category_name=category.category_name,
             category_type=category.category_type.value,
             category_description=category.description,
@@ -79,7 +81,7 @@ class IdeaGenerator:
             brand_name=brand_name,
             excluded_topics=excluded_topics,
             ideas_count=ideas_count
-        )
+        ), output_ctx)
         
         try:
             # Dayanikli parse tutmazsa BIR kez yeniden uret (SEO deseni)
@@ -112,11 +114,12 @@ class IdeaGenerator:
         brand_name: str,
         additional_context: Optional[str] = None,
         excluded_topics: str = "—",
+        output_ctx=None,
     ) -> Optional[SocialIdeaSchema]:
         """
         Regenerate a single idea when user didn't like the previous one.
         """
-        prompt = IDEA_REGENERATE_PROMPT.format(
+        prompt = with_output_block(IDEA_REGENERATE_PROMPT.format(
             old_idea_title=old_idea.idea_title,
             old_platform=old_idea.target_platform.value,
             old_format=old_idea.content_format.value,
@@ -126,7 +129,7 @@ class IdeaGenerator:
             brand_name=brand_name,
             excluded_topics=excluded_topics,
             additional_context=additional_context or "Daha yaratıcı ve farklı bir yaklaşım"
-        )
+        ), output_ctx)
         
         try:
             response = self.ai_service.complete_json(prompt)

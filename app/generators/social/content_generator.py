@@ -8,6 +8,7 @@ from loguru import logger
 
 from app.core.channel.ai_json import AIJsonParseError, parse_ai_json_object
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import with_output_block
 from app.generators.social.prompt_templates import SOCIAL_CONTENT_PROMPT, CONTENT_REGENERATE_PROMPT
 from app.schemas.social import (
     SocialContentSchema,
@@ -52,6 +53,7 @@ class ContentGenerator:
         brand_name: str,
         brand_tone: Optional[str] = None,
         product_facts: Optional[str] = None,
+        output_ctx=None,
     ) -> Optional[SocialContentSchema]:
         """
         Generate full content package for an idea.
@@ -69,7 +71,7 @@ class ContentGenerator:
         brand_name = (brand_name or "Marka").strip() or "Marka"
         brand_tone = (brand_tone or "doğal ve samimi").strip() or "doğal ve samimi"
 
-        prompt = SOCIAL_CONTENT_PROMPT.format(
+        prompt = with_output_block(SOCIAL_CONTENT_PROMPT.format(
             idea_title=idea.idea_title,
             idea_description=idea.idea_description,
             target_platform=idea.target_platform.value,
@@ -78,7 +80,7 @@ class ContentGenerator:
             brand_name=brand_name,
             brand_tone=brand_tone,
             product_facts=(product_facts or "").strip() or "— (ürün bilgisi yok: hiçbir iddia kullanma)",
-        )
+        ), output_ctx)
         
         try:
             # Dayanikli parse tutmazsa BIR kez yeniden uret (SEO deseni)
@@ -109,6 +111,7 @@ class ContentGenerator:
         brand_name: str,
         additional_context: Optional[str] = None,
         product_facts: Optional[str] = None,
+        output_ctx=None,
     ) -> Optional[SocialContentSchema]:
         """
         Regenerate content when user didn't like the previous one.
@@ -116,7 +119,7 @@ class ContentGenerator:
         old_hook = old_content.hooks[0].text if old_content.hooks else "N/A"
         old_caption_start = old_content.caption[:100] if old_content.caption else "N/A"
 
-        prompt = CONTENT_REGENERATE_PROMPT.format(
+        prompt = with_output_block(CONTENT_REGENERATE_PROMPT.format(
             idea_title=idea.idea_title,
             target_platform=idea.target_platform.value,
             content_format=idea.content_format.value,
@@ -125,7 +128,7 @@ class ContentGenerator:
             brand_name=brand_name,
             additional_context=additional_context or "Daha yaratıcı ve farklı bir yaklaşım",
             product_facts=(product_facts or "").strip() or "— (ürün bilgisi yok: hiçbir iddia kullanma)",
-        )
+        ), output_ctx)
         
         try:
             response = self.ai_service.complete_json(prompt)

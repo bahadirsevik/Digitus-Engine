@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Loader2, Plus, Search, X } from 'lucide-react'
 import { useBrandStore } from '../stores/brandStore'
 import {
+  apiErrorCode,
+  apiErrorMessage,
   googleAdsApi,
   EnrichedKeywordOut,
   KeywordImportResponse,
   SkippedKeywordDetail,
 } from '../services/api'
 import KeywordImportResult from './KeywordImportResult'
+import { MarketLine } from './MarketBadge'
 import {
   LOW_VOLUME_THRESHOLD,
   selectMinVolume,
@@ -16,17 +19,19 @@ import {
   splitLowVolume,
 } from './keywordSelection'
 import { getExcludeThemesFromProfile, previewThemeExclusions } from './themePreview'
+import { FetchedMarket, fetchedMarketFrom, marketWorkspaceLink } from '../services/market'
 import './GoogleAdsKeywordSearch.css'
 
 interface Props {
-  onImport: (keywords: EnrichedKeywordOut[]) => Promise<KeywordImportResponse>
+  // market: Google'a gerçekten gönderilen pazar; yoksa import satırlarında alan atlanır
+  onImport: (
+    keywords: EnrichedKeywordOut[],
+    market?: FetchedMarket
+  ) => Promise<KeywordImportResponse>
   // Seed kaynak kartından gelen hazır seed listesi (profil önerileri yerine geçer)
   initialSeeds?: string[]
   onForceInclude?: (detail: SkippedKeywordDetail) => Promise<void>
 }
-
-const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
-  languageId === '1055' ? '1037' : languageId || '1037'
 
 const ideaVolume = (idea: EnrichedKeywordOut) => idea.avg_monthly_searches || 0
 
@@ -43,10 +48,8 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
   const draftInputRef = useRef<HTMLInputElement>(null)
   const [maxResults, setMaxResults] = useState(100)
   const [minVolume, setMinVolume] = useState(0)
-  const [languageId, setLanguageId] = useState(
-    normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id)
-  )
-  const [geoId, setGeoId] = useState(activeWorkspace?.default_geo_target_id || '2792')
+  const [fetchedMarket, setFetchedMarket] = useState<FetchedMarket | null>(null)
+  const [marketNotSet, setMarketNotSet] = useState(false)
   const [ideas, setIdeas] = useState<EnrichedKeywordOut[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -99,8 +102,8 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
   }, [])
 
   useEffect(() => {
-    setLanguageId(normalizeGoogleAdsLanguageId(activeWorkspace?.default_language_id))
-    setGeoId(activeWorkspace?.default_geo_target_id || '2792')
+    setFetchedMarket(null)
+    setMarketNotSet(false)
     // Kullanıcının düzenlediği liste sekme değişimi/remount'ta kaybolmasın
     const workspaceId = activeWorkspace?.id
     const saved = workspaceId ? useBrandStore.getState().seedDrafts[workspaceId] : undefined
@@ -116,12 +119,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
     setIdeas([])
     setError(null)
     setShowThemePreview(false)
-  }, [
-    activeWorkspace?.id,
-    activeWorkspace?.default_language_id,
-    activeWorkspace?.default_geo_target_id,
-    suggestedSeedText,
-  ])
+  }, [activeWorkspace?.id, suggestedSeedText])
 
   const saveWords = (next: string[]) => {
     setWords(next)
@@ -143,26 +141,27 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
 
   const handleSearch = async () => {
     const seedList = words.map((s) => s.trim()).filter(Boolean)
-    if (!customerId || seedList.length === 0) return
+    if (!customerId || seedList.length === 0 || !activeWorkspace) return
     setLoading(true)
     setError(null)
+    setMarketNotSet(false)
     try {
       const res = await googleAdsApi.enrich({
         customer_id: customerId,
         seeds: seedList,
         max_results: maxResults,
         min_volume: minVolume,
-        language_id: languageId,
-        geo_target_id: geoId,
+        brand_profile_id: activeWorkspace.id,
       })
+      setFetchedMarket(fetchedMarketFrom(res.data))
       const sorted = sortByVolumeDesc(res.data.keywords || [], ideaVolume)
       setIdeas(sorted)
       setSelected(new Set(sorted.map((idea) => idea.keyword)))
       setShowLowVolume(false)
       setShowThemePreview(false)
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } }
-      setError(e?.response?.data?.detail || 'Google Ads araması başarısız oldu')
+      setMarketNotSet(apiErrorCode(err) === 'MARKET_NOT_SET')
+      setError(apiErrorMessage(err, 'Google Ads araması başarısız oldu'))
     } finally {
       setLoading(false)
     }
@@ -173,16 +172,12 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
     setImportResult(null)
     try {
       const chosen = ideas.filter((idea) => selected.has(idea.keyword))
-      const data = await onImport(chosen)
+      const data = await onImport(chosen, fetchedMarket ?? undefined)
       setImportResult({ kind: 'success', data })
       setIdeas([])
       setSelected(new Set())
     } catch (err) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string }
-      setImportResult({
-        kind: 'error',
-        message: e?.response?.data?.detail || e?.message || 'Aktarım başarısız oldu',
-      })
+      setImportResult({ kind: 'error', message: apiErrorMessage(err, 'Aktarım başarısız oldu') })
     } finally {
       setImporting(false)
     }
@@ -269,8 +264,11 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
         </div>
       </div>
 
-      {/* Tasarım: 5 kolonlu kompakt parametre satırı */}
-      <div className="kwx-grid-5">
+      {/* Pazar (konum + dil) çalışmadan gelir; burada düzenlenmez */}
+      <MarketLine label={fetchedMarket?.market_label || activeWorkspace?.market_label} />
+
+      {/* Tasarım: kompakt parametre satırı */}
+      <div className="kwx-grid-3">
         <label className="kwx-field">
           <span className="kwx-field-label">Google Ads Hesabı</span>
           {customers.length > 0 ? (
@@ -295,24 +293,6 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
               onChange={(e) => setCustomerId(e.target.value)}
             />
           )}
-        </label>
-        <label className="kwx-field">
-          <span className="kwx-field-label">Dil</span>
-          <input
-            className="kwx-input sm"
-            type="text"
-            value={languageId}
-            onChange={(e) => setLanguageId(e.target.value)}
-          />
-        </label>
-        <label className="kwx-field">
-          <span className="kwx-field-label">Geo Target</span>
-          <input
-            className="kwx-input sm"
-            type="text"
-            value={geoId}
-            onChange={(e) => setGeoId(e.target.value)}
-          />
         </label>
         <label className="kwx-field">
           <span className="kwx-field-label">Min Volume</span>
@@ -357,7 +337,17 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
         </button>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          {marketNotSet && activeWorkspace && (
+            <>
+              {' '}
+              <a href={marketWorkspaceLink(activeWorkspace.id)}>Çalışma profiline git</a>
+            </>
+          )}
+        </div>
+      )}
 
       <KeywordImportResult result={importResult} onForceInclude={onForceInclude} />
 

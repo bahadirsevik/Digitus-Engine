@@ -50,7 +50,7 @@ class TestMidGenerationReassignmentRace:
         )
 
         def fake_generate(self, keywords, brand_name=None, brand_context=None,
-                          max_categories=6, excluded_topics="—"):
+                          max_categories=6, excluded_topics="—", output_ctx=None):
             # "Uzun AI çağrısı" sırasında reassignment: AYRI session,
             # GERÇEK dispatch yolu (manuel/otomatik assign bunu kullanır)
             other = SessionLocal()

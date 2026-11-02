@@ -763,6 +763,9 @@ def prepare_social_content_worker_inputs(
                 brief_id=brief.id,
             ) from exc
 
+        # shortcut: snapshot product_facts = load_product_definition (ilk 10 hizmet/ürün);
+        # 11. hizmet sonrası anılan hizmet izinsiz sayılır. Tam liste için snapshot
+        # şemasına grounding_facts alanı eklenmeli (migration/versiyon gerektirir).
         grounding_context = SocialContentGroundingContext(
             primary_keyword=kw_text,
             product_facts=snapshot.product_facts,

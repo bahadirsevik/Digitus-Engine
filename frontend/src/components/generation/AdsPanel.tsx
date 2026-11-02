@@ -13,6 +13,7 @@ import {
   setStoredTaskId,
 } from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import { useBrandStore } from '../../stores/brandStore'
 import {
   apiErrorMessage,
@@ -27,6 +28,8 @@ import type {
   AdGroupStandardReport,
   AdsResult,
   AdsSetListResult,
+  ClaimFinding,
+  ClaimReview,
   ScoringRun,
 } from '../../types/models'
 import '../../pages/Generation.css'
@@ -40,11 +43,92 @@ const SET_STATUS_LABELS: Record<AdGenerationSetSummary['status'], string> = {
   failed: 'Hatalı',
 }
 
+const CLAIM_KIND_LABEL: Record<ClaimFinding['kind'], string> = {
+  risk: 'Risk — yayın öncesi düzelt',
+  unverified: 'Profilde doğrulanamadı — kontrol gerekli',
+}
+const ASSET_TYPE_LABEL = { headline: 'Başlık', description: 'Açıklama' } as const
+
 const canActivateSet = (s: AdGenerationSetSummary) =>
   !s.is_stale && (s.status === 'draft' || s.status === 'archived') && (s.groups_count ?? 0) > 0
 
 const canRegenerateFromSet = (s: AdGenerationSetSummary | null | undefined) =>
   !!s && !s.is_stale && (s.status === 'active' || s.status === 'draft' || s.status === 'archived')
+
+// İnceleme gerekçeleri: set bazlı bulgu tablosu + otomatik düzeltilen (Orijinal → Öneri) liste
+function ClaimReviewDetails({ review }: { review?: ClaimReview | null }) {
+  const findings = review?.findings ?? []
+  const applied = review?.applied ?? []
+  if (findings.length === 0 && applied.length === 0) return null
+  const assetCell = (f: ClaimFinding) => [
+    f.group_name || (f.group_id != null ? `Grup #${f.group_id}` : '—'),
+    f.asset_type ? ASSET_TYPE_LABEL[f.asset_type] : '—',
+  ]
+  return (
+    <details className="adsx-review" open>
+      <summary>İnceleme gerekçeleri ({findings.length + applied.length})</summary>
+      {findings.length > 0 && (
+        <table className="adsx-review-table">
+          <thead>
+            <tr>
+              <th>Grup</th>
+              <th>Tür</th>
+              <th>Metin</th>
+              <th>Sınıf</th>
+              <th>İfade</th>
+              <th>Gerekçe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {findings.map((f, i) => {
+              const [group, type] = assetCell(f)
+              return (
+                <tr key={i}>
+                  <td>{group}</td>
+                  <td>{type}</td>
+                  <td>{f.asset_text}</td>
+                  <td>{CLAIM_KIND_LABEL[f.kind] ?? f.kind}</td>
+                  <td>{f.span}</td>
+                  <td>{f.reason}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+      {applied.length > 0 && (
+        <>
+          <div className="adsx-review-sub">Otomatik düzeltilenler (Orijinal → Öneri)</div>
+          <table className="adsx-review-table">
+            <thead>
+              <tr>
+                <th>Grup</th>
+                <th>Tür</th>
+                <th>İfade</th>
+                <th>Orijinal</th>
+                <th>Öneri</th>
+              </tr>
+            </thead>
+            <tbody>
+              {applied.map((f, i) => {
+                const [group, type] = assetCell(f)
+                return (
+                  <tr key={i}>
+                    <td>{group}</td>
+                    <td>{type}</td>
+                    <td>{f.span}</td>
+                    <td>{f.original}</td>
+                    <td>{f.suggestion}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
+    </details>
+  )
+}
 
 const adGroupName = (group: AdGroup) => group.group_name || group.name || 'Reklam Grubu'
 const adGroupTheme = (group: AdGroup) => group.group_theme || group.theme || ''
@@ -233,12 +317,20 @@ function AdGroupCard({
   previewUrl,
   onRegenerate,
   regenerateDisabled,
+  findings = [],
 }: {
   group: AdGroup
   previewUrl: string
   onRegenerate?: (groupId: number) => void
   regenerateDisabled?: boolean
+  findings?: ClaimFinding[]
 }) {
+  // Rozet tooltip'i: metni eşleşen bulguların gerekçesi
+  const reasonFor = (text: string) =>
+    findings
+      .filter((f) => f.asset_text === text)
+      .map((f) => `${f.span}: ${f.reason ?? ''}`)
+      .join(' | ') || undefined
   const [tab, setTab] = useState<'heads' | 'descs' | 'neg'>('heads')
   const headlines = group.headlines || []
   const descriptions = group.descriptions || []
@@ -322,13 +414,22 @@ function AdGroupCard({
           headlines.map((headline, hIdx) => (
             <div key={headline.id ?? hIdx} className="adsx-line">
               {headline.text}
-              {headline.validation_action && <small>{headline.validation_action}</small>}
+              {headline.validation_action && (
+                <small title={reasonFor(headline.text)}>
+                  {headline.validation_action === 'claim_review'
+                    ? 'İnceleme gerekli'
+                    : headline.validation_action}
+                </small>
+              )}
             </div>
           ))}
         {tab === 'descs' &&
           descriptions.map((description, dIdx) => (
             <div key={description.id ?? dIdx} className="adsx-line is-desc">
               {description.text}
+              {description.validation_action === 'claim_review' && (
+                <small title={reasonFor(description.text)}>İnceleme gerekli</small>
+              )}
             </div>
           ))}
         {tab === 'neg' && (
@@ -601,6 +702,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
     (selectedSetId != null
       ? (sets.find((s) => s.id === selectedSetId) ?? null)
       : (sets.find((s) => s.id === activeSetId) ?? null))
+  // claim_review yalnız set listesi yanıtında gelir; gösterilen setin kaydı oradan alınır
+  const reviewSet = (shownSet && sets.find((s) => s.id === shownSet.id)) || shownSet
   const hasActiveNonStale = sets.some((s) => s.status === 'active' && !s.is_stale)
   const activatableDraft = sets.find(canActivateSet)
 
@@ -716,6 +819,9 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                     {SET_STATUS_LABELS[s.status]}
                   </span>
                   {s.is_stale && <span className="adsx-set-badge is-stale">Bayat</span>}
+                  {s.review_required && (
+                    <span className="adsx-set-badge is-draft">İnceleme gerekli</span>
+                  )}
                   {typeof s.groups_count === 'number' && (
                     <span className="adsx-set-count">{s.groups_count} grup</span>
                   )}
@@ -723,6 +829,15 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
               )
             })}
           </div>
+          <ClaimReevaluateButton
+            runId={runId}
+            workspaceId={activeWorkspace?.id}
+            disabled={generating || activating}
+            onDone={() => {
+              void fetchSets()
+              void fetchResults()
+            }}
+          />
           {!hasActiveNonStale && !polling.isActive && (
             <div className="adsx-sets-empty">
               Güncel aktif reklam seti yok
@@ -758,6 +873,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
               <span className="adsx-set-badge is-active">Aktif Set</span>
             )}
           </div>
+
+          <ClaimReviewDetails review={reviewSet?.claim_review} />
 
           <div className="adsx-stats">
             <div className="adsx-stat">
@@ -822,6 +939,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                 previewUrl={previewUrl}
                 onRegenerate={canRegenerateFromSet(shownSet) ? regenerateGroup : undefined}
                 regenerateDisabled={generating || activating}
+                findings={reviewSet?.claim_review?.findings}
               />
             ))}
           </div>

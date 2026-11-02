@@ -218,8 +218,10 @@ def _err(exc: BaseException) -> str:
 def _run_ads(db, ai, run, defaults) -> Dict[str, Any]:
     from app.generators.ads.ads_generator import AdsGenerator
     from app.generators.ads.generation_sets import (
-        dispatch_ads_generation, finalize_ads_failure, finalize_ads_success,
+        SET_DRAFT, activate_set, dispatch_ads_generation, finalize_ads_failure,
+        finalize_ads_success, has_successful_set,
     )
+    from app.generators.claim_review import ads_set_warnings, set_needs_review
     from app.schemas.ads import AdsGenerateRequest
 
     name = defaults.get("brand_name") or "Marka"
@@ -228,6 +230,7 @@ def _run_ads(db, ai, run, defaults) -> Dict[str, Any]:
         db, run.id, str(uuid.uuid4()),
         {"operation": "full", "brand_name": name, "display_brand_usp": usp,
          "trusted_brand_usp": "", "max_groups": None, "source": "hybrid_run"})
+    had_prior = has_successful_set(db, run.id)
     try:
         result = AdsGenerator(db, ai).generate_ads(
             AdsGenerateRequest(scoring_run_id=run.id, brand_name=name,
@@ -237,12 +240,19 @@ def _run_ads(db, ai, run, defaults) -> Dict[str, Any]:
         if result.total_groups == 0:
             raise RuntimeError("0 reklam grubu üretildi (havuz boş ya da AI "
                                "çıktısı işlenemedi)")
-        warns = [w for g in result.ad_groups
-                 for w in (g.dropped_negatives or [])]
+        # Üretimle AYNI uyarı kurucusu: işaretli set otomatik active olmaz (N1)
+        warns = ads_set_warnings(
+            [w for g in result.ad_groups for w in (g.dropped_negatives or [])],
+            [f for g in result.ad_groups for f in g.claim_findings],
+            [f for g in result.ad_groups for f in g.claim_applied])
         status = finalize_ads_success(
             db, gen_set, groups_count=result.total_groups,
             failed_groups=result.failed_groups, warnings=warns,
             extra_result_data={"operation": "full", "source": "hybrid_run"})
+        if status == SET_DRAFT and not had_prior and set_needs_review(warns):
+            # Benchmark'ta insan onayı yok: ilk set yalnız inceleme işareti yüzünden draft kaldıysa
+            # eski akışla aynı şekilde aktifleşir; işaret (warnings + asset) KORUNUR, review_required doğru.
+            status = activate_set(db, gen_set).status
         return {"generation_set_id": gen_set.id, "set_status": status,
                 "n_groups": result.total_groups,
                 "failed_groups": result.failed_groups}

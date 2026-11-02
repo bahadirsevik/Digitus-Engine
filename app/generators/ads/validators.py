@@ -7,7 +7,8 @@ Contains:
 - DKIValidator: Regex-based DKI format validation
 """
 import re
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Union
 from loguru import logger
 
 from app.core.constants import (
@@ -18,6 +19,14 @@ from app.core.constants import (
 )
 from app.core.site_analyzer.turkish_normalizer import normalize_turkish
 from app.generators.ai_service import scoped
+from app.generators.claim_review import REASON_RISK_TR, REASON_UNVERIFIED_TR
+from app.generators.claim_lexicon import (
+    ABSOLUTE_RX,
+    CERT_PATTERN,
+    SERVICE_RX,
+    GroundingSource,
+)
+from app.generators.output_language import with_output_block
 from app.schemas.ads import AdGroupStandardReport
 from app.generators.ads.prompt_templates import (
     HEADLINE_REGENERATION_PROMPT,
@@ -56,7 +65,8 @@ class HeadlineValidator:
         headline: str, 
         keyword: str,
         ai_service = None,
-        enable_regeneration: bool = True
+        enable_regeneration: bool = True,
+        output_ctx=None,
     ) -> Tuple[Optional[str], str, Optional[str]]:
         """
         Validate and fix headline character limit.
@@ -87,7 +97,7 @@ class HeadlineValidator:
         
         # Phase 2: AI Regeneration
         if ai_service and enable_regeneration:
-            regenerated = self._regenerate_with_ai(headline, keyword, ai_service, original_len)
+            regenerated = self._regenerate_with_ai(headline, keyword, ai_service, original_len, output_ctx)
             if regenerated and len(regenerated) <= self.MAX_LENGTH:
                 logger.info(f"Headline regenerated: {original_len} → {len(regenerated)} chars via AI")
                 return (regenerated, "regenerated", f"AI generated {len(regenerated)} chars")
@@ -112,15 +122,16 @@ class HeadlineValidator:
         headline: str, 
         keyword: str, 
         ai_service,
-        original_length: int
+        original_length: int,
+        output_ctx=None,
     ) -> Optional[str]:
         """Use AI to regenerate headline within limits."""
         try:
-            prompt = HEADLINE_REGENERATION_PROMPT.format(
+            prompt = with_output_block(HEADLINE_REGENERATION_PROMPT.format(
                 original=headline,
                 keyword=keyword,
                 char_count=original_length
-            )
+            ), output_ctx)
             # Codex v8-7: mikro kısaltma düşünme gerektirmez —
             # Gemini 3.8 `minimal` kabul etmez; en dusuk desteklenen seviye `low`.
             result = scoped(
@@ -169,7 +180,8 @@ class DescriptionValidator:
         self,
         description: str,
         ai_service=None,
-        enable_ai_shortening: bool = True
+        enable_ai_shortening: bool = True,
+        output_ctx=None,
     ) -> Tuple[str, str, Optional[str]]:
         """
         Validate and fix description character limit.
@@ -202,7 +214,7 @@ class DescriptionValidator:
 
         # Phase 2: AI shortening (plain-text)
         if ai_service and enable_ai_shortening:
-            shortened = self._shorten_with_ai(description, ai_service, original_len)
+            shortened = self._shorten_with_ai(description, ai_service, original_len, output_ctx)
             if shortened:
                 logger.info(f"Description AI-shortened: {original_len} → {len(shortened)} chars")
                 return (shortened, "ai_shortened", f"AI shortening: {original_len} → {len(shortened)} chars")
@@ -220,14 +232,15 @@ class DescriptionValidator:
         self,
         description: str,
         ai_service,
-        original_length: int
+        original_length: int,
+        output_ctx=None,
     ) -> Optional[str]:
         """Use AI to shorten description within limits."""
         try:
-            prompt = DESCRIPTION_SHORTENING_PROMPT.format(
+            prompt = with_output_block(DESCRIPTION_SHORTENING_PROMPT.format(
                 original=description,
                 char_count=original_length
-            )
+            ), output_ctx)
             # Codex v8-7: mikro kısaltma düşünme gerektirmez (plan sözleşmesi)
             result = scoped(
                 ai_service, "micro_shorten", thinking_level="low"
@@ -362,6 +375,9 @@ _CLAIM_UNIT_TERMS = (
     "yıl", "yil", "müşteri", "musteri", "yatırımcı", "yatirimci",
     "kullanıcı", "kullanici", "kişi", "kisi", "üye", "uye", "yorum",
     "değerlendirme", "degerlendirme", "ülke", "ulke",
+    # Sağlık müşterilerinin profil gerçekleri ("5000 hasta") RU/UK/EN/DE
+    # "пациентов/patients/Patienten" iddiasını ground'layabilsin
+    "hasta", "ameliyat", "operasyon",
 )
 
 # Birim eş anlamlıları — "10 yıl deneyim" fact'i "10 yıldır hizmet"
@@ -371,11 +387,88 @@ _UNIT_CANON = {
     "yillik": "yıl", "musteri": "müşteri", "yatirimci": "yatırımcı",
     "kullanici": "kullanıcı", "kisi": "kişi", "uye": "üye",
     "degerlendirme": "değerlendirme", "ulke": "ülke", "yildiz": "yıldız",
+    "operasyon": "ameliyat",
 }
+
+# RU/UK/EN/DE birim tabloları: (regex parçası, kanonik birim). Kanonik değer
+# Türkçe tablonun kanoniğidir: Türkçe profil gerçeği ("10 yıl", "5000 hasta")
+# hedef dildeki "10 лет / 5000 пациентов / 10 years" iddiasını ground'lar.
+# Desenler `ı`→`i` normalize edilmiş metinde çalışır.
+_ML_UNIT_TERMS = {
+    "ru": (
+        (r"лет(?:н\w*)?\b|год(?:а|ов|ы|у)?\b", "yıl"),
+        (r"клиент\w*|заказчик\w*|покупател\w*", "müşteri"),
+        (r"пациент\w*", "hasta"),
+        (r"операци\w*|процедур\w*|вмешательств\w*", "ameliyat"),
+        (r"пользовател\w*", "kullanıcı"),
+        (r"человек\b|люд(?:ей|и)\b", "kişi"),
+        (r"отзыв\w*", "yorum"),
+        (r"оценок\b|оценк\w*", "değerlendirme"),
+        (r"звезд\w*|звёзд\w*", "yıldız"),
+        (r"балл\w*", "puan"),
+        (r"стран\w*", "ülke"),
+        (r"инвестор\w*", "yatırımcı"),
+    ),
+    "uk": (
+        (r"рок(?:ів|и|у)\b|рік\b|річн\w*", "yıl"),
+        (r"клієнт\w*|покупц\w*", "müşteri"),
+        (r"пацієнт\w*", "hasta"),
+        (r"операці\w*|процедур\w*|втручан\w*", "ameliyat"),
+        (r"користувач\w*", "kullanıcı"),
+        (r"людей\b|люди\b", "kişi"),
+        (r"відгук\w*", "yorum"),
+        (r"оцінок\b|оцінк\w*", "değerlendirme"),
+        (r"зір(?:ок|ки|ка)\b|зірк\w*", "yıldız"),
+        (r"бал(?:ів|и|ла)?\b", "puan"),
+        (r"країн\w*", "ülke"),
+        (r"інвестор\w*", "yatırımcı"),
+    ),
+    "en": (
+        (r"years?\b|yrs?\b", "yıl"),
+        (r"customers?\b|clients?\b|buyers?\b", "müşteri"),
+        (r"patients?\b", "hasta"),
+        (r"procedures?\b|operations?\b|surger(?:y|ies)\b", "ameliyat"),
+        (r"users?\b|subscribers?\b", "kullanıcı"),
+        (r"members?\b", "üye"),
+        (r"people\b|persons?\b", "kişi"),
+        (r"reviews?\b", "yorum"),
+        (r"ratings?\b", "değerlendirme"),
+        (r"stars?\b", "yıldız"),
+        (r"points?\b", "puan"),
+        (r"countries\b|country\b", "ülke"),
+        (r"investors?\b", "yatırımcı"),
+    ),
+    "de": (
+        (r"jahr\w*", "yıl"),
+        (r"kunden\b|kunde\b|käufer\b|kaeufer\b", "müşteri"),
+        (r"klienten\b|patient(?:en|in|innen)?\b", "hasta"),
+        (r"eingriff\w*|operation\w*|behandlung\w*", "ameliyat"),
+        (r"nutzer\w*", "kullanıcı"),
+        (r"mitglied\w*", "üye"),
+        (r"personen\b|menschen\b", "kişi"),
+        (r"rezension\w*", "yorum"),
+        (r"bewertung\w*", "değerlendirme"),
+        (r"stern\w*", "yıldız"),
+        (r"punkt\w*", "puan"),
+        (r"länder\b|laender\b", "ülke"),
+        (r"anleger\b|investor\w*", "yatırımcı"),
+    ),
+}
+_ML_UNITS_FLAT = tuple(
+    (re.compile(pat), canon)
+    for table in _ML_UNIT_TERMS.values()
+    for pat, canon in table
+)
 
 
 def _canon_unit(unit: str) -> str:
-    return _UNIT_CANON.get(unit, unit)
+    if unit in _UNIT_CANON:
+        return _UNIT_CANON[unit]
+    for rx, canon in _ML_UNITS_FLAT:
+        if rx.fullmatch(unit):
+            return canon
+    return unit
+
 
 _SUPERLATIVE_PATTERNS = (
     r"en\s+iyi",
@@ -388,6 +481,36 @@ _SUPERLATIVE_PATTERNS = (
     r"\bno\.?\s*1\b",
 )
 
+# RU/UK/EN/DE süperlatifleri; `ı`→`i` normalize metinde çalışır.
+_ML_SUPERLATIVE_PATTERNS = {
+    "ru": (
+        r"\bлучш\w*", r"\bнаилучш\w*", r"\bлидер\w*", r"\bведущ\w*",
+        # "самый лучший/самая низкая": sonraki sozcuk SIFAT olmali; "самого импланта"
+        # ("implantin kendisi") superlatif degil (ws77 canli SEO, 01.11)
+        r"\bсам(?:ый|ая|ое|ые|ого|ому|ым|ых|ой|ую)\s+\w+(?:ый|ий|ая|яя|ое|ее|ые|ие|ого|его|ому|ему|ым|им|ых|их|ой|ую|юю)\b",
+        r"№\s*1\b", r"\bномер\s*(?:один|1)\b",
+    ),
+    "uk": (
+        r"\bнай(?:кращ|більш|швидш|популярніш|надійніш|вигідніш|якісніш)\w*",
+        r"\bлідер\w*", r"\bпровідн\w*",
+        r"№\s*1\b", r"\bномер\s*(?:один|1)\b",
+    ),
+    "en": (
+        r"\bbest\b", r"#\s*1\b", r"\bnumber\s*(?:one|1)\b", r"\bleading\b",
+        r"\bleaders?\b", r"\btop[- ]rated\b",
+        r"\bmost\s+(?:trusted|popular|reliable|advanced|affordable|experienced)\b",
+        r"\bworld'?s\s+(?:best|leading|first|largest)\b",
+        r"\bthe\s+(?:cheapest|fastest|biggest|largest)\b",
+    ),
+    "de": (
+        r"\bbest(?:e|er|en|em|es)?\b", r"\bnr\.?\s*1\b",
+        r"\bnummer\s*(?:eins|1)\b", r"\bf(?:ü|ue)hrend\w*",
+        r"\bmarktf(?:ü|ue)hrer\w*",
+        r"\bgr(?:ö|oe)(?:ß|ss)te[rnsm]?\b", r"\bbeliebteste[rnsm]?\b",
+        r"\bg(?:ü|ue)nstigste[rnsm]?\b", r"\bschnellste[rnsm]?\b",
+    ),
+}
+
 _GUARANTEE_PATTERNS = (
     r"kazan[çc]\s+garanti",
     r"garantili\s+kazan[çc]",
@@ -398,20 +521,74 @@ _GUARANTEE_PATTERNS = (
 )
 
 
+def _guarantee_pair(guarantee: str, gain: str) -> tuple:
+    """Garanti sözcüğü ile kazanç/sonuç sözcüğü en çok 2 sözcük arayla, iki sırada."""
+    gap = r"(?:\W+\w+){0,2}?\W+"
+    return (
+        rf"\b(?:{guarantee})\b{gap}(?:{gain})\w*",
+        rf"\b(?:{gain})\w*{gap}(?:{guarantee})\b",
+    )
+
+
+# Garanti = KAZANÇ/SONUÇ garantisi (TR tablosuyla aynı anlam). Salt "garanti /
+# Garantie / warranty" (ürün garantisi, para iade garantisi) iddia SAYILMAZ;
+# "гарантия результата", "guaranteed results", "garantierter Gewinn" yakalanır.
+_ML_GUARANTEE_PATTERNS = {
+    "ru": _guarantee_pair(
+        r"гарант\w*",
+        r"доход|прибыл|заработ|результат|успех|выигр|окупаемост|излечен|эффект",
+    ),
+    "uk": _guarantee_pair(
+        r"гарант\w*",
+        r"дохід|доход|прибут|заробіт|заробл|результат|успіх|виграш|окупн|вилікув|ефект",
+    ),
+    "en": _guarantee_pair(
+        r"guarantee[sd]?|guaranteeing",
+        r"income|profits?|earnings?|returns|results?|success|wins?|winnings|roi|cures?",
+    ),
+    "de": _guarantee_pair(
+        r"garanti\w*",
+        r"gewinn|einkommen|verdienst|rendite|ertr[äa]g|ergebnis|erfolg|heilung",
+    ),
+}
+
+# Her dil için üç tablo da tanımlı olan kodlar (+ "tr" ana tablolar). Katalog
+# dilleri (markets.LANGUAGES) bunun alt kümesi OLMAK ZORUNDA — test korur.
+CLAIM_TERM_LANGUAGES = frozenset({"tr"}) | (
+    set(_ML_UNIT_TERMS) & set(_ML_SUPERLATIVE_PATTERNS) & set(_ML_GUARANTEE_PATTERNS)
+)
+_ML_SUPERLATIVE_COMPILED = tuple(
+    re.compile(p) for ps in _ML_SUPERLATIVE_PATTERNS.values() for p in ps
+)
+_ML_GUARANTEE_COMPILED = tuple(
+    re.compile(p) for ps in _ML_GUARANTEE_PATTERNS.values() for p in ps
+)
+
+
 def _tr_lower(text: str) -> str:
     """Türkçe-güvenli lowercase (I→ı, İ→i)."""
     return text.replace("I", "ı").replace("İ", "i").lower()
 
 
+# Çarpan sözcükleri (Türkçe + RU/UK/EN/DE); sayı gövdesi ve kanonikleştirme paylaşır
+_MILLION_RX = r"milyon|миллион\w*|мільйон\w*|млн\.?|million\w*|mio\.?|mln"
+_THOUSAND_RX = r"bin|тысяч\w*|тыс\.?|тисяч\w*|тис\.?|thousand|tausend"
+_SPACE_GROUP = "[   ]"
+
+
 def _canonical_number(raw: str) -> str:
-    """Sayı biçimlerini tek biçime indirger: '50.000'/'50,000'/'50 bin' → '50000'."""
+    """Sayı biçimlerini tek biçime indirger: '50.000'/'50,000'/'50 bin'/'50 тыс.' → '50000'."""
     s = _tr_lower(raw).strip()
     multiplier = 1
-    for word, mult in (("milyon", 1_000_000), ("bin", 1_000)):
-        if word in s:
-            s = s.replace(word, "").strip()
+    for rx, mult in ((_MILLION_RX, 1_000_000), (_THOUSAND_RX + r"|(?<=\d)k", 1_000)):
+        m = re.search(rf"\s*(?:{rx})$", s)
+        if m:
+            s = s[:m.start()].strip()
             multiplier = mult
             break
+    # Boşluklu binlik "10 000" → "10000"
+    if re.fullmatch(rf"\d{{1,3}}(?:{_SPACE_GROUP}\d{{3}})+", s):
+        s = re.sub(_SPACE_GROUP, "", s)
     # Ondalık "4.8" korunmalı; binlik "50.000" ayracı silinmeli.
     if re.fullmatch(r"\d{1,3}([.,]\d{3})+", s):
         s = re.sub(r"[.,]", "", s)
@@ -426,48 +603,70 @@ def _canonical_number(raw: str) -> str:
     return f"{value:g}"
 
 
-# Sayı gövdesi: 50 | 50.000 | 4,8 | 50 bin | 3 milyon
-_NUMBER_BODY = r"\d[\d.,]*(?:\s*(?:bin|milyon))?"
+# Sayı gövdesi: 50 | 50.000 | 10 000 | 4,8 | 50 bin | 3 milyon | 50 тыс. | 10k.
+# Başta lookbehind: sayının ortasından eşleşme başlamaz ("2026 450 müşteri").
+_NUMBER_BODY = (
+    rf"(?<!\d)(?<!\d[.,])(?:\d{{1,3}}(?:{_SPACE_GROUP}\d{{3}})+(?!\d)|\d[\d.,]*)"
+    rf"(?:\s*(?:{_MILLION_RX}|{_THOUSAND_RX})|k\b)?"
+)
+_PERCENT_WORDS = r"%|percent\b|prozent\b|процент\w*|відсотк\w*"
+_RATING_UNITS = (
+    r"puan|yıldız|yildiz|stars?\b|sterne?\b|sternen\b|звезд\w*|звёзд\w*|зірок\b|"
+    r"зір\w*|балл\w*|points?\b|punkte\b"
+)
 
 
 def _extract_numeric_claims(text: str) -> list:
     """Metindeki sayısal iddia adaylarını (span, canonical) döndürür."""
     lowered = _tr_lower(text)
+    # ML birim terimleri 'i' ile yazılı; TR terimlerin ASCII ('yil') karşılıkları
+    # tabloda var. ı→i 1:1 olduğundan ofsetler korunur, span orijinal metinden alınır.
+    search = lowered.replace("ı", "i")
     claims = []
+
+    def _txt(m):
+        return lowered[m.start():m.end()].strip()
 
     # 4.8/5 (puan) rating biçimi — önce yakala ve metinden çıkar,
     # yoksa "/5 puan" parçası ayrı bir iddia gibi görünür.
     # FALSE-POSITIVE korumasi (idea-44 dersi): thread/carousel sayfalama
     # numaralari ("1/8", "2/8") rating DEGILDIR — yalnizca birim ("puan/
     # yildiz") VEYA ondalikli pay ("4.8/5") tasiyan N/M rating sayilir;
-    # duz tam-sayi/tam-sayi oldugu gibi birakilir.
+    # duz tam-sayi/tam-sayi oldugu gibi birakilir. Yerine boy korunarak boşluk
+    # konur: sonraki eşleşmelerin ofsetleri kaymaz.
     def _consume_rating(m):
         num, unit = m.group(1), m.group(2)
         if unit or "." in num or "," in num:
-            claims.append((m.group(0).strip(), _canonical_number(num) + " puan"))
-            return " "
+            claims.append((_txt(m), _canonical_number(num) + " puan"))
+            return " " * (m.end() - m.start())
         return m.group(0)  # sayfalama (1/8) — iddia degil
 
-    lowered = re.sub(
-        r"(\d[\d.,]*)\s*/\s*\d+(\s*(?:puan|yıldız|yildiz))?",
+    search = re.sub(
+        rf"(\d[\d.,]*)\s*/\s*\d+(\s*(?:{_RATING_UNITS}))?",
         _consume_rating,
-        lowered,
+        search,
     )
 
     # yüzde 80 / %80
-    for m in re.finditer(rf"(?:%\s*|yüzde\s+|yuzde\s+)({_NUMBER_BODY})", lowered):
-        claims.append((m.group(0).strip(), "%" + _canonical_number(m.group(1))))
+    for m in re.finditer(rf"(?:%\s*|yüzde\s+|yuzde\s+)({_NUMBER_BODY})", search):
+        claims.append((_txt(m), "%" + _canonical_number(m.group(1))))
+
+    # 80% / 80 percent / 80 Prozent / 80 процентов
+    for m in re.finditer(rf"({_NUMBER_BODY})\s*(?:{_PERCENT_WORDS})", search):
+        claims.append((_txt(m), "%" + _canonical_number(m.group(1))))
 
     # 100.000+ (birimli veya birimsiz artı)
-    for m in re.finditer(rf"({_NUMBER_BODY})\s*\+", lowered):
-        claims.append((m.group(0).strip(), _canonical_number(m.group(1)) + "+"))
+    for m in re.finditer(rf"({_NUMBER_BODY})\s*\+", search):
+        claims.append((_txt(m), _canonical_number(m.group(1)) + "+"))
 
-    # sayı + birim (10 yıl, 4.8 puan, 50 bin müşteri)
-    unit_alt = "|".join(_CLAIM_UNIT_TERMS)
-    for m in re.finditer(rf"({_NUMBER_BODY})\s*\+?\s*({unit_alt})", lowered):
+    # sayı + birim (10 yıl, 4.8 puan, 50 bin müşteri, 10 лет, 5 000 patients)
+    unit_alt = "|".join(
+        [*_CLAIM_UNIT_TERMS, *(p for t in _ML_UNIT_TERMS.values() for p, _ in t)]
+    )
+    for m in re.finditer(rf"({_NUMBER_BODY})(?:\s|-)*\+?(?:\s|-)*({unit_alt})", search):
         claims.append(
             (
-                m.group(0).strip(),
+                _txt(m),
                 _canonical_number(m.group(1)) + " " + _canon_unit(m.group(2)),
             )
         )
@@ -475,61 +674,171 @@ def _extract_numeric_claims(text: str) -> list:
     return claims
 
 
-def find_ungrounded_claims(
-    text: str,
-    grounding_facts: str,
-    exempt_keywords=None,
+def _lexicon_violations(
+    lowered: str, original: str, source: GroundingSource, include_profile_concepts: bool = True
 ) -> list:
-    """Metindeki, grounding_facts ile desteklenmeyen iddiaları döndürür.
+    """Hizmet/marka, sertifika ve mutlak sonuç ihlalleri (plan_iddia_denetimi A1).
 
-    Dönüş: okunur iddia string listesi (boş liste = temiz).
+    lowered: _tr_lower'lı, MASKESİZ metin; original: sertifika için ham metin.
+    """
+    search = lowered.replace("ı", "i")
+    units = source.permission_units()
+    folded_units = [_tr_lower(u).replace("ı", "i") for u in units]
+    violations = []
+
+    if include_profile_concepts:
+        for rx in SERVICE_RX.values():
+            m = rx.search(search)
+            if m and not any(rx.search(u) for u in folded_units):
+                violations.append("service:" + search[m.start():m.end()])
+
+        granted = {
+            _cert_key(cm) for u in units for cm in CERT_PATTERN.finditer(u) if cm.group(2)
+        }
+        for cm in CERT_PATTERN.finditer(original):
+            if not cm.group(2) or _cert_key(cm) not in granted:
+                violations.append("cert:" + cm.group(0).strip())
+
+    for rx in ABSOLUTE_RX:
+        for m in rx.finditer(search):
+            violations.append("absolute:" + search[m.start():m.end()])
+    return violations
+
+
+def _cert_key(m) -> tuple:
+    org = m.group(1).upper().replace("Ü", "U")
+    return org, m.group(2).split(":")[0]
+
+
+_RISK_CATEGORIES = frozenset({"guarantee", "absolute"})
+
+
+@dataclass(frozen=True)
+class ClaimFinding:
+    """İddia bulgusu (plan_iddia_denetimi rev.4). kind: 'risk' (dar açık risk: garanti +
+    mutlak sonuç) | 'unverified' (profilde doğrulanamadı: hizmet/sertifika/sayı/süperlatif)."""
+
+    kind: str
+    category: str
+    span: str
+    reason_tr: str
+    raw: str  # find_ungrounded_claims'in eski string biçimi ('service:x', 'absolute:y', düz span)
+
+    def as_dict(self) -> dict:
+        return {
+            "kind": self.kind,
+            "category": self.category,
+            "span": self.span,
+            "reason": self.reason_tr,
+        }
+
+
+def _finding(category: str, span: str, raw: str = "") -> ClaimFinding:
+    kind = "risk" if category in _RISK_CATEGORIES else "unverified"
+    return ClaimFinding(
+        kind, category, span, REASON_RISK_TR if kind == "risk" else REASON_UNVERIFIED_TR,
+        raw or span,
+    )
+
+
+def classify_claims(
+    text: str,
+    grounding_facts: Union[str, GroundingSource],
+    exempt_keywords=None,
+    include_profile_concepts: bool = True,
+) -> list:
+    """Metindeki iddiaları sınıflandırır (list[ClaimFinding], tekilleştirilmiş, sıralı).
+
+    Dil-bağımsız: TR + RU/UK/EN/DE tabloları birlikte taranır (hedef dil
+    parametresi yok); sayı biçimi dilden bağımsızdır.
+    grounding_facts: düz metin (etiketli satırlar GroundingSource.from_text ile
+    ayrıştırılır) veya GroundingSource. Hizmet/marka ve sertifika dayanağı yalnız
+    olumlu kaynak birimlerinden gelir; garanti/mutlak sonuç kaynağa bakılmaz.
     """
     if not text or not text.strip():
         return []
 
+    source = (
+        grounding_facts if isinstance(grounding_facts, GroundingSource)
+        else GroundingSource.from_text(grounding_facts or "")
+    )
     working = _tr_lower(text)
 
-    # Keyword muafiyeti DAR: yalnız asset içinde gerçekten geçen tam
-    # keyword metni taramadan çıkarılır.
+    # Keyword muafiyeti DAR: yalnız SAYISAL taramada, asset içinde gerçekten
+    # geçen tam keyword metni maskelenir. Süperlatif/garanti/hizmet/sertifika/
+    # mutlak kalıplar maskesiz metinde çalışır (keyword'deki "en iyi" de yakalanır).
+    numeric_text = working.replace("ı", "i")  # keyword eşleşmesi ı/i farkına (Implant) takılmasın
     for kw in exempt_keywords or []:
-        kw_l = _tr_lower(str(kw)).strip()
-        if kw_l and kw_l in working:
-            working = working.replace(kw_l, " ")
+        kw_l = _tr_lower(str(kw)).strip().replace("ı", "i")
+        if kw_l:
+            # Sınır duyarlı: "20 yıllık implant" keyword'ü "120 yıllık ..." içinden maske açmaz;
+            # sondaki Türkçe ek ("implantları", "hisseleri") serbest, bitişik rakam değil
+            numeric_text = re.sub(
+                r"(?<![^\W_])" + re.escape(kw_l) + r"(?!\d)", " ", numeric_text
+            )
 
-    facts_l = _tr_lower(grounding_facts or "")
+    facts_l = _tr_lower(source.facts_text())
     fact_numeric = {canon for _, canon in _extract_numeric_claims(facts_l)}
     # "100.000+ müşteri" iddiası fact'te "100.000 müşteri" olarak geçiyorsa
     # sayı bazında ground'lanır (+ eki abartı sayılmaz)
     fact_numbers = {c.split()[0].lstrip("%").rstrip("+") for c in fact_numeric}
 
-    violations = []
+    found = []
 
-    for span, canon in _extract_numeric_claims(working):
+    for span, canon in _extract_numeric_claims(numeric_text):
         if canon in fact_numeric:
             continue
         if canon.endswith("+") and canon.rstrip("+") in fact_numbers:
             continue
-        violations.append(span)
+        found.append(_finding("numeric", span))
 
     for pattern in _SUPERLATIVE_PATTERNS:
         for m in re.finditer(pattern, working):
             phrase = m.group(0)
             if phrase not in facts_l:
-                violations.append(phrase)
+                found.append(_finding("superlative", phrase))
+
+    # RU/UK/EN/DE: 'ı'→'i' normalize metin (büyük I'lı İngilizce/Almanca sözcükler)
+    working_i = working.replace("ı", "i")
+    facts_i = facts_l.replace("ı", "i")
+    for rx in _ML_SUPERLATIVE_COMPILED:
+        for m in rx.finditer(working_i):
+            phrase = m.group(0)
+            if phrase not in facts_i:
+                found.append(_finding("superlative", phrase))
 
     # Kazanç garantisi HER DURUMDA yasak (grounding'e bakılmaz)
     for pattern in _GUARANTEE_PATTERNS:
         for m in re.finditer(pattern, working):
-            violations.append(m.group(0))
+            found.append(_finding("guarantee", m.group(0)))
+    for rx in _ML_GUARANTEE_COMPILED:
+        for m in rx.finditer(working_i):
+            found.append(_finding("guarantee", m.group(0)))
+
+    for raw in _lexicon_violations(working, text, source, include_profile_concepts):
+        prefix, _, span = raw.partition(":")
+        found.append(_finding(prefix, span.strip(), raw))
 
     # Tekilleştir, sırayı koru
     seen = set()
     unique = []
-    for v in violations:
-        if v not in seen:
-            seen.add(v)
-            unique.append(v)
+    for f in found:
+        if f.raw not in seen:
+            seen.add(f.raw)
+            unique.append(f)
     return unique
+
+
+def find_ungrounded_claims(
+    text: str,
+    grounding_facts: Union[str, GroundingSource],
+    exempt_keywords=None,
+    include_profile_concepts: bool = True,
+) -> list:
+    """Geriye dönük: classify_claims'in okunur string listesi (boş = temiz)."""
+    return [
+        f.raw for f in classify_claims(text, grounding_facts, exempt_keywords, include_profile_concepts)
+    ]
 
 
 # ==================== NEGATİF ↔ HEDEF ÇAKIŞMASI (plan 2.1) ====================
@@ -649,10 +958,68 @@ _CTA_VERBS = frozenset(kw_tokens(
     "yararlanın faydalanın yaptırın kaydolun görüntüleyin tanışın"))
 
 
-def is_cta(text: str) -> bool:
-    """Başlığın son kelimesi eylem fiili mi (ya da "Göz Atın" ile mi bitiyor)?"""
+# Yabancı pazar CTA'sı: fiil cümle sonunda olmak zorunda değil. Her dil (mod, zarflar, fiiller):
+#   lead = emir fiili başta (zarflardan sonra), any = emir kipi her yerde ayırt edici,
+#   lead_or_end = Almanca (Sie-emri başta / mastar sonda). Ayıklama kw_tokens ile aynı katlanır.
+# shortcut: açık liste + konum kuralı, dilbilgisi yok; EN "Call Center" gibi isim-baş başlık yanlış
+# pozitif olabilir -> CTA sayımı yalnız tamamlama çağrısı/seçim önceliğini etkiler, upgrade: ölçümle.
+_FOREIGN_CTA = {
+    "İngilizce": ("lead", "now today please just easily simply instantly online",
+                  "book call contact get start try learn discover order buy schedule request "
+                  "sign-up shop explore find claim join visit view compare download enquire "
+                  "inquire apply reserve speak talk ask browse grab calculate subscribe register "
+                  "check-out reach"),
+    "Almanca": ("lead_or_end", "jetzt heute bitte direkt einfach sofort online kostenlos",
+                "buchen anrufen kontaktieren anfragen entdecken bestellen sichern starten "
+                "termin-vereinbaren vereinbaren anfordern testen ausprobieren erfahren berechnen "
+                "vergleichen reservieren anmelden kennenlernen mehr-erfahren "
+                "kontaktieren-sie rufen-sie fordern-sie buchen-sie sichern-sie entdecken-sie "
+                "bestellen-sie vereinbaren-sie testen-sie erfahren-sie starten-sie lassen-sie-sich "
+                "informieren-sie-sich"),
+    "Rusça": ("any", "",
+              "запишитесь позвоните звоните закажите заказывайте узнайте получите начните "
+              "свяжитесь оформите попробуйте оставьте рассчитайте выберите приходите обращайтесь "
+              "подберите забронируйте купите скачайте зарегистрируйтесь проверьте сравните "
+              "откройте заходите"),
+    "Ukraynaca": ("any", "",
+                  "запишіться записуйтесь зателефонуйте телефонуйте дзвоніть замовте замовляйте "
+                  "дізнайтеся дізнайтесь отримайте почніть зв'яжіться звʼяжіться оформіть "
+                  "спробуйте залиште розрахуйте оберіть виберіть забронюйте купіть купуйте "
+                  "скористайтеся звертайтеся підберіть завантажте зареєструйтеся перевірте "
+                  "порівняйте відкрийте приходьте"),
+}
+
+
+def _compile_foreign_cta() -> dict:
+    out = {}
+    for lang, (mode, adverbs, verbs) in _FOREIGN_CTA.items():
+        # "-" çok kelimeli ifadeyi bağlar; kw_tokens zaten tire/kesmeyi sınır yapar
+        phrases = {tuple(kw_tokens(v.replace("-", " "))) for v in verbs.split()}
+        out[lang] = (mode, frozenset(kw_tokens(adverbs)), phrases)
+    return out
+
+
+_FOREIGN_CTA_COMPILED = _compile_foreign_cta()
+
+
+def is_cta(text: str, language: Optional[str] = None) -> bool:
+    """CTA mı? Türkçe/None: başlığın son kelimesi eylem fiili ("Göz Atın" dahil) — bayt-aynı
+    eski davranış. EN/DE/RU/UK: dile özgü emir/mastar tablosu (bkz. _FOREIGN_CTA)."""
     t = kw_tokens(text)
-    return bool(t) and (t[-1] in _CTA_VERBS or t[-2:] == ["goz", "atin"])
+    rule = _FOREIGN_CTA_COMPILED.get(language or "")
+    if rule is None:
+        return bool(t) and (t[-1] in _CTA_VERBS or t[-2:] == ["goz", "atin"])
+    mode, adverbs, phrases = rule
+    lead = list(t)
+    while lead and lead[0] in adverbs:
+        lead.pop(0)
+    for p in phrases:
+        n = len(p)
+        if mode != "any" and (tuple(lead[:n]) == p or (mode == "lead_or_end" and tuple(t[-n:]) == p)):
+            return True
+        if mode == "any" and any(tuple(t[i:i + n]) == p for i in range(len(t) - n + 1)):
+            return True
+    return False
 
 
 def keyword_coverage(
@@ -676,6 +1043,7 @@ def build_standard_report(
     fill_keyword_ids: Optional[List[int]],
     headlines: List[str],
     descriptions: List[str],
+    language: Optional[str] = None,
 ) -> AdGroupStandardReport:
     """15 KW teslim standardı raporu (okuma + export için TEK hesap yeri).
 
@@ -688,7 +1056,7 @@ def build_standard_report(
     )
     missing_headlines = max(0, ADS_HEADLINES_PER_GROUP - len(headlines))
     missing_kw_descriptions = max(0, ADS_DESCRIPTIONS_PER_GROUP - kw_descriptions)
-    cta_count = sum(is_cta(h) for h in headlines)
+    cta_count = sum(is_cta(h, language) for h in headlines)
     missing_cta = max(0, ADS_MIN_CTA_HEADLINES - cta_count)
     fill_ids = set(fill_keyword_ids or [])
     short = [k for k in target_keywords if len(k) <= 30]
@@ -708,7 +1076,7 @@ def build_standard_report(
         short_keyword_count=len(short),
         short_keywords_in_headlines=sum(coverage[k] == "headline" for k in short),
         unused_keyword_reasons={
-            k: ("too_long" if len(k) > 30 else "claim" if find_ungrounded_claims(k, "") else "not_used")
+            k: ("too_long" if len(k) > 30 else "claim" if any(f.kind == "risk" for f in classify_claims(k, "", include_profile_concepts=False)) else "not_used")
             for k in target_keywords if coverage[k] != "headline"
         },
         fill_keywords=[k for k, i in zip(target_keywords, target_keyword_ids) if i in fill_ids],

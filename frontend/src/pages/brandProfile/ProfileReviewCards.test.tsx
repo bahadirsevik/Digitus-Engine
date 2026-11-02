@@ -1,13 +1,30 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileReviewCards from './ProfileReviewCards'
+import { useBrandStore } from '../../stores/brandStore'
 
 const approveProfile = vi.fn()
+
+const MARKET_OPTIONS = {
+  countries: [
+    { geo_target_id: '2276', code: 'DE', name_tr: 'Almanya', label: 'Almanya (DE)' },
+    { geo_target_id: '2643', code: 'RU', name_tr: 'Rusya', label: 'Rusya (RU)' },
+  ],
+  languages: [
+    { language_id: '1031', code: 'ru', name_tr: 'Rusça', name_native: 'Русский' },
+    { language_id: '1001', code: 'de', name_tr: 'Almanca', name_native: 'Deutsch' },
+  ],
+  default: { geo_target_id: '2276', language_id: '1031' },
+}
 
 vi.mock('../../services/api', () => ({
   workspaceApi: {
     approveProfile: (...args: unknown[]) => approveProfile(...args),
+    marketOptions: () => Promise.resolve({ data: MARKET_OPTIONS }),
+    searchLocations: () => Promise.resolve({ data: { items: [], total: 0 } }),
   },
+  apiErrorCode: (err: unknown) =>
+    (err as { detail?: { code?: string } } | null)?.detail?.code ?? null,
   // brandProfileState.extractErrorMessage bu helper'a delege eder — modül
   // mock'u gerçek implementasyonu sildiğinden minimal eşdeğeri sağlanır
   apiErrorMessage: (err: unknown, fallback = 'Beklenmeyen hata') =>
@@ -45,8 +62,10 @@ const workspace = {
   suggested_keywords: null,
   preliminary_info: null,
   excluded_info: null,
-  default_geo_target_id: '2792',
-  default_language_id: '1037',
+  default_geo_target_id: '2643',
+  default_language_id: '1001',
+  market_label: 'Moscow, Rusya · Almanca',
+  market_locked: false,
   deleted_at: null,
   created_at: '2026-07-22T00:00:00Z',
   run_count: 0,
@@ -54,6 +73,7 @@ const workspace = {
 
 describe('ProfileReviewCards', () => {
   beforeEach(() => {
+    useBrandStore.setState({ marketOptions: null, marketOptionsError: null })
     approveProfile.mockReset().mockResolvedValue({
       data: { ...workspace, status: 'competitor_review' },
     })
@@ -107,5 +127,43 @@ describe('ProfileReviewCards', () => {
     await waitFor(() => expect(approveProfile).toHaveBeenCalledTimes(1))
     expect(onApproved).not.toHaveBeenCalled()
     expect(await screen.findByText(/Sunucu hatası/)).toBeTruthy()
+  })
+
+  it('mevcut pazar etiketiyle gösterilir ve onayda ID değerleri gönderilir', async () => {
+    render(<ProfileReviewCards workspace={workspace} onApproved={vi.fn()} />)
+    expect(await screen.findByText('Moscow, Rusya')).toBeTruthy()
+    expect((screen.getByLabelText('Çıktı dili') as HTMLSelectElement).value).toBe('1001')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Onayla ve devam et' }))
+    await waitFor(() => expect(approveProfile).toHaveBeenCalledTimes(1))
+    expect(approveProfile.mock.calls[0][1]).toMatchObject({
+      default_geo_target_id: '2643',
+      default_language_id: '1001',
+    })
+  })
+
+  it('veri olan (kilitli) çalışmada pazar pasif, mesaj görünür ve alan gönderilmez', async () => {
+    render(
+      <ProfileReviewCards workspace={{ ...workspace, market_locked: true }} onApproved={vi.fn()} />
+    )
+    expect(await screen.findByText(/hedef konum\/dil değiştirilemez/)).toBeTruthy()
+    expect((screen.getByLabelText('Hedef konum') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Çıktı dili') as HTMLSelectElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Onayla ve devam et' }))
+    await waitFor(() => expect(approveProfile).toHaveBeenCalledTimes(1))
+    expect(approveProfile.mock.calls[0][1]).not.toHaveProperty('default_geo_target_id')
+  })
+
+  it('409 MARKET_LOCKED gelirse kilit mesajı satır içi gösterilir', async () => {
+    approveProfile.mockRejectedValue({
+      status: 409,
+      message: 'x',
+      detail: { code: 'MARKET_LOCKED', message: 'x' },
+    })
+    render(<ProfileReviewCards workspace={workspace} onApproved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Onayla ve devam et' }))
+    expect(await screen.findByText(/Yeni pazar çalışması açın/)).toBeTruthy()
+    expect((screen.getByLabelText('Hedef konum') as HTMLInputElement).disabled).toBe(true)
   })
 })

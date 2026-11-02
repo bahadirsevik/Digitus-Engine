@@ -19,6 +19,7 @@ import {
   LocationAuditResponse,
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
+import MarketBadge from '../components/MarketBadge'
 import type { ScoringRun } from '../types/models'
 import {
   useTaskPolling,
@@ -454,6 +455,7 @@ export default function Channels() {
         <div className="workspace-pill">
           <span className="pill-label">Aktif Marka:</span>
           <span className="pill-value">{activeWorkspace.name}</span>
+          <MarketBadge label={activeWorkspace.market_label} />
         </div>
       )}
 

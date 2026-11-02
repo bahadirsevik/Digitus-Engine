@@ -145,6 +145,7 @@ function ChannelRow({
         </strong>
         <span>{channel.pool_count} havuz</span>
         {missing > 0 && channel.pool_count > 0 && <small>{missing} eksik</small>}
+        {channel.review_pending && <small>Taslak inceleme bekliyor</small>}
       </div>
       <Link to={path} className="btn btn-secondary btn-sm">
         Aç

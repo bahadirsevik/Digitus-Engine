@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_ai
 from app.generators.ai_service import AIService
+from app.generators.output_language import output_context
 from app.config import settings
 from app.core.error_responses import safe_500_detail
 from app.database.models import (
@@ -31,6 +32,8 @@ from app.schemas.brand_profile import (
     AnchorGroupResponse,
     LocationFilterPreviewRequest, LocationFilterPreviewResponse,
     LocationPreviewCityCount, LocationPreviewSample, LocationPreviewExemptSample,
+    MarketOptionsResponse, MarketLocationSearchResponse,
+    MarketCopyRequest, MarketCopyResponse, MarketCopySkipped,
 )
 from app.schemas.location_gate import LocationAuditResponse, LocationAuditRow
 from app.core.channel_seed import (
@@ -43,7 +46,12 @@ from app.core.engine_version_gate import (
     require_relevance_not_v3,
     run_algorithm_version,
 )
-from app.core.workspace import verify_scoring_run, verify_workspace
+from app.core.workspace import (
+    market_change_blocker,
+    set_workspace_market,
+    verify_scoring_run,
+    verify_workspace,
+)
 from app.core.site_analyzer.crawler import (
     CrawlContentUnusable, _is_same_site_url, _page_key,
 )
@@ -73,6 +81,7 @@ from app.core.scoring.state_machine import (
 )
 from app.core.telemetry import UsageCollector
 from app.core.keyword_normalize import normalize_keyword
+from app.core import markets
 from app.core.workspace_refresh import (
     ExistingWorkspaceKeyword,
     build_refreshed_workspace_keywords,
@@ -601,6 +610,38 @@ def get_relevance_scores(
     ]
 
 
+# ==================== MARKET OPTIONS (hedef konum + cikti dili) ====================
+
+@router.get("/market-options", response_model=MarketOptionsResponse)
+def get_market_options():
+    """Ülke listesi, 5 çıktı dili ve varsayılan pazar (ID'ler yalnız teknik alan)."""
+    return {
+        "countries": [
+            {**c, "label": markets.location_label(c["geo_target_id"])}
+            for c in markets.COUNTRIES
+        ],
+        "languages": markets.LANGUAGES,
+        "default": {
+            "geo_target_id": settings.GOOGLE_ADS_GEO_TARGET_ID or "2792",
+            "language_id": settings.GOOGLE_ADS_LANGUAGE_ID or "1037",
+        },
+    }
+
+
+@router.get("/market-options/locations", response_model=MarketLocationSearchResponse)
+def search_market_locations(
+    q: str = Query("", max_length=100, description="Konum adı (en az 2 karakter; kısaysa yalnız ülkeler)"),
+    country: Optional[str] = Query(None, max_length=2, description="ISO alpha-2 ülke kodu ile daralt"),
+):
+    """Ülke + şehir + il/bölge araması (en fazla 20 sonuç)."""
+    try:
+        items, total = markets.search_locations_page(q, country, limit=20)
+    except markets.MarketCatalogError as exc:
+        logger.error("Konum katalogu okunamadi: %s", exc)
+        raise HTTPException(status_code=503, detail="Konum kataloğu şu an kullanılamıyor.")
+    return {"items": items, "total": total}
+
+
 # ==================== WORKSPACE CRUD ENDPOINTS ====================
 
 @router.post(
@@ -618,6 +659,10 @@ def create_workspace(
     Yeni marka çalışması oluştur.
     Background task'ta site crawl + AI profile extraction başlatılır.
     """
+    market_geo, market_lang = markets.validate_market_input(
+        request.default_geo_target_id, request.default_language_id
+    )
+
     # Erken URL doğrulaması (plan v13): geçersiz/tekrarlı rakip URL'si crawl
     # ve AI süreci hiç başlamadan reddedilir.
     if request.competitor_urls:
@@ -675,8 +720,8 @@ def create_workspace(
         competitor_urls=request.competitor_urls,
         preliminary_info=must_have_info,
         excluded_info=request.excluded_info,
-        default_geo_target_id=request.default_geo_target_id,
-        default_language_id=request.default_language_id,
+        default_geo_target_id=market_geo,
+        default_language_id=market_lang,
         status="pending",
         onboarding_flow=request.flow_version,
         analysis_attempt_id=attempt_id,
@@ -708,7 +753,9 @@ def create_workspace(
                 attempt_id=attempt_id,
             )
 
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = False  # yeni çalışmada veri yok
+    return response
 
 
 # capabilities BİLEREK yok: ürüne özgü olabilir ve hiçbir kod okumuyor
@@ -866,6 +913,225 @@ def create_focus(
     return WorkspaceResponse.model_validate(focus)
 
 
+def _run_keyword_suggestions_for_copy(workspace_id: int) -> None:
+    """Background task (pazar kopyası): onaylı kopyaya YALNIZ `suggested_keywords` yazar.
+
+    `_run_keyword_suggestion_from_profile` status'u running -> keywords_review yaptığı için
+    kullanılmaz. Burada status, profile_data, analysis_attempt_id, policy_version ve
+    profile_approved_at'a dokunulmaz; hata halinde kopya `confirmed` kalır, öneri boş kalır.
+    İdempotent: öneri zaten varsa AI çağrılmaz.
+    """
+    from app.database.connection import SessionLocal
+    from app.generators.ai_service import get_ai_service
+    from app.core.site_analyzer.profile_extractor import (
+        ProfileExtractor,
+        resolve_site_content,
+    )
+    from app.core.policy.competitor_policy import approved_competitor_terms, match_term
+
+    def _eligible(ws: Optional[BrandProfile]) -> bool:
+        return bool(
+            ws is not None
+            and ws.deleted_at is None
+            and ws.status == "confirmed"
+            and ws.parent_brand_profile_id is None
+            and not ws.suggested_keywords
+        )
+
+    db = SessionLocal()
+    ai = None
+    try:
+        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
+        if not _eligible(workspace):
+            return
+
+        ai = get_ai_service(api_key=settings.GEMINI_API_KEY)
+        ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
+        extractor = ProfileExtractor(ai)
+        profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
+        competitor_terms = approved_competitor_terms(workspace)
+        preliminary_info = workspace.preliminary_info
+        excluded_info = workspace.excluded_info
+        output_ctx = output_context(workspace)
+        site_content, _pages, content_error = resolve_site_content(
+            extractor, workspace.company_url, workspace.crawl_content_cache,
+            crawl_scope=workspace.crawl_scope,
+        )
+        if content_error:
+            logger.warning(f"Market copy suggestions skipped for workspace_id={workspace_id}: {content_error}")
+            return
+        suggestions = extractor.suggest_keywords_from_profile(
+            site_content,
+            profile,
+            must_have_info=preliminary_info,
+            excluded_info=excluded_info,
+            competitor_terms=competitor_terms,
+            output_ctx=output_ctx,
+        )
+        suggestions = [k for k in suggestions if match_term(k, competitor_terms) is None]
+        keywords = _normalize_seed_keywords(suggestions)[:10]
+        if not keywords:
+            return
+
+        workspace = lock_workspace_row(db, workspace_id)  # AI sürerken durum değişmiş olabilir
+        if not _eligible(workspace):
+            db.rollback()
+            return
+        workspace.suggested_keywords = keywords
+        db.commit()
+    except Exception as exc:
+        logger.warning(f"Market copy keyword suggestions failed for workspace_id={workspace_id}: {exc}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        _close_ai_quietly(ai)
+        db.close()
+
+
+# Pazar kopyası (plan_pazar_dil_secimi Faz 3). capabilities / suggested_keywords /
+# validation_data / policy_version / anchor_version / pending_focus_* BİLEREK kopyalanmaz.
+_MARKET_COPY_FIELDS = (
+    "competitor_urls", "competitor_terms", "competitor_url_decisions",
+    "competitor_policy", "topic_policy", "channel_strategy",
+    "preliminary_info", "excluded_info", "source_pages", "crawl_content_cache",
+)
+
+
+def _canonical_market(geo: Any, lang: Any) -> Optional[Tuple[str, str]]:
+    """Kayıtlı (geo, dil) → kanonik çift; boş/geçersiz eski kayıt None (eşleşmez)."""
+    try:
+        g, l = markets.validate_market_input(geo, lang)
+    except HTTPException:
+        return None
+    return (g, l) if g and l else None
+
+
+def _site_key(url: str) -> str:
+    return _with_scheme(url).strip().lower().rstrip("/")
+
+
+@router.post(
+    "/workspaces/{workspace_id}/markets",
+    response_model=MarketCopyResponse,
+    status_code=201,
+)
+def create_market_copies(
+    workspace_id: int,
+    request: MarketCopyRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Onaylı markadan, seçilen her (hedef konum, dil) için bağımsız pazar kopyası aç.
+
+    Kaynak FOR UPDATE kilitli; tek transaction, tek commit. Mevcut pazarlar `skipped`
+    olur (üst düzey 409 yalnız TÜMÜ atlanırsa). Öneri kelimeler commit SONRASI kopya
+    başına arka planda üretilir (`_run_keyword_suggestions_for_copy`; status'a dokunmaz).
+    """
+    # Tüm liste önce doğrulanır (hiçbir şey yazılmadan); kanonik değerler kullanılır
+    items: List[Tuple[str, str]] = []
+    for item in request.markets:
+        geo, lang = markets.validate_market_input(item.geo_target_id, item.language_id)
+        if (geo, lang) in items:
+            raise HTTPException(
+                status_code=422,
+                detail="Aynı pazar (hedef konum + dil) listede birden fazla kez seçilmiş.",
+            )
+        items.append((geo, lang))
+
+    source = _lock_workspace_for_policy_mutation(db, workspace_id)
+    if source.parent_brand_profile_id is not None or source.status != "confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "MARKET_COPY_SOURCE_INVALID",
+                "message": "Pazar yalnız onaylanmış bir marka çalışmasından eklenebilir "
+                "(alt sayfa odağından veya onaysız çalışmadan değil).",
+            },
+        )
+
+    from urllib.parse import urlparse
+
+    source_key = _site_key(source.company_url)
+    existing: Dict[Tuple[str, str], str] = {}
+    siblings = db.query(BrandProfile).filter(
+        BrandProfile.deleted_at.is_(None),
+        BrandProfile.crawl_scope == "site",
+        BrandProfile.parent_brand_profile_id.is_(None),
+    ).all()
+    for row in siblings:
+        market = _canonical_market(row.default_geo_target_id, row.default_language_id)
+        if market and _site_key(row.company_url) == source_key:
+            existing.setdefault(market, row.name or row.company_url)
+
+    brand_label = source.name or (urlparse(_with_scheme(source.company_url)).hostname or "")
+    own = _canonical_market(source.default_geo_target_id, source.default_language_id)
+    if own:
+        own_suffix = f" — {markets.location_short_label(own[0])}/{markets.language_name(own[1])}"
+        if brand_label.endswith(own_suffix):
+            brand_label = brand_label[: -len(own_suffix)]  # kopyanın kopyasında ek üst üste binmesin
+
+    profile = source.profile_data if isinstance(source.profile_data, dict) else None
+    copies: List[BrandProfile] = []
+    skipped: List[MarketCopySkipped] = []
+    for geo, lang in items:
+        if (geo, lang) in existing:
+            skipped.append(MarketCopySkipped(
+                geo_target_id=geo,
+                language_id=lang,
+                market_label=markets.market_label(
+                    BrandProfile(default_geo_target_id=geo, default_language_id=lang)
+                ),
+                reason=f"Bu pazar için çalışma zaten var: {existing[(geo, lang)]}",
+            ))
+            continue
+        # None alanlar HİÇ verilmez (JSON kolona açık None 'null' yazar)
+        inherited = {
+            f: copy.deepcopy(getattr(source, f))
+            for f in _MARKET_COPY_FIELDS if getattr(source, f) is not None
+        }
+        if profile is not None:
+            # konum politikası alanları atılır: kopyada filtre modu 'none' (alan yok = none)
+            inherited["profile_data"] = {
+                k: copy.deepcopy(v) for k, v in profile.items() if k not in LOCATION_PROFILE_KEYS
+            }
+        suffix = f" — {markets.location_short_label(geo)}/{markets.language_name(lang)}"
+        copies.append(BrandProfile(
+            name=f"{brand_label[: 200 - len(suffix)]}{suffix}",
+            company_url=source.company_url,
+            crawl_scope=source.crawl_scope,
+            strategy_version=source.strategy_version or 0,
+            status="confirmed",
+            profile_approved_at=datetime.now(timezone.utc),
+            onboarding_flow="profile_first",
+            default_geo_target_id=geo,
+            default_language_id=lang,
+            **inherited,
+        ))
+
+    if not copies:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MARKET_COPY_ALL_EXIST",
+                "message": "Seçilen pazarların hepsi için çalışma zaten var.",
+                "skipped": [s.model_dump() for s in skipped],
+            },
+        )
+    db.add_all(copies)
+    db.commit()
+    created = []
+    for row in copies:
+        db.refresh(row)
+        response = WorkspaceResponse.model_validate(row)
+        response.market_locked = False  # yeni kopyada veri yok
+        created.append(response)
+        background_tasks.add_task(_run_keyword_suggestions_for_copy, workspace_id=row.id)
+    return MarketCopyResponse(created=created, skipped=skipped, source_id=source.id)
+
+
 _FOCUS_FIELD_LABELS = {
     "competitor_urls": "Rakip adresleri",
     "competitor_terms": "Rakip terimleri",
@@ -902,10 +1168,22 @@ def _active_focuses(db: Session, brand_id: int) -> List[BrandProfile]:
     )
 
 
+# Pazar alanları setattr ile DEĞİL set_workspace_market ile yazılır; kıyas kanonik (1055 == 1037)
+_FOCUS_MARKET_CLEANERS = {
+    "default_geo_target_id": markets._clean_geo,
+    "default_language_id": markets._clean_language,
+}
+
+
 def _focus_setting_diff(brand: BrandProfile, focus: BrandProfile) -> List[str]:
     """Marka ile odak arasında farklı miras alanları (= ezilecek yerel düzenlemeler)."""
     diff = [
-        f for f in _FOCUS_INHERITED_FIELDS if getattr(focus, f) != getattr(brand, f)
+        f for f in _FOCUS_INHERITED_FIELDS
+        if (
+            _FOCUS_MARKET_CLEANERS[f](getattr(focus, f)) != _FOCUS_MARKET_CLEANERS[f](getattr(brand, f))
+            if f in _FOCUS_MARKET_CLEANERS
+            else getattr(focus, f) != getattr(brand, f)
+        )
     ]
     b = brand.profile_data if isinstance(brand.profile_data, dict) else {}
     f = focus.profile_data if isinstance(focus.profile_data, dict) else {}
@@ -925,13 +1203,20 @@ def preview_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
         busy = focus.status in ("pending", "running") or bool(
             find_active_workspace_work(db, focus.id)
         )
+        diff = _focus_setting_diff(brand, focus)
+        # Odakta veri varsa pazar uygulanmaz (apply ile ayni kural) — degisiklik olarak gosterme
+        market_locked = bool(
+            any(f in _FOCUS_MARKET_CLEANERS for f in diff) and market_change_blocker(db, focus)
+        )
         items.append({
             "id": focus.id,
             "name": focus.name,
             "busy": busy,
+            "market_locked": market_locked,
             "changes": [
                 {"field": f, "label": _FOCUS_FIELD_LABELS[f]}
-                for f in _focus_setting_diff(brand, focus)
+                for f in diff
+                if not (market_locked and f in _FOCUS_MARKET_CLEANERS)
             ],
         })
     return {"focuses": items}
@@ -966,8 +1251,19 @@ def apply_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
             diff = _focus_setting_diff(brand, focus)
             before = policy_effect_snapshot(focus)
             old_user_terms = parse_excluded_info(focus.excluded_info)
+            market_warning = None
+            if any(f in _FOCUS_MARKET_CLEANERS for f in diff):
+                try:
+                    set_workspace_market(
+                        db, focus, brand.default_geo_target_id, brand.default_language_id
+                    )
+                except HTTPException as exc:
+                    if not (isinstance(exc.detail, dict) and exc.detail.get("code") == "MARKET_LOCKED"):
+                        raise
+                    market_warning = "pazar değişmez (odakta veri var)"
+                    diff = [f for f in diff if f not in _FOCUS_MARKET_CLEANERS]
             for field in diff:
-                if field in _FOCUS_INHERITED_FIELDS:
+                if field in _FOCUS_INHERITED_FIELDS and field not in _FOCUS_MARKET_CLEANERS:
                     setattr(focus, field, copy.deepcopy(getattr(brand, field)))
             location_diff = [k for k in diff if k in LOCATION_PROFILE_KEYS]
             anchor_changed = False
@@ -992,7 +1288,8 @@ def apply_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
             if not _bump_policy_version_if_changed(db, focus, before) and anchor_changed:
                 invalidate_workspace_outputs(db, focus.id)
             db.commit()
-            applied.append({"id": focus_id, "name": focus_name, "changed": bool(diff)})
+            applied.append({"id": focus_id, "name": focus_name, "changed": bool(diff),
+                            "warning": market_warning})
         except HTTPException as exc:
             db.rollback()
             if exc.status_code != 409:
@@ -1069,7 +1366,9 @@ def get_workspace(workspace_id: int, db: Session = Depends(get_db)):
     # yolunu açar (bkz. stuck_janitor.py modül docstring'i).
     if fail_if_stuck(db, workspace):
         db.refresh(workspace)
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = bool(market_change_blocker(db, workspace))
+    return response
 
 
 @router.get(
@@ -1341,6 +1640,9 @@ def approve_workspace_profile(
     apply_profile_data_update kapısından (anchor sürümlemesi).
     """
     verify_workspace(db, workspace_id)
+    market_geo, market_lang = markets.validate_market_input(
+        request.default_geo_target_id, request.default_language_id
+    )
     # Row lock (plan v13): status/profile_data dahil her okuma kilitli satırdan —
     # eşzamanlı politika mutasyonu / background analiz yarışları kapanır.
     # populate_existing: verify_workspace satırı identity map'e zaten yükledi;
@@ -1375,6 +1677,15 @@ def approve_workspace_profile(
             detail=f"Şu an {active_work} — bitince tekrar deneyin.",
         )
 
+    # Pazar degisimi (veri yoksa serbest, varsa 409) — hicbir seyi yazmadan ONCE
+    if market_geo is not None or market_lang is not None:
+        set_workspace_market(
+            db,
+            workspace,
+            market_geo if market_geo is not None else workspace.default_geo_target_id,
+            market_lang if market_lang is not None else workspace.default_language_id,
+        )
+
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
     profile = _apply_profile_review_data(
@@ -1385,10 +1696,6 @@ def approve_workspace_profile(
 
     if request.must_have_info is not None:
         workspace.preliminary_info = request.must_have_info.strip() or None
-    if request.default_geo_target_id is not None:
-        workspace.default_geo_target_id = request.default_geo_target_id
-    if request.default_language_id is not None:
-        workspace.default_language_id = request.default_language_id
 
     # Rakip URL/karar + excluded_info: paylaşılan çekirdek (provenance'lı
     # exclude_themes yeniden birleşimi + topic senkronu + sürümleme + stale)
@@ -1435,7 +1742,9 @@ def approve_workspace_profile(
         db.commit()
         db.refresh(workspace)
 
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = bool(market_change_blocker(db, workspace))
+    return response
 
 
 @router.post(
@@ -2507,6 +2816,7 @@ def refresh_workspace_keywords(
     Network çağrısı DB delete+insert transaction'ından önce tamamlanır.
     """
     workspace = verify_workspace(db, workspace_id)
+    market_geo, market_lang = markets.workspace_market(workspace)  # NULL → 409
     rows = (
         db.query(WorkspaceKeyword, Keyword)
         .join(Keyword, WorkspaceKeyword.keyword_id == Keyword.id)
@@ -2556,8 +2866,8 @@ def refresh_workspace_keywords(
             customer_id=customer_id,
             seeds=chunk,
             max_results=request.max_results,
-            language_id=workspace.default_language_id,
-            geo_target_id=workspace.default_geo_target_id,
+            language_id=market_lang,
+            geo_target_id=market_geo,
         )
         if request.min_volume > 0:
             ideas = [idea for idea in ideas if idea.avg_monthly_searches >= request.min_volume]
@@ -2568,6 +2878,8 @@ def refresh_workspace_keywords(
         refreshed_ideas,
         include_new_ideas=request.include_new_ideas,
         data_source="google_ads_api",
+        geo_target_id=market_geo,
+        language_id=market_lang,
     )
 
     existing_keywords_by_norm = {
@@ -2576,6 +2888,22 @@ def refresh_workspace_keywords(
     }
 
     try:
+        # Ag cagrisi sirasinda onceki commit kilidi biraktigi icin yazimdan once yeniden tut.
+        # Bu arada kelimeler silinip pazar degistiyse ESKI pazarin olcumleri yazilmaz
+        # (Codex Faz 0-3 #1): kilitli TAZE satirdan pazar yeniden okunur ve karsilastirilir.
+        db.expire_all()
+        locked = verify_workspace(db, workspace_id, lock=True)
+        if markets.workspace_market(locked) != (market_geo, market_lang):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "MARKET_CHANGED",
+                    "message": (
+                        "Yenileme sürerken çalışmanın hedef konumu/dili değişti; "
+                        "yenilemeyi tekrar başlatın."
+                    ),
+                },
+            )
         db.query(WorkspaceKeyword).filter(
             WorkspaceKeyword.brand_profile_id == workspace_id
         ).delete(synchronize_session=False)
@@ -2612,8 +2940,8 @@ def refresh_workspace_keywords(
                 data_source=row["data_source"],
                 sector=row["sector"],
                 target_market=row["target_market"],
-                geo_target_id=row["geo_target_id"] or workspace.default_geo_target_id,
-                language_id=row["language_id"] or workspace.default_language_id,
+                geo_target_id=row["geo_target_id"] or market_geo,
+                language_id=row["language_id"] or market_lang,
                 notes=row["notes"],
             ))
 
@@ -2665,6 +2993,7 @@ def _run_keyword_suggestion(
             return
 
         crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
+        output_ctx = output_context(workspace)  # keyword dili + hedef konum (kilitli pazar)
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2687,6 +3016,7 @@ def _run_keyword_suggestion(
             crawl["site_content"],
             must_have_info=must_have_info,
             excluded_info=excluded_info,
+            output_ctx=output_ctx,
         )
 
         # Kısa süreli kilit + token kontrolü: tüm başarı yazımları tek transaction
@@ -2886,6 +3216,7 @@ def _run_keyword_suggestion_from_profile(
         excluded_info = workspace.excluded_info
         profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
         competitor_terms = approved_competitor_terms(workspace)
+        output_ctx = output_context(workspace)  # keyword dili + hedef konum (kilitli pazar)
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
             extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope
@@ -2918,6 +3249,7 @@ def _run_keyword_suggestion_from_profile(
             must_have_info=preliminary_info,
             excluded_info=excluded_info,
             competitor_terms=competitor_terms,
+            output_ctx=output_ctx,
         )
         # Prompt yonlendirmedir; deterministic policy son savunmadir.
         suggestions = [

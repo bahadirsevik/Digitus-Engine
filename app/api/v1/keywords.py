@@ -27,7 +27,8 @@ from app.core.csv_import.import_plan import (
 )
 from app.core.constants import WORKSPACE_KEYWORD_LIMIT
 from app.core.policy.import_gate import resolve_import_theme_policy
-from app.core.workspace import verify_workspace
+from app.core import markets
+from app.core.workspace import stamp_rows_market, verify_workspace
 from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
 from app.dependencies import get_db
@@ -255,6 +256,7 @@ async def upload_csv_keywords(
     if not dry_run:
         raise HTTPException(status_code=400, detail="CSV import önce dry-run olarak analiz edilmelidir")
     workspace = verify_workspace(db, brand_profile_id)
+    markets.workspace_market(workspace)  # pazar yoksa onizleme de 409 MARKET_NOT_SET
 
     content = await file.read()
     if len(content) > CSV_IMPORT_MAX_BYTES:
@@ -283,6 +285,10 @@ async def upload_csv_keywords(
     )
     response_payload = import_plan_to_payload(plan)
     response_payload["dry_run_token"] = _store_import_plan(compact_plan_payload(plan))
+    response_payload["market_notice"] = (
+        f"Bu dosyadaki ölçümler {markets.market_label(workspace)} olarak kaydedilecek "
+        "(dosyada konum/dil bilgisi yok; başka konum için alındıysa yeni pazar çalışması açın)."
+    )
     return KeywordUploadCsvResponse.model_validate(response_payload)
 
 
@@ -292,10 +298,15 @@ def commit_csv_keywords(
     db: Session = Depends(get_db),
 ):
     """Commit a previously created CSV dry-run token."""
-    verify_workspace(db, payload.brand_profile_id)
+    workspace = verify_workspace(db, payload.brand_profile_id, lock=True)
     plan_payload = _load_import_plan(payload.dry_run_token)
     if int(plan_payload.get("brand_profile_id")) != payload.brand_profile_id:
         raise HTTPException(status_code=403, detail="Bu import token'ı bu workspace için geçerli değil")
+    for item in plan_payload.get("accepted_plan") or []:
+        item["keyword_data"] = item.get("keyword_data") or {}
+    stamp_rows_market(
+        [item["keyword_data"] for item in plan_payload.get("accepted_plan") or []], workspace
+    )
 
     result = apply_import_plan(db, plan_payload, pool_limit=WORKSPACE_KEYWORD_LIMIT)
     result.update(
@@ -342,11 +353,14 @@ def create_keyword(
     """
     if keyword_data.brand_profile_id is None:
         raise HTTPException(status_code=400, detail="brand_profile_id is required")
-    workspace = verify_workspace(db, keyword_data.brand_profile_id)
+    workspace = verify_workspace(db, keyword_data.brand_profile_id, lock=True)
+    rows = stamp_rows_market(
+        [keyword_data.model_dump(exclude={"brand_profile_id"})], workspace
+    )
 
     result = crud.create_keywords_bulk(
         db,
-        [keyword_data.model_dump(exclude={"brand_profile_id"})],
+        rows,
         brand_profile_id=keyword_data.brand_profile_id,
         return_details=True,
         theme_policy=resolve_import_theme_policy(workspace),
@@ -468,7 +482,12 @@ def import_keywords(
     """Bulk import keywords into a workspace. `brand_profile_id` zorunlu."""
     if import_data.brand_profile_id is None:
         raise HTTPException(status_code=400, detail="brand_profile_id is required")
-    workspace = verify_workspace(db, import_data.brand_profile_id)
+    workspace = verify_workspace(db, import_data.brand_profile_id, lock=True)
+    # Tüm liste DB yazımından ÖNCE doğrulanır (crud 200'lük chunk'larla commit eder)
+    rows = stamp_rows_market(
+        [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
+        workspace,
+    )
 
     total_before = (
         db.query(WorkspaceKeyword)
@@ -477,7 +496,7 @@ def import_keywords(
     )
     result = crud.create_keywords_bulk(
         db,
-        [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
+        rows,
         brand_profile_id=import_data.brand_profile_id,
         return_details=True,
         theme_policy=resolve_import_theme_policy(workspace),
@@ -565,7 +584,7 @@ def cleanup_duplicate_keywords(
 
     from app.core.keyword_dedup import deduplicate_keywords
 
-    verify_workspace(db, brand_profile_id)
+    workspace = verify_workspace(db, brand_profile_id)
 
     # Workspace'e bağlı, aktif keyword'leri çek.
     rows = (
@@ -601,8 +620,10 @@ def cleanup_duplicate_keywords(
         for kw, wk in rows
     ]
 
+    # Dil kuralı import/önizleme ile AYNI kaynaktan (workspace dili; boş = Türkçe)
     deduped, merge_details = deduplicate_keywords(
-        keyword_dicts, return_merge_details=True)
+        keyword_dicts, return_merge_details=True,
+        language_id=workspace.default_language_id)
     survived_ids = {d["_db_id"] for d in deduped}
 
     # Workspace-scoped dedup: global Keyword.is_active'e DOKUNMA. Keyword satirlari

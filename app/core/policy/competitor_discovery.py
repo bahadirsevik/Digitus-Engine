@@ -125,9 +125,15 @@ def fresh_channel_run_count(db: Session, workspace_id: int) -> int:
 
 
 def _profile_prompt(workspace) -> str:
+    from app.generators.output_language import DEFAULT_LOCATION, output_context
+
     profile = canonical_profile_payload(workspace)
+    # Hedef konum çalışmadan (snapshot yok); pazar seçilmemiş eski satır → Türkiye
+    market = output_context(workspace).location
+    if market == DEFAULT_LOCATION:
+        market = "Türkiye"
     return (
-        "Google araması kullanarak aşağıdaki markanın Türkiye pazarındaki doğrudan "
+        f"Google araması kullanarak aşağıdaki markanın {market} pazarındaki doğrudan "
         "ve yakın rakiplerini bul. Haber sitesi, dizin, pazar yeri, entegrasyon partneri "
         "ve markanın kendisini rakip sayma. En fazla 15 gerçek şirket döndür. Her aday "
         "için resmi ana sayfa URL'sini ver. rationale alanını TÜRKÇE yaz (1-2 cümle; "

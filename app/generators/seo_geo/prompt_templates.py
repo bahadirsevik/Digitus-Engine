@@ -318,6 +318,41 @@ Sadece JSON döndür, açıklama ekleme.
 """
 
 
+# ==================== İDDİA DÜZELTME (son metin kapısı — tek tur) ====================
+# Son metinde dayanaksız iddia (sayı/süperlatif/hizmet/sertifika/mutlak sonuç)
+# bulunursa çalışır. Yalnız listelenen iddialar çıkarılır; başka hiçbir şey değişmez.
+
+SEO_GEO_CLAIM_REPAIR_PROMPT = """
+# ROL
+Sen bir SEO+GEO içerik editörüsün. Görevin içeriği BOZMADAN, yalnızca
+dayanaksız iddiaları çıkarmak.
+
+# ANAHTAR KELİME
+{keyword}
+
+# MEVCUT İÇERİK (JSON)
+{content_json}
+
+# DAYANAKSIZ İDDİALAR (denetim sonucu)
+{claims}
+
+# KULLANILABİLİR MARKA BİLGİLERİ (yalnız bunlara dayanan iddia yazılabilir)
+{grounding_facts}
+
+# KURALLAR
+- {claim_rule}
+- Listelenen iddiaların geçtiği cümleyi/ifadeyi düzelt; başka HİÇBİR şeyi değiştirme.
+- Başlık, yapı, alt başlıklar, faq_items, image_alt_texts ve bullet_points alanlarını koru;
+  iddia bunlardan birindeyse yalnız o öğeyi düzelt.
+- internal_link_suggestion ve external_link_url alanlarını aynen koru.
+- Kelime sayısı aralığını koru: {word_count_min}-{word_count_max}
+
+# ÇIKTI
+Mevcut içerikle AYNI JSON şemasında, düzeltilmiş içeriğin tamamını döndür.
+Sadece JSON döndür, açıklama ekleme.
+"""
+
+
 # ==================== HEDEFLİ GENİŞLETME (kelime sayısı — tek tur) ====================
 # Kelime sayısı min'in altında kalırsa çalışır. Salt-EKLEME sözleşmesi:
 # mevcut metin korunur, yalnızca yeni paragraf/bölüm eklenir — anlam kaybı

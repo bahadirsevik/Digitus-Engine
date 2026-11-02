@@ -32,6 +32,7 @@ from app.core.social.idea_worker_input import (
     SocialIdeaWorkerPreparation,
     prepare_social_idea_worker_inputs,
 )
+from app.generators.output_language import output_context_for_run
 from app.generators.social.attempt_state import (
     AttemptNotClaimableError,
     AttemptNotWritableError,
@@ -445,6 +446,8 @@ def run_social_idea_generation(
         )
         brief_id = brief.id
         scoring_run_id = scoring_run.id
+        # Çalışma pazarı (çıktı dili + hedef konum): AI aşamasında DB yok, burada okunur
+        output_ctx = output_context_for_run(claim_session, scoring_run)
         claim_session.commit()
     except Exception as exc:
         claim_session.rollback()
@@ -530,7 +533,7 @@ def run_social_idea_generation(
     #   kategori başına tek çağrıyla istenir (bkz. _build_topup_prompt_inputs).
     # - Heartbeat / lease / worker_lost hataları ve girdi hataları denemeyi durdurur.
     # - Hiç fikir kalmazsa deneme failed olur; sahte yedek fikir üretilmez.
-    generator = SocialBriefIdeaGenerator(ai_service)
+    generator = SocialBriefIdeaGenerator(ai_service, output_ctx=output_ctx)
     ideas_by_category: dict[int, list[ValidatedSocialIdea]] = {
         p.category_id: [] for p in prompt_inputs
     }

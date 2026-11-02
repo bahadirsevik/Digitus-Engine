@@ -22,9 +22,11 @@ from app.core.trial_authorization import (
 )
 from app.core.trial_snapshot import build_execution_snapshot, snapshot_sha256
 from app.core.engine_version_gate import require_non_legacy_run
+from app.core import markets
 from app.core.workspace import verify_scoring_run, verify_workspace
 from app.database.models import (
     EngineSelection, EngineStageResult, Keyword, KeywordScore, ScoringRun,
+    WorkspaceKeyword,
 )
 from app.schemas.scoring import (
     ScoringRunCreate, ScoringRunResponse, ScoringRunStatus,
@@ -203,7 +205,7 @@ def create_scoring_run(
             detail="brand_profile_id is required",
         )
 
-    workspace = verify_workspace(db, run_data.brand_profile_id)
+    workspace = verify_workspace(db, run_data.brand_profile_id, lock=True)
 
     # Ürün kararı (ADR-004): Yeni analizler yalnız v3 ile oluşturulabilir.
     # v2 ve v2_1 emekliye ayrılmıştır; istekte açıkça gönderilirse tipli 400 döner.
@@ -386,6 +388,31 @@ def create_scoring_run(
             "universe_fingerprint": run_data.location_universe_fingerprint,
             "policy_fingerprint": run_data.location_policy_fingerprint,
         }
+
+    # PAZAR KAPISI (pazar planı Faz 1/6): çalışma pazarı şart; açık ve farklı
+    # geo/dil taşıyan satır varsa run açılmaz (alan bazında NULL = çalışma değeri).
+    market_geo, market_lang = markets.workspace_market(workspace)  # NULL → 409
+    mismatched = sum(
+        n
+        for geo, lang, n in db.query(
+            WorkspaceKeyword.geo_target_id,
+            WorkspaceKeyword.language_id,
+            func.count(WorkspaceKeyword.id),
+        )
+        .filter(WorkspaceKeyword.brand_profile_id == run_data.brand_profile_id)
+        .group_by(WorkspaceKeyword.geo_target_id, WorkspaceKeyword.language_id)
+        if (markets._clean_geo(geo) or market_geo) != market_geo
+        or (markets._clean_language(lang) or market_lang) != market_lang
+    )
+    if mismatched:
+        raise HTTPException(status_code=409, detail={
+            "code": "MARKET_MISMATCH_ROWS",
+            "message": (
+                f"{mismatched} kelime satırı çalışma pazarından farklı konum/dille "
+                "kaydedilmiş. Kelimeleri yeniden çekin ya da silin."
+            ),
+            "rows": mismatched,
+        })
 
     engine = ScoreEngine(db)
     scoring_run = engine.create_scoring_run(

@@ -12,7 +12,7 @@ from app.database.models import (
     ContentOutput, ComplianceCheck,
     BrandProfile, WorkspaceKeyword,
 )
-from app.core.keyword_dedup import deduplicate_keywords
+from app.core.keyword_dedup import dedup_mode, deduplicate_keywords
 from app.core.keyword_junk import junk_reason
 from app.core.keyword_normalize import normalize_keyword
 
@@ -30,6 +30,21 @@ _KEYWORD_MODEL_FIELDS = {
     "data_source",
 }
 _LEGACY_KEYWORD_DATA_SOURCES = {"csv", "google_ads_api"}
+
+
+def workspace_dedup_language(db: Session, brand_profile_id: Optional[int]) -> Optional[str]:
+    """Çalışmanın dili (dedup kipi için); çalışma yok / dil boş → None (= Türkçe, eski davranış).
+
+    markets.workspace_market KULLANILMAZ: pazarsız çalışmada 409 atardı; yazma yolları
+    zaten stamp_rows_market ile pazarı şart koşuyor, burası yalnız okuma.
+    """
+    if brand_profile_id is None:
+        return None
+    return (
+        db.query(BrandProfile.default_language_id)
+        .filter(BrandProfile.id == brand_profile_id)
+        .scalar()
+    )
 
 
 def _legacy_keyword_data_source(source: Optional[str]) -> str:
@@ -174,8 +189,9 @@ def create_keywords_bulk(
 
     # Fuzzy deduplication: merge within-batch duplicates (Turkish stemming + Levenshtein)
     before_dedup = len(sanitized_keywords)
+    _dedup_lang = workspace_dedup_language(db, brand_profile_id)
     sanitized_keywords, batch_merge_details = deduplicate_keywords(
-        sanitized_keywords, return_merge_details=True
+        sanitized_keywords, return_merge_details=True, language_id=_dedup_lang
     )
     fuzzy_merged = before_dedup - len(sanitized_keywords)
     if fuzzy_merged > 0:
@@ -239,7 +255,7 @@ def create_keywords_bulk(
         _ws_stem_cache = {
             kw.id: _strip_tr(kw.keyword.lower().strip())
             for kw, _wk in _ws_cache
-        }
+        } if dedup_mode(_dedup_lang) == "fuzzy_tr" else {}
 
         # Global Keyword lookup'lari TEK sorguda on-yukle (kelime basina SELECT
         # yerine). create sonrasi harita guncellenir; ayni-batch duplicate'ler
@@ -336,6 +352,7 @@ def create_keywords_bulk(
                     global_kw_map=_global_kw_map,
                     defer_commit=True,
                     check_only=True,
+                    language_id=_dedup_lang,
                 )
                 if status == 'skipped_exact':
                     skipped_exact += 1
@@ -368,6 +385,7 @@ def create_keywords_bulk(
                 ws_stem_cache=_ws_stem_cache,
                 global_kw_map=_global_kw_map,
                 defer_commit=True,
+                language_id=_dedup_lang,
             )
             status, _kw_id, matched_text = result
             if status in ('created', 'linked'):
@@ -540,6 +558,8 @@ def _import_with_workspace_link(
     global_kw_map: Optional[Dict[tuple, int]] = None,
     defer_commit: bool = False,
     check_only: bool = False,
+    *,
+    language_id: Optional[str],
 ) -> Tuple[str, Optional[int], Optional[str]]:
     """
     Import single keyword with workspace link (Option B snapshot semantics).
@@ -557,6 +577,8 @@ def _import_with_workspace_link(
     ekleyecek adaylar için ('would_add', None, None) döner. Havuz limiti dolunca
     kalan satırların duplicate mi yeni mi olduğunu raporlamak için kullanılır
     (duplicate satır 'limit_exceeded' DEĞİL kendi skip nedeniyle raporlanmalı).
+
+    language_id: çalışma dili; Türkçe dışında fuzzy blok (2.) ATLANIR (dedup_mode).
     """
     from decimal import Decimal, InvalidOperation
 
@@ -617,7 +639,7 @@ def _import_with_workspace_link(
         except ImportError:
             fuzz = None
 
-    if fuzz:
+    if fuzz and dedup_mode(language_id) == "fuzzy_tr":
         # Use pre-loaded cache; fall back to DB query only if cache was not provided.
         workspace_kws = ws_cache if ws_cache is not None else (
             db.query(Keyword, WorkspaceKeyword)

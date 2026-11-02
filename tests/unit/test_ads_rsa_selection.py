@@ -86,20 +86,22 @@ def _texts(items):
 
 # ==================== SIRA: kesme yok, iddia sonrası seçim ====================
 
-def test_late_candidates_fill_in_after_grounding_eliminations():
+def test_unverified_claim_candidates_are_kept_flagged_not_eliminated():
+    # rev.4 (eski test: ihlalli asset elenir, 16.-18. adaylar geç dolar): profilde doğrulanamayan
+    # (sayısal) iddia asset'i ELEMEZ ve rewrite çağırmaz; aday sırasıyla seçime girer ve işaretlenir.
     claims = {1: "100.000+ Müşteri", 4: "Yüzde 80 İndirim Fırsatı", 8: "10 Yıllık Deneyim"}
     cands = [claims.get(i, GENERIC[i]) for i in range(20)]
-    ai = _FakeAI(_rsa(cands, KW_DESCS))   # rewrite "" -> ihlalli asset elenir
+    ai = _FakeAI(_rsa(cands, KW_DESCS))
     result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
 
     texts = _texts(result.headlines)
     assert len(texts) == 15
-    assert not set(claims.values()) & set(texts)
-    # erken kesme olsaydı 16.-18. adaylar (indeks 15-17) hiç görülmezdi
-    assert {GENERIC[15], GENERIC[16], GENERIC[17]} <= set(texts)
-    assert GENERIC[18] not in texts and GENERIC[19] not in texts
-    assert ai.calls["rewrite"] == 3
-    assert ai.calls["completion"] == 0          # 15 başlık + 4 KW'li açıklama: çağrı yok
+    assert set(claims.values()) <= set(texts)          # elenmedi
+    assert ai.calls["rewrite"] == 0                    # AI çağrısı yok
+    flagged = {h.text for h in result.headlines if h.validation_action == "claim_review"}
+    assert flagged == set(claims.values())
+    assert not {GENERIC[15], GENERIC[16], GENERIC[17]} & set(texts)   # erken adaylar 15'i doldurdu
+    assert ai.calls["completion"] == 0
     assert (result.missing_headlines, result.missing_kw_descriptions) == (0, 0)
 
 
@@ -173,7 +175,7 @@ def test_keyword_less_descriptions_only_fill_after_keyword_ones():
 
 
 def test_claim_rewrite_that_drops_keyword_does_not_count():
-    claim_desc = "Ucuz laptop modellerinde 10 yıllık deneyim sizi bekliyor."
+    claim_desc = "Ucuz laptop modellerinde kazanç garantisi sizi bekliyor."
     ai = _FakeAI(_rsa(GENERIC[:15], KW_DESCS[:3] + [claim_desc]),
                  rewrite_text="Güvenilir alışveriş deneyimi yaşayın.")
     result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
@@ -375,7 +377,7 @@ def test_positions_forced_to_any_on_completion_path():
 
 
 def test_positions_forced_to_any_after_claim_rewrite():
-    cands = ["100.000+ Müşteri"] + GENERIC[:17]
+    cands = ["Kazanç Garantisi Sunuyoruz"] + GENERIC[:17]
     ai = _FakeAI(_rsa(cands, KW_DESCS[:4], position="position_3"), rewrite_text="Güvenle İncele Keşfet")
     result = _gen(ai).generate_rsa(_group(), brand_name="Marka")
 
@@ -605,8 +607,8 @@ def test_candidates_prompt_formats_and_lists_long_keywords():
 def test_candidates_prompt_asks_for_natural_turkish_not_forced_keywords():
     prompt = _gen(_FakeAI(EMPTY))._build_candidates_prompt(_group("ucuz laptop"), "Marka", "usp")
     assert "yazıldığı gibi" not in prompt                    # zorlayıcı eski ifade kalktı
-    assert "AKICI, DOĞAL ve dilbilgisi doğru Türkçe" in prompt
-    assert "yalnızca başlık AKICI, DOĞAL Türkçe olduğunda" in prompt
+    assert "AKICI, DOĞAL ve dilbilgisi doğru olmalı (çıktı dilinde)" in prompt
+    assert "yalnızca başlık AKICI, DOĞAL olduğunda" in prompt
     assert "YAZMA; bu kabul edilen bir sonuçtur" in prompt   # atlamak kabul
     assert "dilbilgisini ASLA bozma" in prompt
     assert "TÜM anahtar kelimelerini" not in prompt and "bulunsun" not in prompt  # kelime başına baskı yok

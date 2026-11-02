@@ -26,6 +26,7 @@ import {
   setStoredTaskId,
 } from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import { useBrandStore } from '../../stores/brandStore'
 import { apiErrorMessage, generationApi, policyStaleFromError } from '../../services/api'
 import type { ScoringRun, SEOGeoItem } from '../../types/models'
@@ -166,6 +167,14 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
   const subs = item.subheadings || []
   const date = shortDate(item.created_at)
   const review = item.publish_review
+  const reviewReasons = (review?.critical_failures || []).map((f, i) => (
+    <li key={`f${i}`}>
+      <span className="seox-review-src">
+        {f.source === 'geo_ai' ? 'AI değerlendirmesi' : 'Otomatik kontrol'}
+      </span>{' '}
+      {f.detail || f.criterion}
+    </li>
+  ))
   const stats = [
     item.word_count ? `${item.word_count} kelime` : null,
     subs.length ? `${subs.length} alt başlık` : null,
@@ -189,7 +198,14 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
         </span>
         <span className="seox-meta-right">
           {item.is_stale && <span className="seox-stale">Güncel değil</span>}
-          {review?.required && <span className="seox-review">{review.label}</span>}
+          {review?.required && (
+            <span
+              className="seox-review"
+              title={review.critical_failures[0]?.detail || review.critical_failures[0]?.criterion}
+            >
+              {review.label}
+            </span>
+          )}
           {date && (
             <span className="seox-date chx-mono">
               <Calendar size={12} /> {date}
@@ -197,6 +213,10 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
           )}
         </span>
       </div>
+
+      {review?.required && reviewReasons.length > 0 && (
+        <ul className="seox-review-list seox-review-top">{reviewReasons}</ul>
+      )}
 
       <h3 className="seox-title">{item.title || item.keyword}</h3>
       {slug && <div className="seox-url chx-mono">{slug}</div>}
@@ -302,22 +322,11 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
       )}
 
       {review && (
-        <details className="seox-review-box">
+        <details className="seox-review-box" open={review.required}>
           <summary className="seox-section-label">
             YAYIN ÖNCESİ KONTROL{review.required ? ' · İNCELEME GEREKLİ' : ''}
           </summary>
-          {review.critical_failures.length > 0 && (
-            <ul className="seox-review-list">
-              {review.critical_failures.map((f, i) => (
-                <li key={`f${i}`}>
-                  <span className="seox-review-src">
-                    {f.source === 'geo_ai' ? 'AI değerlendirmesi' : 'Otomatik kontrol'}
-                  </span>{' '}
-                  {f.detail || f.criterion}
-                </li>
-              ))}
-            </ul>
-          )}
+          {reviewReasons.length > 0 && <ul className="seox-review-list">{reviewReasons}</ul>}
           <ul className="seox-review-list is-manual">
             {review.manual_checks.map((m, i) => (
               <li key={`m${i}`}>{m}</li>
@@ -526,6 +535,17 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
             error={polling.errorMessage || 'SEO içerik üretimi başarısız oldu.'}
             onDismiss={() => setTaskId(null)}
             onRetry={() => setTaskId(null)}
+          />
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <div className="adsx-span">
+          <ClaimReevaluateButton
+            runId={runId}
+            workspaceId={activeWorkspace?.id}
+            disabled={generating}
+            onDone={() => void fetchResults()}
           />
         </div>
       )}

@@ -17,6 +17,7 @@ import { apiErrorMessage, scoringApi, ScoringRunCreate, ScoringSortBy } from '..
 import type { ScoringRun } from '../types/models'
 import { DEFAULT_SCORE_SORT, nextScoreSortState, ScoreSortState } from './scoringSort'
 import { useBrandStore } from '../stores/brandStore'
+import MarketBadge from '../components/MarketBadge'
 import './Scoring.css'
 
 interface KeywordScore {
@@ -351,6 +352,7 @@ export default function Scoring() {
         <div className="workspace-pill">
           <span className="pill-label">Aktif Marka:</span>
           <span className="pill-value">{activeWorkspace.name}</span>
+          <MarketBadge label={activeWorkspace.market_label} />
         </div>
       )}
 

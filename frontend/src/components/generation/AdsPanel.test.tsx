@@ -5,7 +5,7 @@
  * gerçekten dolduğunu kilitler.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import AdsPanel from './AdsPanel'
 import { useBrandStore } from '../../stores/brandStore'
 
@@ -38,6 +38,15 @@ vi.mock('../../services/api', () => ({
     ),
     activateAdsSet: vi.fn(() => Promise.resolve({ data: {} })),
     regenerateAdGroup: vi.fn(() => Promise.resolve({ data: { task_id: 't2' } })),
+    reevaluateClaims: vi.fn(() =>
+      Promise.resolve({
+        data: {
+          rsa: { sets: 1, cleared: 2, still_flagged: 1 },
+          seo: { contents: 3, cleared: 0, still_flagged: 0 },
+          social: { contents: 0, cleared: 0, still_flagged: 4 },
+        },
+      })
+    ),
   },
 }))
 
@@ -237,5 +246,111 @@ describe('AdsPanel standart raporu', () => {
     const { container } = showGroup(report)
     expect(await screen.findByText('Grup 1')).toBeTruthy()
     expect(container.querySelector('.adsx-std')).toBeNull()
+  })
+})
+
+// İddia incelemesi (rev.4): bulgu tablosu + yeniden değerlendirme
+describe('AdsPanel iddia incelemesi', () => {
+  beforeEach(() => {
+    mockSets = [
+      {
+        id: 5,
+        scoring_run_id: 1,
+        version_number: 2,
+        status: 'draft',
+        is_stale: false,
+        groups_count: 1,
+        review_required: true,
+        claim_risk_count: 1,
+        claim_unverified_count: 1,
+        claim_review: {
+          findings: [
+            {
+              kind: 'risk',
+              category: 'guarantee',
+              span: 'garantili sonuç',
+              reason: 'Garanti iddiası',
+              asset_type: 'headline',
+              asset_text: 'Garantili sonuç alın',
+              group_id: 1,
+              group_name: 'Grup 1',
+            },
+            {
+              kind: 'unverified',
+              category: 'certificate',
+              span: 'ISO 9001',
+              reason: 'Profilde yok',
+              asset_type: 'description',
+              asset_text: 'ISO 9001 belgeli üretim',
+              group_id: 1,
+              group_name: 'Grup 1',
+            },
+          ],
+          applied: [
+            {
+              kind: 'risk',
+              category: 'absolute',
+              span: 'en iyi',
+              reason: 'Mutlak iddia',
+              asset_type: 'headline',
+              group_id: 1,
+              group_name: 'Grup 1',
+              original: 'Türkiye’nin en iyisi',
+              suggestion: 'Güvenilir çözüm',
+            },
+          ],
+        },
+      },
+    ]
+    mockAdsResult = {
+      total_groups: 1,
+      generation_set: { id: 5, scoring_run_id: 1, version_number: 2, status: 'draft' },
+      ad_groups: [
+        {
+          id: 1,
+          group_name: 'Grup 1',
+          headlines: [{ id: 1, text: 'Garantili sonuç alın', validation_action: 'claim_review' }],
+          descriptions: [],
+          negative_keywords: [],
+        },
+      ],
+    }
+    useBrandStore.setState({
+      activeWorkspace: {
+        id: 10,
+        name: 'WS',
+        company_url: 'https://ws.test',
+        status: 'confirmed',
+        profile_data: null,
+        suggested_keywords: null,
+      },
+    })
+  })
+
+  it('gerekçe tablosu risk, doğrulanamayan ve düzeltilen öğeleri gösterir', async () => {
+    render(<AdsPanel runId={1} />)
+    const block = (await screen.findByText(/İnceleme gerekçeleri \(3\)/)).closest('details')!
+    const view = within(block)
+    expect(view.getByText('Risk — yayın öncesi düzelt')).toBeTruthy()
+    expect(view.getByText('Profilde doğrulanamadı — kontrol gerekli')).toBeTruthy()
+    expect(view.getByText('ISO 9001 belgeli üretim')).toBeTruthy()
+    expect(view.getByText('Orijinal')).toBeTruthy()
+    expect(view.getByText('Güvenilir çözüm')).toBeTruthy()
+    // rozet tooltip'i bulgunun gerekçesini taşır
+    await waitFor(() =>
+      expect(document.querySelector('.adsx-line small')?.getAttribute('title')).toContain(
+        'Garanti iddiası'
+      )
+    )
+  })
+
+  it('yeniden değerlendir sayıları kanal bazında olduğu gibi gösterir', async () => {
+    render(<AdsPanel runId={1} />)
+    fireEvent.click(await screen.findByText('Profili güncelledim, yeniden değerlendir'))
+    expect(
+      await screen.findByText(
+        'Yeniden değerlendirildi — RSA: 2 temizlendi, 1 hâlâ kontrol gerekli; SEO: 0 temizlendi, 0 hâlâ kontrol gerekli; Sosyal: 0 temizlendi, 4 hâlâ kontrol gerekli'
+      )
+    ).toBeTruthy()
   })
 })

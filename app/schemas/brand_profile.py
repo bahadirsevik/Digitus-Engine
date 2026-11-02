@@ -3,7 +3,9 @@ Pydantic schemas for Brand Profile & Keyword Relevance.
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
+
+from app.core import markets
 
 
 # ==================== REQUEST SCHEMAS ====================
@@ -114,6 +116,28 @@ class FocusCreateRequest(BaseModel):
     url: str = Field(..., min_length=1, max_length=500, description="Odak sayfa URL'i (marka ile aynı site)")
 
 
+class MarketCopyItem(BaseModel):
+    """Pazar kopyası hedefi: hedef konum (ülke/şehir) + çıktı dili."""
+    geo_target_id: str = Field(..., min_length=1, max_length=40)
+    language_id: str = Field(..., min_length=1, max_length=40)
+
+    @field_validator("geo_target_id", "language_id", mode="before")
+    @classmethod
+    def _id_to_str(cls, value: Any) -> Any:
+        return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+
+
+class MarketCopyRequest(BaseModel):
+    markets: List[MarketCopyItem] = Field(..., min_length=1, max_length=30)
+
+
+class MarketCopySkipped(BaseModel):
+    geo_target_id: str
+    language_id: str
+    market_label: str
+    reason: str
+
+
 class FocusSettingsChange(BaseModel):
     field: str
     label: str
@@ -123,6 +147,7 @@ class FocusSettingsPreviewItem(BaseModel):
     id: int
     name: Optional[str] = None
     busy: bool
+    market_locked: bool = False
     changes: List[FocusSettingsChange]
 
 
@@ -134,6 +159,7 @@ class FocusSettingsApplied(BaseModel):
     id: int
     name: Optional[str] = None
     changed: bool
+    warning: Optional[str] = None  # örn. "pazar değişmez (odakta veri var)"
 
 
 class FocusSettingsSkipped(BaseModel):
@@ -293,6 +319,8 @@ class WorkspaceResponse(BaseModel):
     deleted_at: Optional[datetime] = None
     default_geo_target_id: Optional[str] = None
     default_language_id: Optional[str] = None
+    # Yalnız tek-çalışma GET / oluşturma / profil onayı cevaplarında hesaplanır (aksi halde null)
+    market_locked: Optional[bool] = None
     is_system_default: bool = False
     scoring_run_id: Optional[int] = None
     created_at: datetime
@@ -300,8 +328,26 @@ class WorkspaceResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_label(self) -> str:
+        return markets.market_label(self)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_location_label(self) -> str:
+        """Yalnız konum kısmı ("Berlin, Almanya — Şehir"); frontend birleşik etiketi bölmesin."""
+        geo = self.default_geo_target_id
+        return markets.location_label(geo) if geo else "Seçilmedi"
 
 
+
+
+
+class MarketCopyResponse(BaseModel):
+    created: List[WorkspaceResponse]
+    skipped: List[MarketCopySkipped]
+    source_id: int
 
 
 class WorkspaceListResponse(BaseModel):
@@ -333,6 +379,18 @@ class WorkspaceListResponse(BaseModel):
     run_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_label(self) -> str:
+        return markets.market_label(self)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_location_label(self) -> str:
+        """Yalnız konum kısmı ("Berlin, Almanya — Şehir"); frontend birleşik etiketi bölmesin."""
+        geo = self.default_geo_target_id
+        return markets.location_label(geo) if geo else "Seçilmedi"
 
 
 class LocationFilterPreviewRequest(BaseModel):
@@ -434,3 +492,43 @@ class RelevanceComputeResponse(BaseModel):
     computed: int
     failed: int
     average_relevance: float
+
+
+# ==================== PAZAR (HEDEF KONUM + DIL) ====================
+
+class MarketCountry(BaseModel):
+    geo_target_id: str
+    code: str
+    name_tr: str
+    label: str
+
+
+class MarketLanguage(BaseModel):
+    language_id: str
+    code: str
+    name_tr: str
+    name_native: str
+
+
+class MarketDefault(BaseModel):
+    geo_target_id: str
+    language_id: str
+
+
+class MarketOptionsResponse(BaseModel):
+    countries: List[MarketCountry]
+    languages: List[MarketLanguage]
+    default: MarketDefault
+
+
+class MarketLocationItem(BaseModel):
+    geo_target_id: str
+    label: str
+    kind: Literal["country", "city", "region"]
+    country_code: str
+    name: str
+
+
+class MarketLocationSearchResponse(BaseModel):
+    items: List[MarketLocationItem]
+    total: int = Field(..., description="Toplam eşleşme (items en fazla 20)")

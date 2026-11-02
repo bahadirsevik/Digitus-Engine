@@ -13,7 +13,10 @@ from app.compliance.publish_review import (
     geo_evaluation_source,
     publish_review_from_rows,
 )
+from app.core import markets
+from app.generators.claim_review import social_warning_display
 from app.schemas.export import (
+    AdSetWarningData,
     ExportSectionEnum, FullReport, SummaryData, ScoringData,
     KeywordScoreData, ChannelsData, ChannelPoolData,
     SEOContentsData, SEOContentData, AdsData, AdGroupData,
@@ -29,6 +32,20 @@ from app.database.models import (
     SocialCategory, SocialIdea, SocialContent, BrandProfile, KeywordRelevance,
     SocialBrief, SocialBriefKeyword, SocialBriefTarget
 )
+
+
+def market_header_fields(workspace: Optional[BrandProfile]) -> Dict[str, str]:
+    """Rapor başlığı için çalışma pazarı; çalışma yok / alan NULL → 'Seçilmedi'."""
+    lang_id = markets.clean_language_id(getattr(workspace, "default_language_id", None))
+    language = markets.language_name(lang_id) or (
+        f"Tanımlanamayan mevcut seçim ({lang_id})" if lang_id else "Seçilmedi"
+    )
+    return {
+        "market_label": markets.market_label(workspace),
+        "target_location": markets.location_label(getattr(workspace, "default_geo_target_id", None)),
+        "output_language": language,
+        "volume_source": "Google Ads",
+    }
 
 
 def collect_run_seo_contents(
@@ -386,7 +403,8 @@ class ExportDataCollector:
             source_pages=profile.source_pages or [],
             competitors=competitors,
             validation_warnings=validation_data.get("warnings") or [],
-            error_message=profile.error_message
+            error_message=profile.error_message,
+            **market_header_fields(profile),
         )
     
     def _collect_summary(self, scoring_run_id: int) -> SummaryData:
@@ -396,6 +414,12 @@ class ExportDataCollector:
         ).first()
         
         created_at = run.created_at if run else datetime.utcnow()
+        
+        workspace = None
+        if run and run.brand_profile_id:
+            workspace = self.db.query(BrandProfile).filter(
+                BrandProfile.id == run.brand_profile_id
+            ).first()
         
         # Keyword count - keywords link via KeywordScore
         total_keywords = self.db.query(KeywordScore).filter(
@@ -455,7 +479,8 @@ class ExportDataCollector:
             strategic_count=strategic_count,
             seo_content_count=seo_content_count,
             ad_group_count=ad_group_count,
-            social_content_count=social_content_count
+            social_content_count=social_content_count,
+            **market_header_fields(workspace),
         )
     
     def _collect_scoring(self, scoring_run_id: int) -> ScoringData:
@@ -666,8 +691,9 @@ class ExportDataCollector:
         Versiyonlama (Faz E): export YALNIZ aktif + non-stale setin
         gruplarını kullanır (ortak active_ad_groups filtresi).
         """
-        from app.generators.ads.generation_sets import active_ad_groups
+        from app.generators.ads.generation_sets import active_ad_groups, get_active_set
         from app.generators.ads.validators import build_standard_report
+        from app.generators.claim_review import review_summary
 
         groups = (
             active_ad_groups(self.db, scoring_run_id)
@@ -678,7 +704,11 @@ class ExportDataCollector:
                 (AdGroup.content_output_id.is_(None)) | (ContentOutput.is_stale == False)
             )
         groups = groups.all()
-        
+
+        # Standart rapor (CTA sayimi) uretimle AYNI dil kuralini kullansin (Codex Faz 0-3 #2)
+        from app.generators.output_language import output_context_for_run
+        report_language = output_context_for_run(self.db, scoring_run_id).language
+
         group_data = []
         for g in groups:
             headlines = self.db.query(AdHeadline).filter(
@@ -705,15 +735,18 @@ class ExportDataCollector:
                     g.fill_keyword_ids,
                     [h.headline_text for h in headlines],
                     [d.description_text for d in descriptions],
+                    report_language,
                 ),
                 headlines=[HeadlineData(
                     headline_text=h.headline_text,
                     headline_type=h.headline_type,
-                    is_dki=h.is_dki or False
+                    is_dki=h.is_dki or False,
+                    review=h.validation_action == 'claim_review',
                 ) for h in headlines],
                 descriptions=[DescriptionData(
                     description_text=d.description_text,
-                    description_type=d.description_type
+                    description_type=d.description_type,
+                    review=d.validation_action == 'claim_review',
                 ) for d in descriptions],
                 negative_keywords=[NegativeKeywordData(
                     keyword=n.keyword,
@@ -722,7 +755,42 @@ class ExportDataCollector:
                 ) for n in negatives]
             ))
         
-        return AdsData(ad_groups=group_data, total=len(group_data))
+        active_set = get_active_set(self.db, scoring_run_id)
+        summary = review_summary(active_set.warnings if active_set else None)
+        review_line = (
+            f"İnceleme gerekli: {summary['claim_risk_count']} risk, "
+            f"{summary['claim_unverified_count']} profilde doğrulanamadı — kontrol gerekli"
+            if summary['review_required'] else ''
+        )
+        return AdsData(
+            ad_groups=group_data, total=len(group_data), claim_review_summary=review_line,
+            set_warnings=self._set_warning_rows(active_set),
+        )
+
+    @staticmethod
+    def _set_warning_rows(active_set) -> list:
+        def _clip(text, limit=400):
+            text = str(text or '')
+            return text if len(text) <= limit else text[:limit - 1] + '…'
+
+        """Aktif setin claim_review kaydından "Set uyarıları" satırları (açık bulgu + uygulanan düzeltme)."""
+        from app.generators.claim_review import KIND_LABEL_TR, set_review
+
+        current = ((set_review(active_set.warnings if active_set else None) or {}).get('current')) or {}
+        rows = []
+        for key, status in (('findings', 'İnceleme gerekli'), ('applied', 'Düzeltme uygulandı')):
+            for f in current.get(key) or []:
+                rows.append(AdSetWarningData(
+                    group_name=str(f.get('group_name') or ''),
+                    asset_type={'headline': 'Başlık', 'description': 'Açıklama'}.get(f.get('asset_type'), ''),
+                    asset_text=str(f.get('asset_text') or f.get('original') or ''),
+                    kind=KIND_LABEL_TR.get(f.get('kind'), ''),
+                    span=str(f.get('span') or ''), reason=str(f.get('reason') or ''),
+                    # Gösterim kısaltması (kayıt tam metin tutar)
+                    original=_clip(f.get('original')), suggestion=_clip(f.get('suggestion')),
+                    status=status,
+                ))
+        return rows
     
     def _collect_social(self, scoring_run_id: int) -> SocialData:
         """Sosyal medya verilerini toplar.
@@ -849,7 +917,7 @@ class ExportDataCollector:
                 duration_max_sec=dur_max,
                 actual_duration_sec=c.actual_duration_sec,
                 duration_status=c.duration_status,
-                validation_warnings=list(c.validation_warnings or []),
+                validation_warnings=social_warning_display(c.validation_warnings),
                 format_payload=c.format_payload,
             )
             content_data.append(item)

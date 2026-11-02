@@ -37,6 +37,7 @@ from app.core.social.idea_retry_worker_input import (
     SocialIdeaRetryWorkerPreparation,
     prepare_social_idea_retry_worker_inputs,
 )
+from app.generators.output_language import output_context_for_run
 from app.generators.social.attempt_state import (
     AttemptNotClaimableError,
     AttemptNotWritableError,
@@ -313,6 +314,8 @@ def run_social_idea_retry_generation(
         )
         brief_id = brief.id
         scoring_run_id = scoring_run.id
+        # Çalışma pazarı (çıktı dili + hedef konum): AI aşamasında DB yok, burada okunur
+        output_ctx = output_context_for_run(claim_session, scoring_run)
         claim_session.commit()
     except Exception as exc:
         claim_session.rollback()
@@ -390,7 +393,7 @@ def run_social_idea_retry_generation(
     # -------------------------------------------------------------
     # 4. AŞAMA C: AI ÜRETİMİ VE HEARTBEAT (DB TRANSACTION AÇIK DEĞİL)
     # -------------------------------------------------------------
-    generator = SocialBriefIdeaGenerator(ai_service)
+    generator = SocialBriefIdeaGenerator(ai_service, output_ctx=output_ctx)
     category_results: list[SocialIdeaAIResult] = []
     total_ai_calls = 0
 

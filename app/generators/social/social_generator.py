@@ -13,6 +13,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.generators.ai_service import AIService
+from app.generators.output_language import output_context_for_run
 from app.generators.social.category_generator import CategoryGenerator
 from app.generators.social.idea_generator import IdeaGenerator
 from app.generators.social.content_generator import ContentGenerator
@@ -49,7 +50,12 @@ from app.schemas.social import (
     SocialContentWarning,
     PolicyWarning,
 )
-from app.generators.ads.validators import find_ungrounded_claims
+from app.generators.ads.validators import classify_claims
+from app.generators.claim_review import (
+    changed_items, finding_dict, make_current, push_review, social_flag_entries, social_record,
+    social_record_entry, social_replace_review,
+)
+from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 
 
 class SocialGenerator:
@@ -105,6 +111,7 @@ class SocialGenerator:
             brand_context=request.brand_context,
             max_categories=request.max_categories,
             excluded_topics=excluded_block,
+            output_ctx=output_context_for_run(self.db, request.scoring_run_id),
         )
 
         # Deterministik topic engeli: eşleşen kategori KAYDEDİLMEZ
@@ -237,6 +244,7 @@ class SocialGenerator:
                 ideas_per_category=request.ideas_per_category,
                 target_platforms=target_platforms,
                 excluded_topics=excluded_block,
+                output_ctx=output_context_for_run(self.db, db_category.scoring_run_id),
             )
 
             # Deterministik topic engeli: eşleşen fikir KAYDEDİLMEZ
@@ -305,9 +313,10 @@ class SocialGenerator:
         grounding whitelist'i (confirmed product_facts) bu run'dan yüklenir.
         Verilmezse ilk idea'nın kategorisinden türetilir (geriye uyum).
 
-        Grounding (Faz F3): caption + hook'lar taranır; ihlalde 1 kez
-        regenerate; ikinci kontrolde hâlâ ihlal varsa içerik DB'YE
-        KAYDEDİLMEZ ve warnings listesinde raporlanır.
+        Grounding (Faz F3 + rev.4): caption + hook'lar taranır; RİSK (garanti/mutlak
+        sonuç) için 1 kez regenerate; profilde doğrulanamayan iddia AI açmaz. Kalan
+        bulgu içeriği SİLMEZ: içerik kaydedilir, validation_warnings'te işaretlenir ve
+        warnings listesinde raporlanır.
 
         Brief sınırları (plan_social_brief_akisi.md §7/§8): brief'e ait
         fikirler bu legacy yoldan üretilemez. Bu kontrol hem senkron
@@ -325,6 +334,7 @@ class SocialGenerator:
         if scoring_run_id is None:
             scoring_run_id = self._run_id_from_ideas(request.idea_ids)
         product_facts, grounding_facts = self._grounding_context(scoring_run_id)
+        output_ctx = output_context_for_run(self.db, scoring_run_id)
         topic_terms, _ = self._topic_policy_context(scoring_run_id)
         assignment_snapshot = self._assignment_version(scoring_run_id)
 
@@ -368,19 +378,20 @@ class SocialGenerator:
                 brand_name=request.brand_name,
                 brand_tone=request.brand_tone,
                 product_facts=product_facts,
+                output_ctx=output_ctx,
             )
 
             if not content_schema:
                 continue
 
             # Grounding kontrolü + tek regenerate şansı (Faz F3)
-            content_schema, claim_warning = self._ground_or_reject(
+            content_schema, claim_warning, review_warnings = self._ground_or_reject(
                 content_schema, idea, request.brand_name or "Marka",
-                product_facts, grounding_facts,
+                product_facts, grounding_facts, output_ctx,
             )
             if claim_warning is not None:
+                # rev.4: içerik SİLİNMEZ; incelemeli kaydedilir, uyarı listede kalır
                 warnings.append(claim_warning)
-                continue  # KAYDEDİLMEZ — sessiz yayın yerine kayıt reddi
 
             # Topic policy (plan B): içerik yüzeyleri taranır; eşleşen KAYDEDİLMEZ
             topic_match = self._content_topic_match(content_schema, topic_terms)
@@ -410,7 +421,7 @@ class SocialGenerator:
                 ))
                 continue
 
-            saved_content = self._save_content(content_schema, idea_id)
+            saved_content = self._save_content(content_schema, idea_id, review_warnings)
             if saved_content:
                 contents.append(saved_content)
 
@@ -554,6 +565,7 @@ class SocialGenerator:
             brand_name=brand_name,
             additional_context=additional_context,
             excluded_topics=excluded_block,
+            output_ctx=output_context_for_run(self.db, db_category.scoring_run_id),
         )
 
         # Topic policy: yeni fikir dislanan konudaysa MEVCUT fikir korunur
@@ -623,6 +635,7 @@ class SocialGenerator:
             brand_name=brand_name,
             additional_context=additional_context,
             product_facts=product_facts,
+            output_ctx=output_context_for_run(self.db, run_id),
         )
 
         # Topic policy (plan B): yeni icerik dislanan konudaysa mevcut korunur
@@ -632,16 +645,24 @@ class SocialGenerator:
             if topic_match:
                 raise ValueError(f"EXCLUDED_TOPIC: {topic_match}")
 
-        # Grounding reddi (Faz F): yeni içerik desteksiz iddia taşıyorsa
-        # MEVCUT TEMİZ İÇERİK OVERWRITE EDİLMEZ
+        # Grounding (rev.4): yeni içerik risk/unverified taşısa da BENİMSENİR ve işaretlenir;
+        # önceki inceleme kaydı history'ye itilir. İçerik kaybolmaz.
+        review_warnings = None
         if new_content is not None:
-            claims = self._find_content_claims(new_content, grounding_facts)
-            if claims:
+            new_findings = self._classify_content_claims(new_content, grounding_facts)
+            old_warnings = list(db_content.validation_warnings or [])
+            prev = social_record(old_warnings)
+            changed = changed_items(self._labeled_texts(old_content), self._labeled_texts(new_content))
+            record = (
+                push_review(prev, make_current(new_findings, [], changed=changed))
+                if (new_findings or prev or changed) else None
+            )
+            review_warnings = social_replace_review(old_warnings, new_findings, record) or None
+            if new_findings:
                 logger.warning(
-                    f"Regenerated social content rejected (content={content_id}): "
-                    f"desteksiz iddia — mevcut içerik korunuyor. claims={claims}"
+                    f"Regenerated social content kept for claim review (content={content_id}): "
+                    f"claims={[f.raw for f in new_findings]}"
                 )
-                return None
 
         if new_content:
             # Update in DB
@@ -655,6 +676,7 @@ class SocialGenerator:
             db_content.industry_posting_suggestion = new_content.industry_posting_suggestion
             db_content.platform_notes = new_content.platform_notes
             db_content.regeneration_count = (db_content.regeneration_count or 0) + 1
+            db_content.validation_warnings = review_warnings
             
             self.db.commit()
             self.db.refresh(db_content)
@@ -917,7 +939,10 @@ class SocialGenerator:
         SOCIAL isteklerinde kullanıcı USP alanı yok; whitelist yalnız
         confirmed product_facts'ten kurulur. Boşsa hiçbir sayısal iddia geçemez.
         """
-        from app.core.channel.brand_defense import load_product_definition
+        from app.core.channel.brand_defense import (
+            load_grounding_facts,
+            load_product_definition,
+        )
         from app.database.models import ScoringRun
 
         if not scoring_run_id:
@@ -928,19 +953,47 @@ class SocialGenerator:
             .first()
         )
         product_facts = load_product_definition(self.db, run) or ""
-        return product_facts, product_facts
+        return product_facts, load_grounding_facts(self.db, run)
+
+    def _classify_content_claims(self, content: SocialContentSchema, grounding_facts: str) -> list:
+        """Hook, caption, CTA, görsel önerisi ve hashtag metinlerindeki iddia bulguları (ClaimFinding)."""
+        findings: list = []
+        texts = [h.text for h in content.hooks or []]
+        texts += [content.caption, content.cta_text, content.visual_suggestion]
+        texts += list(content.hashtags or [])
+        for text in texts:
+            findings.extend(classify_claims(text or "", grounding_facts))
+        # Tekilleştir, sırayı koru
+        seen = set()
+        return [f for f in findings if not (f.raw in seen or seen.add(f.raw))]
 
     def _find_content_claims(
         self, content: SocialContentSchema, grounding_facts: str
     ) -> List[str]:
-        """Caption + hook metinlerindeki desteksiz iddiaları toplar."""
-        claims: List[str] = []
-        for hook in content.hooks or []:
-            claims.extend(find_ungrounded_claims(hook.text, grounding_facts))
-        claims.extend(find_ungrounded_claims(content.caption or "", grounding_facts))
-        # Tekilleştir, sırayı koru
-        seen = set()
-        return [c for c in claims if not (c in seen or seen.add(c))]
+        return [f.raw for f in self._classify_content_claims(content, grounding_facts)]
+
+    @staticmethod
+    def _labeled_texts(content: SocialContentSchema) -> dict:
+        """Legacy içeriğin TÜM metin öğeleri {etiket: metin} (değişiklik kaydı için)."""
+        items = {f"hook[{i}]": h.text for i, h in enumerate(content.hooks or [])}
+        for field in ("caption", "cta_text", "visual_suggestion", "scenario", "video_concept",
+                      "industry_posting_suggestion", "platform_notes"):
+            items[field] = getattr(content, field, None)
+        items.update({f"hashtag[{i}]": h for i, h in enumerate(content.hashtags or [])})
+        return items
+
+    @staticmethod
+    def _review_warnings(findings: list, applied: list, changed: Optional[list] = None,
+                         initial_findings: Optional[list] = None) -> Optional[list]:
+        """SocialContent.validation_warnings: claim_risk:/claim_unverified: + claim_review:<json>.
+
+        changed: onarımın değiştirdiği her metin öğesi (ilk + onarılmış hali); initial_findings verilirse
+        onarım öncesi kayıt history'ye iner."""
+        if not findings and not applied and not changed:
+            return None
+        base = push_review(None, make_current(initial_findings, ())) if initial_findings is not None else None
+        record = push_review(base, make_current(findings, applied, changed=changed or ()))
+        return [*social_flag_entries(findings), social_record_entry(record)]
 
     def _ground_or_reject(
         self,
@@ -949,42 +1002,66 @@ class SocialGenerator:
         brand_name: str,
         product_facts: str,
         grounding_facts: str,
+        output_ctx=None,
     ):
-        """(content, None) temizse; ihlalde 1 regenerate; hâlâ ihlalliyse
-        (None, SocialContentWarning) — çağıran içeriği KAYDETMEZ."""
-        claims = self._find_content_claims(content, grounding_facts)
-        if not claims:
-            return content, None
+        """(content, warning, validation_warnings) — içerik ARTIK her zaman döner (rev.4).
 
-        logger.warning(
-            f"Social content ungrounded claims (idea={idea.id}): {claims} — "
-            f"1 kez yeniden üretiliyor"
-        )
-        regenerated = self.content_gen.regenerate(
-            old_content=content,
-            idea=idea,
-            brand_name=brand_name,
-            additional_context=(
-                "Önceki içerik desteksiz iddia içeriyordu, bunları KULLANMA: "
-                + "; ".join(claims)
-            ),
-            product_facts=product_facts,
-        )
-        if regenerated is not None:
-            second_claims = self._find_content_claims(regenerated, grounding_facts)
-            if not second_claims:
-                return regenerated, None
-            claims = second_claims
+        Temizse (content, None, None). RİSK varsa 1 regenerate (yeni içerik benimsenir,
+        orijinal+öneri kayıtta); profilde doğrulanamayan iddia AI açmaz. Kalan bulgu için
+        SocialContentWarning(kind=…) + validation_warnings döner; çağıran içeriği KAYDEDER.
+        """
+        findings = self._classify_content_claims(content, grounding_facts)
+        if not findings:
+            return content, None, None
 
+        applied: list = []
+        changed: list = []
+        initial_findings = None
+        risks = [f for f in findings if f.kind == "risk"]
+        if risks:
+            logger.warning(
+                f"Social content risky claims (idea={idea.id}): {[f.raw for f in risks]} — "
+                f"1 kez yeniden üretiliyor"
+            )
+            regenerated = self.content_gen.regenerate(
+                old_content=content,
+                idea=idea,
+                brand_name=brand_name,
+                additional_context=(
+                    "Önceki içerik desteksiz iddia içeriyordu, bunları KULLANMA: "
+                    + "; ".join(f.raw for f in risks)
+                    + ". " + CLAIM_REPAIR_RULE
+                ),
+                product_facts=product_facts,
+                output_ctx=output_ctx,
+            )
+            if regenerated is not None:
+                still = {f.raw for f in self._classify_content_claims(regenerated, grounding_facts)}
+                applied = [
+                    finding_dict(f, original=content.caption, suggestion=regenerated.caption)
+                    for f in risks if f.raw not in still
+                ]
+                # Değişen HER metin öğesinin ilk hali kayıtta kalır (risk çözülsün çözülmesin)
+                changed = changed_items(self._labeled_texts(content), self._labeled_texts(regenerated))
+                initial_findings = findings
+                content = regenerated
+                findings = self._classify_content_claims(content, grounding_facts)
+
+        if not findings:
+            return content, None, self._review_warnings([], applied, changed, initial_findings)
+
+        kinds = {f.kind for f in findings}
         logger.warning(
-            f"Social content REJECTED (idea={idea.id}): desteksiz iddia "
-            f"çözülemedi, kaydedilmiyor — claims={claims}"
+            f"Social content kept for claim review (idea={idea.id}): "
+            f"claims={[f.raw for f in findings]}"
         )
-        return None, SocialContentWarning(
+        warning = SocialContentWarning(
             idea_id=idea.id or 0,
             reason_code="ungrounded_claim",
-            claims=claims,
+            claims=[f.raw for f in findings],
+            kind="risk" if "risk" in kinds else "unverified",
         )
+        return content, warning, self._review_warnings(findings, applied, changed, initial_findings)
 
     # ==================== PRIVATE METHODS ====================
 
@@ -1088,7 +1165,8 @@ class SocialGenerator:
     def _save_content(
         self,
         content: SocialContentSchema,
-        idea_id: int
+        idea_id: int,
+        validation_warnings: Optional[list] = None,
     ) -> Optional[SocialContentDBSchema]:
         """Save content to database."""
         try:
@@ -1109,6 +1187,7 @@ class SocialGenerator:
                 hashtags=content.hashtags,
                 industry_posting_suggestion=content.industry_posting_suggestion,
                 platform_notes=content.platform_notes,
+                validation_warnings=validation_warnings,
                 regeneration_count=0
             )
             self.db.add(db_content)

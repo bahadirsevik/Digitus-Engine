@@ -14,6 +14,7 @@ from app.core.constants import ADS_KEYWORDS_PER_GROUP
 from app.core.site_analyzer.turkish_normalizer import normalize_turkish
 from app.generators.ai_service import AIService, scoped
 from app.generators.ads.prompt_templates import ADS_GROUPING_PROMPT
+from app.generators.output_language import DEFAULT_LANGUAGE, with_output_block
 from app.schemas.ads import KeywordForGrouping, KeywordGroupSchema, GroupingResponse
 
 
@@ -89,6 +90,7 @@ class KeywordGrouper:
         self, 
         keywords: List[KeywordForGrouping],
         max_groups: Optional[int] = None,
+        output_ctx=None,
     ) -> List[KeywordGroupSchema]:
         """
         Group keywords using AI.
@@ -96,6 +98,7 @@ class KeywordGrouper:
         Args:
             keywords: List of keywords with id and text
             max_groups: caps the number of groups (never drops keywords)
+            output_ctx: çalışma pazarı (çıktı dili + hedef konum); None → Türkçe
             
         Returns:
             Exactly G KeywordGroupSchema (see _target_sizes), every keyword once
@@ -106,7 +109,7 @@ class KeywordGrouper:
         
         sizes = self._target_sizes(len(keywords), max_groups)
         if len(sizes) == 1:
-            return self._create_single_group(keywords)
+            return self._create_single_group(keywords, output_ctx)
         
         # Prepare keywords for AI
         keywords_json = json.dumps(
@@ -116,12 +119,12 @@ class KeywordGrouper:
         )
         
         # Generate groups via AI
-        prompt = ADS_GROUPING_PROMPT.format(
+        prompt = with_output_block(ADS_GROUPING_PROMPT.format(
             keywords_json=keywords_json,
             keyword_count=len(keywords),
             group_count=len(sizes),
             group_sizes=", ".join(map(str, sizes)),
-        )
+        ), output_ctx)
 
         try:
             validated_groups = self._generate_and_validate_groups(
@@ -135,7 +138,9 @@ class KeywordGrouper:
         except Exception as e:
             logger.warning(f"AI grouping primary attempt failed: {e}")
 
-        strict_prompt = self._build_strict_retry_prompt(keywords_json, sizes)
+        strict_prompt = with_output_block(
+            self._build_strict_retry_prompt(keywords_json, sizes), output_ctx
+        )
         try:
             validated_groups = self._generate_and_validate_groups(
                 prompt=strict_prompt,
@@ -340,7 +345,8 @@ class KeywordGrouper:
     
     def _create_single_group(
         self, 
-        keywords: List[KeywordForGrouping]
+        keywords: List[KeywordForGrouping],
+        output_ctx=None,
     ) -> List[KeywordGroupSchema]:
         """Create a single group holding every keyword (G == 1)."""
         if not keywords:
@@ -349,6 +355,16 @@ class KeywordGrouper:
         # Use first keyword as group name base
         first_kw = keywords[0].keyword
         
+        # shortcut: Turkce etiketler cevrilmez; yabanci cikti dilinde ilk kelime ad ve
+        # tema olur (tema RSA prompt'una girer), cok dilli etiket gerekirse yukselt
+        if getattr(output_ctx, "language", DEFAULT_LANGUAGE) != DEFAULT_LANGUAGE:
+            return [KeywordGroupSchema(
+                name=_turkish_title(first_kw),
+                theme=first_kw,
+                keyword_ids=[k.id for k in keywords],
+                keywords=[k.keyword for k in keywords]
+            )]
+
         return [KeywordGroupSchema(
             name=f"{_turkish_title(first_kw)} - Genel",
             theme="Tüm ilgili anahtar kelimeler",

@@ -7,10 +7,11 @@ Kapsam:
 2. Şablon temizliği — RSA/SOCIAL prompt'larında sayısal/sosyal-kanıt iddiası
    YOK, İDDİA KURALLARI VAR, {product_facts} boş-profil yolunda format'lanıyor.
 3. RSA canned-response zinciri — AI yasak iddia döndürünce validator yakalar
-   → CLAIM_REWRITE (1 kez) → hâlâ ihlalliyse asset elenir; fallback asset'leri
-   de taranır (grup minimum altına düşerse FAILED).
-4. SOCIAL _ground_or_reject — ihlalde 1 regenerate; ikinci ihlalde içerik
-   reddedilir (warning döner, kayıt yok).
+   → RİSK (garanti/mutlak sonuç) için CLAIM_REWRITE (1 kez) → hâlâ riskliyse asset KALIR
+   ve claim_review ile işaretlenir (rev.4: asset ELENMEZ, grup iddia yüzünden FAILED olmaz);
+   profilde doğrulanamayan (unverified) iddia AI çağrısı açmaz. Fallback asset'leri de taranır.
+4. SOCIAL _ground_or_reject — RİSK için 1 regenerate; kalan bulgu içeriği SİLMEZ
+   (içerik + warning + validation_warnings döner).
 """
 import json
 
@@ -71,10 +72,11 @@ class TestFindUngroundedClaims:
     def test_keyword_year_exemption(self):
         # Keyword'deki doğal yıl sayısı claim sayılmaz (dar muafiyet)
         assert (
-            find_ungrounded_claims(
-                "en iyi hisse 2026 önerileri", "", ["en iyi hisse 2026"]
-            )
-            == []
+            find_ungrounded_claims("hisse 2026 önerileri", "", ["hisse 2026"]) == []
+        )
+        # Muafiyet yalnız SAYISAL taramada: keyword'deki süperlatif artık aklanmaz
+        assert find_ungrounded_claims(
+            "en iyi hisse 2026 önerileri", "", ["en iyi hisse 2026"]
         )
         # Aynı sayı keyword DIŞI bağlamda muaf DEĞİL
         assert find_ungrounded_claims(
@@ -95,6 +97,91 @@ class TestFindUngroundedClaims:
         # Gerçek rating biçimleri hâlâ yakalanıyor
         assert find_ungrounded_claims("4.8/5", "")  # ondalıklı pay
         assert find_ungrounded_claims("9/10 puan aldık", "")  # birimli
+
+
+# Her dil: (iddialı metinler, temiz metinler, (grounded metin, TR fact)).
+# Türkçe profil gerçeği ("10 yıl", "5000 hasta") hedef dildeki iddiayı ground'lar.
+_ML_CLAIM_VECTORS = {
+    "ru": (
+        ["Лучший стоматолог города", "Более 10 лет опыта", "Гарантия результата",
+         "5 000 пациентов доверяют нам", "№1 в вашем городе"],
+        ["Запишитесь на консультацию сегодня", "Современная клиника в центре города",
+         "Гарантия на импланты по договору"],
+        ("Опыт 10 лет", "10 yıl deneyim"),
+    ),
+    "uk": (
+        ["Найкраща клініка міста", "10 років досвіду", "Гарантія результату",
+         "Понад 5000 пацієнтів", "№1 у вашому місті"],
+        ["Запишіться на консультацію сьогодні", "Сучасна клініка в центрі міста"],
+        ("Досвід 10 років", "10 yıl deneyim"),
+    ),
+    "en": (
+        ["Best dentist in town", "10 years of experience", "Guaranteed results",
+         "Over 5,000 patients", "#1 clinic in the city"],
+        ["Book a free consultation", "Modern clinic in the city centre",
+         "Money-back guarantee included"],
+        ("Experience of 10 years", "10 yıl deneyim"),
+    ),
+    "de": (
+        ["Die beste Klinik der Stadt", "10 Jahre Erfahrung", "Garantierter Erfolg",
+         "Über 5000 Patienten", "Nr. 1 in Berlin"],
+        ["Jetzt Termin vereinbaren", "Moderne Praxis im Zentrum"],
+        ("Erfahrung: 5.000 Patienten", "5000 hasta"),
+    ),
+}
+
+
+class TestMultilingualClaims:
+    """Plan pazar/dil Faz 2-g: RU/UK/EN/DE birim, süperlatif, garanti tabloları."""
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_claims_caught(self, lang):
+        for text in _ML_CLAIM_VECTORS[lang][0]:
+            assert find_ungrounded_claims(text, ""), (lang, text)
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_clean_text_passes(self, lang):
+        for text in _ML_CLAIM_VECTORS[lang][1]:
+            assert find_ungrounded_claims(text, "") == [], (lang, text)
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_turkish_fact_grounds_translated_claim(self, lang):
+        text, fact = _ML_CLAIM_VECTORS[lang][2]
+        assert find_ungrounded_claims(text, fact) == [], (lang, text)
+        # fact yoksa aynı metin iddia sayılır
+        assert find_ungrounded_claims(text, ""), (lang, text)
+
+    @pytest.mark.parametrize("lang", sorted(_ML_CLAIM_VECTORS))
+    def test_guarantee_banned_even_if_in_facts(self, lang):
+        text = _ML_CLAIM_VECTORS[lang][0][2]
+        assert find_ungrounded_claims(text, text)
+
+    def test_numeric_forms_language_independent(self):
+        # 50 тыс. / 50k / 50 Tausend / 50.000 aynı kanonik sayı
+        assert find_ungrounded_claims("50 тыс. клиентов", "50 bin müşteri") == []
+        assert find_ungrounded_claims("50k customers", "50 bin müşteri") == []
+        assert find_ungrounded_claims("50 Tausend Kunden", "50 bin müşteri") == []
+        assert find_ungrounded_claims("80% of patients", "") and find_ungrounded_claims("80 Prozent", "")
+
+    def test_english_keyword_exemption_stays_narrow(self):
+        # Keyword muafiyeti yalnız sayısal taramada: 'best' süperlatifi artık aklanmaz
+        assert find_ungrounded_claims(
+            "Best Western Hotel Berlin", "", ["best western hotel berlin"])
+        assert find_ungrounded_claims(
+            "Hotel Berlin 2026", "", ["hotel berlin 2026"]) == []
+        assert find_ungrounded_claims(
+            "Best price for Best Western", "", ["best western"])
+
+    def test_existing_turkish_unchanged_next_to_other_languages(self):
+        assert find_ungrounded_claims("En iyi hizmet 10 yıldır", "")
+        assert find_ungrounded_claims("Randevu alın", "") == []
+
+    def test_every_catalog_language_has_claim_tables(self):
+        from app.core import markets
+        from app.generators.ads.validators import CLAIM_TERM_LANGUAGES
+
+        missing = {l["code"] for l in markets.LANGUAGES} - CLAIM_TERM_LANGUAGES
+        assert not missing, f"claim tablosu eksik dil: {missing}"
 
 
 # ==================== 2. ŞABLON TEMİZLİĞİ ====================
@@ -187,9 +274,10 @@ GROUP = KeywordGroupSchema(
 
 
 class TestRsaGroundingChain:
-    def test_violating_headline_rewritten_when_rewrite_clean(self):
+    def test_risky_headline_rewritten_when_rewrite_clean(self):
+        # rev.4: yeniden yazma yalnız RİSK (kazanç garantisi/mutlak sonuç) için
         ai = CannedAI(
-            _rsa_json(["100.000+ Müşteri", "Hisse Analiz Araçları",
+            _rsa_json(["Kazanç Garantisi Sunuyoruz", "Hisse Analiz Araçları",
                        "Hemen Keşfet", "Verileri İncele"]),
             rewrite_response="Güvenilir Analiz Deneyimi",
         )
@@ -198,24 +286,62 @@ class TestRsaGroundingChain:
         result = gen.generate_rsa(GROUP, brand_name="Marka", brand_usp="",
                                   grounding_facts="")
         texts = [h.text for h in result.headlines]
-        assert "100.000+ Müşteri" not in texts
+        assert "Kazanç Garantisi Sunuyoruz" not in texts
         assert "Güvenilir Analiz Deneyimi" in texts
         assert len(ai.rewrite_prompts) == 1
+        # N3: orijinal + öneri kayıtta korunur; temiz kalan asset işaretlenmez
+        applied = result.claim_applied[0]
+        assert applied["original"] == "Kazanç Garantisi Sunuyoruz"
+        assert applied["suggestion"] == "Güvenilir Analiz Deneyimi"
+        assert result.claim_findings == []
 
-    def test_violating_headline_eliminated_when_rewrite_still_violates(self):
+    def test_numeric_headline_unverified_kept_without_ai_call(self):
+        # rev.4 (eski beklenti: sayısal iddia rewrite edilir / elenir): profilde doğrulanamayan
+        # iddia için AI çağrısı YOK, yeniden yazma YOK, eleme YOK — asset aynen kalır ve işaretlenir
         ai = CannedAI(
             _rsa_json(["100.000+ Müşteri", "Hisse Analiz Araçları",
                        "Hemen Keşfet", "Verileri İncele"]),
-            rewrite_response="50 bin kullanıcı bize güveniyor",
+            rewrite_response="kullanılmamalı",
         )
         gen = RSAGenerator(ai_service=ai, enable_ai_regeneration=True,
                            enable_fallback=False)
         result = gen.generate_rsa(GROUP, brand_name="Marka", brand_usp="",
                                   grounding_facts="")
-        texts = [h.text for h in result.headlines]
-        assert "100.000+ Müşteri" not in texts
-        assert all("50 bin" not in t for t in texts)
-        assert len(texts) == 3  # ihlalli asset elendi, kalanlar yeterli
+        by_text = {h.text: h for h in result.headlines}
+        assert by_text["100.000+ Müşteri"].validation_action == "claim_review"
+        assert by_text["Hisse Analiz Araçları"].validation_action is None
+        assert ai.rewrite_prompts == []
+        assert {f["kind"] for f in result.claim_findings} == {"unverified"}
+        assert result.claim_findings[0]["asset_text"] == "100.000+ Müşteri"
+
+    def test_risky_headline_kept_and_flagged_when_rewrite_still_violates(self):
+        # rev.4 (eski beklenti: asset elenir): çözülmeyen risk asset'i SİLMEZ
+        ai = CannedAI(
+            _rsa_json(["Kazanç Garantisi Sunuyoruz", "Hisse Analiz Araçları",
+                       "Hemen Keşfet", "Verileri İncele"]),
+            rewrite_response="Kesin Kazanç Garantisi Veriyoruz",
+        )
+        gen = RSAGenerator(ai_service=ai, enable_ai_regeneration=True,
+                           enable_fallback=False)
+        result = gen.generate_rsa(GROUP, brand_name="Marka", brand_usp="",
+                                  grounding_facts="")
+        by_text = {h.text: h for h in result.headlines}
+        assert len(by_text) == 4  # hiçbiri elenmedi
+        assert by_text["Kazanç Garantisi Sunuyoruz"].validation_action == "claim_review"
+        assert "Kesin Kazanç Garantisi Veriyoruz" not in by_text
+        assert {f["kind"] for f in result.claim_findings} == {"risk"}
+        assert result.claim_applied == []
+
+    def test_risky_headline_without_ai_regeneration_is_kept_flagged(self):
+        ai = CannedAI(_rsa_json(["Kazanç Garantisi Sunuyoruz", "Hisse Analiz Araçları",
+                                 "Hemen Keşfet", "Verileri İncele"]))
+        gen = RSAGenerator(ai_service=ai, enable_ai_regeneration=False,
+                           enable_fallback=False)
+        result = gen.generate_rsa(GROUP, brand_name="Marka", brand_usp="",
+                                  grounding_facts="")
+        by_text = {h.text: h for h in result.headlines}
+        assert by_text["Kazanç Garantisi Sunuyoruz"].validation_action == "claim_review"
+        assert ai.rewrite_prompts == []
 
     def test_grounded_claim_survives(self):
         ai = CannedAI(
@@ -242,7 +368,7 @@ class TestRsaGroundingChain:
         ai = CannedAI(
             json.dumps({
                 "headlines": [
-                    {"text": "100.000+ Müşteri", "type": "trust", "position": "any"},
+                    {"text": "Kazanç Garantisi Sunuyoruz", "type": "trust", "position": "any"},
                     {"text": "Hisse Analiz Araçları", "type": "keyword", "position": "any"},
                     {"text": "Hemen Keşfet", "type": "cta", "position": "any"},
                     {"text": "Verileri İncele", "type": "benefit", "position": "any"},
@@ -266,22 +392,25 @@ class TestRsaGroundingChain:
         result = gen.generate_rsa(group_year, brand_name="Marka", brand_usp="",
                                   grounding_facts="")
         texts = [h.text for h in result.headlines]
-        assert "100.000+ Müşteri" not in texts
+        assert "Kazanç Garantisi Sunuyoruz" not in texts
         assert "2026 yıl sonu hisse rehberi" in texts  # muafiyetle hayatta
 
-    def test_fallback_assets_also_grounded_group_fails_below_minimum(self):
-        # AI hiç geçerli yanıt vermiyor → deterministik fallback; display USP
-        # sayısal iddia taşıyor → fallback description'ları da elenir →
-        # minimum sağlanamaz → grup FAILED (ValueError)
+    def test_fallback_assets_also_graded_but_group_not_failed_by_claims(self):
+        # AI hiç geçerli yanıt vermiyor → deterministik fallback; display USP sayısal iddia
+        # taşıyor. rev.4 (eski beklenti: asset'ler elenir → grup FAILED/ValueError): fallback
+        # asset'leri de taranır ama ELENMEZ, işaretlenir; grup yalnız teknik sebeple (A) başarısız olur.
         ai = CannedAI("bozuk json {{{", rewrite_response="")
         gen = RSAGenerator(ai_service=ai, enable_ai_regeneration=False,
                            enable_fallback=True)
-        with pytest.raises(ValueError):
-            gen.generate_rsa(
-                GROUP, brand_name="Marka",
-                brand_usp="100.000+ müşteri memnuniyeti",
-                grounding_facts="",  # generic/display USP whitelist'e girmez
-            )
+        result = gen.generate_rsa(
+            GROUP, brand_name="Marka",
+            brand_usp="100.000+ müşteri memnuniyeti",
+            grounding_facts="",  # generic/display USP whitelist'e girmez
+        )
+        assert len(result.descriptions) >= gen.MIN_DESCRIPTIONS
+        flagged = [d for d in result.descriptions if d.validation_action == "claim_review"]
+        assert flagged and all("100.000" in d.text for d in flagged)
+        assert {f["kind"] for f in result.claim_findings} == {"unverified"}
 
     def test_fallback_clean_usp_survives_grounding(self):
         ai = CannedAI("bozuk json {{{")
@@ -339,41 +468,77 @@ class TestSocialGroundOrReject:
 
     def test_clean_content_passes_without_regenerate(self):
         gen = self._generator(regenerated=None)
-        content, warning = gen._ground_or_reject(
+        content, warning, review = gen._ground_or_reject(
             _content("Bu hataya dikkat edin."), _idea(), "Marka", "", ""
         )
-        assert warning is None
+        assert warning is None and review is None
         assert content is not None
         assert gen.content_gen.calls == 0
 
-    def test_violation_regenerated_clean_is_saved(self):
+    def test_risky_violation_regenerated_clean_is_saved_with_original(self):
         gen = self._generator(regenerated=_content("Temiz içerik."))
-        content, warning = gen._ground_or_reject(
-            _content("%80'i bu hatayı yapıyor"), _idea(), "Marka", "", ""
+        content, warning, review = gen._ground_or_reject(
+            _content("kazanç garantisi ile bu hatayı çözün"), _idea(), "Marka", "", ""
         )
         assert warning is None
         assert content.caption == "Temiz içerik."
         assert gen.content_gen.calls == 1
+        # N3: çözülen riskin orijinal metni + yeni metin kayıtta
+        record = json.loads(review[-1][len("claim_review:"):])
+        applied = record["current"]["applied"][0]
+        assert applied["original"] == "kazanç garantisi ile bu hatayı çözün"
+        assert applied["suggestion"] == "Temiz içerik."
 
-    def test_second_violation_rejected_with_warning(self):
-        gen = self._generator(
-            regenerated=_content("50 bin kullanıcı bunu yapıyor")
-        )
-        content, warning = gen._ground_or_reject(
+    def test_unverified_claim_kept_without_regenerate(self):
+        # rev.4 (eski beklenti: regenerate → reject): sayısal iddia AI açmaz, içerik silinmez
+        gen = self._generator(regenerated=_content("kullanılmamalı"))
+        content, warning, review = gen._ground_or_reject(
             _content("%80'i bu hatayı yapıyor"), _idea(), "Marka", "", ""
         )
-        assert content is None
+        assert content.caption == "%80'i bu hatayı yapıyor"
+        assert gen.content_gen.calls == 0
+        assert warning.kind == "unverified" and warning.reason_code == "ungrounded_claim"
+        assert review[0].startswith("claim_unverified:")
+
+    def test_second_risk_violation_kept_flagged_with_warning(self):
+        # rev.4 (eski beklenti: content None + warning): yeni üretim korunur, işaretlenir
+        gen = self._generator(
+            regenerated=_content("kazanç garantisi sunuyoruz")
+        )
+        content, warning, review = gen._ground_or_reject(
+            _content("kazanç garantisi ile bu hatayı çözün"), _idea(), "Marka", "", ""
+        )
+        assert content is not None and content.caption == "kazanç garantisi sunuyoruz"
         assert warning is not None
         assert warning.idea_id == 7
         assert warning.reason_code == "ungrounded_claim"
+        assert warning.kind == "risk"
         assert warning.claims
         assert gen.content_gen.calls == 1
+        assert review[0].startswith("claim_risk:")
 
-    def test_regenerate_failure_rejected_with_warning(self):
+    def test_regenerate_failure_keeps_original_flagged(self):
         gen = self._generator(regenerated=None)
-        content, warning = gen._ground_or_reject(
+        content, warning, review = gen._ground_or_reject(
             _content("kazanç garantisi ile"), _idea(), "Marka", "", ""
         )
-        assert content is None
+        assert content is not None and content.caption == "kazanç garantisi ile"
         assert warning is not None
         assert warning.reason_code == "ungrounded_claim"
+        assert warning.kind == "risk"
+
+
+    def test_legacy_changed_regeneration_keeps_all_original_text_even_if_risk_remains(self):
+        """Codex P2 (legacy): aynı risk kalsa da değişen hook + caption'ın ilk hali kayıtta; önceki kayıt history'de."""
+        regenerated = _content("Ağrısız tedavi için tamamen farklı ikinci açıklama.", hook_text="Yeni kanca")
+        gen = self._generator(regenerated=regenerated)
+        content, warning, review = gen._ground_or_reject(
+            _content("Ağrısız tedavi için ilk özgün açıklama.", hook_text="İlk kanca"), _idea(), "Marka", "", ""
+        )
+        assert content.caption == "Ağrısız tedavi için tamamen farklı ikinci açıklama."
+        assert warning.kind == "risk"
+        record = json.loads(next(w for w in review if w.startswith("claim_review:"))[len("claim_review:"):])
+        changed = {c["field"]: c for c in record["current"]["changed"]}
+        assert changed["caption"]["original"] == "Ağrısız tedavi için ilk özgün açıklama."
+        assert changed["hook[0]"]["original"] == "İlk kanca" and changed["hook[0]"]["suggestion"] == "Yeni kanca"
+        assert len(record["history"]) == 1

@@ -6,6 +6,7 @@ Contains:
 2. ADS_RSA_GENERATION_PROMPT - Headlines + Descriptions + Negatives
 3. HEADLINE_REGENERATION_PROMPT - Single headline fix
 """
+from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 
 # ==================== KEYWORD GROUPING PROMPT ====================
 
@@ -194,9 +195,9 @@ Sadece JSON döndür, açıklama ekleme.
 # Yerleştirme noktası kaybolursa import anında patlar (sessiz kayma olmasın).
 
 _KEYWORD_USE_BLOCK = '''# ANAHTAR KELİME KULLANIMI (ÖNEMLİ)
-- Başlıklar ve açıklamalar AKICI, DOĞAL ve dilbilgisi doğru Türkçe olmalı; arama sorgusu gibi
+- Başlıklar ve açıklamalar AKICI, DOĞAL ve dilbilgisi doğru olmalı (çıktı dilinde); arama sorgusu gibi
   okunan, eksik ekli ya da yalnızca kelimeleri art arda sıralayan metin yazma
-- Bir anahtar kelimeyi yalnızca başlık AKICI, DOĞAL Türkçe olduğunda, BÜTÜN hâlinde (ek
+- Bir anahtar kelimeyi yalnızca başlık AKICI, DOĞAL olduğunda, BÜTÜN hâlinde (ek
   almadan, kelimeleri bölmeden, aynı sırada) kullan. Doğal olmuyorsa o kelime için başlık
   YAZMA; bu kabul edilen bir sonuçtur. Kapsam sayısı için dilbilgisini ASLA bozma
 - Başlıkları ve açıklamaları BU GRUBUN anahtar kelimelerinden ve temasından üret. Marka ve
@@ -205,7 +206,7 @@ _KEYWORD_USE_BLOCK = '''# ANAHTAR KELİME KULLANIMI (ÖNEMLİ)
 - BOZUK örnekler (YAZMA): "Instagram Reklam Verme İncele", "TikTok Reklam Verme Başlat",
   "Facebook Reklam Vermek İçin", "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al",
   "Web Sitesi Tasarimi" (ASCII, Türkçe karaktersiz), "B2B Odaklı Web Ajans", "SEO Ajansı İstanbul".
-  Bunun yerine aynı anlamı doğal Türkçeyle yaz, ör. "Facebook'ta Reklam Verin" (kullanılabilir
+  Bunun yerine aynı anlamı çıktı dilinde doğal bir ifadeyle yaz, ör. "Facebook'ta Reklam Verin" (kullanılabilir
   reklam metnidir, tam kelime kapsamı sayılmaz)
 - Açıklamalarda da aynı doğallık kuralı geçerli; bozuk kalıpları başlıktan açıklamaya TAŞIMA
 - Açıklamalarda, anahtar kelimelerden cümleye doğal yerleşenleri BÜTÜN hâlinde kullan; doğal
@@ -214,7 +215,7 @@ _KEYWORD_USE_BLOCK = '''# ANAHTAR KELİME KULLANIMI (ÖNEMLİ)
 - "keyword_headlines" dizisine aşağıdaki HER anahtar kelime için bir kayıt yaz:
   {{"keyword_id": <kimlik>, "headline": "<headlines içindeki o başlığın BİREBİR aynısı>", "reason": ""}}.
   Doğal başlık olmuyorsa headline "" bırak, reason'a kısa neden yaz (ör. "30 karakteri aşıyor",
-  "doğal Türkçe başlık olmuyor", "iddia kuralı"); bu kabul edilen bir sonuçtur. Kayıtta yazdığın başlık "headlines" içinde de olmalı
+  "doğal başlık olmuyor", "iddia kuralı"); bu kabul edilen bir sonuçtur. Kayıtta yazdığın başlık "headlines" içinde de olmalı
 Anahtar kelime kimlikleri (keyword_headlines için):
 {keyword_ids_block}
 {completion_block}
@@ -259,7 +260,7 @@ Aşağıdaki Google Ads başlığını MUTLAKA 30 karakter veya daha kısa olaca
 # KURALLAR
 1. Anlamı koru
 2. Anahtar kelimeyi mümkünse içer
-3. Akıcı ve doğal Türkçe olsun
+3. Akıcı ve doğal olsun (çıktı dilinde)
 4. Kısaltmalar kullanabilirsin (ve → &)
 5. Gereksiz kelimeleri çıkar
 
@@ -316,7 +317,8 @@ Metni bu iddialar OLMADAN yeniden yaz.
    iddiasız, nötr fayda/CTA metni yaz.
 3. Anahtar kelime bağlamını koru: {keyword}
 4. MUTLAKA {max_length} karakter veya daha kısa olsun.
-5. Akıcı ve doğal Türkçe olsun.
+5. Akıcı ve doğal olsun (çıktı dilinde).
+6. ''' + CLAIM_REPAIR_RULE + '''
 
 # ÇIKTI
 Sadece yeni metni yaz. Tırnak kullanma. Açıklama ekleme.

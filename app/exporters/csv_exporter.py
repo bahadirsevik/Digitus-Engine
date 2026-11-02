@@ -15,7 +15,7 @@ from datetime import datetime
 from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.seo_checklist_format import (
-    CHECK_ROW_HEADERS, check_rows, geo_evaluation_text, review_status_text,
+    CHECK_ROW_HEADERS, REVIEW_TEXT, SET_WARNING_HEADERS, check_rows, set_warning_cells, geo_evaluation_text, review_status_text,
 )
 from app.schemas.export import ExportSectionEnum, FullReport
 
@@ -29,6 +29,11 @@ class CsvExporter(BaseExporter):
     UTF-8-sig encoding (BOM) ile Excel uyumu sağlanır.
     """
     
+    # Pazar kolonlari (hedef konum, cikti dili, hacim kaynagi): export() doldurur, ozet haric her
+    # CSV'nin sonuna eklenir. Aciklama/notice satiri YOK — ilk satir hep baslik (tuketici uyumu).
+    MARKET_HEADERS = ['Hedef Konum', 'Çıktı Dili', 'Hacim Kaynağı']
+    _market_cells: tuple = ()
+
     def export(
         self,
         scoring_run_id: int,
@@ -37,6 +42,8 @@ class CsvExporter(BaseExporter):
     ) -> str:
         """Export işlemini yapar."""
         data = self.collect_data(scoring_run_id, sections)
+        s = data.summary
+        self._market_cells = (s.target_location, s.output_language, s.volume_source) if s else ()
         
         # Geçici klasör
         temp_dir = tempfile.mkdtemp()
@@ -78,8 +85,11 @@ class CsvExporter(BaseExporter):
                     os.remove(f)
             os.rmdir(temp_dir)
     
-    def _write_csv(self, filepath: str, headers: List[str], rows: List[List]):
+    def _write_csv(self, filepath: str, headers: List[str], rows: List[List], market: bool = True):
         """CSV dosyası yazar (UTF-8 BOM)."""
+        if market and self._market_cells:
+            headers = [*headers, *self.MARKET_HEADERS]
+            rows = [[*r, *self._market_cells] for r in rows]
         with open(filepath, 'w', encoding='utf-8-sig', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(headers)
@@ -103,9 +113,12 @@ class CsvExporter(BaseExporter):
             ['SEO+GEO İçerik', summary.seo_content_count],
             ['Reklam Grubu', summary.ad_group_count],
             ['Sosyal İçerik', summary.social_content_count],
+            ['Hedef Konum', summary.target_location],
+            ['Çıktı Dili', summary.output_language],
+            ['Hacim Kaynağı', summary.volume_source],
         ]
         
-        return self._write_csv(filepath, headers, rows)
+        return self._write_csv(filepath, headers, rows, market=False)
     
     def _write_scoring_csv(self, temp_dir: str, scoring) -> str:
         """Skorlama CSV."""
@@ -213,20 +226,22 @@ class CsvExporter(BaseExporter):
 
         # Başlıklar
         filepath = os.path.join(temp_dir, 'basliklar.csv')
-        headers = ['Grup', 'Başlık', 'Tip', 'DKI']
+        headers = ['Grup', 'Başlık', 'Tip', 'DKI', 'İnceleme']
         rows = []
         for g in ads.ad_groups:
             for h in g.headlines:
-                rows.append([g.group_name, h.headline_text, h.headline_type, 'Evet' if h.is_dki else ''])
+                rows.append([g.group_name, h.headline_text, h.headline_type, 'Evet' if h.is_dki else '',
+                             REVIEW_TEXT if h.review else ''])
         files.append(self._write_csv(filepath, headers, rows))
         
         # Açıklamalar
         filepath = os.path.join(temp_dir, 'aciklamalar.csv')
-        headers = ['Grup', 'Açıklama', 'Tip']
+        headers = ['Grup', 'Açıklama', 'Tip', 'İnceleme']
         rows = []
         for g in ads.ad_groups:
             for d in g.descriptions:
-                rows.append([g.group_name, d.description_text, d.description_type])
+                rows.append([g.group_name, d.description_text, d.description_type,
+                             REVIEW_TEXT if d.review else ''])
         files.append(self._write_csv(filepath, headers, rows))
         
         # Negatifler
@@ -237,6 +252,12 @@ class CsvExporter(BaseExporter):
             for n in g.negative_keywords:
                 rows.append([g.group_name, n.keyword, n.match_type, n.reason])
         files.append(self._write_csv(filepath, headers, rows))
+
+        # Set uyarıları (iddia incelemesi) — yalnız varsa
+        if ads.set_warnings:
+            filepath = os.path.join(temp_dir, 'set_uyarilari.csv')
+            files.append(self._write_csv(
+                filepath, SET_WARNING_HEADERS, [set_warning_cells(w) for w in ads.set_warnings]))
         
         return files
     

@@ -8,6 +8,7 @@ import re
 from typing import Dict, Any, Optional, List
 
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import DEFAULT_CONTEXT
 from app.core.site_analyzer.crawler import (
     SiteCrawler,
     CrawlContentUnusable,
@@ -141,7 +142,8 @@ aranabilir yaklaşık 10 anahtar kelime öner.
 # KURALLAR
 - Sadece firmanın sattığı/sağladığı ürün, hizmet ve kullanım alanlarıyla ilgili keyword öner.
 - Mutlaka olmaması gereken temalara giren keyword önerme.
-- Keyword'ler Türkçe, kısa ve Google Ads'te aranabilir olsun.
+- Keyword'ler {keyword_language}; hedef konum {target_location}. İşletmenin yeri site içeriğindeki gibidir; hedef konuma taşıma, adres/şehir uydurma.
+- Keyword'ler kısa ve Google Ads'te aranabilir olsun.
 - Marka adı + ürün/hizmet varyasyonlarını gerekiyorsa dahil et.
 - 8-12 arası keyword yeterli; hedef 10.
 
@@ -227,7 +229,8 @@ marka için Google Ads'te aranabilir yaklaşık 10 anahtar kelime öner.
   profil kullanıcı tarafından onaylandı, ana referans odur.
 - Mutlaka olmaması gereken temalara ve profildeki exclude_themes'e giren keyword önerme.
 - Mutlaka olması gereken konular varsa onları kapsayan keyword'lere öncelik ver.
-- Keyword'ler Türkçe, kısa ve Google Ads'te aranabilir olsun.
+- Keyword'ler {keyword_language}; hedef konum {target_location}. İşletmenin yeri site içeriğindeki gibidir; hedef konuma taşıma, adres/şehir uydurma.
+- Keyword'ler kısa ve Google Ads'te aranabilir olsun.
 - Marka adı + ürün/hizmet varyasyonlarını gerekiyorsa dahil et.
 - Onaylı rakip marka adlarını veya bu adları içeren keyword'leri önerme.
 - 8-12 arası keyword yeterli; hedef 10.
@@ -805,12 +808,16 @@ class ProfileExtractor:
         must_have_info: Optional[str] = None,
         excluded_info: Optional[str] = None,
         competitor_terms: Optional[List[str]] = None,
+        output_ctx=None,
     ) -> List[str]:
         """Onaylı profile dayalı 10'luk keyword önerisi (profil-önce akış, adım 4)."""
         profile_json = {
             k: v for k, v in (profile_data or {}).items() if k != "anchor_texts"
         }
+        ctx = output_ctx or DEFAULT_CONTEXT
         prompt = KEYWORD_SUGGESTION_FROM_PROFILE_PROMPT.format(
+            keyword_language=ctx.language,
+            target_location=ctx.location,
             site_content=site_content,
             profile_json=json.dumps(profile_json, ensure_ascii=False, indent=2),
             must_have_info=must_have_info or "(kullanıcı tarafından sağlanmadı)",
@@ -886,9 +893,16 @@ class ProfileExtractor:
         site_content: str,
         must_have_info: Optional[str] = None,
         excluded_info: Optional[str] = None,
+        output_ctx=None,
     ) -> List[str]:
-        """Generate the first-stage keyword suggestions for user review."""
+        """Generate the first-stage keyword suggestions for user review.
+
+        output_ctx: çalışma pazarı (keyword dili + hedef konum); None → Türkçe/Seçilmedi.
+        """
+        ctx = output_ctx or DEFAULT_CONTEXT
         prompt = KEYWORD_SUGGESTION_PROMPT.format(
+            keyword_language=ctx.language,
+            target_location=ctx.location,
             site_content=site_content,
             must_have_info=must_have_info or "(kullanıcı tarafından sağlanmadı)",
             excluded_info=excluded_info or "(kullanıcı tarafından sağlanmadı)",
