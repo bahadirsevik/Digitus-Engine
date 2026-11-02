@@ -25,3 +25,15 @@ def test_run_single_message_carries_last_provider_error():
     assert "ConnectionError: getaddrinfo failed" in msg
     assert ai.calls == 2
     assert isinstance(exc.value.__cause__, ConnectionError)
+
+
+def test_provider_error_text_redacts_secrets_urls_and_ids():
+    exc = RuntimeError(
+        "403 PERMISSION_DENIED https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyA1234567890abcdefghijklmnopqrstu "
+        "for projects/my-gcp-project-123; contact ops@example.com; api_key=sk-live-abcdef"
+    )
+    text = AI._provider_error_text(exc)
+    assert text.startswith("RuntimeError: 403 PERMISSION_DENIED")
+    for leaked in ("AIzaSy", "googleapis.com", "my-gcp-project", "ops@example.com", "sk-live"):
+        assert leaked not in text
+    assert "[gizlendi]" in text and len(text) <= len("RuntimeError: ") + 160
