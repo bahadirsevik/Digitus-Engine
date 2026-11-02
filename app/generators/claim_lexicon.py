@@ -83,17 +83,25 @@ CERT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# NOT: kalıplar fold() ile küçültülür: büyük harfli kaçışlar (\W, \S, \D) bozulur → [^\w] kullan.
 # Mutlak sonuç/güvenlik kalıpları; kaynağa BAKILMAZ. tamamen/полностью/completely
 # tek başına yasak değil, yalnız sonuç/risk/ağrı kalıbı içinde.
 # RU/UK ağrısızlık kökleri (безбол*, без боли) BAŞTA sınır olmadan aranır:
 # '#лечениезубовбезболи' gibi bitişik hashtag'ler yakalansın.
 ABSOLUTE_OUTCOME: Dict[str, List[str]] = {
-    "tr": [r"ağrısız", r"acısız", r"hiçbir (?:ağrı|risk)", r"sıfır risk", r"%\s*100(?!\d)",
+    "tr": [r"ağrısız", r"acısız", r"hiçbir (?:ağrı|risk)", r"sıfır risk",
+           # çıplak '%100' (pamuk, yerli üretim) iddia DEĞİL: yalnız sonuç/güvenlik niteleyicisiyle birlikte
+           r"%\s*100(?!\d)(?:[^\w]+\w+){0,3}?[^\w]+(?:memnuniyet|başarı|güvenli|etkili|sonuç|garanti|ağrısız)\w*",
+           r"(?:memnuniyet|başarı|güvenli|etkili|sonuç|garanti)\w*(?:[^\w]+\w+){0,3}?[^\w]+%\s*100(?!\d)",
            r"yüzde yüz", r"kesin (?:sonuç|çözüm)", r"garantili (?:sonuç|tedavi)"],
 # (?<!о) без боли: обезболивающий = agri kesici, iddia degil (ws77 canli SEO)
     "ru": [r"безболезн\w*", r"(?<!о)без\s?боли", r"никакой боли", r"абсолютно безопасн\w*",
-           r"(?<!\d)100\s*%", r"полностью (?:восстанавливает|безопасн\w*)"],
+           r"(?<!\d)100\s*%(?:[^\w]+\w+){0,3}?[^\w]+(?:гарант|безопасн|результат|эффект|успех|удовлетвор)\w*",
+           r"(?:гарант|безопасн|результат|эффект|успех|удовлетвор)\w*(?:[^\w]+\w+){0,3}?[^\w]+(?<!\d)100\s*%",
+           r"полностью (?:восстанавливает|безопасн\w*)"],
     "uk": [r"безболісн\w*", r"без\s?болю", r"абсолютно безпечн\w*",
+           r"(?<!\d)100\s*%(?:[^\w]+\w+){0,3}?[^\w]+(?:гарант|безпечн|результат|ефект|успіх|задоволен)\w*",
+           r"(?:гарант|безпечн|результат|ефект|успіх|задоволен)\w*(?:[^\w]+\w+){0,3}?[^\w]+(?<!\d)100\s*%",
            r"повністю (?:відновлює|безпечн\w*)"],
     "en": [r"painless", r"pain[- ]free", r"100\s*%\s*(?:safe|success)", r"completely safe"],
     "de": [r"schmerzfrei", r"100\s*%\s*(?:sicher|erfolg)", r"völlig sicher"],

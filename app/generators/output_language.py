@@ -36,6 +36,12 @@ MARKET_RULE = (
 )
 
 
+def _country_of(location: str) -> str:
+    """Konum etiketinin ULKE parcasi: 'Istanbul, Türkiye — Şehir' / 'Türkiye (TR) — Ülke' -> 'Türkiye'."""
+    head = location.split(" — ")[0].split(" (")[0]
+    return head.rsplit(", ", 1)[-1].strip()
+
+
 @dataclass(frozen=True)
 class OutputContext:
     language: str = DEFAULT_LANGUAGE
@@ -46,8 +52,10 @@ class OutputContext:
             output_language=self.language, target_location=self.location
         )
         foreign_language = self.language != DEFAULT_LANGUAGE
+        # Türkiye pazarı = ülke/şehir/bölge etiketinin ülke parçası Türkiye (şehir etiketi
+        # 'Istanbul, Türkiye — Şehir' "Türkiye" ile BAŞLAMAZ; blok TR için bayt-aynı kalmalı)
         foreign_market = not (
-            self.location == DEFAULT_LOCATION or self.location.startswith("Türkiye")
+            self.location == DEFAULT_LOCATION or _country_of(self.location) == "Türkiye"
         )
         extra = []
         if foreign_language:

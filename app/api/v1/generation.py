@@ -182,7 +182,14 @@ def _recheck_dispatch_guard(db: Session, run_id: int) -> None:
     ayni guard taze satirlarla kosar; FOR UPDATE kilidi cagiranin commit'ine
     kadar kalir (kontrol + kayit tek transaction)."""
     db.expire_all()
-    _guard_generation_dispatch(db, run_id)
+    try:
+        _guard_generation_dispatch(db, run_id)
+    except BaseException:
+        # 409/hata: brand_profiles FOR UPDATE kilidi BIRAKILMALI. Aksi halde istek sonunda
+        # get_ai (collector.finalize -> ayri oturumdan ai_usage_events, FK -> brand_profiles)
+        # get_db'den ONCE kapanir, tuttugumuz kilide takilir ve istek sonsuza dek asili kalir.
+        db.rollback()
+        raise
 
 
 def _scope_usage(ai, *, scoring_run_id=None, brand_profile_id=None) -> None:
@@ -239,10 +246,13 @@ def generate_seo_geo_content(
         )
         return result
     except HTTPException:
+        db.rollback()  # before_save kilidi (FOR UPDATE) hata yolunda tutulmasin
         raise
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "İçerik üretimi başarısız oldu")
@@ -984,8 +994,10 @@ def generate_social_categories(
         generator = SocialGenerator(db, ai)
         return generator.generate_categories(effective_request)
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal kategoriler üretilemedi")
@@ -1023,8 +1035,10 @@ def generate_social_ideas(
             # BRIEF_SCOPED: brief'e ait kategori legacy uctan islenemez (K11/§7-8)
             raise HTTPException(status_code=409, detail=str(policy_error))
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal fikirler üretilemedi")
@@ -1065,8 +1079,10 @@ def generate_social_contents(
             # BRIEF_SCOPED: brief'e ait fikir legacy uctan islenemez (§7-8)
             raise HTTPException(status_code=409, detail=str(policy_error))
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal içerikler üretilemedi")
@@ -1187,8 +1203,10 @@ def generate_social_bulk(
         generator = SocialGenerator(db, ai)
         return generator.generate_full_pipeline(effective_request)
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal medya içeriği üretilemedi")
@@ -3321,8 +3339,10 @@ def regenerate_social_idea(
             raise HTTPException(status_code=404, detail="Idea not found")
         return result
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Fikir yeniden üretilemedi")
@@ -3372,8 +3392,10 @@ def regenerate_social_content(
             raise HTTPException(status_code=404, detail="Content not found")
         return result
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "İçerik yeniden üretilemedi")

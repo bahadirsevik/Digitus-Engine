@@ -387,3 +387,27 @@ def test_foreign_block_adds_title_and_market_rules():
     # Türkçe dil + yabancı pazar: yalnız pazar kuralı
     tr_abroad = OutputContext(language="Türkçe", location="Berlin, Almanya — Şehir").block()
     assert MARKET_RULE in tr_abroad and TITLE_RULE not in tr_abroad
+
+
+def test_turkish_city_with_turkish_language_block_is_byte_identical_to_default_country_block():
+    """QA F2: 'Istanbul, Türkiye — Şehir' + Türkçe → ek kural YOK (TR blok bayt-aynı)."""
+    from app.generators.output_language import MARKET_RULE, OUTPUT_BLOCK_TEMPLATE
+
+    for label in ("Istanbul, Türkiye — Şehir", "Ankara, Türkiye — İl/Bölge", "Türkiye (TR) — Ülke"):
+        block = OutputContext(language="Türkçe", location=label).block()
+        assert block == OUTPUT_BLOCK_TEMPLATE.format(output_language="Türkçe", target_location=label)
+        assert MARKET_RULE not in block
+
+
+def test_foreign_city_with_turkish_language_gets_market_rule_only():
+    from app.generators.output_language import MARKET_RULE, TITLE_RULE
+
+    block = OutputContext(language="Türkçe", location="Berlin, Almanya — Şehir").block()
+    assert MARKET_RULE in block and TITLE_RULE not in block
+
+
+def test_russian_with_turkish_city_still_gets_both_rules():
+    from app.generators.output_language import MARKET_RULE, TITLE_RULE
+
+    block = OutputContext(language="Rusça", location="Istanbul, Türkiye — Şehir").block()
+    assert TITLE_RULE in block and MARKET_RULE in block

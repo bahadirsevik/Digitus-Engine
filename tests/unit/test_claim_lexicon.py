@@ -186,3 +186,31 @@ class TestKeywordExemptionNarrowed:
     def test_superlative_keyword_is_now_violation(self):
         # Belgelenmiş davranış değişikliği: keyword maskesi artık süperlatifi aklamaz.
         assert find_ungrounded_claims("En iyi diş hekimi", "", ["en iyi diş hekimi"])
+
+
+class TestBarePercentIsNotAbsoluteOutcome:
+    """QA F3: çıplak '%100' (pamuk, yerli üretim) sınıf B değil; yalnız sonuç/güvenlik niteleyicisiyle risk."""
+
+    @pytest.mark.parametrize("text", [
+        "%100 pamuk", "%100 yerli üretim", "100% organic cotton", "100% хлопок", "100% бавовна",
+    ])
+    def test_bare_percent_is_not_risk(self, text):
+        from app.generators.ads.validators import classify_claims
+
+        findings = classify_claims(text, "")
+        assert not any(f.kind == "risk" for f in findings)
+
+    def test_bare_percent_falls_to_numeric_unverified_and_grounded_by_source(self):
+        from app.generators.ads.validators import classify_claims
+
+        assert [(f.kind, f.category) for f in classify_claims("%100 pamuk", "")] == [("unverified", "numeric")]
+        assert classify_claims("%100 pamuk", "Ürünler: %100 pamuk tişört") == []  # kaynak sayıyı taşıyorsa temiz
+
+    @pytest.mark.parametrize("text", [
+        "%100 memnuniyet garantisi", "%100 ağrısız", "Yüzde yüz sonuç", "memnuniyet %100", "%100 güvenli tedavi",
+        "100% безопасно", "гарантия 100%", "100% безпечно", "100% safe",
+    ])
+    def test_percent_with_outcome_qualifier_is_risk(self, text):
+        from app.generators.ads.validators import classify_claims
+
+        assert any(f.kind == "risk" and f.category == "absolute" for f in classify_claims(text, ""))

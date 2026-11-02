@@ -161,7 +161,7 @@ def _reevaluate_seo(db: Session, run: ScoringRun) -> Dict[str, int]:
             "details": failure_text(findings),
         }
         if findings or prev:
-            # `original` yalnız onarımın uygulandığı kayıtta kalır (history'de); yenisine kopyalanmaz
+            # applied/changed/original üretim anı verisidir: refresh_review önceki current'tan TAŞIR (yeniden hesaplanmaz)
             item["claim_review"] = refresh_review(prev, make_current(findings, _applied(prev)))
         checks = [c for c in checks if c.get("criterion") != CLAIM_CRITERION] + [item]
         seo_row.checks_json = checks  # yeni liste: JSON değişimi izlenir

@@ -151,3 +151,83 @@ def test_endpoint_saves_when_still_fresh(client, db_session, seo_setup, monkeypa
     assert len(calls) == 2
     assert db_session.query(SEOGeoContent).count() == 1
     assert res.json()['claim_check']['status'] == 'pass'
+
+
+def test_recheck_409_releases_workspace_lock_so_collector_flush_does_not_hang(
+    client, db_session, seo_setup, monkeypatch
+):
+    """Kayit oncesi kapi 409 verince brand_profiles FOR UPDATE kilidi BIRAKILIR.
+
+    Aksi halde istek sonunda get_ai teardown'u collector.finalize() ile ayri oturumdan
+    ai_usage_events yazar (FK -> brand_profiles = kilitli satira key-share) ve istek sonsuza dek
+    asili kalirdi. Gercek guard + gercek UsageCollector: bekleyen olay var, 409 hizli doner,
+    satir kilidi sonrasinda ikinci oturumdan NOWAIT ile alinabilir."""
+    import threading
+
+    from sqlalchemy import text
+
+    from app.core.telemetry import UsageCollector
+    from app.database.connection import SessionLocal
+    from app.dependencies import get_ai as get_ai_dependency
+    from app.main import app
+
+    ws, run, kw = seo_setup
+    holder = {}
+
+    def fake_get_ai():
+        ai = RepairAI(dict(FIXED_CONTENT))
+        ai.collector = UsageCollector()
+        holder['collector'] = ai.collector
+        try:
+            yield ai
+        finally:
+            ai.collector.finalize()  # gercek get_ai ile ayni: ayri oturumdan flush
+
+    def raw_content_recording_usage(self, **kwargs):
+        holder['collector'].record(stage='seo_geo', model='test-model')  # kimlik _scope_usage ile atandi
+        return dict(FIXED_CONTENT)
+
+    monkeypatch.setattr(SEOGEOGenerator, '_generate_raw_content', raw_content_recording_usage)
+    calls = []
+    real_fresh = generation_api.require_fresh_channel_pool
+
+    def fresh_then_409(db, run_obj):
+        calls.append(1)
+        if len(calls) == 2:  # ikinci cagri = kayit oncesi; FOR UPDATE bu noktada alinmis durumda
+            raise HTTPException(status_code=409, detail={'code': 'POLICY_STALE', 'message': 'test'})
+        return real_fresh(db, run_obj)
+
+    monkeypatch.setattr(generation_api, 'require_fresh_channel_pool', fresh_then_409)
+    app.dependency_overrides[get_ai_dependency] = fake_get_ai
+    outcome = {}
+
+    def call():
+        outcome['res'] = _post(client, ws, run, kw)
+
+    worker = threading.Thread(target=call, daemon=True)
+    try:
+        worker.start()
+        worker.join(timeout=30)
+        assert not worker.is_alive(), "istek asili kaldi: FOR UPDATE kilidi hata yolunda birakilmadi"
+    finally:
+        app.dependency_overrides.pop(get_ai_dependency, None)
+
+    assert outcome['res'].status_code == 409, outcome['res'].text
+    assert outcome['res'].json()['detail']['code'] == 'POLICY_STALE'
+    assert len(calls) == 2
+    # Kilit birakildi: ikinci oturum satiri beklemeden kilitleyebilir
+    other = SessionLocal()
+    try:
+        other.execute(text("SET lock_timeout = '3s'"))
+        got = other.execute(
+            text("SELECT id FROM brand_profiles WHERE id = :i FOR UPDATE NOWAIT"), {'i': ws.id}
+        ).scalar()
+        assert got == ws.id
+        # collector olayi da yazildi (flush bekleyen kilide takilmadi)
+        count = other.execute(
+            text("SELECT count(*) FROM ai_usage_events WHERE brand_profile_id = :i"), {'i': ws.id}
+        ).scalar()
+        assert count >= 1
+    finally:
+        other.rollback()
+        other.close()
