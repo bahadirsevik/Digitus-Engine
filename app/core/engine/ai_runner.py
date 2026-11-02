@@ -78,6 +78,13 @@ def classify_provider_error(exc: BaseException) -> str:
     return "transient"
 
 
+def _provider_error_text(exc: BaseException) -> str:
+    """'TypeAdi: ilk 160 karakter' — hata mesajina ve WARNING log'a eklenir.
+    Gercek neden (429/503/baglanti/400) onceden hicbir yerde gorunmuyordu."""
+    text = " ".join(str(exc).split())[:160]
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
 def _wait_before_retry(exc: BaseException) -> None:
     """Fatal hatada YUKSELTIR; rate-limit/timeout'ta bekler; digerinde beklemez."""
     import random
@@ -227,8 +234,11 @@ def run_single(ai: Any, *, stage: str, model: str, thinking_level: str,
     message = (f"{stage}: cevap {max_attempts} denemede de kirpik/bozuk "
                f"('{result_key}' listesi yok) — DEVAM EDILMEDI")
     if last_error is not None:
+        detail = _provider_error_text(last_error)
+        logging.getLogger(__name__).warning("%s: saglayici hatasi (%d deneme): %s",
+                                            stage, max_attempts, detail)
         raise error_cls(f"{stage}: saglayici {max_attempts} denemede de hata "
-                        "verdi — DEVAM EDILMEDI") from last_error
+                        f"verdi — DEVAM EDILMEDI (son hata: {detail})") from last_error
     raise error_cls(message)
 
 
@@ -351,9 +361,12 @@ def run_batch(ai: Any, *, stage: str, model: str, thinking_level: str,
                     f"{stage}: cevap {max_attempts} denemede de yapisal "
                     f"dogrulamadan gecmedi ({last_validation}) — DEVAM EDILMEDI")
             if last_error is not None:
+                detail = _provider_error_text(last_error)
+                logging.getLogger(__name__).warning(
+                    "%s: saglayici hatasi (%d deneme): %s", stage, max_attempts, detail)
                 raise error_cls(
                     f"{stage}: saglayici {max_attempts} denemede de hata "
-                    "verdi — DEVAM EDILMEDI") from last_error
+                    f"verdi — DEVAM EDILMEDI (son hata: {detail})") from last_error
             raise error_cls(
                 f"{stage}: cevap {max_attempts} denemede de kirpik/bozuk "
                 f"('{result_key}' listesi yok) — DEVAM EDILMEDI")

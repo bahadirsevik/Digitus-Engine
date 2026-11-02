@@ -375,7 +375,10 @@ def search_locations_page(
         if label in seen:
             continue
         seen.add(label)
-        rank = 0 if r.norm_name == needle else 1 if r.norm_name.startswith(needle) else 2
+        # Kendi ADI eslesen satir, yalniz ust konumu (kanonik ad) eslesenin ONUNE gecer:
+        # 'petersburg' -> Saint Petersburg sehri, ilceleri (Kolpino, ...) degil (kullanici bulgusu)
+        rank = (0 if r.norm_name == needle else 1 if r.norm_name.startswith(needle)
+                else 2 if all(t in r.norm_name for t in tokens) else 3)
         key = (1, rank, _KIND_RANK[r.kind], _COUNTRY_ORDER.get(r.country_code, 999), r.name)
         hits.append((key, r))
     hits.sort(key=lambda h: h[0])

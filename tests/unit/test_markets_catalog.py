@@ -172,3 +172,17 @@ def test_missing_catalog_file_raises_clear_error(monkeypatch, tmp_path):
     with pytest.raises(markets.MarketCatalogError):
         markets.is_valid_location("1003854")
     assert markets.is_valid_location("2276")  # ulke katalog dosyasi gerektirmez
+
+
+def test_search_ranks_own_name_match_above_parent_only_matches():
+    """Kullanici bulgusu: 'petersburg' yazinca Saint Petersburg sehri listede ilk sirada
+    gelmeli; yalniz ust konumu eslesen ilceler (Kolpino, ...) onun arkasinda kalmali."""
+    items = markets.search_locations("petersburg", country_code="RU", limit=20)
+    names = [i["name"] for i in items]
+    assert names, "Rusya'da petersburg eslesmesi yok"
+    assert names[0] == "Saint Petersburg"
+    kinds_first = [i["kind"] for i in items[:2]]
+    assert "city" in kinds_first  # sehir ve il/bolge kaydi ilce listesinden once
+    # ulke filtresi olmadan da adi 'petersburg' iceren bir kayit ilcelerden once gelir
+    first_any = markets.search_locations("petersburg", limit=20)[0]
+    assert "petersburg" in first_any["name"].lower()
