@@ -26,8 +26,21 @@ _CURATED_ASSIGNMENT_ERRORS = (
 def assignment_error_text(exc: BaseException) -> str:
     """Kullanıcıya gösterilecek hata metni: Türkçe mesajlı alan hataları ham
     kalır ("KOD: " öneki atılır); beklenmeyen istisnalar jenerik metne iner."""
+    from app.core.engine.ai_runner import AiStageError
+    from app.core.engine.family.rules import FamilyStageError
+    from app.core.engine.seo.runner import SeoStageError
+    from app.core.engine.social.runner import SocialStageError
+    from app.core.telemetry.ai_cost_budget import BudgetExceeded
+
     if isinstance(exc, _CURATED_ASSIGNMENT_ERRORS):
         return re.sub(r"^[A-Z][A-Z_]+:\s*", "", str(exc))
+    if isinstance(exc, BudgetExceeded):
+        return ("Bu analiz için onaylanan yapay zekâ bütçe tavanına ulaşıldı; "
+                "kanal ataması durduruldu.")
+    if isinstance(exc, (AiStageError, FamilyStageError, SeoStageError, SocialStageError)):
+        return ("Kanal atamasının analiz adımlarından biri tamamlanamadı (genellikle "
+                "yapay zekâ servisi yanıt vermediğinde ya da geçersiz yanıt verdiğinde "
+                "olur). Lütfen biraz sonra tekrar deneyin.")
     return "Kanal atama beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
 
 

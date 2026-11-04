@@ -48,6 +48,7 @@ export default function Tasks() {
     try {
       const res = await tasksApi.list({ brand_profile_id: activeWorkspace.id })
       setTasks((res.data as { tasks?: Task[] }).tasks || [])
+      setError(null)
     } catch (err) {
       setError(`Görev listesi alınamadı: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
@@ -86,6 +87,11 @@ export default function Tasks() {
       ads: 'Google Ads',
       social: 'Sosyal Medya',
       export: 'Dışa Aktarım',
+      social_content: 'Sosyal Medya',
+      channel_assignment: 'Kanal Ataması',
+      corpus_screening: 'Ön Tarama',
+      competitor_discovery: 'Rakip Keşfi',
+      policy_preview: 'Rakip Önizlemesi',
     }
     return labels[type] || type
   }
@@ -130,9 +136,11 @@ export default function Tasks() {
 
       {/* Task List */}
       <div className="task-list">
-        {loading && tasks.length === 0 ? (
+        {!activeWorkspace?.id ? (
+          <div className="empty-state">Görevleri görmek için önce bir marka çalışması seçin.</div>
+        ) : loading && tasks.length === 0 ? (
           <div className="loading-state">Yükleniyor...</div>
-        ) : filteredTasks.length === 0 ? (
+        ) : error && tasks.length === 0 ? null : filteredTasks.length === 0 ? (
           <div className="empty-state">Görev bulunamadı</div>
         ) : (
           filteredTasks.map((task) => (
@@ -156,7 +164,9 @@ export default function Tasks() {
               )}
 
               {task.error_message && (
-                <div className="task-error">
+                <div
+                  className={task.status === 'completed' ? 'task-error task-note' : 'task-error'}
+                >
                   <strong>{task.status === 'completed' ? 'Not:' : 'Hata:'}</strong>{' '}
                   {task.error_message}
                 </div>

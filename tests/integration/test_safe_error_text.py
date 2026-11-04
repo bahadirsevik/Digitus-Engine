@@ -80,6 +80,19 @@ def test_assignment_error_text_keeps_curated_messages_only():
     assert SECRET not in generic and "beklenmeyen" in generic
 
 
+def test_assignment_error_text_explains_ai_stage_and_budget_failures():
+    from app.core.engine.family.rules import FamilyStageError
+    from app.core.engine.seo.runner import SeoStageError
+    from app.core.telemetry.ai_cost_budget import BudgetExceeded
+    from app.tasks.intent_tasks import assignment_error_text
+
+    raw = "family_a1: saglayici 2 denemede de hata verdi — DEVAM EDILMEDI"
+    for exc in (FamilyStageError(raw), SeoStageError(raw)):
+        msg = assignment_error_text(exc)
+        assert raw not in msg and "yapay zekâ servisi" in msg
+    assert "bütçe tavanına" in assignment_error_text(BudgetExceeded(SECRET))
+
+
 def test_google_ads_health_error_is_safe(monkeypatch):
     from app.config import settings
     from app.integrations.google_ads.service import GoogleAdsService
@@ -111,3 +124,20 @@ def test_url_reachability_error_hides_raw_text(monkeypatch):
     assert info.value.status_code == 422
     assert SECRET not in info.value.detail
     assert "URL'ye ulaşılamadı" in info.value.detail
+
+
+def test_url_seed_inspection_warning_hides_raw_text(monkeypatch):
+    import httpx
+
+    from app.api.v1 import google_ads
+
+    monkeypatch.setattr(google_ads, "_assert_url_host_is_public", lambda url: None)
+
+    def _fail(self, url, **kw):
+        raise httpx.ConnectError(SECRET)
+
+    monkeypatch.setattr(httpx.Client, "get", _fail)
+    status, warnings = google_ads._inspect_url_for_seed("https://example.com")
+    assert status.reachable is False
+    assert warnings and all(SECRET not in w for w in warnings)
+    assert SECRET not in (status.warning or "")

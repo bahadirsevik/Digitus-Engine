@@ -366,7 +366,10 @@ def _inspect_url_for_seed(url: str) -> tuple[UrlSeedSourceStatus, list[str]]:
             try:
                 resp = client.get(current)
             except Exception as exc:
-                warning = f"URL sunucu kontrolünde erişilemedi: {exc}"
+                logger.warning(f"URL seed erişim kontrolü başarısız ({current}): {exc}")
+                warning = (
+                    "URL'ye sunucumuzdan ulaşılamadı; adresin doğru olduğunu kontrol edin."
+                )
                 warnings.append(warning)
                 return (
                     UrlSeedSourceStatus(
