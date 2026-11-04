@@ -120,8 +120,7 @@ def test_fresh_and_exempt_tasks_untouched(client, db_session, make_workspace, ma
     run = make_scoring_run(brand_profile_id=ws.id)
     _mk(db_session, "t-fresh", "running", run_id=run.id, age_s=600)
     _mk(db_session, "t-pend-fresh", "pending", run_id=run.id, age_s=600)
-    _mk(db_session, "t-ads", "running", run_id=run.id, task_type="ads",
-        age_s=TASK_RUNNING_STALE_SECONDS + 600)
+    _mk(db_session, "t-ads", "running", run_id=run.id, task_type="ads", age_s=600)
     _mk(db_session, "t-screen", "pending", run_id=run.id, task_type="corpus_screening",
         age_s=TASK_PENDING_STALE_SECONDS + 600)
     _mk(db_session, "t-done", "completed", run_id=run.id,
@@ -199,3 +198,100 @@ def test_mark_task_running_if_active_sets_started_at(db_session):
     assert mark_task_running_if_active("t-start") is True
     row = _row(db_session, "t-start")
     assert row.status == "running" and row.started_at is not None
+
+
+# --- ADS: genel mekanizmadan muaf; kendi uzlastirmasi okuma anlarinda calisir ---
+
+def _ads_set(db, run_id, task_id, status, *, age_s):
+    from app.database.models import AdGenerationSet
+
+    gen_set = AdGenerationSet(
+        scoring_run_id=run_id, version_number=1, status=status, task_id=task_id,
+        groups_count=2, failed_groups=0, request_snapshot={},
+        created_at=datetime.now(timezone.utc) - timedelta(seconds=age_s))
+    db.add(gen_set)
+    db.commit()
+    return gen_set
+
+
+def test_stale_ads_task_with_generating_set_failed_on_get(
+    client, db_session, make_workspace, make_scoring_run
+):
+    from app.database.models import AdGenerationSet
+    from app.generators.ads.generation_sets import SET_FAILED, SET_GENERATING
+
+    ws = make_workspace("Ads Stale WS")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    _mk(db_session, "ads-dead", "running", run_id=run.id, task_type="ads", age_s=10800)
+    gen_set = _ads_set(db_session, run.id, "ads-dead", SET_GENERATING, age_s=10800)
+
+    res = client.get(f"/api/v1/tasks/ads-dead?brand_profile_id={ws.id}")
+
+    assert res.status_code == 200 and res.json()["status"] == "failed"
+    db_session.expire_all()
+    assert db_session.get(AdGenerationSet, gen_set.id).status == SET_FAILED
+
+
+def test_stale_ads_task_with_active_set_completed_on_run_list(
+    client, db_session, make_workspace, make_scoring_run
+):
+    from app.generators.ads.generation_sets import SET_ACTIVE
+
+    ws = make_workspace("Ads Repair WS")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    _mk(db_session, "ads-done", "running", run_id=run.id, task_type="ads", age_s=10800)
+    _ads_set(db_session, run.id, "ads-done", SET_ACTIVE, age_s=10800)
+
+    res = client.get(f"/api/v1/tasks/run/{run.id}?brand_profile_id={ws.id}")
+
+    task = res.json()["tasks"][0]
+    assert task["status"] == "completed"
+    assert task["result_data"]["reconciled"] is True
+
+
+def test_fresh_ads_task_untouched_and_workspace_list_reconciles(
+    client, db_session, make_workspace, make_scoring_run
+):
+    from app.generators.ads.generation_sets import SET_GENERATING
+
+    ws = make_workspace("Ads Fresh WS")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    _mk(db_session, "ads-fresh", "running", run_id=run.id, task_type="ads", age_s=60)
+    _ads_set(db_session, run.id, "ads-fresh", SET_GENERATING, age_s=60)
+    assert client.get(f"/api/v1/tasks/ads-fresh?brand_profile_id={ws.id}").json()["status"] == "running"
+
+    run2 = make_scoring_run(brand_profile_id=ws.id, name="Run 2")
+    _mk(db_session, "ads-old", "running", run_id=run2.id, task_type="ads", age_s=10800)
+    res = client.get(f"/api/v1/tasks/?brand_profile_id={ws.id}")
+    statuses = {t["task_id"]: t["status"] for t in res.json()["tasks"]}
+    assert statuses == {"ads-fresh": "running", "ads-old": "failed"}
+
+
+def test_ads_reconcile_skips_locked_run_instead_of_blocking(
+    client, db_session, make_workspace, make_scoring_run
+):
+    from app.database.models import ScoringRun
+
+    ws = make_workspace("Ads Lock WS")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    _mk(db_session, "ads-locked", "running", run_id=run.id, task_type="ads", age_s=10800)
+    # dispatch'in tuttugu kilidin aynisi: okuma yolu BEKLEMEZ, sonra tekrar dener
+    db_session.query(ScoringRun).filter(ScoringRun.id == run.id).with_for_update().first()
+
+    assert client.get(f"/api/v1/tasks/ads-locked?brand_profile_id={ws.id}").json()["status"] == "running"
+
+    db_session.rollback()  # kilit birakildi
+    assert client.get(f"/api/v1/tasks/ads-locked?brand_profile_id={ws.id}").json()["status"] == "failed"
+
+
+def test_active_generation_lookup_reconciles_ads(
+    db_session, make_workspace, make_scoring_run
+):
+    from app.core.channel.assignment_dispatcher import get_active_generation_task
+
+    ws = make_workspace("Ads Lookup WS")
+    run = make_scoring_run(brand_profile_id=ws.id)
+    _mk(db_session, "ads-lookup", "running", run_id=run.id, task_type="ads", age_s=10800)
+
+    assert get_active_generation_task(db_session, run.id) is None
+    assert _row(db_session, "ads-lookup").status == "failed"

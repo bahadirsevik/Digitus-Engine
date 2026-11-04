@@ -105,6 +105,28 @@ def fail_stale_tasks(
     scoring_run_id: Optional[int] = None,
     brand_profile_id: Optional[int] = None,
 ) -> int:
+    """Okuma-ani uzlaştırma girişi: genel bayat task'lar + ADS set uzlaştırması.
+
+    ADS genel mekanizmadan muaftır (set/task birlikte tutarlı olmalı); onların
+    uzlaştırması `reconcile_stale_ads_on_read` ile AYNI okuma noktalarında
+    çalışır. Değişen toplam kayıt/run sayısını döndürür.
+    """
+    from app.generators.ads.generation_sets import reconcile_stale_ads_on_read
+
+    changed = _fail_stale_generic(
+        task_id=task_id, scoring_run_id=scoring_run_id,
+        brand_profile_id=brand_profile_id)
+    return changed + reconcile_stale_ads_on_read(
+        task_id=task_id, scoring_run_id=scoring_run_id,
+        brand_profile_id=brand_profile_id)
+
+
+def _fail_stale_generic(
+    *,
+    task_id: Optional[str] = None,
+    scoring_run_id: Optional[int] = None,
+    brand_profile_id: Optional[int] = None,
+) -> int:
     """Okuma-ani uzlaştırma (ADR-002 `fail_if_stuck` ile aynı fikir).
 
     Süresi dolmuş `running`/`pending` kayıtları koşullu UPDATE ile `failed`

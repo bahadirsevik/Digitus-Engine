@@ -154,6 +154,82 @@ def reconcile_stale_ads(db: Session, scoring_run_id: int) -> None:
             )
 
 
+def reconcile_stale_ads_on_read(
+    *,
+    task_id: Optional[str] = None,
+    scoring_run_id: Optional[int] = None,
+    brand_profile_id: Optional[int] = None,
+) -> int:
+    """OKUMA anında ADS uzlaştırması (dispatch'e bağımlı kalmasın).
+
+    Frontend running ADS task'ı görünce "üret"i kapatır → dispatch (ve onun
+    içindeki reconcile) hiç çalışmaz. Burada: önce ucuz, kilitsiz sorgu (eşiği
+    aşmış ADS task'ı / orphan generating set); yalnız varsa run satırı kilitlenip
+    `reconcile_stale_ads` (semantik DEĞİŞMEDİ) çağrılır. Kilit `dispatch_ads_generation`
+    ile AYNI (ScoringRun) ve tek kilittir; `skip_locked` ile kilitli run (dispatch,
+    başka okuyucu ya da çağıranın kendi oturumu) BEKLENMEZ — sonraki okumada
+    yeniden denenir, deadlock/askıda kalma olmaz. Uzlaştırılan run sayısını döndürür.
+    """
+    from sqlalchemy import func, select
+
+    from app.database.connection import SessionLocal
+
+    cutoff = _utcnow() - timedelta(seconds=ADS_TASK_STALE_SECONDS)
+    run_scope = None
+    if brand_profile_id is not None:
+        run_scope = select(ScoringRun.id).where(ScoringRun.brand_profile_id == brand_profile_id)
+
+    def scoped(query, run_col, task_col):
+        if task_id is not None:
+            query = query.filter(task_col == task_id)
+        if scoring_run_id is not None:
+            query = query.filter(run_col == scoring_run_id)
+        if run_scope is not None:
+            query = query.filter(run_col.in_(run_scope))
+        return query
+
+    session = SessionLocal()
+    reconciled = 0
+    try:
+        stale_tasks = scoped(
+            session.query(TaskResult.scoring_run_id).filter(
+                TaskResult.task_type == "ads",
+                TaskResult.status.in_(("pending", "running")),
+                func.coalesce(TaskResult.started_at, TaskResult.created_at) < cutoff,
+                TaskResult.scoring_run_id.isnot(None),
+            ),
+            TaskResult.scoring_run_id, TaskResult.task_id)
+        stale_sets = scoped(
+            session.query(AdGenerationSet.scoring_run_id).filter(
+                AdGenerationSet.status == SET_GENERATING,
+                AdGenerationSet.created_at < cutoff,
+            ),
+            AdGenerationSet.scoring_run_id, AdGenerationSet.task_id)
+        run_ids = sorted({r[0] for r in stale_tasks.all()} | {r[0] for r in stale_sets.all()})
+        session.rollback()  # okuma transaction'ı kilit almadan kapanır
+
+        for run_id in run_ids:
+            locked = (
+                session.query(ScoringRun.id)
+                .filter(ScoringRun.id == run_id)
+                .with_for_update(skip_locked=True)
+                .first()
+            )
+            if locked is None:  # kilitli (dispatch/başka okuyucu) ya da silinmiş
+                session.rollback()
+                continue
+            reconcile_stale_ads(session, run_id)
+            session.commit()
+            reconciled += 1
+        return reconciled
+    except Exception as exc:
+        session.rollback()
+        logger.error(f"ADS okuma-ani uzlaştırması başarısız: {exc}")
+        return reconciled
+    finally:
+        session.close()
+
+
 def has_successful_set(db: Session, scoring_run_id: int) -> bool:
     return (
         db.query(AdGenerationSet.id)
