@@ -230,6 +230,11 @@ class Settings(BaseSettings):
                     "CORS_ORIGINS='*' production'da yasaktir. Virgul ile ayrilmis "
                     "whitelist kullanin (ornek: https://app.example.com)."
                 )
+            if self.DEBUG:
+                raise ValueError(
+                    "DEBUG=true production'da yasaktir (ham hata metni ve "
+                    "init_db() acilir). Ortamda DEBUG=false ayarlayin."
+                )
         return self
 
     @model_validator(mode='after')

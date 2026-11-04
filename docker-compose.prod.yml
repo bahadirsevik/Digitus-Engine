@@ -18,6 +18,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=${REDIS_URL}
+      # Config guard production'da DEBUG=true'yu reddeder; .env'deki degeri ezer.
+      - DEBUG=false
     env_file:
       - .env
     depends_on:
@@ -70,6 +72,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=${REDIS_URL}
+      # Config guard production'da DEBUG=true'yu reddeder; .env'deki degeri ezer.
+      - DEBUG=false
     env_file:
       - .env
     depends_on:
@@ -95,6 +99,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=${REDIS_URL}
+      # Config guard production'da DEBUG=true'yu reddeder; .env'deki degeri ezer.
+      - DEBUG=false
     env_file:
       - .env
     depends_on:
@@ -114,6 +120,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=${REDIS_URL}
+      # Config guard production'da DEBUG=true'yu reddeder; .env'deki degeri ezer.
+      - DEBUG=false
     env_file:
       - .env
     depends_on:
