@@ -11,7 +11,14 @@ import SeoGeoPanel from './generation/SeoGeoPanel'
 import AdsPanel from './generation/AdsPanel'
 import SocialPanel from './generation/SocialPanel'
 import { useBriefKeywordSelection } from './generation/socialBrief/useBriefKeywordSelection'
-import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
+import {
+  getWorkspaceTaskKey,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+  useScopedTaskId,
+  useTaskPolling,
+} from '../hooks/useTaskPolling'
+import ErrorBanner from './ErrorBanner'
 import '../pages/Channels.css'
 
 type ChannelName = 'ADS' | 'SEO' | 'SOCIAL'
@@ -537,6 +544,14 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
 
       {activeWorkspace && runs.length === 0 && (
         <p className="empty-text">Kanal ataması tamamlanmış analiz bulunamadı.</p>
+      )}
+
+      {assignTaskId && assignPolling.pollFailed && (
+        <ErrorBanner
+          error={POLL_FAILED_MESSAGE}
+          onRetry={assignPolling.recheck}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
       )}
 
       {assignTaskId && assignPolling.status && (

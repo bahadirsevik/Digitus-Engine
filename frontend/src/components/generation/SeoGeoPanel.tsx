@@ -24,6 +24,8 @@ import {
   useScopedTaskId,
   getWorkspaceTaskKey,
   setStoredTaskId,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
 } from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
 import ClaimReevaluateButton from './ClaimReevaluateButton'
@@ -432,7 +434,8 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
     }
   }
 
-  const generating = loading || polling.isActive
+  // Durum bilinmiyorken yeni üretim başlatılmaz; önce durum yeniden kontrol edilir
+  const generating = loading || polling.isActive || polling.pollFailed
   const host = hostFrom(activeWorkspace?.company_url)
   const brandName = (activeWorkspace?.profile_data?.company_name as string) || activeWorkspace?.name
 
@@ -527,6 +530,15 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       {polling.isActive && (
         <div className="adsx-span">
           <GenBanner progress={polling.progress} />
+        </div>
+      )}
+      {polling.pollFailed && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={POLL_FAILED_MESSAGE}
+            onRetry={polling.recheck}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
         </div>
       )}
       {polling.isFailed && (

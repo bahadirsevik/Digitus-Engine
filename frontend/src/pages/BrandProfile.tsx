@@ -57,6 +57,8 @@ import {
   WorkspacePhase,
 } from './brandProfileState'
 import PolicyPanel from '../components/PolicyPanel'
+import ErrorBanner from '../components/ErrorBanner'
+import { MAX_POLL_FAILURES, POLL_RECHECK_LABEL } from '../hooks/useTaskPolling'
 import ProfileReviewCards from './brandProfile/ProfileReviewCards'
 import PolicyReviewSection from './brandProfile/PolicyReviewSection'
 import KeywordAnchorReview from './brandProfile/KeywordAnchorReview'
@@ -454,6 +456,9 @@ function WorkspaceModal({
   const [focusBusy, setFocusBusy] = useState(false)
   const [stripError, setStripError] = useState('')
   const [retryingAnalysis, setRetryingAnalysis] = useState(false)
+  // Üst üste MAX_POLL_FAILURES yoklama hatası: analiz durumu bilinmiyor (başarısız DEĞİL)
+  const [wsPollFailed, setWsPollFailed] = useState(false)
+  const [wsPollAttempt, setWsPollAttempt] = useState(0)
 
   // Legacy formlar (keyword-önce çalışmalar + confirmed düzenleme)
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
@@ -532,19 +537,36 @@ function WorkspaceModal({
   // içinde ilerler; kullanıcı kapatırsa sayfa polling'i zaten devam eder)
   useEffect(() => {
     if (!ws || !LOADING_PHASES.includes(phase as WorkspacePhase)) return
-    const timer = window.setInterval(async () => {
+    let cancelled = false
+    let timer: number | undefined
+    let failures = 0
+    setWsPollFailed(false)
+    // Sıralı yoklama: sonraki istek öncekinin bitmesinden sonra planlanır
+    const tick = async () => {
       try {
         const res = await workspaceApi.get(ws.id)
+        if (cancelled) return
+        failures = 0
         const fresh = workspaceResponseToListRow(res.data as WorkspaceResponse, ws)
         setWs(fresh)
         onWorkspaceUpdated(res.data as WorkspaceResponse)
       } catch {
-        /* poll hatası sessiz — sonraki tikte tekrar dener */
+        if (cancelled) return
+        failures += 1
+        if (failures >= MAX_POLL_FAILURES) {
+          setWsPollFailed(true)
+          return
+        }
       }
-    }, MODAL_POLL_MS)
-    return () => window.clearInterval(timer)
+      timer = window.setTimeout(tick, MODAL_POLL_MS)
+    }
+    timer = window.setTimeout(tick, MODAL_POLL_MS)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ws?.id, phase])
+  }, [ws?.id, phase, wsPollAttempt])
 
   const createWorkspace = async (choice: ScopeChoice | 'root') => {
     setCreating(true)
@@ -1283,6 +1305,13 @@ function WorkspaceModal({
       <div className="bpx-modal" onClick={(e) => e.stopPropagation()}>
         {renderHeader()}
         {restoreError && <div className="error-banner">{restoreError}</div>}
+        {wsPollFailed && isLoadingPhase && (
+          <ErrorBanner
+            error={ANALYSIS_POLL_FAILED_MESSAGE}
+            onRetry={() => setWsPollAttempt((n) => n + 1)}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
+        )}
         <div className={`bpx-modal-body${isLoadingPhase ? ' is-loading' : ''}`}>{renderBody()}</div>
       </div>
     </div>
@@ -1553,6 +1582,8 @@ function BrandCard({
 
 const POLLING_STATUSES = new Set(['pending', 'running'])
 const POLL_INTERVAL_MS = 3000
+const ANALYSIS_POLL_FAILED_MESSAGE =
+  'Analiz durumu alınamıyor. Analiz arka planda devam ediyor olabilir.'
 
 // Türkçe duyarsız arama: "İstanbul" / "istanbul" / "ISTANBUL" ve "akıllı" / "akilli" eşleşir
 function normalizeSearchText(value: string): string {
@@ -1601,6 +1632,10 @@ export default function BrandProfile() {
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
   const [marketSource, setMarketSource] = useState<WorkspaceListRow | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Liste yoklaması: ardışık hata sayacı efekt yeniden kurulsa da korunur
+  const listPollFailuresRef = useRef(0)
+  const [listPollFailed, setListPollFailed] = useState(false)
+  const [listPollAttempt, setListPollAttempt] = useState(0)
 
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true)
@@ -1704,6 +1739,8 @@ export default function BrandProfile() {
     const tick = async () => {
       try {
         const results = await Promise.all(pollingIds.map((id) => workspaceApi.get(id)))
+        listPollFailuresRef.current = 0
+        setListPollFailed(false)
         const updated = results.map((r) => r.data as WorkspaceListRow)
         setWorkspaces((prev) =>
           prev.map((ws) => {
@@ -1722,7 +1759,11 @@ export default function BrandProfile() {
           }
         })
       } catch {
-        /* sessiz — poll devam eder */
+        listPollFailuresRef.current += 1
+        if (listPollFailuresRef.current >= MAX_POLL_FAILURES) {
+          setListPollFailed(true)
+          return
+        }
       }
       pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
@@ -1732,7 +1773,7 @@ export default function BrandProfile() {
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
     }
-  }, [workspaces, activeWorkspace, setActiveWorkspace])
+  }, [workspaces, activeWorkspace, setActiveWorkspace, listPollAttempt])
 
   const handleArchive = async (id: number) => {
     // Arşivde onay yoktu; yalnız aktif alt sayfası olan markada, etkisini bildirmek için sorulur
@@ -1951,6 +1992,17 @@ export default function BrandProfile() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {listPollFailed && (
+        <ErrorBanner
+          error={ANALYSIS_POLL_FAILED_MESSAGE}
+          onRetry={() => {
+            listPollFailuresRef.current = 0
+            setListPollFailed(false)
+            setListPollAttempt((n) => n + 1)
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
 
       {loading && workspaces.length === 0 && <div className="loading-indicator">Yükleniyor...</div>}
 

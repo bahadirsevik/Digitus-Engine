@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { tasksApi } from '../services/api'
+import { apiErrorMessage, tasksApi } from '../services/api'
 import type { TaskStatusInfo as TaskStatus } from '../services/api'
 
 const STORAGE_KEY = 'digitus_active_tasks'
+
+/** Üst üste bu kadar yoklama hatasından sonra yoklama durur (görev başarısız SAYILMAZ). */
+export const MAX_POLL_FAILURES = 3
+export const POLL_FAILED_MESSAGE =
+  'Görevin durumu alınamıyor. İşlem arka planda devam ediyor olabilir.'
+export const POLL_RECHECK_LABEL = 'Durumu tekrar kontrol et'
 
 // localStorage helpers
 const getStoredTasks = (): Record<string, string> => {
@@ -85,6 +91,10 @@ export function useTaskPolling(
   const [status, setStatus] = useState<TaskStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Üst üste MAX_POLL_FAILURES yoklama hatası: durum BİLİNMİYOR (görev başarısız değil)
+  const [pollFailed, setPollFailed] = useState(false)
+  const failuresRef = useRef(0)
+  const inFlightRef = useRef<string | null>(null)
   // Backend görevin başka bir run'a ait olduğunu bildirdi — bu görev "bizim" değil
   const [foreign, setForeign] = useState(false)
 
@@ -103,6 +113,11 @@ export function useTaskPolling(
       const isCurrent = () =>
         scopeRef.current.taskId === id && scopeRef.current.storageKey === storageKey
 
+      // Aynı görev için ikinci istek başlatılmaz (yoklamalar çakışmaz)
+      const flightKey = `${storageKey}|${id}`
+      if (inFlightRef.current === flightKey) return null
+      inFlightRef.current = flightKey
+
       try {
         const response = await tasksApi.getStatus(id, brand_profile_id)
         if (!isCurrent()) return null
@@ -119,6 +134,9 @@ export function useTaskPolling(
           return null
         }
 
+        failuresRef.current = 0
+        setPollFailed(false)
+        setError(null)
         setStatus(data)
 
         // Task bittiyse storage'dan sil
@@ -129,8 +147,12 @@ export function useTaskPolling(
         return data
       } catch (err) {
         if (!isCurrent()) return null
-        setError(err instanceof Error ? err.message : 'Polling error')
+        failuresRef.current += 1
+        setError(apiErrorMessage(err, 'Görev durumu alınamadı'))
+        if (failuresRef.current >= MAX_POLL_FAILURES) setPollFailed(true)
         return null
+      } finally {
+        if (inFlightRef.current === flightKey) inFlightRef.current = null
       }
     },
     [storageKey, brand_profile_id, runId]
@@ -140,6 +162,8 @@ export function useTaskPolling(
   useEffect(() => {
     setStatus(null)
     setError(null)
+    setPollFailed(false)
+    failuresRef.current = 0
     setForeign(false)
     if (taskId && brand_profile_id) {
       storeTask(storageKey, taskId)
@@ -150,19 +174,32 @@ export function useTaskPolling(
     }
   }, [taskId, storageKey, brand_profile_id, fetchStatus])
 
-  // Polling
+  const finished = status != null && ['completed', 'failed', 'cancelled'].includes(status.status)
+
+  // Sıralı yoklama: bir sonraki istek, öncekinin BİTMESİNDEN sonra planlanır
   useEffect(() => {
-    if (!taskId) return
-    if (!brand_profile_id) return
-    if (foreign) return
-    if (status && ['completed', 'failed', 'cancelled'].includes(status.status)) return
+    if (!taskId || !brand_profile_id || foreign || finished || pollFailed) return
+    let cancelled = false
+    let timer: number | undefined
+    const loop = async () => {
+      await fetchStatus(taskId)
+      if (!cancelled) timer = window.setTimeout(loop, intervalMs)
+    }
+    timer = window.setTimeout(loop, intervalMs)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [taskId, foreign, finished, pollFailed, intervalMs, brand_profile_id, fetchStatus])
 
-    const interval = setInterval(() => {
-      fetchStatus(taskId)
-    }, intervalMs)
-
-    return () => clearInterval(interval)
-  }, [taskId, status, foreign, intervalMs, brand_profile_id, fetchStatus])
+  // "Durumu tekrar kontrol et": sayaç sıfırlanır, yoklama kaldığı yerden sürer (görev/depo kaydı korunur)
+  const recheck = useCallback(() => {
+    failuresRef.current = 0
+    setPollFailed(false)
+    setError(null)
+    const id = scopeRef.current.taskId
+    if (id) void fetchStatus(id)
+  }, [fetchStatus])
 
   const isActive = status?.status === 'pending' || status?.status === 'running'
   const isCompleted = status?.status === 'completed'
@@ -172,6 +209,8 @@ export function useTaskPolling(
     status,
     loading,
     error,
+    pollFailed,
+    recheck,
     isActive,
     isCompleted,
     isFailed,

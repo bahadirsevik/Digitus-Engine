@@ -47,7 +47,14 @@ import { UrlSeedIdea } from '../services/api'
 import { WORKSPACE_KEYWORD_LIMIT } from '../constants'
 import { Users, X } from 'lucide-react'
 import type { ScoringRun } from '../types/models'
-import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
+import {
+  getWorkspaceTaskKey,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+  useScopedTaskId,
+  useTaskPolling,
+} from '../hooks/useTaskPolling'
+import ErrorBanner from '../components/ErrorBanner'
 import { useAnalysisToastStore } from '../stores/analysisToastStore'
 import './Keywords.css'
 
@@ -1136,6 +1143,13 @@ export default function Keywords() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {assignTaskId && assignPolling.pollFailed && (
+        <ErrorBanner
+          error={POLL_FAILED_MESSAGE}
+          onRetry={assignPolling.recheck}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
 
       {view === 'scores' ? (
         <div className="keyword-list-section">

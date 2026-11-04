@@ -1,6 +1,12 @@
 import { useNavigate } from 'react-router-dom'
+import { X } from 'lucide-react'
 import { AnalysisToast, ChainStage } from './AnalysisProgress'
-import { getWorkspaceTaskKey, useTaskPolling } from '../hooks/useTaskPolling'
+import {
+  getWorkspaceTaskKey,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+  useTaskPolling,
+} from '../hooks/useTaskPolling'
 import { useAnalysisToastStore } from '../stores/analysisToastStore'
 import { useBrandStore } from '../stores/brandStore'
 
@@ -17,6 +23,28 @@ export default function GlobalAnalysisToast() {
     mine?.workspaceId,
     mine?.runId
   )
+
+  // Yoklama hatası: görev BAŞARISIZ değil, durumu bilinmiyor — yeniden başlatma değil, yeniden kontrol sunulur
+  if (mine && polling.pollFailed && dismissedTaskId !== mine.taskId) {
+    return (
+      <div className="kwx-toast" role="alert">
+        <div className="kwx-toast-head">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="kwx-toast-title">Analiz durumu alınamıyor</div>
+            <div className="kwx-toast-sub">{POLL_FAILED_MESSAGE}</div>
+          </div>
+          <button type="button" className="kwx-toast-close" onClick={dismiss} title="Kapat">
+            <X size={13} />
+          </button>
+        </div>
+        <div className="kwx-toast-body">
+          <button type="button" className="btn btn-sm btn-secondary" onClick={polling.recheck}>
+            {POLL_RECHECK_LABEL}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const taskStatus = polling.status?.status
   if (!mine || !taskStatus || dismissedTaskId === mine.taskId) return null

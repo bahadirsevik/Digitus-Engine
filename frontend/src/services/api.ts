@@ -14,6 +14,10 @@ const api = axios.create({
   },
 })
 
+// Görev/deneme/export DURUM yoklamaları için sonlu zaman aşımı (genel timeout YOK:
+// yükleme ve uzun istekler bozulmasın). Askıda kalan yoklama bir hata sayılır.
+export const STATUS_POLL_TIMEOUT_MS = 15000
+
 export interface ApiError {
   status: number
   message: string
@@ -330,7 +334,9 @@ export const workspaceApi = {
       params: { include_archived: includeArchived },
     }),
 
-  get: (id: number) => api.get(`/brand-profile/workspaces/${id}`),
+  // Analiz durumu yoklamaları da buradan geçer: askıda kalan istek sonlu sürede hata olur
+  get: (id: number) =>
+    api.get(`/brand-profile/workspaces/${id}`, { timeout: STATUS_POLL_TIMEOUT_MS }),
 
   // Pazar seçimi (ülke/dil listesi + konum arama) — plan_pazar_dil_secimi.md Faz 1
   marketOptions: () => api.get<MarketOptions>('/brand-profile/market-options'),
@@ -568,7 +574,10 @@ export const exportApi = {
     api.post('/export/', data, { params: { brand_profile_id } }),
 
   status: (exportId: string, brand_profile_id?: number) =>
-    api.get(`/export/${exportId}/status`, { params: { brand_profile_id } }),
+    api.get(`/export/${exportId}/status`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
 
   download: (exportId: string, brand_profile_id?: number) =>
     api.get(`/export/${exportId}/download`, {
@@ -710,7 +719,10 @@ export interface TaskStatusInfo {
 
 export const tasksApi = {
   getStatus: (taskId: string, brand_profile_id?: number) =>
-    api.get<TaskStatusInfo>(`/tasks/${taskId}`, { params: { brand_profile_id } }),
+    api.get<TaskStatusInfo>(`/tasks/${taskId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
 
   listByRun: (runId: number, brand_profile_id?: number) =>
     api.get(`/tasks/run/${runId}`, { params: { brand_profile_id } }),
@@ -1859,7 +1871,7 @@ export const socialBriefApi = {
   getIdeasAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialIdeasGenerateResponse>(
       `/generation/social/briefs/${brief_id}/ideas/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   retryIdeas: (brief_id: number, data: SocialBriefIdeasRetryRequest, brand_profile_id: number) =>
@@ -1872,7 +1884,7 @@ export const socialBriefApi = {
   getIdeasRetryAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialIdeasGenerateResponse>(
       `/generation/social/briefs/${brief_id}/ideas/retry/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   generateContents: (
@@ -1889,7 +1901,7 @@ export const socialBriefApi = {
   getContentsAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialBriefContentsAttemptResponse>(
       `/generation/social/briefs/${brief_id}/contents/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   // Workspace geneli sosyal içerik geçmişi (K13); brief_id verilirse yalnız o brief

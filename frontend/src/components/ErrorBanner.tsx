@@ -11,6 +11,8 @@ interface ErrorBannerProps {
   details?: string | Record<string, unknown>
   requestId?: string
   onRetry?: () => void
+  /** Varsayılan 'Tekrar Dene'; durum-yoklama hatasında 'Durumu tekrar kontrol et' gibi */
+  retryLabel?: string
   onDismiss?: () => void
 }
 
@@ -19,6 +21,7 @@ export default function ErrorBanner({
   details,
   requestId,
   onRetry,
+  retryLabel = 'Tekrar Dene',
   onDismiss,
 }: ErrorBannerProps) {
   const [showDetails, setShowDetails] = useState(false)
@@ -60,7 +63,7 @@ export default function ErrorBanner({
           {onRetry && (
             <button className="btn btn-sm btn-secondary" onClick={onRetry}>
               <RefreshCw size={14} />
-              Tekrar Dene
+              {retryLabel}
             </button>
           )}
           {onDismiss && (
