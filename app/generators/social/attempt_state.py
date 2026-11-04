@@ -1569,8 +1569,13 @@ def _finalize_social_idea_attempt_failure(
     expected_stage: str,
     now: datetime | None = None,
     allowed_reasons: frozenset[str] | None = None,
+    pending_claimed: bool = False,
 ) -> tuple[SocialGenerationAttempt, bool]:
-    """Ideas, ideas_retry veya contents attempt'ini failure durumunda canonical kilit sırasıyla sonlandıran ortak çekirdek."""
+    """Ideas, ideas_retry veya contents attempt'ini failure durumunda canonical kilit sırasıyla sonlandıran ortak çekirdek.
+
+    pending_claimed: çağıran bu task_id ile claim'i başarmış ama claim'i taşıyan
+    transaction geri alınmışsa (hazırlık hatası) True; pending attempt da failed olur.
+    """
     if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id <= 0:
         raise ValueError("attempt_id bool olmayan pozitif bir tamsayı olmalıdır.")
     valid_reasons = allowed_reasons if allowed_reasons is not None else ALLOWED_IDEAS_FAILURE_REASONS
@@ -1628,7 +1633,7 @@ def _finalize_social_idea_attempt_failure(
 
     # 5. Pending attempt kuralları
     if attempt.status == "pending":
-        if reason_code in PENDING_ALLOWED_FAILURE_REASONS:
+        if pending_claimed or reason_code in PENDING_ALLOWED_FAILURE_REASONS:
             attempt.status = "failed"
             attempt.reason_code = reason_code
             attempt.error_message = error_message
@@ -1692,6 +1697,7 @@ def finalize_contents_attempt_failure(
     reason_code: str,
     error_message: str,
     now: datetime | None = None,
+    pending_claimed: bool = False,
 ) -> tuple[SocialGenerationAttempt, bool]:
     """Contents attempt'ini failure durumunda canonical kilit sırasıyla sonlandırır."""
     return _finalize_social_idea_attempt_failure(
@@ -1703,6 +1709,7 @@ def finalize_contents_attempt_failure(
         expected_stage="contents",
         now=now,
         allowed_reasons=ALLOWED_CONTENTS_FAILURE_REASONS,
+        pending_claimed=pending_claimed,
     )
 
 

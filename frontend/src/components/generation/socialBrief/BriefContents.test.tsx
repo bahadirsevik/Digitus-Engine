@@ -345,6 +345,29 @@ describe('İçerik seçimi, üretimi, yoklama ve format kartları', () => {
     expect(await screen.findByRole('article', { name: 'Fikir 1' })).toBeInTheDocument()
   })
 
+  it('başarısız içerik denemesinde gerekçeli uyarı paneli gösterir', async () => {
+    mocks.getBriefState.mockResolvedValue({
+      data: ideasState({
+        content_attempts: [
+          attempt(501, 'contents', 'failed', { reason_code: 'content_input_invalid' }),
+        ],
+      }),
+    })
+    mocks.getContentsAttempt.mockResolvedValue({
+      data: contentsResponse(501, 'failed', {
+        requested_idea_ids: [1],
+        unresolved_idea_ids: [1],
+        reason_code: 'content_input_invalid',
+      }),
+    })
+    renderWorkspace()
+    await openBrief()
+    const alert = (await screen.findByText('İçerik üretimi başarısız oldu.')).closest(
+      '[role="alert"]'
+    )
+    expect(alert).toHaveTextContent(/marka notları çok uzun/)
+  })
+
   it('aktif içerik denemesi sürerken yeni üretim düğmesi kapalıdır', async () => {
     mocks.getBriefState.mockResolvedValue({
       data: ideasState({ content_attempts: [attempt(501, 'contents', 'running')] }),

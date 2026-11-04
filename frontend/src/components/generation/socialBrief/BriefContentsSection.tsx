@@ -301,6 +301,14 @@ export default function BriefContentsSection({
         </div>
       )}
 
+      {status === 'failed' && !choosingNewIdeas && (
+        <div className="channels-alert channels-alert-error sb-stage-alert" role="alert">
+          <AlertTriangle size={14} /> <b>İçerik üretimi başarısız oldu.</b>{' '}
+          {reasonText(attemptRes?.reason_code ?? latest?.reason_code) ||
+            'Seçtiğiniz fikirlerle yeniden deneyebilirsiniz.'}
+        </div>
+      )}
+
       {attemptRes && !active && (
         <div className="sb-attempt-summary" role="status">
           {choosingNewIdeas && <strong>Önceki üretimin özeti</strong>}
@@ -309,7 +317,7 @@ export default function BriefContentsSection({
             <b>{attemptRes.successful_idea_ids.length}</b> · Üretilemeyen{' '}
             <b>{attemptRes.unresolved_idea_ids.length}</b>
           </span>
-          {attemptRes.reason_code && (
+          {attemptRes.reason_code && (status !== 'failed' || choosingNewIdeas) && (
             <span className="sb-muted">{reasonText(attemptRes.reason_code)}</span>
           )}
           {attemptRes.warnings.length > 0 && (

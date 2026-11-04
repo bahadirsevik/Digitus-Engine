@@ -53,6 +53,16 @@ def test_01_valid_request_parsed():
     assert res.format_matrix_version == "v1"
 
 
+def test_brand_context_over_10000_chars_rejected_at_create():
+    """Brief notları 10000 karakteri aşarsa brief oluşturulurken reddedilir (içerik aşamasında değil)."""
+    target = [SocialBriefTargetCreateRequest(platform="instagram", content_format="post")]
+    SocialBriefCreateRequest(scoring_run_id=1, keyword_ids=[1], targets=target, brand_context="a" * 10000)
+    with pytest.raises(ValidationError):
+        SocialBriefCreateRequest(
+            scoring_run_id=1, keyword_ids=[1], targets=target, brand_context="a" * 10001
+        )
+
+
 def test_02_scoring_run_id_string_rejected():
     """2. scoring_run_id string verilirse pydantic tarafından reddedilir."""
     with pytest.raises(ValidationError):

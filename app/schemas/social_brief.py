@@ -82,7 +82,10 @@ class SocialBriefCreateRequest(BaseModel):
         description="Hedef platform ve format listesi (1-6 adet)",
     )
     brand_name: Optional[str] = Field(None, max_length=200, description="Opsiyonel marka adı")
-    brand_context: Optional[str] = Field(None, description="Opsiyonel marka bağlamı veya brief notları")
+    # Sınır içerik prompt doğrulamasıyla aynı (generators/social/brief_content_prompt.py)
+    brand_context: Optional[str] = Field(
+        None, max_length=10000, description="Opsiyonel marka bağlamı veya brief notları"
+    )
 
 
 # ==================== RESPONSE SCHEMAS (F1-D.4) ====================

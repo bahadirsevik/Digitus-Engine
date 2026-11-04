@@ -47,6 +47,8 @@ export interface SocialBriefWorkspaceProps {
 }
 
 const LAST_BRIEF_KEY = (ws: number, run: number) => `last_social_brief_${ws}_${run}`
+// Backend ile aynı sınır (app/schemas/social_brief.py brand_context max_length)
+const BRAND_CONTEXT_MAX = 10000
 
 export default function SocialBriefWorkspace({
   runId,
@@ -110,6 +112,8 @@ export default function SocialBriefWorkspace({
   const [targetDurationPresetId, setTargetDurationPresetId] = useState<string>('')
   const [brandName, setBrandName] = useState<string>(activeWorkspace?.name || '')
   const [brandContext, setBrandContext] = useState<string>('')
+  const brandContextLength = brandContext.trim().length
+  const brandContextTooLong = brandContextLength > BRAND_CONTEXT_MAX
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -741,7 +745,13 @@ export default function SocialBriefWorkspace({
             </div>
 
             <div className="sb-form-group">
-              <label htmlFor="brief-brand-context">Marka Bağlamı / Özel Notlar (Opsiyonel)</label>
+              <label htmlFor="brief-brand-context">
+                <span>Marka Bağlamı / Özel Notlar (Opsiyonel)</span>
+                <span className="sb-form-counter">
+                  <b>{brandContextLength.toLocaleString('tr-TR')}</b> /{' '}
+                  {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter
+                </span>
+              </label>
               <textarea
                 id="brief-brand-context"
                 className="sb-textarea"
@@ -749,7 +759,15 @@ export default function SocialBriefWorkspace({
                 placeholder="Kampanya amacı, hedef kitle veya tonlama notları..."
                 value={brandContext}
                 onChange={(e) => setBrandContext(e.target.value)}
+                aria-invalid={brandContextTooLong}
               />
+              {brandContextTooLong && (
+                <div className="channels-alert channels-alert-error" role="alert">
+                  Notlar en fazla {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter olabilir (
+                  {(brandContextLength - BRAND_CONTEXT_MAX).toLocaleString('tr-TR')} karakter
+                  fazla). Metni kısaltın; marka profili zaten içerik üretiminde kullanılıyor.
+                </div>
+              )}
             </div>
 
             {/* Kaydet ve İptal Butonları */}
@@ -759,6 +777,7 @@ export default function SocialBriefWorkspace({
                 className="sb-btn sb-btn-primary"
                 disabled={
                   isSubmitting ||
+                  brandContextTooLong ||
                   selectedKeywordIds.length < 1 ||
                   selectedKeywordIds.length > maxKeywords ||
                   selectedTargets.length < 1 ||
