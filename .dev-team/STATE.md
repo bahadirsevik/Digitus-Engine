@@ -1,10 +1,26 @@
 # Current Status
 
-Last updated: 2026-10-31
+Last updated: 2026-11-04
 Branch: `deploy/lean-taslak`
+Son is (04.11, push yok): **Hata/uyari gosterme plani** (Codex 3 tur onayli; kapi KAPALI) — 12 commit b8ad2e8..713ec68, asagida.
 Active phase: **Hedef konum (ulke/sehir) + cikti dili secimi — main repo `plan_pazar_dil_secimi.md` rev.4 (Codex 5 tur, "uygulamaya gecilebilir"). Kapi KAPALI: Architect/Konsey KOSMADI, kararlar planda (K1-K6). Faz 0 BASLADI 31.10.**
 Onceki aktif is (dagitim bekliyor): Marka alt sayfa + SPA crawler — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127, Faz 3c+3d 914ffe5, 3e 65cfe3f + 8e6a27a (push yok); sunucu dali dg-auth-merge d9e045e (uzak 78aac3a).
 Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
+
+## Just completed (04.11 — hata/uyari gosterme plani; Backend Dev + Frontend Dev A/B + QA, Sonnet+high; Architect/Konsey KOSMADI)
+
+- Ilke: her islem basarili / kismen basarili / basarisiz / durum bilinmiyor ile biter; "veri yok" ≠ "yuklenemedi"; yeniden yukle/kontrol butonlari AI uretimini TETIKLEMEZ; ham exception yalniz log'da.
+- 0 b1a5255: APP_ENV=production + DEBUG=true acilista reddedilir; prod compose 4 serviste DEBUG=false (sunucuda acilis DENENMEDI).
+- 3 96cd5e5 + a500769: 5xx detail ve task error_message guvenli Turkce; interceptor 5xx string/{message} detail'i gecirir; ag/timeout Turkce.
+- 1 b8ad2e8: keyword silme hatasinda satir korunur; force-include catch; "Backend calisiyor mu?" yalniz ag hatasinda; StartAnalysisModal "kontrol edilemedi" ≠ "kapali"; `instanceof Error` hatalari → apiErrorMessage.
+- 2 351feea + 1bc149c: polling setTimeout zinciri (ust uste istek yok), 3 ardisik hata → pollFailed + "Durumu tekrar kontrol et" (gorev kimligi korunur; uret butonu kilitli), 404 → idle; status isteklerine 15 sn timeout; export + marka analizi ayni davranis.
+- 4 d9e778b: ADS/SEO sonuc, skor, analiz listesi, export gecmisi, Google Ads hesaplari, policy, dashboard yukleme hatalari gorunur + yeniden yukle.
+- 5 fcbd224 + 146e100: ADS failed_groups uyarisi; SEO result_data `requested_count` + `failed_keywords[{keyword,reason}]` (≤50) ekranda.
+- 6 fcc5136 + 713ec68: update_task_status kosullu UPDATE (terminal satira gec yazim YOK — status/progress/result_data/error_message); okuma-ani `fail_stale_tasks` (running >3900 s, pending >7200 s; muaf: ads, corpus_screening, seo_content chord) GET /tasks, /tasks/{id}, /tasks/run, dashboard, aktif-gorev kontrollerinde; iptal yarisi 409; kanal atamada tipli hata mesajlari korunur.
+- 7 b64eba2: Layout icinde ErrorBoundary (route degisince sifirlanir; GlobalAnalysisToast disarida).
+- Testler: BE tam paket 5694 gecti / 2 bilinen (test_hybrid_run_db) / 112 atlandi; ruff temiz. FE 402/402 + lint/format/build. Tarayici dogrulamasi YAPILMADI. Test ortami: `digitus_test_db` baska worktree'ye (dg-auth-merge, alembic 20261029_002) ait oldugu icin `-p dgbe` ayri proje kullanildi.
+- Bilinen sinirlar: olu SEO parent artik otomatik failed olmaz (muaf); esikler (3900/7200 s) yargi; crawler/profile_extractor sayfa girdilerinde ham str(e) kaldi; olu sayfalar (Scoring/Relevance/Channels/SocialStepper) dokunulmadi.
+- Dagitim notu: imaj rebuild + app/celery_worker/celery_screening_worker/celery_beat restart (task imza degil ama task_status davranisi degisti); prod .env DEBUG kontrolu.
 
 ## Just completed (31.10 — pazar/dil plani FAZ 0; Backend Dev Sonnet+high; Architect/Konsey KOSMADI)
 
