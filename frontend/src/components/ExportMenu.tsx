@@ -55,6 +55,7 @@ export default function ExportMenu({ channel, runId, disabled }: Props) {
   const {
     activeJob,
     history,
+    historyError,
     error,
     busy,
     pollFailed,
@@ -195,6 +196,15 @@ export default function ExportMenu({ channel, runId, disabled }: Props) {
               {EXPORT_POLL_FAILED_MESSAGE}{' '}
               <button type="button" className="chx-btn" onClick={recheck}>
                 {POLL_RECHECK_LABEL}
+              </button>
+            </div>
+          )}
+
+          {historyError && (
+            <div className="exm-error" role="alert">
+              {historyError}{' '}
+              <button type="button" className="chx-btn" onClick={() => void refreshHistory()}>
+                Geçmişi yeniden yükle
               </button>
             </div>
           )}

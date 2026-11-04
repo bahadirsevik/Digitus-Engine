@@ -373,6 +373,8 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
   const [results, setResults] = useState<SEOGeoItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Sonuç listesi YÜKLEME hatası (üretim hatasından ayrı): yalnız yeniden yükleme sunar
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(true)
 
   const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
@@ -382,6 +384,7 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
   useEffect(() => {
     setResults([])
     setError(null)
+    setLoadError(null)
     setLoading(false)
   }, [scopeKey])
 
@@ -392,8 +395,10 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
       if (scopeRef.current !== requestScope) return
       setResults((res.data as { items?: SEOGeoItem[] }).items || [])
+      setLoadError(null)
     } catch (e) {
-      console.error('Failed to fetch SEO results:', e)
+      if (scopeRef.current !== requestScope) return
+      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId])
 
@@ -538,6 +543,19 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
             error={POLL_FAILED_MESSAGE}
             onRetry={polling.recheck}
             retryLabel={POLL_RECHECK_LABEL}
+          />
+        </div>
+      )}
+      {loadError && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={`${
+              polling.isCompleted
+                ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
+                : 'SEO içerik sonuçları yüklenemedi.'
+            } ${loadError}`}
+            onRetry={() => void fetchResults()}
+            retryLabel="Sonuçları yeniden yükle"
           />
         </div>
       )}

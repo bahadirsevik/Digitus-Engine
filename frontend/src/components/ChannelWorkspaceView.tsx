@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, ChevronDown, RefreshCw, X } from 'lucide-react'
-import { channelsApi, scoringApi, tasksApi, tasksFromListResponse } from '../services/api'
+import {
+  apiErrorMessage,
+  channelsApi,
+  scoringApi,
+  tasksApi,
+  tasksFromListResponse,
+} from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import MarketBadge from './MarketBadge'
 import type { ScoringRun } from '../types/models'
@@ -80,6 +86,11 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
   const [poolError, setPoolError] = useState<string | null>(null)
   const poolRequestRef = useRef(0)
   const [error, setError] = useState('')
+  // Analiz listesi / atama görevi keşfi YÜKLEME hataları (boş durumdan ayrı, yeniden yükleme sunar)
+  const [runsError, setRunsError] = useState<string | null>(null)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
+  const workspaceIdRef = useRef(activeWorkspace?.id)
+  workspaceIdRef.current = activeWorkspace?.id
   const [info, setInfo] = useState('')
   const [assignTaskId, setAssignTaskId] = useScopedTaskId(assignTaskStorageKey)
   const [staleNotice, setStaleNotice] = useState(false)
@@ -112,8 +123,11 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       return
     }
 
+    const requestWorkspaceId = activeWorkspace.id
     try {
-      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      const res = await scoringApi.listRuns({ brand_profile_id: requestWorkspaceId })
+      if (workspaceIdRef.current !== requestWorkspaceId) return
+      setRunsError(null)
       const allRuns = (Array.isArray(res.data) ? res.data : []) as ScoringRun[]
       const visibleRuns = allRuns.filter((run) =>
         ['channel_assigning', 'channel_assigned', 'completed'].includes(run.status)
@@ -132,8 +146,9 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       if (requested && !requestedRun) {
         setInfo('Bu analiz aktif marka çalışmasına ait değil veya kanal havuzu hazır değil.')
       }
-    } catch {
-      setError('Analizler yüklenemedi.')
+    } catch (err) {
+      if (workspaceIdRef.current !== requestWorkspaceId) return
+      setRunsError(`Analizler yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }, [activeWorkspace?.id, searchParams])
 
@@ -150,10 +165,10 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
         if (poolRequestRef.current !== requestId) return
         setPool((res.data.channels?.[channel] || []) as PoolKeyword[])
         setError('')
-      } catch {
+      } catch (err) {
         if (poolRequestRef.current !== requestId) return
         setPool([])
-        setPoolError('Kanal havuzu alınamadı.')
+        setPoolError(`Kanal havuzu alınamadı: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
       } finally {
         if (poolRequestRef.current === requestId) setLoading(false)
       }
@@ -188,6 +203,8 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
     poolRequestRef.current += 1
     setPool([])
     setPoolError(null)
+    setRunsError(null)
+    setDiscoverError(null)
     setLoading(false)
   }, [activeWorkspace?.id])
 
@@ -200,7 +217,13 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
     setSearchParams({ run_id: String(selectedRunId) })
     setPoolExpanded(false)
     void fetchPool(selectedRunId)
-    void discoverAssignmentTask(selectedRunId, () => cancelled)
+    setDiscoverError(null)
+    discoverAssignmentTask(selectedRunId, () => cancelled).catch((err: unknown) => {
+      if (!cancelled)
+        setDiscoverError(
+          `Kanal atama görevi kontrol edilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+        )
+    })
     return () => {
       cancelled = true
     }
@@ -542,7 +565,31 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
         </div>
       )}
 
-      {activeWorkspace && runs.length === 0 && (
+      {runsError && (
+        <ErrorBanner
+          error={runsError}
+          onRetry={() => void fetchRuns()}
+          retryLabel="Analizleri yeniden yükle"
+        />
+      )}
+      {discoverError && selectedRunId && (
+        <ErrorBanner
+          error={discoverError}
+          onRetry={() => {
+            const runId = selectedRunId
+            setDiscoverError(null)
+            discoverAssignmentTask(runId, () => workspaceIdRef.current == null).catch(
+              (err: unknown) =>
+                setDiscoverError(
+                  `Kanal atama görevi kontrol edilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+                )
+            )
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
+
+      {activeWorkspace && runs.length === 0 && !runsError && (
         <p className="empty-text">Kanal ataması tamamlanmış analiz bulunamadı.</p>
       )}
 

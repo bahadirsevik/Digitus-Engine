@@ -472,6 +472,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const [results, setResults] = useState<AdsResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Sonuç/set listesi YÜKLEME hatası (üretim hatasından ayrı): yalnız yeniden yükleme sunar
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(true)
   // Set versiyonlama (Faz E): geçmiş + onay akışı
   const [sets, setSets] = useState<AdGenerationSetSummary[]>([])
@@ -492,6 +494,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   useEffect(() => {
     setResults(null)
     setError(null)
+    setLoadError(null)
     setLoading(false)
     setActivating(false)
     setBrandName('')
@@ -563,8 +566,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       if (scopeRef.current !== requestScope) return
       const data = res.data as AdsResult
       setResults(data.total_groups > 0 ? data : null)
+      setLoadError(null)
     } catch (e) {
-      console.error('Failed to fetch Ads results:', e)
+      if (scopeRef.current !== requestScope) return
+      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId, selectedSetId])
 
@@ -578,13 +583,20 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       setSets(data.sets || [])
       setActiveSetId(data.active_set_id ?? null)
     } catch (e) {
-      console.error('Failed to fetch Ads sets:', e)
+      if (scopeRef.current !== requestScope) return
+      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId])
 
   useEffect(() => {
     void fetchResults()
   }, [fetchResults])
+
+  // Yalnız okuma: üretimi TETİKLEMEZ
+  const reloadResults = () => {
+    void fetchSets()
+    void fetchResults()
+  }
 
   useEffect(() => {
     void fetchSets()
@@ -796,6 +808,19 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
             error={POLL_FAILED_MESSAGE}
             onRetry={polling.recheck}
             retryLabel={POLL_RECHECK_LABEL}
+          />
+        </div>
+      )}
+      {loadError && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={`${
+              polling.isCompleted
+                ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
+                : 'Reklam sonuçları yüklenemedi.'
+            } ${loadError}`}
+            onRetry={reloadResults}
+            retryLabel="Sonuçları yeniden yükle"
           />
         </div>
       )}

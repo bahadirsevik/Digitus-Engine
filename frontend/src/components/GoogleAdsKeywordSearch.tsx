@@ -9,6 +9,7 @@ import {
   KeywordImportResponse,
   SkippedKeywordDetail,
 } from '../services/api'
+import ErrorBanner from './ErrorBanner'
 import KeywordImportResult from './KeywordImportResult'
 import { MarketLine } from './MarketBadge'
 import {
@@ -41,6 +42,8 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
 
   const [customerId, setCustomerId] = useState('')
   const [customers, setCustomers] = useState<string[]>([])
+  // Hesap listesi alınamadı ("hesap yok" ile karışmasın); hesap kimliği elle girilebilir
+  const [customersError, setCustomersError] = useState<string | null>(null)
   // Tasarımdaki chip editörü: seed kelimeler liste olarak tutulur
   const [words, setWords] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
@@ -84,20 +87,25 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
           .slice(0, 10) || []
   const suggestedSeedText = suggestedSeeds.join('\n')
 
-  useEffect(() => {
-    const loadCustomers = async () => {
-      try {
-        const res = await googleAdsApi.listCustomers()
-        const ids = (res.data || []).map((item) => item.customer_id)
-        setCustomers(ids)
-        // Varsayılan hesap: 956 ile biten; yoksa tek hesap varsa o
-        const preferred = ids.find((id) => id.endsWith('956')) ?? (ids.length === 1 ? ids[0] : '')
-        if (!customerId && preferred) setCustomerId(preferred)
-      } catch {
-        setCustomers([])
-      }
+  const loadCustomers = async () => {
+    setCustomersError(null)
+    try {
+      const res = await googleAdsApi.listCustomers()
+      const ids = (res.data || []).map((item) => item.customer_id)
+      setCustomers(ids)
+      // Varsayılan hesap: 956 ile biten; yoksa tek hesap varsa o
+      const preferred = ids.find((id) => id.endsWith('956')) ?? (ids.length === 1 ? ids[0] : '')
+      if (!customerId && preferred) setCustomerId(preferred)
+    } catch (err) {
+      setCustomers([])
+      setCustomersError(
+        `Google Ads hesapları yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+      )
     }
-    loadCustomers()
+  }
+
+  useEffect(() => {
+    void loadCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -313,6 +321,14 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
           />
         </label>
       </div>
+
+      {customersError && (
+        <ErrorBanner
+          error={`${customersError} Hesap kimliğini elle girebilir veya listeyi yeniden yükleyebilirsiniz.`}
+          onRetry={() => void loadCustomers()}
+          retryLabel="Hesapları yeniden yükle"
+        />
+      )}
 
       {!customerId && (
         <div className="field-warning">

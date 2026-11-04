@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Award, ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react'
-import { scoringApi, ScoringSortBy } from '../services/api'
+import { apiErrorMessage, scoringApi, ScoringSortBy } from '../services/api'
+import ErrorBanner from './ErrorBanner'
 import { DEFAULT_SCORE_SORT, nextScoreSortState, ScoreSortState } from '../pages/scoringSort'
 import type { AnalysisChannels } from './AnalysisProgress'
 import '../pages/Scoring.css'
@@ -57,6 +58,10 @@ export default function ScoreResults({
   const [isLoadingScores, setIsLoadingScores] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [errorAppend, setErrorAppend] = useState(false)
+  // Run/workspace değişince uçuştaki eski yanıt state'e yazılmaz
+  const scopeRef = useRef(`${workspaceId}:${runId}`)
+  scopeRef.current = `${workspaceId}:${runId}`
 
   const fetchScores = async ({
     offset = 0,
@@ -68,6 +73,7 @@ export default function ScoreResults({
     append?: boolean
   }) => {
     if (!workspaceId || !runId) return
+    const requestScope = scopeRef.current
     if (append) setIsLoadingMore(true)
     else setIsLoadingScores(true)
     setErrorMsg(null)
@@ -80,19 +86,27 @@ export default function ScoreResults({
         sort_by: sort.sort_by,
         sort_dir: sort.sort_dir,
       })
+      if (scopeRef.current !== requestScope) return
       const nextScores = res.data.scores || []
       setScores((prev) => (append ? [...prev, ...nextScores] : nextScores))
       setTotalScored(Number(res.data.total_scored || 0))
       setAlgorithmVersion(res.data.algorithm_version || null)
-    } catch {
-      setErrorMsg(append ? 'Daha fazla skor yüklenemedi.' : 'Skorlar yüklenemedi.')
+    } catch (err) {
+      if (scopeRef.current !== requestScope) return
+      setErrorAppend(append)
+      setErrorMsg(
+        `${append ? 'Daha fazla skor yüklenemedi.' : 'Skorlar yüklenemedi.'} ${apiErrorMessage(err, '')}`.trim()
+      )
     } finally {
-      if (append) setIsLoadingMore(false)
-      else setIsLoadingScores(false)
+      if (scopeRef.current === requestScope) {
+        if (append) setIsLoadingMore(false)
+        else setIsLoadingScores(false)
+      }
     }
   }
 
   useEffect(() => {
+    setErrorMsg(null)
     setScores([])
     setTotalScored(0)
     setAlgorithmVersion(null)
@@ -198,11 +212,25 @@ export default function ScoreResults({
           <p>
             {totalScored > 0
               ? `${scores.length}/${totalScored} skor gösteriliyor`
-              : 'Skor kaydı bulunamadı'}
+              : errorMsg
+                ? 'Skorlar yüklenemedi'
+                : 'Skor kaydı bulunamadı'}
           </p>
         </div>
       </div>
-      {errorMsg && <div className="error-banner">{errorMsg}</div>}
+      {errorMsg && (
+        <ErrorBanner
+          error={errorMsg}
+          onRetry={() =>
+            void fetchScores(
+              errorAppend
+                ? { offset: scores.length, sort: scoreSort, append: true }
+                : { offset: 0, sort: scoreSort, append: false }
+            )
+          }
+          retryLabel="Skorları yeniden yükle"
+        />
+      )}
       <div
         className={`table-container ${isLoadingScores && scores.length > 0 ? 'table-sorting' : ''}`}
       >
@@ -239,7 +267,7 @@ export default function ScoreResults({
             ) : scores.length === 0 ? (
               <tr>
                 <td colSpan={isV3Run ? 2 + shown : 1 + 2 * shown} className="scores-empty-cell">
-                  Skor kaydı bulunamadı.
+                  {errorMsg ? 'Skorlar yüklenemedi.' : 'Skor kaydı bulunamadı.'}
                 </td>
               </tr>
             ) : (

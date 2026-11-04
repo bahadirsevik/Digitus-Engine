@@ -49,6 +49,7 @@ import { Users, X } from 'lucide-react'
 import type { ScoringRun } from '../types/models'
 import {
   getWorkspaceTaskKey,
+  MAX_POLL_FAILURES,
   POLL_FAILED_MESSAGE,
   POLL_RECHECK_LABEL,
   useScopedTaskId,
@@ -249,6 +250,11 @@ export default function Keywords() {
     Number.isNaN(initialRunId) || initialRunId <= 0 ? null : initialRunId
   )
   const [scoreRunsLoading, setScoreRunsLoading] = useState(false)
+  // Analiz listesi yüklenemedi (boş liste ile karışmasın) ve arka plan durum yoklama uyarısı
+  const [scoreRunsError, setScoreRunsError] = useState<string | null>(null)
+  const [statusNotice, setStatusNotice] = useState<string | null>(null)
+  const workspaceIdRef = useRef(activeWorkspace?.id)
+  workspaceIdRef.current = activeWorkspace?.id
   const [taskDiscoveryActive, setTaskDiscoveryActive] = useState(false)
   // Analiz zinciri banner/toast durumu.
   const [chainActive, setChainActive] = useState(false)
@@ -302,6 +308,11 @@ export default function Keywords() {
     }
   }, [searchParams])
 
+  // Run/workspace değişince önceki bağlamın uyarıları taşınmaz
+  useEffect(() => {
+    setStatusNotice(null)
+  }, [selectedScoreRunId, activeWorkspace?.id])
+
   useEffect(() => {
     if (!selectedScoreRunId || view !== 'scores' || !activeWorkspace?.id) {
       setTaskDiscoveryActive(false)
@@ -309,23 +320,41 @@ export default function Keywords() {
     }
 
     let cancelled = false
+    // Üst üste biten istekler çakışmasın: önceki yanıt gelmeden yeni yoklama başlamaz
+    let inFlight = false
+    let failures = 0
+    const repeating = taskDiscoveryActive && !assignTaskId
     const findTask = async () => {
+      if (inFlight) return
+      inFlight = true
       try {
         const task = await discoverChannelAssignmentTask(selectedScoreRunId)
-        if (cancelled || !task) return
+        if (cancelled) return
+        failures = 0
+        setStatusNotice(null)
+        if (!task) return
         setAssignTaskId(task.task_id)
         if (!isActiveTask(task)) {
           setTaskDiscoveryActive(false)
         }
       } catch {
-        if (!cancelled) setTaskDiscoveryActive(false)
+        if (cancelled) return
+        // Tek seferlik arama hemen, tekrarlayan yoklama 3 ardışık hatadan sonra bildirir
+        failures += 1
+        if (failures >= (repeating ? MAX_POLL_FAILURES : 1)) {
+          setTaskDiscoveryActive(false)
+          setStatusNotice(
+            'Kanal atama durumu alınamadı; görev çalışıyor olabilir. Bağlantıyı kontrol edip durumu tekrar kontrol edin.'
+          )
+        }
+      } finally {
+        inFlight = false
       }
     }
 
     void findTask()
     // Cleanup HER durumda döner: run değişince uçuştaki keşif yanıtı yok sayılır
-    const interval =
-      taskDiscoveryActive && !assignTaskId ? window.setInterval(findTask, 3000) : null
+    const interval = repeating ? window.setInterval(findTask, 3000) : null
     return () => {
       cancelled = true
       if (interval !== null) window.clearInterval(interval)
@@ -391,16 +420,21 @@ export default function Keywords() {
       setSelectedScoreRunId(null)
       return
     }
+    const requestWorkspaceId = activeWorkspace.id
     setScoreRunsLoading(true)
     try {
-      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      const res = await scoringApi.listRuns({ brand_profile_id: requestWorkspaceId })
+      if (workspaceIdRef.current !== requestWorkspaceId) return
       const runs = (Array.isArray(res.data) ? res.data : []) as ScoringRun[]
       setScoreRuns(runs)
+      setScoreRunsError(null)
       if (!selectedScoreRunId && runs.length > 0) {
         setSelectedScoreRunId(runs[0].id)
       }
-    } catch {
+    } catch (err) {
+      if (workspaceIdRef.current !== requestWorkspaceId) return
       setScoreRuns([])
+      setScoreRunsError(`Analiz listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
       setScoreRunsLoading(false)
     }
@@ -430,12 +464,28 @@ export default function Keywords() {
     if (!chainActive || !selectedScoreRunId || !activeWorkspace?.id) return
     if (assignTaskId && assignPolling.isActive) return // task varken status'a gerek yok
     let cancelled = false
+    let inFlight = false
+    let failures = 0
     const tick = async () => {
+      if (inFlight) return
+      inFlight = true
       try {
         const res = await scoringApi.getRun(selectedScoreRunId, activeWorkspace.id)
-        if (!cancelled) setChainRunStatus((res.data as ScoringRun).status)
+        if (cancelled) return
+        failures = 0
+        setStatusNotice(null)
+        setChainRunStatus((res.data as ScoringRun).status)
       } catch {
-        /* sessiz */
+        // Her başarısız yoklamada uyarı basılmaz; ardışık hatadan sonra TEK uyarı
+        if (cancelled) return
+        failures += 1
+        if (failures === MAX_POLL_FAILURES) {
+          setStatusNotice(
+            'Analiz durumu şu an alınamıyor; yoklama sürüyor, bağlantı düzelince ekran güncellenir.'
+          )
+        }
+      } finally {
+        inFlight = false
       }
     }
     void tick()
@@ -1143,6 +1193,17 @@ export default function Keywords() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {statusNotice && (
+        <ErrorBanner
+          error={statusNotice}
+          onRetry={() => {
+            setStatusNotice(null)
+            setTaskDiscoveryActive(true)
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+          onDismiss={() => setStatusNotice(null)}
+        />
+      )}
       {assignTaskId && assignPolling.pollFailed && (
         <ErrorBanner
           error={POLL_FAILED_MESSAGE}
@@ -1154,6 +1215,13 @@ export default function Keywords() {
       {view === 'scores' ? (
         <div className="keyword-list-section">
           <h3 className="kwx-scores-title">Skorlama Sonuçları</h3>
+          {scoreRunsError && (
+            <ErrorBanner
+              error={scoreRunsError}
+              onRetry={() => void fetchScoreRuns()}
+              retryLabel="Listeyi yeniden yükle"
+            />
+          )}
           <div className="kwx-run-row">
             <select
               title="Analiz seç"

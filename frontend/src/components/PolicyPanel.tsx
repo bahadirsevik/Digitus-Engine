@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, Ban, ChevronDown, ChevronRight, Plus, Settings2, X } from 'lucide-react'
 import {
+  apiErrorMessage,
   brandProfileApi,
   dashboardApi,
   PolicyTermEntry,
@@ -21,6 +22,7 @@ import {
   poolFreshnessLabel,
   WorkspacePolicyResponse,
 } from '../services/api'
+import ErrorBanner from './ErrorBanner'
 import './PolicyPanel.css'
 
 const CHANNELS: Array<'ads' | 'seo' | 'social'> = ['ads', 'seo', 'social']
@@ -54,8 +56,9 @@ export default function PolicyPanel({
     try {
       const res = await brandProfileApi.getPolicy(workspaceId)
       setPolicy(res.data)
-    } catch {
-      setError('Politika yüklenemedi')
+      setError(null)
+    } catch (err) {
+      setError(`Politika yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
     // Freshness prop'la gelmediyse dashboard özetinden alınır — band yalnız
     // testte değil gerçek ekranda da görünmeli. refresh:true ile cache bypass:
@@ -87,8 +90,8 @@ export default function PolicyPanel({
     try {
       await fn()
       await load()
-    } catch {
-      setError('İşlem başarısız')
+    } catch (err) {
+      setError(`İşlem başarısız: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
       setBusy(false)
     }
@@ -119,7 +122,12 @@ export default function PolicyPanel({
     )
   }
 
-  if (!policy) return null
+  // İlk yükleme başarısızsa panel sessizce kaybolmaz: neden + yeniden yükleme
+  if (!policy) {
+    return error ? (
+      <ErrorBanner error={error} onRetry={() => void load()} retryLabel="Yeniden yükle" />
+    ) : null
+  }
 
   const approvedTerms = policy.competitor_terms.filter((t) => t.status === 'approved')
   const approvedAliases = (policy.topic_policy?.excluded_aliases || []).filter(

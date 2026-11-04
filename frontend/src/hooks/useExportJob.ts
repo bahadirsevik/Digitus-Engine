@@ -30,6 +30,10 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
   const [activeJob, setActiveJob] = useState<ExportStatusResponse | null>(null)
   const [history, setHistory] = useState<ExportStatusResponse[]>([])
   const [error, setError] = useState<string | null>(null)
+  // Geçmiş listesi YÜKLEME hatası ("geçmiş yok" ile karışmasın); yeniden yükleme sunulur
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const scopeRef = useRef(`${runId}:${workspaceId}`)
+  scopeRef.current = `${runId}:${workspaceId}`
   const [busy, setBusy] = useState(false)
   // Yalnız KULLANICININ başlattığı job biter bitmez otomatik indirilir;
   // geçmişten devralınan job'da sürpriz indirme olmaz.
@@ -57,8 +61,11 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
       setHistory([])
       return
     }
+    const requestScope = scopeRef.current
     try {
       const res = await exportApi.listForRun(runId, workspaceId, HISTORY_LIMIT)
+      if (scopeRef.current !== requestScope) return
+      setHistoryError(null)
       const jobs = (res.data?.exports || []) as ExportStatusResponse[]
       setHistory(jobs)
       // Devral: sayfaya dönüşte süren job varsa poll'a alınır — sonsuza
@@ -69,13 +76,17 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
         setBusy(true)
       }
     } catch (err) {
-      console.error('Export history failed:', err)
+      if (scopeRef.current !== requestScope) return
+      setHistoryError(
+        `Dışa aktarım geçmişi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+      )
     }
   }, [runId, workspaceId])
 
   useEffect(() => {
     setActiveJob(null)
     setError(null)
+    setHistoryError(null)
     setBusy(false)
     setPollFailed(false)
     failuresRef.current = 0
@@ -177,6 +188,7 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
   return {
     activeJob,
     history,
+    historyError,
     error,
     busy,
     pollFailed,
