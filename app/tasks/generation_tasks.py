@@ -121,6 +121,10 @@ def _refuse_legacy_social_attempt(finalize_failure, *, attempt_id: int,
 
 # ==================== SEO+GEO TASKS ====================
 
+SEO_KEYWORD_FAILED_REASON = "AI yanıtı işlenemedi"
+SEO_FAILED_KEYWORDS_CAP = 50  # parent result_data şişmesin
+
+
 @celery_app.task(
     bind=True,
     name="generation.seo_chunk",
@@ -162,6 +166,7 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
         generator = SEOGeoGenerator(db, ai)
 
         results = []
+        failed_keywords = []  # {"keyword", "reason"} — kullanıcıya gösterilen güvenli özet
         claim_blocked = 0  # son-metin iddia kapısı fail → publish_review: review_required
         for i, kw_id in enumerate(keyword_ids):
             kw = db.query(Keyword).filter(Keyword.id == kw_id).first()
@@ -185,12 +190,16 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
                     if (content.get('claim_check') or {}).get('status') == 'fail':
                         claim_blocked += 1
                     logger.info(f"SEO content generated for: {kw.keyword}")
+                else:
+                    failed_keywords.append({"keyword": kw.keyword, "reason": SEO_KEYWORD_FAILED_REASON})
             except Exception as e:
                 logger.error(f"SEO content failed for {kw.keyword}: {e}")
+                failed_keywords.append({"keyword": kw.keyword, "reason": SEO_KEYWORD_FAILED_REASON})
                 continue
         
         usage = collector.finalize()
         return {'chunk_id': task_id, 'content_ids': results, 'count': len(results),
+                'requested': len(keyword_ids), 'failed_keywords': failed_keywords,
                 'claim_blocked': claim_blocked, 'usage': usage}
 
     except SoftTimeLimitExceeded as e:
@@ -228,9 +237,14 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
         return {'status': 'failed', 'reason': LEGACY_RUN_READ_ONLY}
 
     total_ids = []
+    failed_keywords = []
     for r in results:
         if r and 'content_ids' in r:
             total_ids.extend(r['content_ids'])
+            failed_keywords.extend(r.get('failed_keywords') or [])
+    # Sözleşme (frontend): result_data.requested_count + failed_keywords[].keyword/.reason
+    requested_count = sum(int((r or {}).get('requested') or 0) for r in results)
+    failed_keywords = failed_keywords[:SEO_FAILED_KEYWORDS_CAP]
 
     # Havuz bos olamaz (endpoint 404 doner) — 0 icerik, tum kelimelerin
     # uretimde elendigi anlamina gelir. "Tamamlandi" diye yutma, failed isaretle
@@ -245,7 +259,9 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
             parent_task_id,
             status='failed',
             progress=100,
-            result_data={'content_ids': [], 'total': 0, 'scoring_run_id': scoring_run_id},
+            result_data={'content_ids': [], 'total': 0, 'scoring_run_id': scoring_run_id,
+                         'requested_count': requested_count,
+                         'failed_keywords': failed_keywords},
             error_message=error_message
         )
         logger.error(f"SEO bulk produced zero contents for run {scoring_run_id}")
@@ -257,6 +273,8 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
         progress=100,
         result_data={
             'content_ids': total_ids, 'total': len(total_ids),
+            'requested_count': requested_count,
+            'failed_keywords': failed_keywords,
             'claim_blocked_count': sum(int((r or {}).get('claim_blocked') or 0) for r in results),
         }
     )
