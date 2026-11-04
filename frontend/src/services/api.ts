@@ -1862,6 +1862,13 @@ export const socialBriefApi = {
       { params: { brand_profile_id } }
     ),
 
+  // Tek brief'in içerik dosyası (stale brief de iner, raporda "güncel değil" etiketiyle)
+  exportBrief: (brief_id: number, brand_profile_id: number, format: 'excel' | 'docx' | 'pdf') =>
+    api.get(`/generation/social/briefs/${brief_id}/export`, {
+      params: { brand_profile_id, format },
+      responseType: 'blob',
+    }),
+
   // Brief ekranını sunucudan yeniden kurar (kategoriler + attempt kimlikleri)
   getBriefState: (brief_id: number, brand_profile_id: number) =>
     api.get<SocialBriefStateResponse>(`/generation/social/briefs/${brief_id}/state`, {

@@ -35,13 +35,16 @@ const mocks = vi.hoisted(() => ({
   getContentsAttempt: vi.fn(),
   getContentHistory: vi.fn(),
   getPools: vi.fn(),
+  exportBrief: vi.fn(),
+  downloadBlobResponse: vi.fn(),
 }))
 
 vi.mock('../../services/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../services/api')>()
-  const { getPools, ...social } = mocks
+  const { getPools, downloadBlobResponse, ...social } = mocks
   return {
     ...actual,
+    downloadBlobResponse,
     socialBriefApi: social,
     channelsApi: { ...actual.channelsApi, getPools },
   }
@@ -319,6 +322,25 @@ describe('SocialBriefWorkspace — brief oluşturma ve kategori (H.1 + düzeltme
       await screen.findByText(/Kanal havuzu bu brief oluşturulduktan sonra/)
     ).toBeInTheDocument()
     expect(screen.getByText('Kategorileri Üret').closest('button')).toBeDisabled()
+    // İçerik üretilmemiş brief'te indirme sunulmaz
+    expect(screen.queryByRole('button', { name: 'Word' })).toBeNull()
+  })
+
+  it('içeriği olan eskimiş brief kendi dosyasını indirebilir', async () => {
+    mocks.listBriefs.mockResolvedValue({ data: [{ ...BRIEF, is_stale: true }] })
+    mocks.getBriefState.mockResolvedValue({
+      data: briefState({
+        is_stale: true,
+        content_idea_ids: [],
+        content_attempts: [attempt(301, 'contents', 'completed')],
+      }),
+    })
+    mocks.exportBrief.mockResolvedValue({ data: new Blob(['x']), headers: {} })
+    render(<SocialBriefWorkspace runId={RUN_ID} pool={POOL} />)
+    await openBrief()
+    fireEvent.click(await screen.findByRole('button', { name: 'Word' }))
+    await waitFor(() => expect(mocks.downloadBlobResponse).toHaveBeenCalled())
+    expect(mocks.exportBrief).toHaveBeenCalledWith(BRIEF.id, WS_ID, 'docx')
   })
 
   it('run değişince önceki run’ın geç gelen brief listesi ekrana yazılmaz', async () => {

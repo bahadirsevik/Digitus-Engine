@@ -304,7 +304,10 @@ class ExportDataCollector:
     def __init__(self, db: Session):
         self.db = db
         self.include_stale_content = False
-    
+        # Brief bazli indirme: set edilirse sosyal bolum YALNIZ bu brief'i
+        # toplar ve brief stale olsa da dahil eder (grup etiketiyle isaretli)
+        self.brief_id: Optional[int] = None
+
     def collect(
         self,
         scoring_run_id: int,
@@ -801,10 +804,25 @@ class ExportDataCollector:
         `content_history_read.py`'deki join kalıbıyla aynı kaynaktan (tek
         sorgu, N+1 yok) okunur.
         """
-        categories = self.db.query(SocialCategory).filter(
-            SocialCategory.scoring_run_id == scoring_run_id,
-            SocialCategory.is_stale.is_(False),
-        ).all()
+        brief_id = self.brief_id
+        if brief_id is None:
+            cat_filters = [
+                SocialCategory.scoring_run_id == scoring_run_id,
+                SocialCategory.is_stale.is_(False),
+            ]
+            idea_filters = cat_filters + [SocialIdea.is_stale.is_(False)]
+            content_filters = idea_filters + [SocialContent.is_stale.is_(False)]
+        else:
+            # Tek brief indirmesi: stale brief'in emegi de inebilsin; grup
+            # etiketi "GUNCEL DEGIL" der, guncel rapor sanilmaz
+            cat_filters = [
+                SocialCategory.scoring_run_id == scoring_run_id,
+                SocialCategory.brief_id == brief_id,
+            ]
+            idea_filters = cat_filters + [SocialIdea.brief_id == brief_id]
+            content_filters = idea_filters + [SocialContent.brief_id == brief_id]
+
+        categories = self.db.query(SocialCategory).filter(*cat_filters).all()
 
         cat_data = [{
             "id": c.id,
@@ -826,11 +844,7 @@ class ExportDataCollector:
             Keyword, SocialIdea.keyword_id == Keyword.id
         ).outerjoin(
             SocialBriefTarget, SocialIdea.brief_target_id == SocialBriefTarget.id
-        ).filter(
-            SocialCategory.scoring_run_id == scoring_run_id,
-            SocialCategory.is_stale.is_(False),
-            SocialIdea.is_stale.is_(False),
-        ).all()
+        ).filter(*idea_filters).all()
 
         idea_data = [{
             "id": i.id,
@@ -873,13 +887,8 @@ class ExportDataCollector:
             SocialBrief, SocialContent.brief_id == SocialBrief.id
         ).outerjoin(
             ContentOutput, SocialContent.content_output_id == ContentOutput.id
-        ).filter(
-            SocialCategory.scoring_run_id == scoring_run_id,
-            SocialCategory.is_stale.is_(False),
-            SocialIdea.is_stale.is_(False),
-            SocialContent.is_stale.is_(False),
-        )
-        if not self.include_stale_content:
+        ).filter(*content_filters)
+        if not self.include_stale_content and brief_id is None:
             query = query.filter(
                 (SocialContent.content_output_id.is_(None)) | (ContentOutput.is_stale == False)  # noqa: E712
             )
@@ -930,6 +939,8 @@ class ExportDataCollector:
                     created_label = brief_created_at.strftime('%d.%m.%Y') if brief_created_at else ""
                     brand_part = f" - {brand_name}" if brand_name else ""
                     label = f"Brief #{c.brief_id}{brand_part} ({created_label})" if created_label else f"Brief #{c.brief_id}{brand_part}"
+                    if brief_is_stale:
+                        label += " — GÜNCEL DEĞİL (sonradan kanal havuzu değişti)"
                 group = SocialBriefGroupData(
                     brief_id=c.brief_id,
                     label=label,
