@@ -307,7 +307,13 @@ def validate_social_content_prompt_input(prompt_input: Any) -> None:
                     error_code="CONTENT_PROMPT_INVALID_INPUT",
                     field=opt_name,
                 )
-            max_limit = 200 if opt_name in ("brand_name", "brand_tone") else 5000
+            # brand_context sınırı brief oluşturma şemasıyla aynı olmalı (schemas/social_brief.py)
+            if opt_name in ("brand_name", "brand_tone"):
+                max_limit = 200
+            elif opt_name == "brand_context":
+                max_limit = 10000
+            else:
+                max_limit = 5000
             if len(opt_val) > max_limit:
                 raise SocialContentPromptError(
                     f"{opt_name} karakter sınırını aşamaz.",

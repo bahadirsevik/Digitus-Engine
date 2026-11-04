@@ -841,3 +841,16 @@ def test_m01_dto_immutability():
 
     with pytest.raises((FrozenInstanceError, AttributeError)):
         result.ai_calls_used = 99  # type: ignore
+
+
+def test_brand_context_limit_is_10000_chars():
+    """Brief notları 10000 karaktere kadar kabul edilir; product_facts sınırı 5000 kalır."""
+    build_social_content_prompt(_make_prompt_input(brand_context="a" * 10000))
+
+    with pytest.raises(SocialContentPromptError) as exc_info:
+        build_social_content_prompt(_make_prompt_input(brand_context="a" * 10001))
+    assert exc_info.value.field == "brand_context"
+
+    with pytest.raises(SocialContentPromptError) as exc_info:
+        build_social_content_prompt(_make_prompt_input(product_facts="a" * 5001))
+    assert exc_info.value.field == "product_facts"

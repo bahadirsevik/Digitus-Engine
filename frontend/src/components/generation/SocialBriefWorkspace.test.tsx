@@ -139,6 +139,23 @@ describe('SocialBriefWorkspace — brief oluşturma ve kategori (H.1 + düzeltme
     )
   })
 
+  it('marka notu 10.000 karakteri aşınca uyarı gösterir ve kaydı engeller', async () => {
+    render(<SocialBriefWorkspace runId={RUN_ID} pool={POOL} />)
+    fireEvent.click(await screen.findByText("İlk Brief'i Oluştur"))
+    fireEvent.click(screen.getByText(POOL[0].keyword))
+    fireEvent.click(screen.getByText('Hedef Ekle'))
+    const notes = screen.getByLabelText(/Marka Bağlamı/)
+    const save = () => screen.getByText("Brief'i Kaydet ve Aç").closest('button')
+
+    fireEvent.change(notes, { target: { value: 'a'.repeat(10000) } })
+    expect(save()).toBeEnabled()
+    expect(screen.queryByText(/karakter fazla/)).not.toBeInTheDocument()
+
+    fireEvent.change(notes, { target: { value: 'a'.repeat(10001) } })
+    expect(screen.getByRole('alert')).toHaveTextContent('1 karakter fazla')
+    expect(save()).toBeDisabled()
+  })
+
   it('hedef tekilliği (platform, format): farklı süreyle aynı çift ikinci kez eklenemez', async () => {
     render(<SocialBriefWorkspace runId={RUN_ID} pool={POOL} />)
     fireEvent.click(await screen.findByText("İlk Brief'i Oluştur"))

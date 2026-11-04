@@ -29,7 +29,8 @@ const REASON_TEXT: Record<string, string> = {
   idea_persistence_failed: 'Fikirler kaydedilemedi.',
   content_rejected:
     'İçerik, doğrulanmamış iddia (sayı, üstünlük, garanti) içerdiği için kaydedilmedi.',
-  content_input_invalid: 'İçerik üretim girdisi geçersizdi.',
+  content_input_invalid:
+    'Brief verisi içerik üretimine uygun değil (ör. marka notları çok uzun). Notları kısaltıp yeni bir brief oluşturun.',
   content_provider_error: 'Yapay zekâ servisi hata verdi.',
   content_output_invalid: 'Yapay zekâ çıktısı format kurallarına uymadı.',
   content_quality_invalid: 'İçerik kalite kontrolünden geçemedi.',
@@ -41,7 +42,8 @@ const REASON_TEXT: Record<string, string> = {
   content_persistence_failed: 'İçerik kaydedilemedi.',
   content_generation_failed: 'İçerik üretilemedi.',
   content_partial: 'Bazı fikirler için içerik üretilemedi.',
-  worker_lost: 'Arka plan görevi yanıt vermeyi bıraktı.',
+  worker_lost:
+    'Arka plan görevi yanıt vermeyi bıraktı. Tekrar deneyin; sürerse yöneticinize bildirin.',
   brief_stale: 'Kanal ataması değiştiği için sonuç kaydedilmedi.',
   assignment_changed: 'Kanal ataması değiştiği için sonuç kaydedilmedi.',
   worker_bootstrap_failed: 'Arka plan görevi başlatılamadı.',

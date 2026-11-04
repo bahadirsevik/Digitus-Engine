@@ -2009,3 +2009,29 @@ def test_rev4_unresolved_risk_saved_with_claim_risk_instead_of_reject(
     row, warnings = _persisted_warnings(db_session, ctx["brief"].id)
     assert row.caption == "Hala kazanç garantisi veriyoruz."
     assert any(w.startswith("claim_risk:") for w in warnings)
+
+
+def test_prep_input_error_fails_pending_attempt_immediately(
+    db_session, make_workspace, make_scoring_run, make_keyword, enable_flag
+):
+    """Hazırlıkta deterministik girdi hatası (ör. sınırı aşan brief notu) pending attempt'i
+    lease süresini beklemeden failed/content_input_invalid yapar; AI çağrısı 0."""
+    ctx = _setup_content_orchestration_env(
+        db_session, make_workspace, make_scoring_run, make_keyword, num_ideas=1,
+        task_id="task-prep-invalid", attempt_status="pending",
+    )
+    ctx["brief"].brand_context_snapshot = "a" * 10001
+    db_session.commit()
+    ai = SmartMockAIService()
+
+    with pytest.raises(SocialContentWorkerInputError):
+        run_social_content_generation(
+            session_factory=SessionLocal, ai_service=ai, attempt_id=ctx["attempt"].id,
+            task_id="task-prep-invalid", now_provider=lambda: T0,
+        )
+
+    assert ai.call_count == 0
+    db_session.expire_all()
+    db_attempt = db_session.query(SocialGenerationAttempt).filter_by(id=ctx["attempt"].id).one()
+    assert db_attempt.status == "failed"
+    assert db_attempt.reason_code == "content_input_invalid"
