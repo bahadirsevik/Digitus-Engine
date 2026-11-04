@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiErrorMessage, tasksApi } from '../services/api'
+import { apiErrorMessage, apiErrorStatus, tasksApi } from '../services/api'
 import type { TaskStatusInfo as TaskStatus } from '../services/api'
 
 const STORAGE_KEY = 'digitus_active_tasks'
@@ -95,7 +95,7 @@ export function useTaskPolling(
   const [pollFailed, setPollFailed] = useState(false)
   const failuresRef = useRef(0)
   const inFlightRef = useRef<string | null>(null)
-  // Backend görevin başka bir run'a ait olduğunu bildirdi — bu görev "bizim" değil
+  // Görev "bizim" değil (başka run'a ait) ya da backend'de yok (404): yoklama durur, boşta durum
   const [foreign, setForeign] = useState(false)
 
   // Geç gelen yanıt, kapsam (görev/anahtar) değiştiyse state'e yazılmaz
@@ -147,6 +147,14 @@ export function useTaskPolling(
         return data
       } catch (err) {
         if (!isCurrent()) return null
+        // 404: görev kaydı yok (silinmiş/eski depo kaydı) — "durum bilinmiyor" DEĞİL, boşta durum.
+        // Depo kaydı silinir, yoklama durur ve pollFailed set edilmez (üretim butonu kilitlenmesin).
+        if (apiErrorStatus(err) === 404) {
+          setStatus(null)
+          setForeign(true)
+          removeStoredTask(storageKey)
+          return null
+        }
         failuresRef.current += 1
         setError(apiErrorMessage(err, 'Görev durumu alınamadı'))
         if (failuresRef.current >= MAX_POLL_FAILURES) setPollFailed(true)

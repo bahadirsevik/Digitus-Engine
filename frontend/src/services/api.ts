@@ -215,10 +215,11 @@ api.interceptors.response.use(
       message = raw
     } else if (status >= 500) {
       // Backend 5xx detayı güvenli Türkçe metindir (ham istisna yalnız logda); boşsa jenerik
+      // Nesne detay ({code, message}, ör. 502 BROKER_ERROR) mesajını da taşır
       message =
         typeof raw === 'string' && raw.trim()
           ? raw
-          : 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+          : detailMessage.trim() || 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
     } else if (status === 0 && err.code === 'ECONNABORTED') {
       message = 'İstek zaman aşımına uğradı; biraz sonra tekrar deneyin.'
     } else if (status === 0 && err.code !== 'ERR_CANCELED') {

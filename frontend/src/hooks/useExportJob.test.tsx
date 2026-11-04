@@ -52,4 +52,18 @@ describe('useExportJob durum yoklama hatası', () => {
     expect(result.current.activeJob?.status).toBe('completed')
     expect(result.current.busy).toBe(false)
   })
+
+  it('404 (job yok) pollFailed olmaz: takip bırakılır, busy kapanır', async () => {
+    api.status.mockRejectedValue({ status: 404, message: 'Export bulunamadı.' })
+    const { result } = renderHook(() => useExportJob(9, 3))
+    await flush(0)
+    expect(result.current.busy).toBe(true)
+    await flush(2000)
+    expect(result.current.pollFailed).toBe(false)
+    expect(result.current.busy).toBe(false)
+    expect(result.current.activeJob).toBeNull()
+    const calls = api.status.mock.calls.length
+    await flush(10000)
+    expect(api.status.mock.calls.length).toBe(calls)
+  })
 })

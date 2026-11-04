@@ -80,6 +80,13 @@ describe('response interceptor (5xx / ağ hatası)', () => {
     expect((await failWith(502, {}))?.message).toMatch(/^Sunucu hatası oluştu/)
   })
 
+  it('5xx nesne detayında {code, message} mesajı kullanılır', async () => {
+    const e = await failWith(502, {
+      detail: { code: 'BROKER_ERROR', message: 'Kuyruk servisine ulaşılamadı.' },
+    })
+    expect(e?.message).toBe('Kuyruk servisine ulaşılamadı.')
+  })
+
   it('ağ hatası Türkçe metne çevrilir', async () => {
     const e = await failWith(0, undefined, 'ERR_NETWORK')
     expect(e?.status).toBe(0)

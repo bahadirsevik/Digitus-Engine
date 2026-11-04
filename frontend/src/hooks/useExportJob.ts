@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_POLL_FAILURES } from './useTaskPolling'
 import {
   apiErrorMessage,
+  apiErrorStatus,
   downloadBlobResponse,
   exportApi,
   ExportRequest,
@@ -116,8 +117,17 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
             void downloadJob(next)
           }
         }
-      } catch {
+      } catch (err) {
         if (activeIdRef.current !== exportId) return
+        // 404: job artık yok — "durum bilinmiyor" değil; takip bırakılır, yeni export alınabilir
+        if (apiErrorStatus(err) === 404) {
+          setActiveJob(null)
+          setBusy(false)
+          setPollFailed(false)
+          failuresRef.current = 0
+          setHistory((prev) => prev.filter((job) => job.export_id !== exportId))
+          return
+        }
         failuresRef.current += 1
         // Durum BİLİNMİYOR (job başarısız sayılmaz): busy/takip korunur, kullanıcı yeniden kontrol eder
         if (failuresRef.current >= MAX_POLL_FAILURES) setPollFailed(true)

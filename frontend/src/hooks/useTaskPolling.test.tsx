@@ -55,6 +55,19 @@ describe('useTaskPolling hata dayanıklılığı', () => {
     expect(getStatus.mock.calls.length).toBeGreaterThan(MAX_POLL_FAILURES + 1)
   })
 
+  it('404 (görev yok) pollFailed DEĞİL: kayıt silinir, yoklama durur, boşta durum', async () => {
+    window.localStorage.setItem('digitus_active_tasks', JSON.stringify({ [KEY]: 't1' }))
+    getStatus.mockRejectedValue({ status: 404, message: 'Görev bulunamadı.' })
+    const { result } = renderHook(() => useTaskPolling('t1', KEY, 1000, 7, 3))
+    await flush(0)
+    await flush(5000)
+    expect(getStatus).toHaveBeenCalledTimes(1)
+    expect(result.current.pollFailed).toBe(false)
+    expect(result.current.status).toBeNull()
+    expect(result.current.isActive).toBe(false)
+    expect(getStoredTaskId(KEY)).toBeNull()
+  })
+
   it('başarı hata sayacını sıfırlar (kesintili hatalar pollFailed yapmaz)', async () => {
     getStatus
       .mockRejectedValueOnce(networkError)
