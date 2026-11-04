@@ -721,6 +721,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const reviewSet = (shownSet && sets.find((s) => s.id === shownSet.id)) || shownSet
   const hasActiveNonStale = sets.some((s) => s.status === 'active' && !s.is_stale)
   const activatableDraft = sets.find(canActivateSet)
+  // Kısmi başarı: üretilemeyen gruplar sette YOK (sebep: AI çıktısı işlenemedi / RSA kuralları sağlanamadı)
+  const failedGroups = shownSet?.failed_groups ?? 0
 
   return (
     <div className="adsx-root">
@@ -910,6 +912,14 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
               <span className="adsx-set-badge is-active">Aktif Set</span>
             )}
           </div>
+
+          {failedGroups > 0 && results && (
+            <div className="adsx-sets-empty" role="status">
+              {results.total_groups + failedGroups} reklam grubundan {failedGroups} tanesi
+              üretilemedi (yapay zekâ çıktısı işlenemedi veya reklam kurallarını karşılamadı); bu
+              grupların kelimeleri sette yer almıyor. Yeniden üretim deneyebilirsiniz.
+            </div>
+          )}
 
           <ClaimReviewDetails review={reviewSet?.claim_review} />
 

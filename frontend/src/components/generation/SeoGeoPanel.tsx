@@ -44,6 +44,21 @@ const SEO_STEPS = [
   'SEO & GEO skorları hesaplanıyor',
 ]
 
+// Başarısız kelime listesi uzunsa ilk N satır görünür, kalanı açılır bölümde
+const FAILED_KEYWORDS_SHOWN = 5
+
+const numberOrNull = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+
+function failedKeywordsFrom(raw: unknown): Array<{ keyword: string; reason: string }> {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    const row = item as { keyword?: unknown; reason?: unknown }
+    return typeof row?.keyword === 'string' && row.keyword
+      ? [{ keyword: row.keyword, reason: typeof row.reason === 'string' ? row.reason : '' }]
+      : []
+  })
+}
+
 const TONES = [
   { value: 'informative', label: 'Bilgilendirici' },
   { value: 'professional', label: 'Profesyonel' },
@@ -380,6 +395,11 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
   const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_seo === false
 
+  // Kısmi başarı (backend result_data sözleşmesi; alan yoksa uyarı yok)
+  const failedKeywords = failedKeywordsFrom(polling.resultData?.failed_keywords)
+  const requestedCount = numberOrNull(polling.resultData?.requested_count)
+  const producedCount = numberOrNull(polling.resultData?.total)
+
   // Run/workspace değişince önceki run'ın sonuçları ve devam eden istek durumu taşınmaz
   useEffect(() => {
     setResults([])
@@ -566,6 +586,35 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
             onDismiss={() => setTaskId(null)}
             onRetry={() => setTaskId(null)}
           />
+        </div>
+      )}
+
+      {failedKeywords.length > 0 && (polling.isCompleted || polling.isFailed) && (
+        <div className="adsx-span adsx-sets-empty" role="status">
+          {requestedCount != null && producedCount != null
+            ? `${requestedCount} kelimeden ${producedCount} içerik üretildi; ${requestedCount - producedCount} kelime üretilemedi:`
+            : `${failedKeywords.length} kelime için içerik üretilemedi:`}
+          <ul>
+            {failedKeywords.slice(0, FAILED_KEYWORDS_SHOWN).map((f) => (
+              <li key={f.keyword}>
+                {f.keyword}
+                {f.reason ? ` — ${f.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+          {failedKeywords.length > FAILED_KEYWORDS_SHOWN && (
+            <details>
+              <summary>Tümünü göster ({failedKeywords.length})</summary>
+              <ul>
+                {failedKeywords.slice(FAILED_KEYWORDS_SHOWN).map((f) => (
+                  <li key={f.keyword}>
+                    {f.keyword}
+                    {f.reason ? ` — ${f.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 
