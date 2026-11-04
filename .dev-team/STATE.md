@@ -20,6 +20,7 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 - 7 b64eba2: Layout icinde ErrorBoundary (route degisince sifirlanir; GlobalAnalysisToast disarida).
 - Testler: BE tam paket 5694 gecti / 2 bilinen (test_hybrid_run_db) / 112 atlandi; ruff temiz. FE 402/402 + lint/format/build. Tarayici dogrulamasi YAPILMADI. Test ortami: `digitus_test_db` baska worktree'ye (dg-auth-merge, alembic 20261029_002) ait oldugu icin `-p dgbe` ayri proje kullanildi.
 - Bilinen sinirlar: olu SEO parent artik otomatik failed olmaz (muaf); esikler (3900/7200 s) yargi; crawler/profile_extractor sayfa girdilerinde ham str(e) kaldi; olu sayfalar (Scoring/Relevance/Channels/SocialStepper) dokunulmadi.
+- Codex 4. tur (04.11) dogrulandi + duzeltildi: 9cc2dbd ADS `reconcile_stale_ads_on_read` (okuma yollarinda, ScoringRun FOR UPDATE SKIP LOCKED; eskiden yalniz dispatch'te → olu ADS gorevi sonsuza running); ca1c409 export baslatma yaniti workspace kapsamli + export poll in-flight guard + ADS sets/results hata alanlari ayri; 6f6e119 yalniz set listesi hatasinda dogru metin + BrandProfile liste poll cift zincir yarisi. BE tam paket 5699 / 2 bilinen / 112; FE 406/406.
 - Dagitim notu: imaj rebuild + app/celery_worker/celery_screening_worker/celery_beat restart (task imza degil ama task_status davranisi degisti); prod .env DEBUG kontrolu.
 
 ## Just completed (31.10 — pazar/dil plani FAZ 0; Backend Dev Sonnet+high; Architect/Konsey KOSMADI)
