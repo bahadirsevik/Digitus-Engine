@@ -200,12 +200,19 @@ describe('StartAnalysisModal v3 ürün akışı', () => {
     expect(mockedScoring.createRun).not.toHaveBeenCalled()
   })
 
-  it('capability çağrısı başarısızsa legacy motora düşmez', async () => {
+  it('capability çağrısı başarısızsa legacy motora düşmez ve "kapalı" demez, tekrar dene sunar', async () => {
     setup({ capabilityError: true })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Motor v3 sunucuda kapalı')
+    const alert = await screen.findByTestId('engine-check-error')
+    expect(alert).toHaveTextContent('kontrol edilemedi')
+    expect(screen.queryByText(/sunucuda kapalı/)).toBeNull()
     expect(screen.getByRole('button', { name: /Başlat/ })).toBeDisabled()
     expect(mockedScoring.createRun).not.toHaveBeenCalled()
+
+    mockedScoring.getCapabilities.mockResolvedValue(response({ engine_v3_enabled: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tekrar dene' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Başlat/ })).toBeEnabled())
+    expect(screen.queryByTestId('engine-check-error')).toBeNull()
   })
 
   it('tüm kanallar kapatıldığında başlatmayı engeller', async () => {

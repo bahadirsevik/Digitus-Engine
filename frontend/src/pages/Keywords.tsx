@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import {
   apiErrorMessage,
+  apiErrorStatus,
   downloadBlobResponse,
   keywordsApi,
   scoringApi,
@@ -365,8 +366,12 @@ export default function Keywords() {
       })
       setKeywords(res.data.items || [])
       setPoolTotal(res.data.total ?? (res.data.items || []).length)
-    } catch {
-      setError('API bağlantısı kurulamadı. Backend çalışıyor mu?')
+    } catch (err) {
+      setError(
+        apiErrorStatus(err) === 0
+          ? 'API bağlantısı kurulamadı. Backend çalışıyor mu?'
+          : `Anahtar kelime listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+      )
       setKeywords([])
       setPoolTotal(0)
     }
@@ -512,7 +517,13 @@ export default function Keywords() {
       language_id: detail.language_id || undefined,
       force_include: true,
     }
-    await keywordsApi.import([row], activeWorkspace.id)
+    try {
+      await keywordsApi.import([row], activeWorkspace.id)
+    } catch (err) {
+      setError(`"${detail.keyword}" geri alınamadı: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
+      // Çağıranlar "eklendi" işaretini yalnız başarıda koysun diye hata yeniden fırlatılır
+      throw err
+    }
     fetchKeywords()
   }
 
@@ -554,7 +565,8 @@ export default function Keywords() {
       await keywordsApi.delete(wk_id, activeWorkspace?.id)
       fetchKeywords()
     } catch (err) {
-      setKeywords(keywords.filter((k) => k.wk_id !== wk_id))
+      // Satır silinemedi: listede KALIR, gerçek hata gösterilir
+      setError(`Kelime silinemedi, listede korundu: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }
 
@@ -569,7 +581,7 @@ export default function Keywords() {
       await keywordsApi.deleteAll(activeWorkspace.id)
       fetchKeywords()
     } catch (err) {
-      setError('Silme başarısız oldu')
+      setError(`Kelimeler silinemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }
 
@@ -718,8 +730,7 @@ export default function Keywords() {
       fetchKeywords()
       return res.data
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string }
-      setError(`Hata: ${e?.response?.data?.detail || e?.message || 'Bilinmeyen hata'}`)
+      setError(`Hata: ${apiErrorMessage(err, 'Bilinmeyen hata')}`)
       throw err
     }
   }
@@ -971,19 +982,20 @@ export default function Keywords() {
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm restore-btn"
-                              onClick={() =>
-                                handleForceInclude({
-                                  keyword: d.keyword || '',
-                                  reason: 'skipped_theme',
-                                  monthly_volume: d.monthly_volume,
-                                  trend_3m: d.trend_3m,
-                                  trend_12m: d.trend_12m,
-                                  competition_score: d.competition_score,
-                                  data_source:
-                                    (d.data_source as KeywordCreate['data_source']) || 'csv',
-                                  geo_target_id: d.geo_target_id,
-                                  language_id: d.language_id,
-                                })
+                              onClick={
+                                () =>
+                                  handleForceInclude({
+                                    keyword: d.keyword || '',
+                                    reason: 'skipped_theme',
+                                    monthly_volume: d.monthly_volume,
+                                    trend_3m: d.trend_3m,
+                                    trend_12m: d.trend_12m,
+                                    competition_score: d.competition_score,
+                                    data_source:
+                                      (d.data_source as KeywordCreate['data_source']) || 'csv',
+                                    geo_target_id: d.geo_target_id,
+                                    language_id: d.language_id,
+                                  }).catch(() => {}) // hata handleForceInclude'da gösterildi
                               }
                             >
                               Geri al

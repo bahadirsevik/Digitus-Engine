@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { RefreshCw, Clock, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
-import { tasksApi } from '../services/api'
+import { apiErrorMessage, tasksApi } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
 import ErrorBanner from '../components/ErrorBanner'
 import './Tasks.css'
@@ -49,7 +49,7 @@ export default function Tasks() {
       const res = await tasksApi.list({ brand_profile_id: activeWorkspace.id })
       setTasks((res.data as { tasks?: Task[] }).tasks || [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Hata')
+      setError(`Görev listesi alınamadı: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
       setLoading(false)
     }
@@ -62,7 +62,7 @@ export default function Tasks() {
       await tasksApi.cancel(taskId, activeWorkspace.id)
       fetchTasks()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'İptal hatası')
+      setError(`Görev iptal edilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }
 

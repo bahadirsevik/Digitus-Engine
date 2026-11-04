@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { useBrandStore } from '../stores/brandStore'
 import {
   apiErrorCode,
+  apiErrorMessage,
   googleAdsUrlSeedApi,
   KeywordImportResponse,
   SkippedKeywordDetail,
@@ -35,19 +36,7 @@ interface Props {
 
 const ideaVolume = (idea: UrlSeedIdea) => idea.monthly_volume || 0
 
-const errorMessageFrom = (err: unknown, fallback: string): string => {
-  const e = err as {
-    message?: string
-    detail?: unknown
-    response?: { data?: { detail?: string } }
-  }
-  return (
-    e?.message ||
-    (typeof e?.detail === 'string' ? e.detail : undefined) ||
-    e?.response?.data?.detail ||
-    fallback
-  )
-}
+const errorMessageFrom = apiErrorMessage
 
 export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclude }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)

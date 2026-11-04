@@ -67,6 +67,9 @@ export default function StartAnalysisModal({
     social: String(DEFAULT_CAPACITIES.social),
   })
   const [engineV3Enabled, setEngineV3Enabled] = useState<boolean | null>(null)
+  // Motor durumu sorgusu başarısız (ağ/sunucu) — "kapalı" cevabından ayrı bir durum
+  const [capsCheckFailed, setCapsCheckFailed] = useState(false)
+  const [capsAttempt, setCapsAttempt] = useState(0)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
 
@@ -125,19 +128,21 @@ export default function StartAnalysisModal({
   useEffect(() => {
     if (!open) return
     setEngineV3Enabled(null)
+    setCapsCheckFailed(false)
     let cancelled = false
     void (async () => {
       try {
         const caps = await scoringApi.getCapabilities()
         if (!cancelled) setEngineV3Enabled(Boolean(caps.data?.engine_v3_enabled))
       } catch {
-        if (!cancelled) setEngineV3Enabled(false)
+        // Durum bilinmiyor: motor "kapalı" sayılmaz; başlatma yine engelli (engineV3Enabled !== true)
+        if (!cancelled) setCapsCheckFailed(true)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, capsAttempt])
 
   // (b) Birincil düzeltme: modal her açılışta workspace'i SUNUCUDAN taze
   // çeker; kararı store DEĞİL bu çağrı belirler. Bu sayede kayıtlı mod
@@ -320,7 +325,23 @@ export default function StartAnalysisModal({
         {engineUnavailable && (
           <div className="kwx-modal-warning" role="alert">
             <AlertTriangle size={14} />
-            <span>Motor v3 sunucuda kapalı veya doğrulanamadı. Analiz başlatılmadı.</span>
+            <span>Motor v3 sunucuda kapalı olduğu için analiz başlatılamıyor.</span>
+          </div>
+        )}
+        {capsCheckFailed && (
+          <div className="kwx-modal-warning" role="alert" data-testid="engine-check-error">
+            <AlertTriangle size={14} />
+            <span>
+              Motor durumu şu an kontrol edilemedi; bağlantıyı kontrol edip tekrar deneyin.{' '}
+              <button
+                type="button"
+                className="kwx-modal-cancel"
+                style={{ padding: '2px 10px', marginLeft: 6 }}
+                onClick={() => setCapsAttempt((n) => n + 1)}
+              >
+                Tekrar dene
+              </button>
+            </span>
           </div>
         )}
 

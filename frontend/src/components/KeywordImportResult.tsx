@@ -63,6 +63,8 @@ export default function KeywordImportResult({
     try {
       await onForceInclude(detail)
       setRestored((prev) => new Set(prev).add(detail.keyword))
+    } catch {
+      // Hata onForceInclude sahibi tarafından gösterilir; "eklendi" işaretlenmez.
     } finally {
       setRestoring(null)
     }
