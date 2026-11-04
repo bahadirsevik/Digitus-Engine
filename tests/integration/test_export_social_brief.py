@@ -319,3 +319,69 @@ def test_social_export_without_briefs_still_renders_legacy_only(
     rows = [[c.value for c in row] for row in wb["Sosyal İçerikler"].iter_rows()]
     assert rows[1][0] == "Eski (brief'siz)"
     assert rows[1][1] == "Eski Fikir"
+
+
+# --- Tek brief indirmesi (stale brief'in emeği kaybolmasın) -----------------
+
+def test_collect_social_single_brief_includes_stale_brief_with_label(
+    db_session, make_workspace, make_keyword, make_scoring_run
+):
+    """brief_id verilince yalnız o brief toplanır; stale olsa da dahil edilir
+    ve grup başlığı "GÜNCEL DEĞİL" der. Tam rapor stale brief'i dışlamaya devam eder."""
+    from app.exporters.data_collector import ExportDataCollector
+    from app.schemas.export import ExportSectionEnum
+
+    ws = make_workspace(name="Tek Brief WS")
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+    keyword = make_keyword("tek brief kelime", brand_profile_id=ws.id)
+    brief, content, _legacy = _build_brief_and_legacy_chain(db_session, run, keyword)
+
+    brief.is_stale = True
+    for model in (SocialCategory, SocialIdea, SocialContent):
+        db_session.query(model).filter(model.brief_id == brief.id).update({"is_stale": True})
+    db_session.commit()
+
+    full = ExportDataCollector(db_session).collect(run.id, [ExportSectionEnum.SOCIAL]).social
+    assert [g.brief_id for g in full.brief_groups] == [None]
+
+    collector = ExportDataCollector(db_session)
+    collector.brief_id = brief.id
+    single = collector.collect(run.id, [ExportSectionEnum.SOCIAL]).social
+    assert [g.brief_id for g in single.brief_groups] == [brief.id]
+    assert [c.id for c in single.contents] == [content.id]
+    assert "GÜNCEL DEĞİL" in single.brief_groups[0].label
+
+
+def test_brief_export_endpoint_downloads_and_scopes_workspace(
+    client, db_session, make_workspace, make_keyword, make_scoring_run, monkeypatch
+):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ENABLE_SOCIAL_BRIEF_FLOW", True)
+    ws = make_workspace(name="Uç WS")
+    other = make_workspace(name="Başka WS")
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+    keyword = make_keyword("uç kelime", brand_profile_id=ws.id)
+    brief, _content, _legacy = _build_brief_and_legacy_chain(db_session, run, keyword)
+    brief.is_stale = True
+    db_session.commit()
+
+    url = f"/api/v1/generation/social/briefs/{brief.id}/export"
+    for fmt, magic in (("docx", b"PK"), ("excel", b"PK"), ("pdf", b"%PDF")):
+        res = client.get(url, params={"brand_profile_id": ws.id, "format": fmt})
+        assert res.status_code == 200, res.text
+        assert res.content.startswith(magic)
+        assert "attachment" in res.headers["content-disposition"]
+
+    assert client.get(url, params={"brand_profile_id": other.id}).status_code == 404
+    assert client.get(url, params={"brand_profile_id": ws.id, "format": "csv"}).status_code == 422
+
+    empty = SocialBrief(scoring_run_id=run.id, is_stale=False)
+    db_session.add(empty)
+    db_session.commit()
+    res = client.get(
+        f"/api/v1/generation/social/briefs/{empty.id}/export",
+        params={"brand_profile_id": ws.id},
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "NO_CONTENT"

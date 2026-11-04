@@ -1390,6 +1390,82 @@ def get_social_brief_endpoint(
         )
 
 
+_BRIEF_EXPORT_MEDIA = {
+    "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+}
+
+
+@router.get("/social/briefs/{brief_id}/export")
+def export_social_brief_endpoint(
+    brief_id: int,
+    brand_profile_id: int = Query(..., gt=0, description="Workspace scope"),
+    format: str = Query("docx", pattern="^(excel|docx|pdf)$"),
+    db: Session = Depends(get_db),
+):
+    """Tek brief'in sosyal içeriklerini senkron indirir.
+
+    Tam rapor stale brief'leri dışlar; kanal havuzu sonradan değişince eski
+    brief'in emeği rapordan düşüyordu. Bu uç stale brief'i de verir — grup
+    başlığı "GÜNCEL DEĞİL" der. Tek brief küçük: ExportJob/Celery gerekmez.
+    """
+    import os
+    import tempfile
+
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    from app.core.http_headers import content_disposition, download_filename
+    from app.core.workspace import verify_workspace
+    from app.database.models import SocialContent
+    from app.schemas.export import ExportFormatEnum, ExportSectionEnum
+    from app.tasks.export_tasks import _file_extension, _get_exporter
+
+    if not getattr(settings, "ENABLE_SOCIAL_BRIEF_FLOW", False):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "FEATURE_DISABLED", "message": "Social brief flow is not enabled."},
+        )
+    try:
+        brief = get_social_brief(db, brief_id=brief_id, brand_profile_id=brand_profile_id)
+    except SocialBriefNotFoundError as e:
+        raise HTTPException(status_code=404, detail={"code": e.error_code, "message": e.message})
+
+    if not db.query(SocialContent.id).filter(SocialContent.brief_id == brief.id).first():
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "NO_CONTENT", "message": "Bu brief için üretilmiş içerik yok."},
+        )
+
+    format_enum = ExportFormatEnum(format)
+    exporter = _get_exporter(format_enum, db)
+    exporter.data_collector.brief_id = brief.id
+    ext = _file_extension(format_enum)
+    fd, filepath = tempfile.mkstemp(suffix=ext)
+    os.close(fd)
+    try:
+        exporter.export(
+            scoring_run_id=brief.scoring_run_id,
+            sections=[ExportSectionEnum.SOCIAL],
+            filepath=filepath,
+        )
+    except Exception as e:
+        os.remove(filepath)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=safe_500_detail(e, "Brief indirilemedi"))
+
+    filename = download_filename(
+        verify_workspace(db, brand_profile_id), f"Sosyal_Brief_{brief.id}", ext
+    )
+    return FileResponse(
+        filepath,
+        media_type=_BRIEF_EXPORT_MEDIA[format],
+        headers={"Content-Disposition": content_disposition(filename)},
+        background=BackgroundTask(os.remove, filepath),
+    )
+
+
 def _attempt_summary_to_response(s: SocialAttemptSummary) -> SocialAttemptSummaryResponse:
     return SocialAttemptSummaryResponse(
         id=s.id,
