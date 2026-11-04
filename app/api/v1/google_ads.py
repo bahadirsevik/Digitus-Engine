@@ -12,6 +12,7 @@ from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import httpx
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -344,7 +345,11 @@ def _assert_url_reachable(url: str) -> None:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"URL erişilemedi: {exc}")
+        logger.warning(f"URL erişim kontrolü başarısız ({url}): {exc}")
+        raise HTTPException(
+            status_code=422,
+            detail="URL'ye ulaşılamadı; adresi kontrol edip tekrar deneyin.",
+        )
 
 
 def _inspect_url_for_seed(url: str) -> tuple[UrlSeedSourceStatus, list[str]]:

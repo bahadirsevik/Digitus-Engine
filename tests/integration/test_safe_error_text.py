@@ -93,3 +93,21 @@ def test_google_ads_health_error_is_safe(monkeypatch):
 
     monkeypatch.setattr(svc, "_build_client", lambda: (_ for _ in ()).throw(RuntimeError("invalid_grant: x")))
     assert "refresh token" in svc.health_check()["error"]
+
+
+def test_url_reachability_error_hides_raw_text(monkeypatch):
+    import httpx
+
+    from app.api.v1 import google_ads
+
+    monkeypatch.setattr(google_ads, "_assert_url_host_is_public", lambda url: None)
+
+    def _fail(self, url, **kw):
+        raise httpx.ConnectError(SECRET)
+
+    monkeypatch.setattr(httpx.Client, "get", _fail)
+    with pytest.raises(HTTPException) as info:
+        google_ads._assert_url_reachable("https://example.com")
+    assert info.value.status_code == 422
+    assert SECRET not in info.value.detail
+    assert "URL'ye ulaşılamadı" in info.value.detail

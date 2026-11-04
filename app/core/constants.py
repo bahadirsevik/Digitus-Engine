@@ -297,6 +297,7 @@ TASK_STALE_ERROR_MESSAGE = (
     "Görev zaman aşımına uğradı veya worker yeniden başladı; "
     "işlemi yeniden başlatabilirsiniz."
 )
+SCREENING_NOT_USED_MESSAGE = "Ön tarama tamamlanamadı; sonuçları kullanılmadı."
 # Kendi uzlastirmasi olan task turleri (ADS set reconcile, screening attempt
 # reconcile) bu genel mekanizmadan MUAF: iki uzlastirici ayni satiri
 # yarismamali. Sosyal brief attempt'lerinin TaskResult satiri yoktur.

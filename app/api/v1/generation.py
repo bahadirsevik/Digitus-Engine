@@ -1148,7 +1148,7 @@ def generate_social_contents_async(
             update_task_status(
                 task_id,
                 status="failed",
-                error_message="Gorev kuyruga alinamadi; Celery/Redis erisimini kontrol edin.",
+                error_message="Görev kuyruğa alınamadı. Lütfen tekrar deneyin.",
             )
             raise HTTPException(
                 status_code=503,

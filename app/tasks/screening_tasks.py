@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from celery.exceptions import SoftTimeLimitExceeded
 from loguru import logger
 
+from app.core.constants import SCREENING_NOT_USED_MESSAGE
 from app.tasks.celery_app import celery_app
 
 CORPUS_SCREENING_QUEUE = "corpus_screening"
@@ -438,7 +439,7 @@ def run_corpus_screening_task(self, *, job_id: int, attempt_id: int,
                       error_message=str(exc), task_id=task_id)
             _mark_child_task(
                 session, task_id, status=_child_task_status(job_status),
-                progress=100, error_message=str(exc),
+                progress=100, error_message=SCREENING_NOT_USED_MESSAGE,
                 result_data={"status": job_status,
                              "reason": getattr(exc, "error_code",
                                                type(exc).__name__)})

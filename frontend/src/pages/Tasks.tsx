@@ -157,7 +157,8 @@ export default function Tasks() {
 
               {task.error_message && (
                 <div className="task-error">
-                  <strong>Hata:</strong> {task.error_message}
+                  <strong>{task.status === 'completed' ? 'Not:' : 'Hata:'}</strong>{' '}
+                  {task.error_message}
                 </div>
               )}
 
