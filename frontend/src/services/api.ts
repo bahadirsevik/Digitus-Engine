@@ -214,7 +214,15 @@ api.interceptors.response.use(
     } else if (status === 503 && typeof raw === 'string') {
       message = raw
     } else if (status >= 500) {
-      message = 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+      // Backend 5xx detayı güvenli Türkçe metindir (ham istisna yalnız logda); boşsa jenerik
+      message =
+        typeof raw === 'string' && raw.trim()
+          ? raw
+          : 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+    } else if (status === 0 && err.code === 'ECONNABORTED') {
+      message = 'İstek zaman aşımına uğradı; biraz sonra tekrar deneyin.'
+    } else if (status === 0 && err.code !== 'ERR_CANCELED') {
+      message = 'Sunucuya ulaşılamadı; bağlantınızı kontrol edip tekrar deneyin.'
     } else {
       message = typeof raw === 'string' ? raw : detailMessage || err.message
     }

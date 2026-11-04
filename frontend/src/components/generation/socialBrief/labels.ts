@@ -168,6 +168,9 @@ export function socialErrorText(err: unknown, fallback: string): string {
     return 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip aynı işlemi güvenle tekrar deneyebilirsiniz.'
   }
   if (status >= 500) {
+    // Backend'in güvenli Türkçe metni varsa onu göster; yoksa genel metin
+    const detail = (err as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
     return 'Sunucu hatası oluştu. Aynı işlemi güvenle tekrar deneyebilirsiniz.'
   }
   return apiErrorMessage(err, fallback)
