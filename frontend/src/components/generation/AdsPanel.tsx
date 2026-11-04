@@ -472,8 +472,11 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const [results, setResults] = useState<AdsResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Sonuç/set listesi YÜKLEME hatası (üretim hatasından ayrı): yalnız yeniden yükleme sunar
-  const [loadError, setLoadError] = useState<string | null>(null)
+  // Sonuç ve set listesi YÜKLEME hataları AYRI tutulur (biri diğerinin başarısıyla silinmez);
+  // üretim hatasından ayrıdır, yalnız yeniden yükleme sunar
+  const [resultsError, setResultsError] = useState<string | null>(null)
+  const [setsError, setSetsError] = useState<string | null>(null)
+  const loadError = resultsError ?? setsError
   const [toastOpen, setToastOpen] = useState(true)
   // Set versiyonlama (Faz E): geçmiş + onay akışı
   const [sets, setSets] = useState<AdGenerationSetSummary[]>([])
@@ -494,7 +497,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   useEffect(() => {
     setResults(null)
     setError(null)
-    setLoadError(null)
+    setResultsError(null)
+    setSetsError(null)
     setLoading(false)
     setActivating(false)
     setBrandName('')
@@ -566,10 +570,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       if (scopeRef.current !== requestScope) return
       const data = res.data as AdsResult
       setResults(data.total_groups > 0 ? data : null)
-      setLoadError(null)
+      setResultsError(null)
     } catch (e) {
       if (scopeRef.current !== requestScope) return
-      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
+      setResultsError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId, selectedSetId])
 
@@ -582,9 +586,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       const data = res.data as AdsSetListResult
       setSets(data.sets || [])
       setActiveSetId(data.active_set_id ?? null)
+      setSetsError(null)
     } catch (e) {
       if (scopeRef.current !== requestScope) return
-      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
+      setSetsError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId])
 

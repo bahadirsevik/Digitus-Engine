@@ -43,6 +43,8 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
   const [pollFailed, setPollFailed] = useState(false)
   const failuresRef = useRef(0)
   const activeIdRef = useRef<string | null>(null)
+  // Aynı job için ikinci durum isteği başlatılmaz (recheck + zamanlayıcı çakışmasın)
+  const pollInFlightRef = useRef<string | null>(null)
 
   const downloadJob = useCallback(
     async (job: ExportStatusResponse) => {
@@ -97,7 +99,8 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
 
   const pollOnce = useCallback(
     async (exportId: string): Promise<void> => {
-      if (!workspaceId) return
+      if (!workspaceId || pollInFlightRef.current === exportId) return
+      pollInFlightRef.current = exportId
       try {
         const res = await exportApi.status(exportId, workspaceId)
         // Kapsam değiştiyse (başka job/workspace) geç yanıt yazılmaz
@@ -131,6 +134,8 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
         failuresRef.current += 1
         // Durum BİLİNMİYOR (job başarısız sayılmaz): busy/takip korunur, kullanıcı yeniden kontrol eder
         if (failuresRef.current >= MAX_POLL_FAILURES) setPollFailed(true)
+      } finally {
+        if (pollInFlightRef.current === exportId) pollInFlightRef.current = null
       }
     },
     [workspaceId, downloadJob]
@@ -164,6 +169,8 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
   const startExport = useCallback(
     async (req: ExportRequest) => {
       if (!workspaceId || busy) return
+      // Yanıt/hata geldiğinde kapsam (run/workspace) değiştiyse A'nın sonucu B'ye yazılmaz
+      const requestScope = scopeRef.current
       setBusy(true)
       setError(null)
       setPollFailed(false)
@@ -172,6 +179,7 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
       autoDownloadRef.current = true
       try {
         const res = await exportApi.create(req, workspaceId)
+        if (scopeRef.current !== requestScope) return
         const job = res.data as ExportStatusResponse
         setActiveJob(job)
         setHistory((prev) => [job, ...prev.filter((item) => item.export_id !== job.export_id)])
@@ -185,6 +193,7 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
           }
         }
       } catch (err) {
+        if (scopeRef.current !== requestScope) return
         // 409 bayat havuz kendi mesajıyla; 422 NO_CONTENT detail.message'ı apiErrorMessage getirir
         const stale = policyStaleFromError(err)
         setError(stale ? stale.message : apiErrorMessage(err, 'Dışa aktarım başlatılamadı'))

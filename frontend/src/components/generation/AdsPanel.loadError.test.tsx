@@ -83,4 +83,16 @@ describe('AdsPanel sonuç yükleme hatası', () => {
     expect(screen.getByRole('button', { name: /Sonuçları yeniden yükle/ })).toBeTruthy()
     expect(mocks.createAdsRsa).not.toHaveBeenCalled()
   })
+
+  it('set listesi hatası, başarılı sonuç yüklemesiyle silinmez', async () => {
+    mocks.getAdsSets.mockRejectedValue({ status: 500, message: 'Set listesi alınamadı.' })
+    mocks.getAdsRsa.mockResolvedValue({
+      data: { total_groups: 1, ad_groups: [{ id: 1, group_name: 'Grup 1', headlines: [] }] },
+    })
+    render(<AdsPanel runId={1} />)
+
+    expect(await screen.findByText('RSA Üretimi Tamamlandı')).toBeTruthy()
+    expect(await screen.findByText(/Set listesi alınamadı/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Sonuçları yeniden yükle/ })).toBeTruthy()
+  })
 })
