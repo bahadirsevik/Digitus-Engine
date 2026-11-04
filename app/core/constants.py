@@ -285,6 +285,23 @@ STOP_CHANNEL_DISABLED = "channel_disabled"
 # TaskResult'sız 'generating' set stale sayılır (E2d reconciliation).
 ADS_TASK_STALE_SECONDS = 1200
 
+# ==================== GENEL TASK BAYATLIK (okuma-ani uzlastirma) ====================
+# `running`: celery task_time_limit (3600s) worker'i ZORLA oldurur; ustune 5 dk
+# pay birakilir. Bu sureyi asan running kayit, worker'in oldugu/yeniden
+# basladigi anlamina gelir. `pending`: normalde saniyeler icinde alinir; sonsuz
+# beklemeyi kesmek icin 2 saat (en uzun task'in 2 kati) — kuyruk gecici
+# tikansa bile mesru bekleme bunu asmaz.
+TASK_RUNNING_STALE_SECONDS = 3600 + 300
+TASK_PENDING_STALE_SECONDS = 2 * 3600
+TASK_STALE_ERROR_MESSAGE = (
+    "Görev zaman aşımına uğradı veya worker yeniden başladı; "
+    "işlemi yeniden başlatabilirsiniz."
+)
+# Kendi uzlastirmasi olan task turleri (ADS set reconcile, screening attempt
+# reconcile) bu genel mekanizmadan MUAF: iki uzlastirici ayni satiri
+# yarismamali. Sosyal brief attempt'lerinin TaskResult satiri yoktur.
+TASK_STALE_EXEMPT_TYPES = ("ads", "corpus_screening")
+
 # Backoff sabitleri (pre-filter retry'ları için)
 PREFILTER_BASE_DELAY = 2  # seconds
 PREFILTER_RETRIABLE_PATTERNS = (

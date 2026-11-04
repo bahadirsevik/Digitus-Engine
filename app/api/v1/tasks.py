@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 from app.core.workspace import verify_task_in_workspace, verify_workspace
 from app.database.models import ScoringRun, TaskResult
 from app.dependencies import get_db
-from app.tasks.task_status import get_task_status, get_tasks_by_run, update_task_status
+from app.tasks.task_status import (
+    fail_stale_tasks,
+    get_task_status,
+    get_tasks_by_run,
+    update_task_status,
+)
 
 
 router = APIRouter()
@@ -53,6 +58,7 @@ def get_task(
     """Tek bir task'ın durumunu getirir. Task'ın run'ı workspace'e ait olmalı."""
     verify_task_in_workspace(db, task_id, brand_profile_id)
 
+    fail_stale_tasks(task_id=task_id)  # takılı running/pending -> failed (okuma anında)
     status = get_task_status(task_id)
     if not status:
         raise HTTPException(status_code=404, detail="Task bulunamadı")
@@ -71,6 +77,7 @@ def get_tasks_for_run(
 
     verify_scoring_run(db, run_id, brand_profile_id)
 
+    fail_stale_tasks(scoring_run_id=run_id)
     tasks = get_tasks_by_run(run_id)
     return TaskListResponse(
         tasks=[TaskStatusResponse(**t) for t in tasks],
@@ -100,7 +107,7 @@ def cancel_task(
         )
 
     celery_app.control.revoke(task_id, terminate=True)
-    update_task_status(task_id, status='cancelled', error_message='User cancelled')
+    update_task_status(task_id, status='cancelled', error_message='Kullanıcı tarafından iptal edildi.')
 
     return {"message": "Task iptal edildi", "task_id": task_id}
 
