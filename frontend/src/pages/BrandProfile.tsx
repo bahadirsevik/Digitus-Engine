@@ -1736,9 +1736,13 @@ export default function BrandProfile() {
 
     if (pollingIds.length === 0) return
 
+    // Efekt yeniden kurulunca uçuştaki eski tick yeni zinciri çiftlemesin / yetim zamanlayıcı bırakmasın
+    let cancelled = false
     const tick = async () => {
+      if (cancelled) return
       try {
         const results = await Promise.all(pollingIds.map((id) => workspaceApi.get(id)))
+        if (cancelled) return
         listPollFailuresRef.current = 0
         setListPollFailed(false)
         const updated = results.map((r) => r.data as WorkspaceListRow)
@@ -1759,18 +1763,21 @@ export default function BrandProfile() {
           }
         })
       } catch {
+        if (cancelled) return
         listPollFailuresRef.current += 1
         if (listPollFailuresRef.current >= MAX_POLL_FAILURES) {
           setListPollFailed(true)
           return
         }
       }
+      if (cancelled) return
       pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
 
     pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
 
     return () => {
+      cancelled = true
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
     }
   }, [workspaces, activeWorkspace, setActiveWorkspace, listPollAttempt])

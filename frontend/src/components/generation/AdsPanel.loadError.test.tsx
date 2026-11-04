@@ -92,7 +92,10 @@ describe('AdsPanel sonuç yükleme hatası', () => {
     render(<AdsPanel runId={1} />)
 
     expect(await screen.findByText('RSA Üretimi Tamamlandı')).toBeTruthy()
-    expect(await screen.findByText(/Set listesi alınamadı/)).toBeTruthy()
+    expect(
+      await screen.findByText(/Reklam seti listesi yüklenemedi: Set listesi alınamadı/)
+    ).toBeTruthy()
+    expect(screen.queryByText(/sonuçlar yüklenemedi/)).toBeNull()
     expect(screen.getByRole('button', { name: /Sonuçları yeniden yükle/ })).toBeTruthy()
   })
 })

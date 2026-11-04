@@ -822,9 +822,11 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
         <div className="adsx-span">
           <ErrorBanner
             error={`${
-              polling.isCompleted
-                ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
-                : 'Reklam sonuçları yüklenemedi.'
+              resultsError
+                ? polling.isCompleted
+                  ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
+                  : 'Reklam sonuçları yüklenemedi.'
+                : 'Reklam seti listesi yüklenemedi:'
             } ${loadError}`}
             onRetry={reloadResults}
             retryLabel="Sonuçları yeniden yükle"
