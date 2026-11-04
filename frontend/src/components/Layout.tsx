@@ -12,6 +12,7 @@ import {
 import logoFull from '../assets/optimice-logo.png'
 import logoIcon from '../assets/optimice-icon.png'
 import GlobalAnalysisToast from './GlobalAnalysisToast'
+import ErrorBoundary from './ErrorBoundary'
 import './Layout.css'
 
 interface LayoutProps {
@@ -60,7 +61,9 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </aside>
 
-      <main className="main-content">{children}</main>
+      <main className="main-content">
+        <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
+      </main>
       <GlobalAnalysisToast />
     </div>
   )
