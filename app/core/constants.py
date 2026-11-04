@@ -300,7 +300,10 @@ TASK_STALE_ERROR_MESSAGE = (
 # Kendi uzlastirmasi olan task turleri (ADS set reconcile, screening attempt
 # reconcile) bu genel mekanizmadan MUAF: iki uzlastirici ayni satiri
 # yarismamali. Sosyal brief attempt'lerinin TaskResult satiri yoktur.
-TASK_STALE_EXEMPT_TYPES = ("ads", "corpus_screening")
+# `seo_content`: chord PARENT'i — gercek is chunk task'larinda, parent yalniz
+# finalize'da biter; toplam sure tek task limitini asabilir (yanlis failed ->
+# finalize'in completed yazimi yok sayilirdi). Projedeki tek chord budur.
+TASK_STALE_EXEMPT_TYPES = ("ads", "corpus_screening", "seo_content")
 
 # Backoff sabitleri (pre-filter retry'ları için)
 PREFILTER_BASE_DELAY = 2  # seconds

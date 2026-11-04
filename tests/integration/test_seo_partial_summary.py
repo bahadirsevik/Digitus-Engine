@@ -1,6 +1,7 @@
 """SEO toplu uretim: kismi sonuc ozeti (requested_count + failed_keywords)."""
 import types
 
+from app.core.channel.ai_json import AIJsonParseError
 from app.tasks import generation_tasks
 
 
@@ -9,6 +10,8 @@ class _FakeGen:
         pass
 
     def generate_content(self, request, scoring_run_id=None):
+        if request.keyword_id % 4 == 0:
+            raise AIJsonParseError("bozuk json: secret provider text")
         if request.keyword_id % 2 == 0:
             raise ValueError("boom: secret provider text")
         return {"id": request.keyword_id * 10}
@@ -27,13 +30,20 @@ def test_chunk_reports_failed_keywords_with_safe_reason(
     monkeypatch.setattr(
         "app.generators.ai_service.get_ai_service", lambda *a, **k: types.SimpleNamespace(collector=None))
 
-    out = generation_tasks.generate_seo_chunk_task.apply(args=(run.id, ids)).get()
+    out = generation_tasks.generate_seo_chunk_task.apply(args=(run.id, ids + [999999])).get()
 
-    failed = {f["keyword"] for f in out["failed_keywords"]}
-    assert failed == {k.keyword for k in kws if k.id % 2 == 0}
-    assert all(f["reason"] == "AI yanıtı işlenemedi" for f in out["failed_keywords"])
+    reasons = {f["keyword"]: f["reason"] for f in out["failed_keywords"]}
+    expected = {}
+    for k in kws:
+        if k.id % 4 == 0:
+            expected[k.keyword] = "AI yanıtı işlenemedi"
+        elif k.id % 2 == 0:
+            expected[k.keyword] = "Üretim sırasında beklenmeyen bir hata oluştu"
+    # silinmis/bulunamayan kelime de sessizce kaybolmaz
+    expected["#999999"] = "Kelime kaydı bulunamadı"
+    assert reasons == expected
     assert "secret" not in str(out["failed_keywords"])
-    assert out["requested"] == 4
+    assert out["requested"] == 5
     assert out["count"] == 2
 
 

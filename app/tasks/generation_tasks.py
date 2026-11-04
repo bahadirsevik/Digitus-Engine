@@ -121,7 +121,9 @@ def _refuse_legacy_social_attempt(finalize_failure, *, attempt_id: int,
 
 # ==================== SEO+GEO TASKS ====================
 
-SEO_KEYWORD_FAILED_REASON = "AI yanıtı işlenemedi"
+SEO_REASON_AI = "AI yanıtı işlenemedi"
+SEO_REASON_UNEXPECTED = "Üretim sırasında beklenmeyen bir hata oluştu"
+SEO_REASON_NOT_FOUND = "Kelime kaydı bulunamadı"
 SEO_FAILED_KEYWORDS_CAP = 50  # parent result_data şişmesin
 
 
@@ -137,6 +139,8 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
     Tek SEO chunk'ını işler.
     Max 10 kelime, max 10 dakika.
     """
+    from app.core.channel.ai_json import AIJsonParseError
+    from app.generators.ai_service import AIResponseError
     from app.generators.seo_geo.seo_geo_generator import SEOGeoGenerator
     from app.schemas.seo_geo import SEOGEOGenerateRequest
     from app.database.models import Keyword
@@ -171,6 +175,7 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
         for i, kw_id in enumerate(keyword_ids):
             kw = db.query(Keyword).filter(Keyword.id == kw_id).first()
             if not kw:
+                failed_keywords.append({"keyword": f"#{kw_id}", "reason": SEO_REASON_NOT_FOUND})
                 continue
             
             try:
@@ -191,10 +196,11 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
                         claim_blocked += 1
                     logger.info(f"SEO content generated for: {kw.keyword}")
                 else:
-                    failed_keywords.append({"keyword": kw.keyword, "reason": SEO_KEYWORD_FAILED_REASON})
+                    failed_keywords.append({"keyword": kw.keyword, "reason": SEO_REASON_UNEXPECTED})
             except Exception as e:
                 logger.error(f"SEO content failed for {kw.keyword}: {e}")
-                failed_keywords.append({"keyword": kw.keyword, "reason": SEO_KEYWORD_FAILED_REASON})
+                reason = SEO_REASON_AI if isinstance(e, (AIJsonParseError, AIResponseError))                     else SEO_REASON_UNEXPECTED
+                failed_keywords.append({"keyword": kw.keyword, "reason": reason})
                 continue
         
         usage = collector.finalize()
@@ -251,9 +257,8 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
     # ki kullanici Gorevler'de ve kanal sayfasinda gercegi gorsun.
     if not total_ids:
         error_message = (
-            "SEO icerik uretimi hic icerik uretemedi: tum kelimeler AI yaniti "
-            "islenemedigi icin atlandi. Yeniden deneyin; sorun surerse "
-            "worker loglarina bakin."
+            "SEO içerik üretimi hiç içerik üretemedi: hiçbir kelime tamamlanamadı "
+            "(ayrıntı için başarısız kelime listesine bakın). Yeniden deneyin."
         )
         update_task_status(
             parent_task_id,

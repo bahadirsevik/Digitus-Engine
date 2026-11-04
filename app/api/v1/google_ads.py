@@ -70,7 +70,7 @@ def _get_service() -> GoogleAdsService:
     if not svc.is_configured():
         raise HTTPException(
             status_code=503,
-            detail="Google Ads credentials not configured. Check .env file."
+            detail="Google Ads kimlik bilgileri tanımlı değil. Sunucu yapılandırmasını (.env) kontrol edin."
         )
     return svc
 

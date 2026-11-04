@@ -100,14 +100,21 @@ def cancel_task(
     if not status:
         raise HTTPException(status_code=404, detail="Task bulunamadı")
 
-    if status['status'] in ['completed', 'failed']:
+    if status['status'] in ['completed', 'failed', 'cancelled']:
         raise HTTPException(
             status_code=400,
             detail=f"Task zaten tamamlanmış: {status['status']}",
         )
 
+    # Önce koşullu yazım: görev bu arada bittiyse iptal EDİLMEZ (revoke da gitmez)
+    if not update_task_status(
+        task_id, status='cancelled', error_message='Kullanıcı tarafından iptal edildi.'
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Görev bu arada tamamlandı veya sonlandı; iptal edilemedi.",
+        )
     celery_app.control.revoke(task_id, terminate=True)
-    update_task_status(task_id, status='cancelled', error_message='Kullanıcı tarafından iptal edildi.')
 
     return {"message": "Task iptal edildi", "task_id": task_id}
 
@@ -122,6 +129,7 @@ def list_recent_tasks(
     """Son task'ları listeler. Workspace zorunlu — global task leak önlendi."""
     verify_workspace(db, brand_profile_id)
 
+    fail_stale_tasks(brand_profile_id=brand_profile_id)
     query = (
         db.query(TaskResult)
         .join(ScoringRun, TaskResult.scoring_run_id == ScoringRun.id)

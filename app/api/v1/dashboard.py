@@ -96,7 +96,7 @@ def _gads_health(*, refresh: bool) -> Tuple[Optional[str], Optional[str]]:
     except Exception as exc:
         logger.debug(f"google ads health probe failed: {exc}")
         status = "error"
-        error = str(exc)
+        error = "Google Ads bağlantısı kurulamadı. Lütfen biraz sonra tekrar deneyin."
 
     if redis_client:
         try:

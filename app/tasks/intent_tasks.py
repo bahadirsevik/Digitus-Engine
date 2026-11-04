@@ -1,15 +1,34 @@
 """
 Celery tasks for intent analysis.
 """
+import re
+
 from loguru import logger
 
 from app.tasks.celery_app import celery_app
 from app.database.connection import SessionLocal
-from app.core.channel.channel_engine import ChannelEngine
+from app.core.channel.channel_engine import (
+    ChannelEngine,
+    PolicyVersionChangedError,
+    StrategyChangedError,
+)
+from app.core.relevance import RelevanceRefreshError
 from app.core.engine.orchestrator import run_v3_orchestration
 from app.core.scoring.state_machine import transition
 from app.generators.ai_service import get_ai_service
 from app.tasks.task_status import update_task_status
+
+_CURATED_ASSIGNMENT_ERRORS = (
+    PolicyVersionChangedError, StrategyChangedError, RelevanceRefreshError,
+)
+
+
+def assignment_error_text(exc: BaseException) -> str:
+    """Kullanıcıya gösterilecek hata metni: Türkçe mesajlı alan hataları ham
+    kalır ("KOD: " öneki atılır); beklenmeyen istisnalar jenerik metne iner."""
+    if isinstance(exc, _CURATED_ASSIGNMENT_ERRORS):
+        return re.sub(r"^[A-Z][A-Z_]+:\s*", "", str(exc))
+    return "Kanal atama beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
 
 
 # time_limit 1800→3600 (soft 3300): pencere-çarpanlı deney koşuları (4×
@@ -289,7 +308,7 @@ def run_channel_assignment_task(
 
     except Exception as e:
         logger.exception("Kanal atama görevi başarısız")
-        assign_error = "Kanal atama beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
+        assign_error = assignment_error_text(e)
         usage = collector.finalize()  # failure yolunda da persist (plan C)
         update_task_status(
             task_id, status='failed', error_message=assign_error,

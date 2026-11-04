@@ -64,3 +64,32 @@ def test_preview_task_unexpected_error_is_safe(db_session):
     assert row.status == "failed"
     assert SECRET not in row.error_message
     assert "Politika önizlemesi" in row.error_message
+
+
+def test_assignment_error_text_keeps_curated_messages_only():
+    from app.core.channel.channel_engine import PolicyVersionChangedError, StrategyChangedError
+    from app.core.relevance import RelevanceRefreshError
+    from app.tasks.intent_tasks import assignment_error_text
+
+    msg = assignment_error_text(PolicyVersionChangedError(
+        "POLICY_VERSION_CHANGED: atama sürerken profil sürümü değişti — yeniden atama gerekli."))
+    assert msg == "atama sürerken profil sürümü değişti — yeniden atama gerekli."
+    assert "yeniden atama" in assignment_error_text(StrategyChangedError("STRATEGY_CHANGED: x — yeniden atama gerekli."))
+    assert "Profili onaylayip" in assignment_error_text(RelevanceRefreshError("Relevance tazelenemedi. Profili onaylayip yeniden baslatin."))
+    generic = assignment_error_text(RuntimeError(SECRET))
+    assert SECRET not in generic and "beklenmeyen" in generic
+
+
+def test_google_ads_health_error_is_safe(monkeypatch):
+    from app.config import settings
+    from app.integrations.google_ads.service import GoogleAdsService
+
+    svc = GoogleAdsService(settings)
+    monkeypatch.setattr(svc, "is_configured", lambda: True)
+    monkeypatch.setattr(svc, "_build_client", lambda: (_ for _ in ()).throw(RuntimeError(SECRET)))
+    out = svc.health_check()
+    assert out["status"] == "error"
+    assert SECRET not in out["error"]
+
+    monkeypatch.setattr(svc, "_build_client", lambda: (_ for _ in ()).throw(RuntimeError("invalid_grant: x")))
+    assert "refresh token" in svc.health_check()["error"]

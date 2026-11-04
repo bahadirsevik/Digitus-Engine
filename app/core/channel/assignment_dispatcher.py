@@ -31,6 +31,9 @@ ACTIVE_TASK_STATUSES = ("pending", "running")
 
 
 def get_active_channel_assignment_task(db: Session, scoring_run_id: int) -> Optional[TaskResult]:
+    from app.tasks.task_status import fail_stale_tasks
+
+    fail_stale_tasks(scoring_run_id=scoring_run_id)  # takılı görev yeni işi kilitlemesin
     return (
         db.query(TaskResult)
         .filter(TaskResult.scoring_run_id == scoring_run_id)
@@ -42,6 +45,9 @@ def get_active_channel_assignment_task(db: Session, scoring_run_id: int) -> Opti
 
 
 def get_active_generation_task(db: Session, scoring_run_id: int) -> Optional[TaskResult]:
+    from app.tasks.task_status import fail_stale_tasks
+
+    fail_stale_tasks(scoring_run_id=scoring_run_id)
     return (
         db.query(TaskResult)
         .filter(TaskResult.scoring_run_id == scoring_run_id)

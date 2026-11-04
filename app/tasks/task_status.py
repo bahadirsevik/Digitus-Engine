@@ -3,7 +3,7 @@ Task Status DB Synchronization.
 
 Celery task durumunu hem Redis hem PostgreSQL'e yazan helper fonksiyonlar.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from loguru import logger
 from sqlalchemy.orm import Session
@@ -49,9 +49,9 @@ def update_task_status(
         if status:
             values["status"] = status
             if status == 'running':
-                values["started_at"] = func.coalesce(TaskResult.started_at, datetime.utcnow())
+                values["started_at"] = func.coalesce(TaskResult.started_at, datetime.now(timezone.utc))
             elif status in ('completed', 'failed', 'cancelled'):
-                values["completed_at"] = datetime.utcnow()
+                values["completed_at"] = datetime.now(timezone.utc)
         if progress is not None:
             values["progress"] = func.greatest(func.coalesce(TaskResult.progress, 0), progress)
         if result_data:
@@ -66,7 +66,7 @@ def update_task_status(
                 task_id=task_id,
                 status=status or 'pending',
                 progress=progress or 0,
-                created_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc)
             ))
             db.commit()
             return True
@@ -100,7 +100,10 @@ def update_task_status(
 
 
 def fail_stale_tasks(
-    *, task_id: Optional[str] = None, scoring_run_id: Optional[int] = None
+    *,
+    task_id: Optional[str] = None,
+    scoring_run_id: Optional[int] = None,
+    brand_profile_id: Optional[int] = None,
 ) -> int:
     """Okuma-ani uzlaştırma (ADR-002 `fail_if_stuck` ile aynı fikir).
 
@@ -109,9 +112,9 @@ def fail_stale_tasks(
     task'a dokunulmaz). Kendi uzlaştırması olan türler muaftır
     (`TASK_STALE_EXEMPT_TYPES`). Kaç satır değiştiğini döndürür.
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
-    from sqlalchemy import and_, func, or_, update
+    from sqlalchemy import and_, func, or_, select, update
 
     from app.core.constants import (
         TASK_PENDING_STALE_SECONDS,
@@ -119,7 +122,7 @@ def fail_stale_tasks(
         TASK_STALE_ERROR_MESSAGE,
         TASK_STALE_EXEMPT_TYPES,
     )
-    from app.database.models import TaskResult
+    from app.database.models import ScoringRun, TaskResult
 
     now = datetime.now(timezone.utc)
     conditions = [
@@ -138,6 +141,12 @@ def fail_stale_tasks(
         conditions.append(TaskResult.task_id == task_id)
     if scoring_run_id is not None:
         conditions.append(TaskResult.scoring_run_id == scoring_run_id)
+    if brand_profile_id is not None:
+        conditions.append(or_(
+            TaskResult.brand_profile_id == brand_profile_id,
+            TaskResult.scoring_run_id.in_(
+                select(ScoringRun.id).where(ScoringRun.brand_profile_id == brand_profile_id)),
+        ))
 
     db = SessionLocal()
     try:
@@ -148,7 +157,7 @@ def fail_stale_tasks(
         db.commit()
         if result.rowcount:
             logger.warning(f"Bayat task failed işaretlendi: {result.rowcount} kayıt "
-                           f"(task_id={task_id}, run={scoring_run_id})")
+                           f"(task_id={task_id}, run={scoring_run_id}, workspace={brand_profile_id})")
         return result.rowcount or 0
     except Exception as e:
         db.rollback()
@@ -190,7 +199,7 @@ def create_task_record(
             status='pending',
             progress=0,
             result_data=metadata or {},
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         db.add(task)
         db.commit()
@@ -274,7 +283,7 @@ def mark_task_running_if_active(task_id: str) -> bool:
     mükerrer teslim TAMAMLANMIŞ bir task'ı yeniden `running` yapabiliyordu.
     Terminal kayıt hiçbir koşulda geriye taşınmaz.
     """
-    from sqlalchemy import update
+    from sqlalchemy import func, update
 
     from app.database.connection import SessionLocal
     from app.database.models import TaskResult
@@ -285,7 +294,8 @@ def mark_task_running_if_active(task_id: str) -> bool:
             update(TaskResult)
             .where(TaskResult.task_id == task_id,
                    TaskResult.status.in_(("pending", "running")))
-            .values(status="running"))
+            .values(status="running",
+                    started_at=func.coalesce(TaskResult.started_at, func.now())))
         session.commit()
         return bool(result.rowcount)
     finally:

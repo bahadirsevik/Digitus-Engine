@@ -234,6 +234,9 @@ def _build_channel_group(
 
 
 def _active_tasks(db: Session, run_id: int) -> Tuple[List[TaskSummary], Optional[TaskSummary]]:
+    from app.tasks.task_status import fail_stale_tasks
+
+    fail_stale_tasks(scoring_run_id=run_id)  # takılı görev "bloklayıcı" kalmasın
     tasks = (
         db.query(TaskResult)
         .filter(

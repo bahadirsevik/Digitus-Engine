@@ -36,6 +36,9 @@ def find_active_workspace_work(db: Session, workspace_id: int) -> Optional[str]:
 
     None → mutasyon güvenle ilerleyebilir.
     """
+    from app.tasks.task_status import fail_stale_tasks
+
+    fail_stale_tasks(brand_profile_id=workspace_id)
     run_ids = [
         r.id
         for r in db.query(ScoringRun.id).filter(
