@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db
 from app.config import settings
 from app.core import markets
+from app.core.error_responses import safe_500_detail
 from app.core.keyword_normalize import normalize_keyword
 from app.integrations.google_ads.service import (
     CAMPAIGN_IMPORT_DISABLED_DETAIL,
@@ -92,7 +93,12 @@ def _raise_google_ads_error(exc: Exception) -> None:
         )
     if exc_name in {"InvalidArgument", "GoogleAdsException"}:
         raise HTTPException(status_code=400, detail=_translate_invalid_argument(detail))
-    raise HTTPException(status_code=502, detail=f"Google Ads isteği başarısız oldu: {detail}")
+    raise HTTPException(
+        status_code=502,
+        detail=safe_500_detail(
+            exc, "Google Ads isteği başarısız oldu. Lütfen biraz sonra tekrar deneyin."
+        ),
+    )
 
 
 # --- Request/Response Modelleri ---

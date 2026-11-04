@@ -195,12 +195,12 @@ def run_channel_assignment_task(
     except Exception as exc:  # noqa: BLE001
         # Muhasebe kurulamadiysa KOSU DURUR: bagli olmayan harcama
         # "birlesik cap" vaadini bozar (fail-closed)
-        logger.error(f"downstream ledger kurulamadi: {exc}")
-        update_task_status(task_id, status='failed',
-                           error_message=f'Butce muhasebesi kurulamadi: {exc}')
+        logger.exception("downstream ledger kurulamadi")
+        ledger_error = "Bütçe muhasebesi kurulamadı; işlem güvenlik için durduruldu. Lütfen tekrar deneyin."
+        update_task_status(task_id, status='failed', error_message=ledger_error)
         try_finish_attempt(db, parent_task_id=task_id,
                            error_code='LEDGER_BIND_FAILED',
-                           error_message=str(exc))
+                           error_message=ledger_error)
         try:
             if run_row and getattr(run_row, "algorithm_version", "v2") == "v3":
                 if run_row.status in ("scored", "channel_assigning"):
@@ -288,9 +288,11 @@ def run_channel_assignment_task(
         }
 
     except Exception as e:
+        logger.exception("Kanal atama görevi başarısız")
+        assign_error = "Kanal atama beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
         usage = collector.finalize()  # failure yolunda da persist (plan C)
         update_task_status(
-            task_id, status='failed', error_message=str(e),
+            task_id, status='failed', error_message=assign_error,
             result_data={
                 'scoring_run_id': scoring_run_id, 'usage': usage,
                 'algorithm_version': getattr(run_row, "algorithm_version", "v2"),
@@ -301,7 +303,7 @@ def run_channel_assignment_task(
         )
         try_finish_attempt(db, parent_task_id=task_id,
                            error_code='ASSIGNMENT_FAILED',
-                           error_message=str(e))
+                           error_message=assign_error)
         # v3 hata durumunda run status'ünü 'failed' yap (state machine)
         try:
             if run_row and run_row.status in ("scored", "channel_assigning"):

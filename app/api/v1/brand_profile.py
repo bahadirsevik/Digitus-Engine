@@ -2485,8 +2485,9 @@ def start_competitor_preview(
     except Exception as exc:
         task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
         if task:
+            logger.error(f"Competitor preview enqueue failed: {exc}")
             task.status = "failed"
-            task.error_message = str(exc)
+            task.error_message = "Preview görevi kuyruğa alınamadı. Lütfen tekrar deneyin."
             db.commit()
         raise HTTPException(
             status_code=502, detail="Preview görevi kuyruğa alınamadı"
@@ -2624,7 +2625,8 @@ def start_competitor_discovery(
         task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
         if task:
             task.status = "failed"
-            task.error_message = str(exc)[:500]
+            logger.error(f"Competitor discovery enqueue failed: {exc}")
+            task.error_message = "Rakip keşfi kuyruğa alınamadı. Lütfen tekrar deneyin."
             db.commit()
         raise HTTPException(
             status_code=502,

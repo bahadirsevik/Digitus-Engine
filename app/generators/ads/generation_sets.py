@@ -261,7 +261,8 @@ def mark_dispatch_failed(db: Session, task_id: str, error: str) -> None:
     task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
     if task is not None:
         task.status = "failed"
-        task.error_message = f"Enqueue hatası: {error[:200]}"
+        logger.error(f"ADS enqueue failed for task {task_id}: {error[:200]}")
+        task.error_message = "Reklam görevi kuyruğa alınamadı. Lütfen tekrar deneyin."
         task.completed_at = _utcnow()
     gen_set = (
         db.query(AdGenerationSet)

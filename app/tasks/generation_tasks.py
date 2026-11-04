@@ -196,8 +196,8 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
     except SoftTimeLimitExceeded as e:
         logger.error(f"SEO chunk soft time limit exceeded: {e}")
         raise
-    except Exception as e:
-        logger.error(f"SEO chunk failed: {e}")
+    except Exception:
+        logger.exception("SEO chunk failed")
         raise
 
     finally:
@@ -271,7 +271,7 @@ def finalize_seo_bulk_error(parent_task_id: str, scoring_run_id: int):
     Marks the parent seo_content task as failed when any chunk fails.
     """
     error_message = (
-        "SEO bulk generation failed: at least one chunk timed out or crashed."
+        "SEO içerik üretimi durdu: en az bir parça zaman aşımına uğradı veya beklenmeyen bir hata aldı. Lütfen tekrar deneyin."
     )
     update_task_status(
         parent_task_id,
@@ -589,8 +589,9 @@ def generate_ads_task(
             "set_status": new_status,
         }
 
-    except Exception as e:
-        logger.error(f"Ads generation failed: {e}")
+    except Exception:
+        logger.exception("Ads generation failed")
+        ads_error = "Reklam üretimi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
         try:
             # Hata yolunda da harcanan token'lar TaskResult'a taşınır
             usage_extra = (
@@ -600,14 +601,14 @@ def generate_ads_task(
                 # Set finalize edilmişse (geç hata) DOKUNMAZ — completed set
                 # failed'a düşürülmez (finalize_ads_failure içinde korunur)
                 finalize_ads_failure(
-                    db, gen_set, error_message=str(e),
+                    db, gen_set, error_message=ads_error,
                     extra_result_data=usage_extra,
                 )
             else:
-                update_task_status(task_id, status="failed", error_message=str(e))
+                update_task_status(task_id, status="failed", error_message=ads_error)
         except Exception as inner:
             logger.error(f"Ads failure finalize hatası: {inner}")
-            update_task_status(task_id, status="failed", error_message=str(e))
+            update_task_status(task_id, status="failed", error_message=ads_error)
         raise
 
     finally:
@@ -743,7 +744,7 @@ def generate_social_task(
         )
         return {'status': 'completed', 'total_contents': result.total_contents}
         
-    except Exception as e:
+    except Exception:
         usage = collector.finalize() if collector is not None else None
         update_task_status(
             task_id,
@@ -755,9 +756,9 @@ def generate_social_task(
                 'policy_warnings': bulk_policy,
                 'usage': usage,
             },
-            error_message=str(e),
+            error_message="Sosyal içerik üretimi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin.",
         )
-        logger.error(f"Social generation failed: {e}")
+        logger.exception("Social generation failed")
         raise
 
     finally:
@@ -888,7 +889,7 @@ def social_contents_task(
         )
         return {'status': 'completed', 'total': len(content_ids), 'warnings': warnings}
 
-    except Exception as e:
+    except Exception:
         usage = collector.finalize() if collector is not None else None
         update_task_status(
             task_id,
@@ -903,9 +904,9 @@ def social_contents_task(
                 'policy_warnings': policy_warnings,
                 'usage': usage,
             },
-            error_message=str(e),
+            error_message="Sosyal içerik üretimi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin.",
         )
-        logger.error(f"Social contents generation failed: {e}")
+        logger.exception("Social contents generation failed")
         raise
 
     finally:

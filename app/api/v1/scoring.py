@@ -13,6 +13,7 @@ from sqlalchemy import asc, desc, func, nullslast
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
+from app.core.error_responses import safe_500_detail
 from app.core.http_headers import content_disposition, download_filename
 from app.core.scoring.score_engine import ScoreEngine
 from app.core.trial_authorization import (
@@ -539,7 +540,7 @@ def execute_scoring(
                 raise HTTPException(status_code=400, detail=str(exc))
             raise HTTPException(
                 status_code=500,
-                detail=f"Snapshot oluşturulamadı: {exc}",
+                detail=safe_500_detail(exc, "Çalıştırma için veri anlık görüntüsü oluşturulamadı."),
             )
 
         # 2b. LOKASYON KAPISI (Faz 6a, plan §5.7 — create->execute yarışına
