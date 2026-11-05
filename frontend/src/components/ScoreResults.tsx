@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Award, ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react'
 import { apiErrorMessage, scoringApi, ScoringSortBy } from '../services/api'
 import ErrorBanner from './ErrorBanner'
+import TablePager from './TablePager'
+import { poolClassLabel, selectionReasonLabel } from './statusLabels'
 import { DEFAULT_SCORE_SORT, nextScoreSortState, ScoreSortState } from '../pages/scoringSort'
 import type { AnalysisChannels } from './AnalysisProgress'
 import '../pages/Scoring.css'
@@ -29,7 +31,7 @@ interface KeywordScore {
   social_priority?: string | null
 }
 
-const SCORE_PAGE_SIZE = 100
+const SCORE_PAGE_SIZE = 25
 
 export default function ScoreResults({
   runId,
@@ -55,53 +57,44 @@ export default function ScoreResults({
   const [totalScored, setTotalScored] = useState(0)
   const [algorithmVersion, setAlgorithmVersion] = useState<string | null>(null)
   const [scoreSort, setScoreSort] = useState<ScoreSortState>(defaultSort)
+  const [page, setPage] = useState(0)
   const [isLoadingScores, setIsLoadingScores] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [errorAppend, setErrorAppend] = useState(false)
   // Run/workspace değişince uçuştaki eski yanıt state'e yazılmaz
   const scopeRef = useRef(`${workspaceId}:${runId}`)
   scopeRef.current = `${workspaceId}:${runId}`
 
+  // Sıralama sunucuda tüm sonuçlar üzerinde yapılır; ekranda yalnız bir sayfa durur.
   const fetchScores = async ({
-    offset = 0,
+    pageIndex = 0,
     sort = scoreSort,
-    append = false,
   }: {
-    offset?: number
+    pageIndex?: number
     sort?: ScoreSortState
-    append?: boolean
   }) => {
     if (!workspaceId || !runId) return
     const requestScope = scopeRef.current
-    if (append) setIsLoadingMore(true)
-    else setIsLoadingScores(true)
+    setIsLoadingScores(true)
     setErrorMsg(null)
     try {
       const res = await scoringApi.getScores({
         runId,
         brand_profile_id: workspaceId,
         limit: SCORE_PAGE_SIZE,
-        offset,
+        offset: pageIndex * SCORE_PAGE_SIZE,
         sort_by: sort.sort_by,
         sort_dir: sort.sort_dir,
       })
       if (scopeRef.current !== requestScope) return
-      const nextScores = res.data.scores || []
-      setScores((prev) => (append ? [...prev, ...nextScores] : nextScores))
+      setScores(res.data.scores || [])
+      setPage(pageIndex)
       setTotalScored(Number(res.data.total_scored || 0))
       setAlgorithmVersion(res.data.algorithm_version || null)
     } catch (err) {
       if (scopeRef.current !== requestScope) return
-      setErrorAppend(append)
-      setErrorMsg(
-        `${append ? 'Daha fazla skor yüklenemedi.' : 'Skorlar yüklenemedi.'} ${apiErrorMessage(err, '')}`.trim()
-      )
+      setErrorMsg(`Skorlar yüklenemedi. ${apiErrorMessage(err, '')}`.trim())
     } finally {
-      if (scopeRef.current === requestScope) {
-        if (append) setIsLoadingMore(false)
-        else setIsLoadingScores(false)
-      }
+      if (scopeRef.current === requestScope) setIsLoadingScores(false)
     }
   }
 
@@ -110,9 +103,10 @@ export default function ScoreResults({
     setScores([])
     setTotalScored(0)
     setAlgorithmVersion(null)
+    setPage(0)
     setScoreSort(defaultSort)
     if (runId && workspaceId) {
-      void fetchScores({ offset: 0, sort: defaultSort, append: false })
+      void fetchScores({ pageIndex: 0, sort: defaultSort })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, workspaceId, defaultSort.sort_by])
@@ -121,16 +115,7 @@ export default function ScoreResults({
     if (!runId) return
     const nextSort = nextScoreSortState(scoreSort, column)
     setScoreSort(nextSort)
-    await fetchScores({ offset: 0, sort: nextSort, append: false })
-  }
-
-  const loadMoreScores = async () => {
-    if (!runId || isLoadingMore || scores.length >= totalScored) return
-    await fetchScores({
-      offset: scores.length,
-      sort: scoreSort,
-      append: true,
-    })
+    await fetchScores({ pageIndex: 0, sort: nextSort })
   }
 
   const formatScore = (value: number | string | null | undefined) => {
@@ -177,22 +162,31 @@ export default function ScoreResults({
         poolClass: score.social_pool_class,
       },
     }[channel]
+    if (!values.rank && !values.finalRank && !values.reason) {
+      return (
+        <div className="v3-channel-result">
+          <strong>{formatScore(values.score)}</strong>
+          <span>Aday değil</span>
+        </div>
+      )
+    }
+    const reason = values.finalRank || !values.reason ? null : selectionReasonLabel(values.reason)
+    const poolLabel = poolClassLabel(
+      channel,
+      values.poolClass ?? (channel === 'social' ? score.social_priority : null)
+    )
+    const meta = [values.rank ? `Aday sırası ${values.rank}` : null, poolLabel]
+      .filter(Boolean)
+      .join(' · ')
     return (
       <div className="v3-channel-result">
         <strong>{formatScore(values.score)}</strong>
-        <span>{values.rank ? `Algoritma #${values.rank}` : 'Aday değil'}</span>
         {values.finalRank ? (
-          <span className="v3-delivered">Teslim #{values.finalRank}</span>
-        ) : values.reason ? (
-          <span className="v3-excluded">Elendi: {values.reason}</span>
+          <span className="v3-delivered">Havuzda · {values.finalRank}. sıra</span>
+        ) : reason ? (
+          <span className={reason.neutral ? 'v3-skipped' : 'v3-excluded'}>{reason.label}</span>
         ) : null}
-        {(values.poolClass || (channel === 'social' && score.social_priority)) && (
-          <span className="v3-meta">
-            {[values.poolClass, channel === 'social' ? score.social_priority : null]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        )}
+        {meta && <span className="v3-meta">{meta}</span>}
       </div>
     )
   }
@@ -201,7 +195,6 @@ export default function ScoreResults({
     return <div className="empty-text">Skorlama çalışması seçin.</div>
   }
 
-  const hasMoreScores = scores.length < totalScored
   const isV3Run = algorithmVersion === 'v3'
 
   return (
@@ -211,7 +204,7 @@ export default function ScoreResults({
           <h2>Skorlar - Çalışma #{runId}</h2>
           <p>
             {totalScored > 0
-              ? `${scores.length}/${totalScored} skor gösteriliyor`
+              ? `${totalScored} anahtar kelime skorlandı`
               : errorMsg
                 ? 'Skorlar yüklenemedi'
                 : 'Skor kaydı bulunamadı'}
@@ -221,13 +214,7 @@ export default function ScoreResults({
       {errorMsg && (
         <ErrorBanner
           error={errorMsg}
-          onRetry={() =>
-            void fetchScores(
-              errorAppend
-                ? { offset: scores.length, sort: scoreSort, append: true }
-                : { offset: 0, sort: scoreSort, append: false }
-            )
-          }
+          onRetry={() => void fetchScores({ pageIndex: page, sort: scoreSort })}
           retryLabel="Skorları yeniden yükle"
         />
       )}
@@ -281,7 +268,6 @@ export default function ScoreResults({
                       <td>
                         <div className="v3-family">
                           <strong>{score.family_name || score.family_id || '—'}</strong>
-                          {score.family_name && score.family_id && <span>{score.family_id}</span>}
                         </div>
                       </td>
                       {show.ads && <td>{renderV3Channel(score, 'ads')}</td>}
@@ -328,18 +314,14 @@ export default function ScoreResults({
           </tbody>
         </table>
       </div>
-      {hasMoreScores && (
-        <div className="scores-load-more">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={loadMoreScores}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore ? 'Yükleniyor...' : 'Daha fazla göster'}
-          </button>
-        </div>
-      )}
+      <TablePager
+        page={page}
+        pageSize={SCORE_PAGE_SIZE}
+        total={totalScored}
+        unit="kelime"
+        disabled={isLoadingScores}
+        onPage={(next) => void fetchScores({ pageIndex: next, sort: scoreSort })}
+      />
     </div>
   )
 }

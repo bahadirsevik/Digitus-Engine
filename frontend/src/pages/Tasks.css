@@ -87,12 +87,43 @@
 }
 
 .task-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: monospace;
   font-size: 12px;
   color: var(--text-secondary);
   padding: 2px 6px;
   background: rgba(255, 255, 255, 0.05);
+  border: none;
   border-radius: 4px;
+  cursor: pointer;
+}
+
+.task-id:hover {
+  color: var(--text-primary);
+}
+
+.task-status-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.task-status-failed,
+.task-status-cancelled {
+  color: var(--error-text);
+}
+
+.task-scope-note {
+  margin: -12px 0 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.task-summary {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .task-date {
@@ -144,20 +175,6 @@
 .task-note {
   background: var(--warning-soft);
   color: var(--warning-text);
-}
-
-.task-result {
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 4px;
-  margin-bottom: 12px;
-  overflow-x: auto;
-}
-
-.task-result pre {
-  margin: 0;
-  font-size: 11px;
-  color: var(--text-secondary);
 }
 
 /* Actions */

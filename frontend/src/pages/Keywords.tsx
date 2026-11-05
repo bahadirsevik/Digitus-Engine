@@ -56,6 +56,8 @@ import {
   useTaskPolling,
 } from '../hooks/useTaskPolling'
 import ErrorBanner from '../components/ErrorBanner'
+import TablePager from '../components/TablePager'
+import { runStatusLabel } from '../components/statusLabels'
 import { useAnalysisToastStore } from '../stores/analysisToastStore'
 import './Keywords.css'
 
@@ -212,6 +214,8 @@ const formatKeywordImportStatus = (result: {
   return `✓ ${result.requested} satır işlendi: ${details.join(' · ')}`
 }
 
+const KEYWORD_PAGE_SIZE = 50
+
 export default function Keywords() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
@@ -229,6 +233,7 @@ export default function Keywords() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [keywordPage, setKeywordPage] = useState(0)
   const [competitorUrl, setCompetitorUrl] = useState<string | null>(null)
   const [showStartModal, setShowStartModal] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -289,6 +294,7 @@ export default function Keywords() {
   useEffect(() => {
     fetchKeywords()
     setLastImport(null)
+    setKeywordPage(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id])
 
@@ -795,6 +801,13 @@ export default function Keywords() {
   const filteredKeywords = keywords.filter((kw) =>
     kw.keyword.toLowerCase().includes(search.toLowerCase())
   )
+  // Silme/yenileme sonrası liste kısalırsa son geçerli sayfada kal
+  const keywordLastPage = Math.max(0, Math.ceil(filteredKeywords.length / KEYWORD_PAGE_SIZE) - 1)
+  const currentKeywordPage = Math.min(keywordPage, keywordLastPage)
+  const pagedKeywords = filteredKeywords.slice(
+    currentKeywordPage * KEYWORD_PAGE_SIZE,
+    (currentKeywordPage + 1) * KEYWORD_PAGE_SIZE
+  )
 
   const workspaceDisabled = !activeWorkspace
   const disableMessage = workspaceDisabled ? 'Önce Marka Çalışması seçin' : undefined
@@ -1234,7 +1247,7 @@ export default function Keywords() {
               </option>
               {scoreRuns.map((run) => (
                 <option key={run.id} value={run.id}>
-                  #{run.id} {run.run_name || 'Analiz'} — {run.status}
+                  #{run.id} {run.run_name || 'Analiz'} — {runStatusLabel(run.status)}
                 </option>
               ))}
             </select>
@@ -1304,7 +1317,10 @@ export default function Keywords() {
                 type="text"
                 placeholder="Ara…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setKeywordPage(0)
+                }}
               />
             </div>
             <button
@@ -1366,7 +1382,7 @@ export default function Keywords() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredKeywords.map((kw) => {
+                  {pagedKeywords.map((kw) => {
                     const monthlyVolume = kw.wk_monthly_volume ?? kw.monthly_volume
                     const trend12m = kw.wk_trend_12m ?? kw.trend_12m
                     const trend3m = kw.wk_trend_3m ?? kw.trend_3m
@@ -1410,6 +1426,15 @@ export default function Keywords() {
                 </tbody>
               </table>
             </div>
+          )}
+          {!loading && (
+            <TablePager
+              page={currentKeywordPage}
+              pageSize={KEYWORD_PAGE_SIZE}
+              total={filteredKeywords.length}
+              unit="kelime"
+              onPage={setKeywordPage}
+            />
           )}
         </div>
       )}

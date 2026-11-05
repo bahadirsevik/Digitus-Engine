@@ -456,6 +456,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
   const scopeRef = useRef(scopeKey)
   scopeRef.current = scopeKey
+  const resultsSeqRef = useRef(0)
   // Unmount sonrası dönen başlatma yanıtı UI state'ine/yan etkiye dokunmaz
   const mountedRef = useRef(true)
   useEffect(() => {
@@ -506,7 +507,11 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
     setUsps('')
     setSets([])
     setActiveSetId(null)
-    setSelectedSetId(null)
+    // Görevler sayfası bağlantısı: ?run_id=X&set_id=Y → o set açılır (aktif set değil)
+    const urlParams = new URLSearchParams(window.location.search)
+    setSelectedSetId(
+      urlParams.get('run_id') === String(runId) ? Number(urlParams.get('set_id')) || null : null
+    )
     setPendingSetId(null)
     if (!runId || !activeWorkspace?.id) return
 
@@ -561,18 +566,21 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const fetchResults = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
     const requestScope = scopeRef.current
+    // Set değişince geç dönen eski set yanıtı yenisinin üzerine yazmaz
+    const requestSeq = ++resultsSeqRef.current
+    const isStale = () => scopeRef.current !== requestScope || resultsSeqRef.current !== requestSeq
     try {
       const res = await generationApi.getAdsRsa(
         runId,
         activeWorkspace.id,
         selectedSetId ?? undefined
       )
-      if (scopeRef.current !== requestScope) return
+      if (isStale()) return
       const data = res.data as AdsResult
       setResults(data.total_groups > 0 ? data : null)
       setResultsError(null)
     } catch (e) {
-      if (scopeRef.current !== requestScope) return
+      if (isStale()) return
       setResultsError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId, selectedSetId])
@@ -586,6 +594,10 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       const data = res.data as AdsSetListResult
       setSets(data.sets || [])
       setActiveSetId(data.active_set_id ?? null)
+      // Bağlantıdaki set bu analize ait değilse varsayılan görünüme dön
+      setSelectedSetId((cur) =>
+        cur != null && !(data.sets || []).some((s) => s.id === cur) ? null : cur
+      )
       setSetsError(null)
     } catch (e) {
       if (scopeRef.current !== requestScope) return

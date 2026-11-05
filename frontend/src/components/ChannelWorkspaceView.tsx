@@ -25,6 +25,7 @@ import {
   useTaskPolling,
 } from '../hooks/useTaskPolling'
 import ErrorBanner from './ErrorBanner'
+import { runStatusLabel } from './statusLabels'
 import '../pages/Channels.css'
 
 type ChannelName = 'ADS' | 'SEO' | 'SOCIAL'
@@ -214,7 +215,13 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       return
     }
     let cancelled = false
-    setSearchParams({ run_id: String(selectedRunId) })
+    // Görevler sayfasından gelen set_id yalnız aynı analiz için korunur
+    setSearchParams((prev) => {
+      const next = new URLSearchParams({ run_id: String(selectedRunId) })
+      const setId = prev.get('set_id')
+      if (setId && prev.get('run_id') === String(selectedRunId)) next.set('set_id', setId)
+      return next
+    })
     setPoolExpanded(false)
     void fetchPool(selectedRunId)
     setDiscoverError(null)
@@ -518,7 +525,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
                 >
                   {runs.map((run) => (
                     <option key={run.id} value={run.id}>
-                      #{run.id} {run.run_name || 'Analiz'} — {run.status}
+                      #{run.id} {run.run_name || 'Analiz'} — {runStatusLabel(run.status)}
                     </option>
                   ))}
                 </select>
@@ -530,7 +537,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
                     selectedRun.status === 'channel_assigning' ? ' is-busy' : ''
                   }`}
                 >
-                  {selectedRun.status}
+                  {runStatusLabel(selectedRun.status)}
                 </span>
               )}
             </div>
