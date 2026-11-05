@@ -11,7 +11,7 @@ export interface TaskLike {
 
 export interface TaskSummary {
   summary: string | null
-  warning: string | null
+  warnings: string[]
   link: { to: string; label: string } | null
 }
 
@@ -44,7 +44,7 @@ function channelCounts(rd: Record<string, unknown>): {
 }
 
 export function summarizeTask(task: TaskLike): TaskSummary {
-  const empty: TaskSummary = { summary: null, warning: null, link: null }
+  const empty: TaskSummary = { summary: null, warnings: [], link: null }
   if (task.status !== 'completed') return empty
   const rd = task.result_data || {}
   const runId = task.scoring_run_id
@@ -53,13 +53,23 @@ export function summarizeTask(task: TaskLike): TaskSummary {
   switch (task.task_type) {
     case 'seo_content': {
       const total = num(rd.total)
+      const requested = num(rd.requested_count)
       const blocked = num(rd.claim_blocked_count) ?? 0
+      // failed_keywords listesi sunucuda kırpılır; eksik sayısı istenen − üretilen
+      const missing = total !== null && requested !== null ? requested - total : 0
       return {
-        summary: total !== null ? `${total} SEO içeriği üretildi.` : null,
-        warning:
+        summary:
+          total === null
+            ? null
+            : missing > 0
+              ? `${requested} kelimeden ${total} tanesi için SEO içeriği üretildi.`
+              : `${total} SEO içeriği üretildi.`,
+        warnings: [
+          missing > 0 ? `${missing} kelime için içerik üretilemedi.` : null,
           blocked > 0
             ? `${blocked} içerik, iddia kontrolü nedeniyle yayın öncesi inceleme gerektiriyor.`
             : null,
+        ].filter((w): w is string => w !== null),
         link: runId ? { to: `/seo-geo?${run}`, label: 'İçerikleri görüntüle' } : null,
       }
     }
@@ -73,7 +83,7 @@ export function summarizeTask(task: TaskLike): TaskSummary {
           groups !== null
             ? `${groups} reklam grubu üretildi${version !== null ? ` (set v${version})` : ''}.`
             : null,
-        warning: failed > 0 ? `${failed} reklam grubu üretilemedi.` : null,
+        warnings: failed > 0 ? [`${failed} reklam grubu üretilemedi.`] : [],
         // Geçmiş görev, o an aktif olan sete değil kendi ürettiği sete götürür
         link: runId
           ? {
@@ -88,8 +98,8 @@ export function summarizeTask(task: TaskLike): TaskSummary {
       const unsaved = arrLen(rd.warnings) ?? 0
       return {
         summary: total !== null ? `${total} sosyal içerik üretildi.` : null,
-        warning:
-          unsaved > 0 ? `${unsaved} içerik doğrulanamayan iddia nedeniyle kaydedilmedi.` : null,
+        warnings:
+          unsaved > 0 ? [`${unsaved} içerik doğrulanamayan iddia nedeniyle kaydedilmedi.`] : [],
         link: runId ? { to: `/social?${run}`, label: 'Sosyal içerikleri görüntüle' } : null,
       }
     }
@@ -97,9 +107,11 @@ export function summarizeTask(task: TaskLike): TaskSummary {
       const { summary, unfilled } = channelCounts(rd)
       return {
         summary,
-        warning: unfilled.length
-          ? `${unfilled.join(', ')} kanalında yeterli uygun kelime bulunamadı; havuz kapasitesi dolmadı.`
-          : null,
+        warnings: unfilled.length
+          ? [
+              `${unfilled.join(', ')} kanalında yeterli uygun kelime bulunamadı; havuz kapasitesi dolmadı.`,
+            ]
+          : [],
         link: runId ? { to: `/keywords?view=scores&${run}`, label: 'Skorları görüntüle' } : null,
       }
     }
@@ -112,7 +124,7 @@ export function summarizeTask(task: TaskLike): TaskSummary {
       const found = arrLen(rd.candidates)
       return {
         summary: found !== null ? `${found} rakip adayı bulundu.` : null,
-        warning: null,
+        warnings: [],
         link: { to: '/brand-profile', label: 'Marka profiline git' },
       }
     }

@@ -182,7 +182,7 @@ export default function Tasks() {
           <div className="empty-state">{emptyText}</div>
         ) : (
           tasks.map((task) => {
-            const { summary, warning, link } = summarizeTask(task)
+            const { summary, warnings, link } = summarizeTask(task)
             return (
               <div key={task.task_id} className={`task-card glass-card task-${task.status}`}>
                 <div className="task-header">
@@ -219,11 +219,11 @@ export default function Tasks() {
 
                 {summary && <p className="task-summary">{summary}</p>}
 
-                {warning && (
-                  <div className="task-error task-note">
-                    <strong>Not:</strong> {warning}
+                {warnings.map((w) => (
+                  <div key={w} className="task-error task-note">
+                    <strong>Not:</strong> {w}
                   </div>
-                )}
+                ))}
 
                 {task.error_message && (
                   <div

@@ -63,6 +63,8 @@ export default function ScoreResults({
   // Run/workspace değişince uçuştaki eski yanıt state'e yazılmaz
   const scopeRef = useRef(`${workspaceId}:${runId}`)
   scopeRef.current = `${workspaceId}:${runId}`
+  // Aynı run içinde art arda sıralama/sayfa isteğinde son istek kazanır
+  const requestSeqRef = useRef(0)
 
   // Sıralama sunucuda tüm sonuçlar üzerinde yapılır; ekranda yalnız bir sayfa durur.
   const fetchScores = async ({
@@ -74,6 +76,9 @@ export default function ScoreResults({
   }) => {
     if (!workspaceId || !runId) return
     const requestScope = scopeRef.current
+    const requestSeq = ++requestSeqRef.current
+    const isCurrent = () =>
+      scopeRef.current === requestScope && requestSeqRef.current === requestSeq
     setIsLoadingScores(true)
     setErrorMsg(null)
     try {
@@ -85,16 +90,16 @@ export default function ScoreResults({
         sort_by: sort.sort_by,
         sort_dir: sort.sort_dir,
       })
-      if (scopeRef.current !== requestScope) return
+      if (!isCurrent()) return
       setScores(res.data.scores || [])
       setPage(pageIndex)
       setTotalScored(Number(res.data.total_scored || 0))
       setAlgorithmVersion(res.data.algorithm_version || null)
     } catch (err) {
-      if (scopeRef.current !== requestScope) return
+      if (!isCurrent()) return
       setErrorMsg(`Skorlar yüklenemedi. ${apiErrorMessage(err, '')}`.trim())
     } finally {
-      if (scopeRef.current === requestScope) setIsLoadingScores(false)
+      if (isCurrent()) setIsLoadingScores(false)
     }
   }
 

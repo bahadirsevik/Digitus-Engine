@@ -10,8 +10,29 @@ describe('summarizeTask', () => {
       result_data: { content_ids: [229, 230], total: 2, claim_blocked_count: 2 },
     })
     expect(r.summary).toBe('2 SEO içeriği üretildi.')
-    expect(r.warning).toContain('2 içerik, iddia kontrolü')
+    expect(r.warnings).toEqual([
+      '2 içerik, iddia kontrolü nedeniyle yayın öncesi inceleme gerektiriyor.',
+    ])
     expect(r.link).toEqual({ to: '/seo-geo?run_id=97', label: 'İçerikleri görüntüle' })
+  })
+
+  it('SEO: kısmi başarısızlığı ve iddia incelemesini ayrı ayrı gösterir', () => {
+    const r = summarizeTask({
+      task_type: 'seo_content',
+      status: 'completed',
+      scoring_run_id: 97,
+      result_data: {
+        total: 8,
+        requested_count: 10,
+        failed_keywords: [{ keyword: 'a' }],
+        claim_blocked_count: 1,
+      },
+    })
+    expect(r.summary).toBe('10 kelimeden 8 tanesi için SEO içeriği üretildi.')
+    expect(r.warnings).toEqual([
+      '2 kelime için içerik üretilemedi.',
+      '1 içerik, iddia kontrolü nedeniyle yayın öncesi inceleme gerektiriyor.',
+    ])
   })
 
   it('ADS: bağlantı görevin ürettiği seti açar', () => {
@@ -27,7 +48,7 @@ describe('summarizeTask', () => {
       },
     })
     expect(r.summary).toBe('1 reklam grubu üretildi (set v1).')
-    expect(r.warning).toBeNull()
+    expect(r.warnings).toEqual([])
     expect(r.link?.to).toBe('/ads?run_id=97&set_id=46')
   })
 
@@ -48,7 +69,7 @@ describe('summarizeTask', () => {
       },
     })
     expect(r.summary).toBe('Kanal havuzları: ADS 5 · SEO 3 kelime.')
-    expect(r.warning).toContain('SEO kanalında')
+    expect(r.warnings[0]).toContain('SEO kanalında')
     expect(r.link?.to).toBe('/keywords?view=scores&run_id=97')
   })
 
@@ -63,6 +84,6 @@ describe('summarizeTask', () => {
         scoring_run_id: 1,
         result_data: { total: 0 },
       })
-    ).toEqual({ summary: null, warning: null, link: null })
+    ).toEqual({ summary: null, warnings: [], link: null })
   })
 })

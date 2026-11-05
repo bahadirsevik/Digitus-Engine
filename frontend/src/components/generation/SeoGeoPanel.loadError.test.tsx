@@ -47,13 +47,15 @@ describe('SeoGeoPanel sonuç yükleme hatası', () => {
     mocks.getStatus.mockResolvedValue({
       data: { task_id: 'task-A', status: 'completed', progress: 100, scoring_run_id: 1 },
     })
-    mocks.listSeoGeo.mockRejectedValueOnce({ status: 500, message: 'Liste alınamadı.' })
-    mocks.listSeoGeo.mockResolvedValue({ data: { items: [] } })
+    // Panel açılışta listeyi birden çok kez isteyebilir: hepsi başarısız kalır,
+    // yalnız kullanıcı "yeniden yükle"ye bastıktan sonra liste gelir.
+    mocks.listSeoGeo.mockRejectedValue({ status: 500, message: 'Liste alınamadı.' })
     render(<SeoGeoPanel runId={1} />)
 
     expect(
       await screen.findByText(/Üretim tamamlandı ancak sonuçlar yüklenemedi\. Liste alınamadı/)
     ).toBeTruthy()
+    mocks.listSeoGeo.mockResolvedValue({ data: { items: [] } })
     const callsBefore = mocks.listSeoGeo.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: /Sonuçları yeniden yükle/ }))
     await waitFor(() => expect(mocks.listSeoGeo.mock.calls.length).toBeGreaterThan(callsBefore))

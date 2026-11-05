@@ -54,6 +54,36 @@ describe('ScoreResults motor v3 görünümü', () => {
     expect(screen.queryByText(/CAPACITY_LIMIT|SECONDARY|steel_pipe/)).not.toBeInTheDocument()
   })
 
+  it('art arda iki sıralamada geç dönen eski yanıt yenisini ezmez', async () => {
+    const row = (kw: string) => ({
+      keyword_id: kw.length,
+      keyword: kw,
+      seo_score: 1,
+      social_score: 1,
+    })
+    mockedScoringApi.getScores.mockResolvedValueOnce(
+      response({ algorithm_version: 'v3', total_scored: 1, scores: [row('ilk')] })
+    )
+    render(<ScoreResults runId={51} workspaceId={50} />)
+    expect(await screen.findByText('ilk')).toBeInTheDocument()
+
+    let resolveSeo: (v: unknown) => void = () => {}
+    mockedScoringApi.getScores
+      .mockImplementationOnce(() => new Promise((r) => (resolveSeo = r)) as never)
+      .mockResolvedValueOnce(
+        response({ algorithm_version: 'v3', total_scored: 1, scores: [row('social-sirali')] })
+      )
+
+    fireEvent.click(screen.getByRole('button', { name: /^SEO/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^SOCIAL/ }))
+    expect(await screen.findByText('social-sirali')).toBeInTheDocument()
+
+    resolveSeo(response({ algorithm_version: 'v3', total_scored: 1, scores: [row('seo-sirali')] }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByText('seo-sirali')).not.toBeInTheDocument()
+    expect(screen.getByText('social-sirali')).toBeInTheDocument()
+  })
+
   it('skorları 25lik sayfalarla sunucudan ister ve konumu gösterir', async () => {
     const row = (id: number) => ({ keyword_id: id, keyword: `kw ${id}`, ads_score: 1 })
     mockedScoringApi.getScores.mockResolvedValue(
