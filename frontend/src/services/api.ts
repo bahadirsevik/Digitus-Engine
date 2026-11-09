@@ -116,38 +116,86 @@ export function apiErrorStatus(err: unknown): number {
 
 // FastAPI 422 detayını (Pydantic hata listesi) okunur Türkçe mesaja çevirir.
 // Hem `{detail: [...]}`ten gelen array'i hem doğrudan array/string formunu kapsar.
-// İç alan adları gösterilmez; sınır değerleri (en az/en fazla) korunur.
-// Backend'in kendi Türkçe doğrulama metni ("Value error, ...") olduğu gibi geçer.
+// İç alan adı yerine formdaki Türkçe adı gösterilir (eşleme yoksa genel ifade);
+// sınır değerleri (en az/en fazla) korunur. Backend'in Türkçe doğrulama metni
+// ("Value error, ...") olduğu gibi geçer.
+const VALIDATION_FIELD_LABEL: Record<string, string> = {
+  keyword: 'Anahtar kelime',
+  keywords: 'Anahtar kelime listesi',
+  seeds: 'Başlangıç kelimeleri',
+  selected_keyword_ids: 'Seçilen kelimeler',
+  keyword_ids: 'Seçilen kelimeler',
+  url: 'URL',
+  urls: 'URL listesi',
+  competitor_urls: "Rakip URL'leri",
+  company_url: 'Web sitesi URL',
+  website_url: 'Web sitesi URL',
+  min_volume: 'En az aylık arama',
+  max_results: 'En fazla sonuç',
+  monthly_volume: 'Aylık arama',
+  competition_score: 'Rekabet',
+  sector: 'Sektör',
+  target_market: 'Hedef pazar',
+  markets: 'Pazarlar',
+  run_name: 'Analiz adı',
+  ads_capacity: 'ADS kelime sayısı',
+  seo_capacity: 'SEO kelime sayısı',
+  social_capacity: 'Sosyal medya kelime sayısı',
+  limit: 'Limit',
+  keyword_limit: 'Kelime sayısı',
+  max_categories: 'Kategori sayısı',
+  ideas_per_category: 'Kategori başına fikir sayısı',
+  max_contents: 'İçerik sayısı',
+  target_word_count: 'Hedef kelime sayısı',
+  brand_name: 'Marka adı',
+  name: 'Ad',
+  usps: "USP'ler",
+  term: 'Terim',
+  title: 'Başlık',
+}
+
 function validationItemText(row: {
   type?: string
   msg?: string
+  loc?: unknown[]
   ctx?: Record<string, unknown>
 }): string {
   const msg = row.msg ?? ''
   if (msg.startsWith('Value error, ')) return msg.slice('Value error, '.length)
+  const field = Array.isArray(row.loc)
+    ? [...row.loc].reverse().find((p): p is string => typeof p === 'string' && p !== 'body')
+    : undefined
+  const label = field ? VALIDATION_FIELD_LABEL[field] : undefined
   const c = row.ctx ?? {}
+  const value = label ?? 'Bir değer'
+  const text = label ?? 'Bir metin'
   switch (row.type) {
     case 'missing':
-      return 'Zorunlu bir alan boş bırakılmış.'
+      return label ? `${label} alanı zorunlu.` : 'Zorunlu bir alan boş bırakılmış.'
     case 'greater_than_equal':
-      return `Bir değer en az ${c.ge} olmalı.`
+      return `${value} en az ${c.ge} olmalı.`
     case 'greater_than':
-      return `Bir değer ${c.gt} değerinden büyük olmalı.`
+      return `${value} ${c.gt} değerinden büyük olmalı.`
     case 'less_than_equal':
-      return `Bir değer en fazla ${c.le} olmalı.`
+      return `${value} en fazla ${c.le} olmalı.`
     case 'less_than':
-      return `Bir değer ${c.lt} değerinden küçük olmalı.`
+      return `${value} ${c.lt} değerinden küçük olmalı.`
     case 'string_too_short':
-      return `Bir metin en az ${c.min_length} karakter olmalı.`
+      return `${text} en az ${c.min_length} karakter olmalı.`
     case 'string_too_long':
-      return `Bir metin en fazla ${c.max_length} karakter olabilir.`
+      return `${text} en fazla ${c.max_length} karakter olabilir.`
     case 'too_short':
-      return `En az ${c.min_length} seçim yapılmalı.`
+      return label
+        ? `${label}: en az ${c.min_length} seçim yapılmalı.`
+        : `En az ${c.min_length} seçim yapılmalı.`
     case 'too_long':
-      return `En fazla ${c.max_length} seçim yapılabilir.`
+      return label
+        ? `${label}: en fazla ${c.max_length} seçim yapılabilir.`
+        : `En fazla ${c.max_length} seçim yapılabilir.`
   }
   // Türkçe yazılmış özel mesaj ise koru; İngilizce ham mesajı gösterme
-  return /[çğıöşüÇĞİÖŞÜ]/.test(msg) ? msg : 'Girilen değerlerden biri geçersiz.'
+  if (/[çğıöşüÇĞİÖŞÜ]/.test(msg)) return msg
+  return label ? `${label} alanındaki değer geçersiz.` : 'Girilen değerlerden biri geçersiz.'
 }
 
 export function formatValidationDetail(raw: unknown): string | null {
@@ -155,7 +203,12 @@ export function formatValidationDetail(raw: unknown): string | null {
   if (!Array.isArray(raw)) return null
   const msgs = raw
     .map((item) => {
-      const row = item as { type?: string; msg?: string; ctx?: Record<string, unknown> }
+      const row = item as {
+        type?: string
+        msg?: string
+        loc?: unknown[]
+        ctx?: Record<string, unknown>
+      }
       return row?.msg ? validationItemText(row) : ''
     })
     .filter(Boolean)

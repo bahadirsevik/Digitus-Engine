@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import api, { formatValidationDetail } from './api'
 
 describe('formatValidationDetail', () => {
-  it('Pydantic hata listesini alan adı göstermeden Türkçeye çevirir; sınırı korur', () => {
+  it('Pydantic hata listesini Türkçe alan adı ve sınırla çevirir', () => {
     const detail = [
       {
         type: 'greater_than_equal',
@@ -26,8 +26,29 @@ describe('formatValidationDetail', () => {
       },
     ]
     expect(formatValidationDetail(detail)).toBe(
-      'Bir değer en az 4 olmalı. · Bir değer en az 3 olmalı.'
+      'Kategori sayısı en az 4 olmalı. · Kategori başına fikir sayısı en az 3 olmalı.'
     )
+  })
+
+  it('elle kelime girişindeki karakter sınırı alan adıyla söylenir', () => {
+    expect(
+      formatValidationDetail([
+        {
+          type: 'string_too_long',
+          loc: ['body', 'keyword'],
+          msg: 'String should have at most 500 characters',
+          ctx: { max_length: 500 },
+        },
+      ])
+    ).toBe('Anahtar kelime en fazla 500 karakter olabilir.')
+  })
+
+  it('eşlemesi olmayan iç alan adı gösterilmez', () => {
+    expect(
+      formatValidationDetail([
+        { type: 'greater_than_equal', loc: ['body', 'internal_x'], msg: 'x', ctx: { ge: 2 } },
+      ])
+    ).toBe('Bir değer en az 2 olmalı.')
   })
 
   it('zorunlu alan ve backend Türkçe doğrulama metni', () => {

@@ -478,8 +478,10 @@ def check_cost_cap(db, workspace, *, stage: str) -> Optional[Dict[str, Any]]:
     return {
         "code": COST_CAP_EXCEEDED,
         "message": (
-            f"Bu marka çalışmasının harcama sınırına ulaşıldı (harcanan "
-            f"${cost['exposure_usd']}, sınır ${cap}); işlem başlatılmadı. "
+            f"Bu marka çalışmasının harcama sınırına ulaşıldı: harcanan "
+            f"${cost['spent_usd']} ve devam eden işlemler için ayrılan "
+            f"${cost['reserved_usd']}, toplam ${cost['exposure_usd']} "
+            f"(sınır ${cap}); işlem başlatılmadı. "
             f"Sınırın artırılması için sistem yöneticinize başvurun."),
         "workspace_id": workspace.id,
         "stage": stage,
