@@ -208,7 +208,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
       {/* Tasarım: chip editörü — Önerilen Keywordler + Ekle */}
       <div className="kwx-seed-editor">
         <div className="kwx-seed-head">
-          <span className="kwx-field-label">Önerilen Keywordler ({words.length})</span>
+          <span className="kwx-field-label">Önerilen Anahtar Kelimeler ({words.length})</span>
           <button
             type="button"
             className={`kwx-add-toggle${adding ? ' active' : ''}`}
@@ -303,7 +303,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
           )}
         </label>
         <label className="kwx-field">
-          <span className="kwx-field-label">Min Volume</span>
+          <span className="kwx-field-label">En az aylık arama</span>
           <input
             className="kwx-input sm"
             type="number"
@@ -312,7 +312,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
           />
         </label>
         <label className="kwx-field">
-          <span className="kwx-field-label">Max Sonuç</span>
+          <span className="kwx-field-label">En fazla sonuç</span>
           <input
             className="kwx-input sm"
             type="number"
@@ -379,8 +379,8 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
                 <AlertCircle size={14} />
                 <span>
                   {themePreview.length > 0
-                    ? `${themePreview.length} keyword yasakli tema filtresine takilacak.`
-                    : 'Bu sonuclarda yasakli tema filtresine takilan keyword yok.'}
+                    ? `${themePreview.length} kelime yasaklı tema filtresine takılacak.`
+                    : 'Bu sonuçlarda yasaklı tema filtresine takılan kelime yok.'}
                 </span>
                 {themePreview.length > 0 && (
                   <button
@@ -388,7 +388,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
                     className="skipped-toggle"
                     onClick={() => setShowThemePreview((v) => !v)}
                   >
-                    {showThemePreview ? 'elenenleri gizle' : 'elenenleri goster'}
+                    {showThemePreview ? 'elenenleri gizle' : 'elenenleri göster'}
                   </button>
                 )}
               </div>
@@ -398,7 +398,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
                     <li key={item.keyword}>
                       <strong>{item.keyword}</strong>
                       <span className="skipped-reason">
-                        - Yasakli temayla eslesti: "{item.matched}"
+                        - Yasaklı temayla eşleşti: "{item.matched}"
                       </span>
                     </li>
                   ))}
@@ -408,7 +408,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
           )}
           <div className="preview-header">
             <span>
-              {selected.size} seçili / {ideas.length} keyword bulundu
+              {selected.size} seçili / {ideas.length} kelime bulundu
               {!showLowVolume && lowVolumeIdeas.length > 0 && (
                 <> · {lowVolumeIdeas.length} düşük hacimli gizli</>
               )}
@@ -469,10 +469,10 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
               <thead>
                 <tr>
                   <th aria-label="Seç"></th>
-                  <th>Keyword</th>
+                  <th>Anahtar Kelime</th>
                   <th>Aylık Arama</th>
-                  <th>Trend 3M</th>
-                  <th>Trend 12M</th>
+                  <th>3 Aylık Trend</th>
+                  <th>12 Aylık Trend</th>
                   <th>Rekabet</th>
                   <th>CPC</th>
                   <th>Filtre</th>
@@ -500,7 +500,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
                     <td>
                       {themePreviewMap.get(idea.keyword) ? (
                         <span className="theme-pill">
-                          Yasakli: {themePreviewMap.get(idea.keyword)}
+                          Yasaklı: {themePreviewMap.get(idea.keyword)}
                         </span>
                       ) : (
                         <span className="muted-cell">-</span>

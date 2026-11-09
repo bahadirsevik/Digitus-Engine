@@ -103,7 +103,7 @@ export default function StartAnalysisModal({
       if (!res.data.has_keywords || res.data.kept_count <= 0) {
         setLocationStatus('error')
         setLocationError(
-          'Lokasyon filtresi sonrası kalacak keyword yok — analiz başlatılamaz. Filtre ayarlarını gözden geçirin.'
+          'Şehir filtresi sonrası kalacak kelime yok — analiz başlatılamaz. Filtre ayarlarını gözden geçirin.'
         )
         return
       }
@@ -111,7 +111,7 @@ export default function StartAnalysisModal({
     } catch (err: unknown) {
       setLocationPreview(null)
       setLocationStatus('error')
-      setLocationError(apiErrorMessage(err, 'Lokasyon filtresi önizlemesi alınamadı'))
+      setLocationError(apiErrorMessage(err, 'Şehir filtresi önizlemesi alınamadı'))
     }
   }, [brandProfileId])
 
@@ -242,7 +242,7 @@ export default function StartAnalysisModal({
       } catch (execErr: unknown) {
         if (LOCATION_RETRY_CODES.has(apiErrorCode(execErr) || '')) {
           setError(
-            'Lokasyon önizlemesi bayatladığı için bu koşu başarısız oldu. Önizleme yenilendi — lütfen tekrar başlatın.'
+            'Konum önizlemesi güncel olmadığı için analiz başlatılamadı. Önizleme yenilendi; kontrol edip analizi yeniden başlatın.'
           )
           void refreshLocationPreview()
           return
@@ -252,7 +252,9 @@ export default function StartAnalysisModal({
       onStarted(runId)
     } catch (err: unknown) {
       if (LOCATION_RETRY_CODES.has(apiErrorCode(err) || '')) {
-        setError('Lokasyon önizlemesi güncel değil. Önizleme yenilendi — lütfen tekrar başlatın.')
+        setError(
+          'Şehir filtresi önizlemesi güncel değil. Önizleme yenilendi — lütfen tekrar başlatın.'
+        )
         void refreshLocationPreview()
         return
       }
@@ -268,16 +270,9 @@ export default function StartAnalysisModal({
       <div className="kwx-modal">
         <h2>Bu analizi ne için yapıyoruz?</h2>
         <p className="kwx-modal-sub">
-          Havuzdaki <b>{poolCount}</b> keyword skorlanacak; seçtiğiniz amaçlara göre kanal atamaları
+          Havuzdaki <b>{poolCount}</b> kelime skorlanacak; seçtiğiniz amaçlara göre kanal atamaları
           yapılır.
         </p>
-
-        <div className="kwx-count-field kwx-engine-field">
-          <span className="lbl">Analiz motoru</span>
-          <div className="kwx-engine-value" aria-label="Analiz motoru">
-            v3 — kilitli üretim motoru
-          </div>
-        </div>
 
         <div className="kwx-channel-grid">
           {CHANNELS.map((c) => {
@@ -325,7 +320,10 @@ export default function StartAnalysisModal({
         {engineUnavailable && (
           <div className="kwx-modal-warning" role="alert">
             <AlertTriangle size={14} />
-            <span>Motor v3 sunucuda kapalı olduğu için analiz başlatılamıyor.</span>
+            <span>
+              Analiz motoru sunucuda kapalı olduğu için analiz başlatılamıyor. Sistem yöneticinize
+              başvurun.
+            </span>
           </div>
         )}
         {capsCheckFailed && (
@@ -349,7 +347,7 @@ export default function StartAnalysisModal({
           <div className="kwx-modal-warning" role="alert" data-testid="location-gate-error">
             <AlertTriangle size={14} />
             <span>
-              Marka çalışması bilgisi alınamadı — lokasyon filtresi durumu doğrulanamadı.{' '}
+              Marka çalışması bilgisi alınamadı — şehir filtresi durumu doğrulanamadı.{' '}
               <button
                 type="button"
                 className="kwx-modal-cancel"
@@ -370,7 +368,7 @@ export default function StartAnalysisModal({
         {locationModeActive && locationStatus === 'loading' && (
           <div className="kwx-modal-warning" role="status" data-testid="location-gate-loading">
             <Loader2 size={14} className="spin-icon" />
-            <span>Lokasyon filtresi etkisi kontrol ediliyor…</span>
+            <span>Şehir filtresi etkisi kontrol ediliyor…</span>
           </div>
         )}
         {locationModeActive && locationStatus === 'ready' && locationPreview && (
@@ -378,8 +376,8 @@ export default function StartAnalysisModal({
             <AlertTriangle size={14} />
             <span>
               Şehir politikası: <b>{locationModeLabel(effectiveLocationMode || '')}</b> —{' '}
-              <b>{locationPreview.excluded_count}</b> keyword lokasyon filtresi nedeniyle hariç
-              tutulacak, <b>{locationPreview.kept_count}</b> keyword skorlanacak.
+              <b>{locationPreview.excluded_count}</b> kelime şehir filtresi nedeniyle hariç
+              tutulacak, <b>{locationPreview.kept_count}</b> kelime skorlanacak.
             </span>
           </div>
         )}
@@ -387,7 +385,7 @@ export default function StartAnalysisModal({
           <div className="kwx-modal-warning" role="alert" data-testid="location-gate-error">
             <AlertTriangle size={14} />
             <span>
-              {locationError || 'Lokasyon filtresi önizlemesi alınamadı.'}{' '}
+              {locationError || 'Şehir filtresi önizlemesi alınamadı.'}{' '}
               <button
                 type="button"
                 className="kwx-modal-cancel"

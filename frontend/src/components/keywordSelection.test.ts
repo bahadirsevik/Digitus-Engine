@@ -87,11 +87,11 @@ describe('startAnalysis payload builder', () => {
 describe('KeywordImportResult reasonLabel', () => {
   it('yeni skip nedenlerini Türkçe etiketler', () => {
     expect(reasonLabel({ keyword: 'x', reason: 'skipped_theme', matched: 'temettü takibi' })).toBe(
-      'Yasakli temayla elendi: "temettü takibi"'
+      'Yasaklı temayla elendi: "temettü takibi"'
     )
     expect(reasonLabel({ keyword: 'x', reason: 'limit_exceeded' })).toBe('Havuz limiti doldu')
     expect(reasonLabel({ keyword: 'x', reason: 'skipped_exact' })).toBe(
-      "Workspace'te ayni metriklerle zaten var"
+      'Bu marka çalışmasında aynı metriklerle zaten var'
     )
   })
 })

@@ -261,11 +261,11 @@ export function statusLabel(workspaceOrStatus: string | PhaseInput): string {
     case 'generating_profile':
       return 'Analiz Ediliyor'
     case 'generating_keywords':
-      return 'Keyword Önerileri Hazırlanıyor'
+      return 'Anahtar Kelime Önerileri Hazırlanıyor'
     case 'keywords_review':
-      return 'KW Onayi'
+      return 'Anahtar Kelime Onayı'
     case 'keyword_anchor_review':
-      return 'Keyword & Odak Onayı'
+      return 'Anahtar Kelime ve Odak Onayı'
     case 'profile_cards_review':
       return 'Profil Onayı Bekliyor'
     case 'competitor_review':

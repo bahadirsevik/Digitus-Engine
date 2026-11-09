@@ -82,7 +82,10 @@ export default function BriefIdeasSection({
         await ctx.refreshState()
       }
     } catch (err) {
-      if (alive.current) setReadError(socialErrorText(err, 'Fikirler okunamadı.'))
+      if (alive.current)
+        setReadError(
+          socialErrorText(err, 'Fikirler yüklenemedi. Sayfayı yenileyip tekrar deneyin.')
+        )
     }
   }, [brief.id, ideasId, workspaceId, alive, ctx, ideasAttempt?.status])
 
@@ -98,7 +101,13 @@ export default function BriefIdeasSection({
         await loadIdeas()
       }
     } catch (err) {
-      if (alive.current) setReadError(socialErrorText(err, 'Tekrar deneme sonucu okunamadı.'))
+      if (alive.current)
+        setReadError(
+          socialErrorText(
+            err,
+            'Tekrar deneme sonucu yüklenemedi. Sayfayı yenileyip tekrar deneyin.'
+          )
+        )
     }
   }, [brief.id, retryId, workspaceId, alive, ctx, latestRetry?.status, loadIdeas])
 
@@ -344,7 +353,7 @@ export default function BriefIdeasSection({
           {ideasRes?.reason_code || ideasAttempt?.reason_code
             ? `: ${reasonText(ideasRes?.reason_code ?? ideasAttempt?.reason_code)}`
             : '.'}{' '}
-          Sahte yedek fikir oluşturulmaz; aşağıdan yeniden başlatabilirsiniz.
+          Aşağıdan yeniden başlatabilirsiniz.
         </p>
       )}
 
@@ -415,7 +424,7 @@ export default function BriefIdeasSection({
                     {current === 0 ? (
                       <span className="sb-badge sb-badge-stale">Eksik hedef</span>
                     ) : planned != null && current < planned ? (
-                      <span className="sb-badge sb-badge-neutral">Kota altında</span>
+                      <span className="sb-badge sb-badge-neutral">Planlanandan az</span>
                     ) : (
                       <span className="sb-badge sb-badge-active">Tamam</span>
                     )}

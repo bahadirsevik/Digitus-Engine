@@ -144,7 +144,8 @@ export default function ProfileReviewCards({
         Markanızı böyle anladık
       </h3>
       <p className="bpx-sub" style={{ marginBottom: 20 }}>
-        Kartları kontrol edip düzeltin. Onayladığınızda size özel keyword önerileri hazırlanır.
+        Kartları kontrol edip düzeltin. Onayladığınızda size özel anahtar kelime önerileri
+        hazırlanır.
       </p>
 
       <Section n={1} title="Marka Özeti">

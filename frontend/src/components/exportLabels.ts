@@ -11,7 +11,7 @@ export const SECTION_LABEL: Record<string, string> = {
   all: 'Tam rapor',
   ads: 'ADS içerikleri',
   seo_content: 'SEO+GEO içerikleri',
-  social: 'Social içerikleri',
+  social: 'Sosyal medya içerikleri',
 }
 
 // "Tam rapor · Excel" / "ADS içerikleri · Word" — sections+format'tan üretilir

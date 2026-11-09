@@ -76,7 +76,9 @@ describe('AiCompetitorDiscovery', () => {
 
     fireEvent.click(screen.getByText('1 rakibi onayla'))
     expect(screen.getByRole('dialog').textContent).toContain('2')
-    expect(screen.getByRole('dialog').textContent).toContain('güncel kanal çalışması')
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'analizin kanal havuzları güncelliğini yitirecek'
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Onayla' }))
     await waitFor(() => expect(decide).toHaveBeenCalledTimes(1))
     expect(decide.mock.calls[0][1]).toEqual([

@@ -75,7 +75,7 @@ describe('ScoreResults motor v3 görünümü', () => {
       )
 
     fireEvent.click(screen.getByRole('button', { name: /^SEO/ }))
-    fireEvent.click(screen.getByRole('button', { name: /^SOCIAL/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Sosyal Medya/ }))
     expect(await screen.findByText('social-sirali')).toBeInTheDocument()
 
     resolveSeo(response({ algorithm_version: 'v3', total_scored: 1, scores: [row('seo-sirali')] }))

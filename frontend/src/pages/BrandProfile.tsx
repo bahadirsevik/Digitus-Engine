@@ -209,7 +209,7 @@ const ANALYZE_STEPS = [
 ]
 const GENERATE_STEPS = [
   'Profil analiz ediliyor',
-  'Keyword havuzu oluşturuluyor',
+  'Anahtar kelime havuzu oluşturuluyor',
   'Marka odakları eşleştiriliyor',
 ]
 
@@ -235,7 +235,7 @@ const SCOPE_OPTIONS: ReadonlyArray<{ value: ScopeChoice; title: string; desc: st
   {
     value: 'both',
     title: 'Ana marka + bu alt sayfa',
-    desc: 'Ana sayfa ve ilgili birkaç sayfadan marka profili hazırlanır. Marka çalışmasını tamamlayınca (profil, rakipler, keyword onayı) bu alt sayfa markanın altında kendiliğinden hazırlanır ve onu da onaylarsınız. Alt sayfa markanın rakip, dışlama ve konum ayarlarını alır.',
+    desc: 'Ana sayfa ve ilgili birkaç sayfadan marka profili hazırlanır. Marka çalışmasını tamamlayınca (profil, rakipler, anahtar kelime onayı) bu alt sayfa markanın altında kendiliğinden hazırlanır ve onu da onaylarsınız. Alt sayfa markanın rakip, dışlama ve konum ayarlarını alır.',
   },
   {
     value: 'brand',
@@ -844,7 +844,7 @@ function WorkspaceModal({
               disabled={startingKeywords}
             >
               {startingKeywords ? <Loader2 size={15} className="spin-icon" /> : null}
-              Şimdi değil, keywordleri üret
+              Şimdi değil, anahtar kelimeleri üret
             </button>
             <button
               type="button"
@@ -989,7 +989,7 @@ function WorkspaceModal({
     if (phase === 'generating_keywords') {
       return (
         <LoadingStep
-          title="Keyword önerileri hazırlanıyor…"
+          title="Anahtar kelime önerileri hazırlanıyor…"
           sub="Onayladığınız profile göre size özel anahtar kelimeler ve marka odakları üretiliyor."
           steps={GENERATE_STEPS}
         />
@@ -1027,7 +1027,9 @@ function WorkspaceModal({
             </div>
           ) : canRetryKeywords ? (
             <div className="error-banner bpx-banner-action">
-              <span>Keyword üretimi tamamlanamadı. Profil hazır; site yeniden taranmaz.</span>
+              <span>
+                Anahtar kelime üretimi tamamlanamadı. Profil hazır; site yeniden taranmaz.
+              </span>
               <button
                 type="button"
                 className="bpx-btn-raised"
@@ -1035,7 +1037,7 @@ function WorkspaceModal({
                 disabled={startingKeywords}
               >
                 {startingKeywords && <Loader2 size={14} className="spin-icon" />}
-                Keyword üretimini tekrar dene
+                Anahtar kelime üretimini tekrar dene
               </button>
             </div>
           ) : (
@@ -1105,8 +1107,8 @@ function WorkspaceModal({
             title={phase === 'analyzing_keywords' ? 'Site okunuyor…' : 'Marka profili üretiliyor…'}
             sub={
               phase === 'analyzing_keywords'
-                ? 'İlk 10 keyword önerisi hazırlanıyor.'
-                : 'Onaylanan keywordlere göre marka profili üretiliyor.'
+                ? 'İlk 10 anahtar kelime önerisi hazırlanıyor.'
+                : 'Onaylanan anahtar kelimelere göre marka profili üretiliyor.'
             }
             steps={phase === 'analyzing_keywords' ? ANALYZE_STEPS : GENERATE_STEPS}
           />
@@ -1115,7 +1117,7 @@ function WorkspaceModal({
         {canEditKeywordsLegacy && (
           <div className="suggested-keywords">
             <div className="section-title-row">
-              <h4>Onerilen Keywordler</h4>
+              <h4>Önerilen Anahtar Kelimeler</h4>
               <button
                 type="button"
                 className="bpx-btn-raised"
@@ -1133,7 +1135,7 @@ function WorkspaceModal({
                   <input
                     type="text"
                     value={kw}
-                    placeholder={`Keyword ${idx + 1}`}
+                    placeholder={`Kelime ${idx + 1}`}
                     onChange={(e) =>
                       setKeywordDraft((items) =>
                         items.map((item, i) => (i === idx ? e.target.value : item))
@@ -1164,7 +1166,7 @@ function WorkspaceModal({
                 ) : (
                   <CheckCircle2 size={14} />
                 )}
-                {approvingKeywords ? 'Profil Uretiliyor...' : 'Keywordleri Onayla'}
+                {approvingKeywords ? 'Profil Üretiliyor...' : 'Anahtar Kelimeleri Onayla'}
               </button>
             </div>
           </div>
@@ -1668,7 +1670,7 @@ export default function BrandProfile() {
     if (!workspaceIdParam) return
     const workspaceId = Number(workspaceIdParam)
     if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-      setError('Gecersiz marka calismasi id parametresi.')
+      setError('Bağlantıdaki marka çalışması geçersiz. Listeden bir çalışma seçin.')
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
@@ -1689,7 +1691,9 @@ export default function BrandProfile() {
         if (workspace.deleted_at) {
           setSelectedWs(null)
           setModalOpen(false)
-          setError('Bu marka calismasi arsivlenmis. Panel acilmadi.')
+          setError(
+            'Bu marka çalışması arşivlenmiş. Görmek için "Arşivlenmiş Çalışmaları Göster" seçeneğini açın.'
+          )
           setSearchParams(
             (prev) => {
               const next = new URLSearchParams(prev)
@@ -1707,7 +1711,7 @@ export default function BrandProfile() {
         if (cancelled) return
         setSelectedWs(null)
         setModalOpen(false)
-        setError(`Marka calismasi acilamadi: ${extractErrorMessage(err)}`)
+        setError(`Marka çalışması açılamadı: ${extractErrorMessage(err)}`)
         setSearchParams(
           (prev) => {
             const next = new URLSearchParams(prev)

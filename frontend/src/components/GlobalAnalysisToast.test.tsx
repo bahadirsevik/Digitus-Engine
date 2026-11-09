@@ -81,7 +81,7 @@ describe('GlobalAnalysisToast', () => {
     )
     track('t1')
     expect(await screen.findByText('Analiz tamamlandı')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Social/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Sosyal Medya/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Skorları gör'))
     await waitFor(() =>
       expect(screen.getByTestId('loc').textContent).toBe('/keywords?view=scores&run_id=7')

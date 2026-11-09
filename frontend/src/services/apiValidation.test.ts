@@ -8,30 +8,49 @@ import { afterEach, describe, expect, it } from 'vitest'
 import api, { formatValidationDetail } from './api'
 
 describe('formatValidationDetail', () => {
-  it('Pydantic hata listesini alan adlarıyla okunur mesaja çevirir', () => {
+  it('Pydantic hata listesini alan adı göstermeden Türkçeye çevirir; sınırı korur', () => {
     const detail = [
       {
         type: 'greater_than_equal',
         loc: ['body', 'max_categories'],
         msg: 'Input should be greater than or equal to 4',
         input: 2,
+        ctx: { ge: 4 },
       },
       {
         type: 'greater_than_equal',
         loc: ['body', 'ideas_per_category'],
         msg: 'Input should be greater than or equal to 3',
         input: 2,
+        ctx: { ge: 3 },
       },
     ]
     expect(formatValidationDetail(detail)).toBe(
-      'max_categories: Input should be greater than or equal to 4 · ' +
-        'ideas_per_category: Input should be greater than or equal to 3'
+      'Bir değer en az 4 olmalı. · Bir değer en az 3 olmalı.'
     )
   })
 
-  it('loc yalnız body ise alan öneki eklemez', () => {
-    const detail = [{ loc: ['body'], msg: 'Field required' }]
-    expect(formatValidationDetail(detail)).toBe('Field required')
+  it('zorunlu alan ve backend Türkçe doğrulama metni', () => {
+    expect(
+      formatValidationDetail([{ type: 'missing', loc: ['body'], msg: 'Field required' }])
+    ).toBe('Zorunlu bir alan boş bırakılmış.')
+    expect(
+      formatValidationDetail([
+        {
+          type: 'value_error',
+          loc: ['body', 'x'],
+          msg: 'Value error, Video formatları için süre seçin.',
+        },
+      ])
+    ).toBe('Video formatları için süre seçin.')
+  })
+
+  it('tanınmayan İngilizce mesajı ham göstermez', () => {
+    expect(
+      formatValidationDetail([
+        { type: 'int_parsing', loc: ['body', 'n'], msg: 'Input should be a valid integer' },
+      ])
+    ).toBe('Girilen değerlerden biri geçersiz.')
   })
 
   it('string detail olduğu gibi döner', () => {

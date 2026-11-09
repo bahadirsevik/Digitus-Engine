@@ -114,20 +114,52 @@ export function apiErrorStatus(err: unknown): number {
   return 0
 }
 
-// FastAPI 422 detayını (Pydantic hata listesi) okunur mesaja çevirir.
+// FastAPI 422 detayını (Pydantic hata listesi) okunur Türkçe mesaja çevirir.
 // Hem `{detail: [...]}`ten gelen array'i hem doğrudan array/string formunu kapsar.
+// İç alan adları gösterilmez; sınır değerleri (en az/en fazla) korunur.
+// Backend'in kendi Türkçe doğrulama metni ("Value error, ...") olduğu gibi geçer.
+function validationItemText(row: {
+  type?: string
+  msg?: string
+  ctx?: Record<string, unknown>
+}): string {
+  const msg = row.msg ?? ''
+  if (msg.startsWith('Value error, ')) return msg.slice('Value error, '.length)
+  const c = row.ctx ?? {}
+  switch (row.type) {
+    case 'missing':
+      return 'Zorunlu bir alan boş bırakılmış.'
+    case 'greater_than_equal':
+      return `Bir değer en az ${c.ge} olmalı.`
+    case 'greater_than':
+      return `Bir değer ${c.gt} değerinden büyük olmalı.`
+    case 'less_than_equal':
+      return `Bir değer en fazla ${c.le} olmalı.`
+    case 'less_than':
+      return `Bir değer ${c.lt} değerinden küçük olmalı.`
+    case 'string_too_short':
+      return `Bir metin en az ${c.min_length} karakter olmalı.`
+    case 'string_too_long':
+      return `Bir metin en fazla ${c.max_length} karakter olabilir.`
+    case 'too_short':
+      return `En az ${c.min_length} seçim yapılmalı.`
+    case 'too_long':
+      return `En fazla ${c.max_length} seçim yapılabilir.`
+  }
+  // Türkçe yazılmış özel mesaj ise koru; İngilizce ham mesajı gösterme
+  return /[çğıöşüÇĞİÖŞÜ]/.test(msg) ? msg : 'Girilen değerlerden biri geçersiz.'
+}
+
 export function formatValidationDetail(raw: unknown): string | null {
   if (typeof raw === 'string') return raw
   if (!Array.isArray(raw)) return null
   const msgs = raw
     .map((item) => {
-      const row = item as { loc?: unknown[]; msg?: string }
-      if (!row?.msg) return ''
-      const field = Array.isArray(row.loc) ? String(row.loc[row.loc.length - 1] ?? '') : ''
-      return field && field !== 'body' ? `${field}: ${row.msg}` : row.msg
+      const row = item as { type?: string; msg?: string; ctx?: Record<string, unknown> }
+      return row?.msg ? validationItemText(row) : ''
     })
     .filter(Boolean)
-  return msgs.length ? msgs.join(' · ') : null
+  return msgs.length ? Array.from(new Set(msgs)).join(' · ') : null
 }
 
 // Blob response'u tarayıcı indirmesine çevirir (plan v4: Export.tsx'ten ortak util'e).
@@ -204,7 +236,8 @@ api.interceptors.response.use(
       message =
         formatValidationDetail(raw) || detailMessage || 'Gönderilen değerler doğrulamadan geçemedi.'
     } else if (status === 401) {
-      message = 'Kimlik doğrulama gerekli. Lütfen oturum açın.'
+      message =
+        'Sunucu bu isteği yetkisiz buldu. Uygulamanın erişim anahtarı eksik ya da geçersiz olabilir; sistem yöneticinize başvurun.'
     } else if (status === 403) {
       message = 'Bu işlem için yetkiniz yok.'
     } else if (status === 404) {
@@ -1098,7 +1131,7 @@ export function poolFreshnessLabel(
   return (
     [
       f.policy_stale && 'Politika değişti',
-      f.relevance_stale && 'Profil değişti (relevance bayat)',
+      f.relevance_stale && 'Marka profili değişti',
       f.strategy_stale && 'Kanal stratejisi değişti',
     ]
       .filter(Boolean)

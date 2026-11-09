@@ -33,7 +33,7 @@ export interface StartAnalysisOptions {
 
 export const DEFAULT_CAPACITIES = { ads: 30, seo: 50, social: 20 }
 
-export const SOCIAL_BASELINE_LABEL = 'Mevcut SOCIAL — henüz optimize edilmedi'
+export const SOCIAL_BASELINE_LABEL = 'Sosyal medya analizi (eski yöntem)'
 
 export function buildStartAnalysisPayload(opts: StartAnalysisOptions): ScoringRunCreate {
   const invalid = (capacity: number) => !Number.isSafeInteger(capacity) || capacity < 1
@@ -89,10 +89,10 @@ export function defaultRunName(opts: {
   today?: string
 }): string {
   const stamp = opts.today ?? new Date().toLocaleDateString('tr')
-  const channels = [opts.ads && 'ADS', opts.seo && 'SEO', opts.social && 'SOCIAL']
+  const channels = [opts.ads && 'ADS', opts.seo && 'SEO', opts.social && 'Sosyal medya']
     .filter(Boolean)
     .join('/')
-  return `v3 ${channels} analizi — ${stamp}`
+  return `${channels} analizi — ${stamp}`
 }
 
 /** Sonuç listesindeki koşu rozeti (mevcut baseline SOCIAL açıkça işaretlenir). */

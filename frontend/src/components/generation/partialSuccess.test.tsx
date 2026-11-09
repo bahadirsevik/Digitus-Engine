@@ -112,7 +112,9 @@ describe('kısmi başarı uyarıları', () => {
     })
     render(<SeoGeoPanel runId={1} />)
     expect(
-      await screen.findByText(/10 kelimeden 8 içerik üretildi; 2 kelime üretilemedi/)
+      await screen.findByText(
+        /10 kelimeden 8 tanesi için içerik üretildi; 2 kelime için içerik üretilemedi/
+      )
     ).toBeTruthy()
     expect(screen.getByText(/implant fiyat — AI yanıtı işlenemedi/)).toBeTruthy()
     expect(screen.getByText(/diş beyazlatma — AI yanıtı işlenemedi/)).toBeTruthy()

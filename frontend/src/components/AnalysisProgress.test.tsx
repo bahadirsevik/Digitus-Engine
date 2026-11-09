@@ -42,7 +42,7 @@ describe('AnalysisProgress V3 steps', () => {
     [15, 'Kelime aileleri'],
     [40, 'ADS'],
     [65, 'SEO'],
-    [85, 'SOCIAL'],
+    [85, 'Sosyal Medya'],
     [92, 'Havuz teslimi'],
   ])('all channels: progress %i activates "%s" and finishes earlier steps', (progress, label) => {
     renderBanner({ taskProgress: progress, channels: ALL })
@@ -52,7 +52,7 @@ describe('AnalysisProgress V3 steps', () => {
       'Kelime aileleri',
       'ADS',
       'SEO',
-      'SOCIAL',
+      'Sosyal Medya',
       'Havuz teslimi',
     ])
     const activeIdx = states.findIndex(([l]) => l === label)
@@ -81,7 +81,7 @@ describe('AnalysisProgress V3 steps', () => {
     })
     expect(stepStates()).toEqual([
       ['Analiz başladı', 'done'],
-      ['SOCIAL', 'active'],
+      ['Sosyal Medya', 'active'],
       ['Havuz teslimi', 'todo'],
     ])
   })
@@ -133,7 +133,7 @@ describe('AnalysisProgress V3 steps', () => {
       ['Kelime aileleri', 'done'],
       ['ADS', 'failed'],
       ['SEO', 'todo'],
-      ['SOCIAL', 'todo'],
+      ['Sosyal Medya', 'todo'],
       ['Havuz teslimi', 'todo'],
     ])
     const fill = document.querySelector('.kwx-progressbar-fill') as HTMLElement
@@ -177,7 +177,7 @@ describe('AnalysisProgress V3 steps', () => {
         />
       </MemoryRouter>
     )
-    expect(screen.getByText('SOCIAL adımında durdu')).toBeInTheDocument()
+    expect(screen.getByText('Sosyal Medya adımında durdu')).toBeInTheDocument()
     expect(screen.getByText('2/3 adım')).toBeInTheDocument()
   })
 

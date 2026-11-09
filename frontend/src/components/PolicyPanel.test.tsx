@@ -20,7 +20,7 @@ vi.mock('../services/api', () => ({
   }) =>
     [
       f.policy_stale && 'Politika değişti',
-      f.relevance_stale && 'Profil değişti (relevance bayat)',
+      f.relevance_stale && 'Marka profili değişti',
       f.strategy_stale && 'Kanal stratejisi değişti',
     ]
       .filter(Boolean)
@@ -81,9 +81,9 @@ describe('PolicyPanel (Gelişmiş ayarlar)', () => {
   it('provenance etiketli chipleri ve alias bölümünü gösterir', async () => {
     await openPanel()
     expect(await screen.findByText('fintables')).toBeTruthy()
-    expect(screen.getByText('Rakip URL + Manuel')).toBeTruthy()
+    expect(screen.getByText('Rakip URL + elle onaylandı')).toBeTruthy()
     expect(screen.getByText('eski kayıt')).toBeTruthy()
-    expect(screen.getByText('Eski alias kuralları')).toBeTruthy()
+    expect(screen.getByText('Eski yazım varyantı kuralları')).toBeTruthy()
     expect(screen.getByText('temettu')).toBeTruthy()
     // Topic serbest-ekleme bloğu KALKTI
     expect(screen.queryByPlaceholderText(/Konu terimi ekle/)).toBeNull()

@@ -197,7 +197,7 @@ export default function ScoreResults({
   }
 
   if (!runId) {
-    return <div className="empty-text">Skorlama çalışması seçin.</div>
+    return <div className="empty-text">Bir analiz seçin.</div>
   }
 
   const isV3Run = algorithmVersion === 'v3'
@@ -235,16 +235,20 @@ export default function ScoreResults({
                   <th>Aile</th>
                   {show.ads && <th>{renderSortableHeader('ads_score', 'ADS')}</th>}
                   {show.seo && <th>{renderSortableHeader('seo_score', 'SEO')}</th>}
-                  {show.social && <th>{renderSortableHeader('social_score', 'SOCIAL')}</th>}
+                  {show.social && <th>{renderSortableHeader('social_score', 'Sosyal Medya')}</th>}
                 </>
               ) : (
                 <>
                   {show.ads && <th>{renderSortableHeader('ads_score', 'ADS Skor')}</th>}
                   {show.seo && <th>{renderSortableHeader('seo_score', 'SEO Skor')}</th>}
-                  {show.social && <th>{renderSortableHeader('social_score', 'SOCIAL Skor')}</th>}
+                  {show.social && (
+                    <th>{renderSortableHeader('social_score', 'Sosyal Medya Skor')}</th>
+                  )}
                   {show.ads && <th>{renderSortableHeader('ads_rank', 'ADS Sıra')}</th>}
                   {show.seo && <th>{renderSortableHeader('seo_rank', 'SEO Sıra')}</th>}
-                  {show.social && <th>{renderSortableHeader('social_rank', 'SOCIAL Sıra')}</th>}
+                  {show.social && (
+                    <th>{renderSortableHeader('social_rank', 'Sosyal Medya Sıra')}</th>
+                  )}
                 </>
               )}
             </tr>

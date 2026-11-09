@@ -199,7 +199,7 @@ export default function AiCompetitorDiscovery({
   const removeApproved = (entry: PolicyTermEntry) => {
     if (!entry.discovery_id) return
     const accepted = window.confirm(
-      `"${entry.term}" engel listesinden çıkarılacak; güncel kanal havuzları bayatlayabilir. Devam edilsin mi?`
+      `"${entry.term}" engel listesinden çıkarılacak; mevcut kanal havuzları güncelliğini yitirebilir ve kanal atamasını yeniden çalıştırmanız gerekebilir. Devam edilsin mi?`
     )
     if (!accepted) return
     void submit([{ discovery_id: entry.discovery_id, decision: 'rejected', term: entry.term }])
@@ -208,7 +208,7 @@ export default function AiCompetitorDiscovery({
   if (!confirmed) {
     return (
       <div className="acd-shell is-disabled">
-        <div className="acd-heading">AI İle Engellenecek Rakipler</div>
+        <div className="acd-heading">AI ile Engellenecek Rakipler</div>
         <p>Rakip keşfi marka profili onaylandıktan sonra kullanılabilir.</p>
       </div>
     )
@@ -234,7 +234,7 @@ export default function AiCompetitorDiscovery({
     >
       <div className="acd-header">
         <div>
-          <div className="acd-heading">AI İle Engellenecek Rakipler</div>
+          <div className="acd-heading">AI ile Engellenecek Rakipler</div>
           <p>Doğrulanmış şirketleri inceleyip engellenecek marka adlarını seçin.</p>
         </div>
         <button
@@ -380,8 +380,9 @@ export default function AiCompetitorDiscovery({
             <h3>Rakipleri engelleme politikasına ekle</h3>
             <p>
               {selectedCandidates.length} rakip onaylanacak.{' '}
-              <strong>{policy?.discovery_impact.fresh_channel_run_count || 0}</strong> güncel kanal
-              çalışması bayatlayacak ve kanal atamasının yeniden çalıştırılması gerekecek.
+              <strong>{policy?.discovery_impact.fresh_channel_run_count || 0}</strong> analizin
+              kanal havuzları güncelliğini yitirecek; bu analizlerde kanal atamasını yeniden
+              çalıştırmanız gerekecek.
             </p>
             <div className="acd-modal-actions">
               <button

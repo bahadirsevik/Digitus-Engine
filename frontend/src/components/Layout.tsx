@@ -25,7 +25,7 @@ const navItems = [
   { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
   { path: '/ads', icon: BadgeDollarSign, label: 'ADS' },
   { path: '/seo-geo', icon: Search, label: 'SEO+GEO' },
-  { path: '/social', icon: Share2, label: 'Social' },
+  { path: '/social', icon: Share2, label: 'Sosyal Medya' },
   { path: '/tasks', icon: ListTodo, label: 'Görevler' },
 ]
 

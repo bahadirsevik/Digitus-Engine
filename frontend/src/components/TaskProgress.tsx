@@ -87,7 +87,7 @@ export default function TaskProgress({
         {getStatusIcon()}
         <div className="task-info">
           <span className="task-status-text">{getStatusText()}</span>
-          <span className="task-id">Gorev ID: {taskId}</span>
+          <span className="task-id">Görev ID: {taskId}</span>
         </div>
       </div>
 

@@ -111,7 +111,7 @@ describe('LocationPolicyControl', () => {
     expect(screen.getByRole('radiogroup', { name: 'Şehir politikası' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Şehir filtresi yok' })).toBeChecked()
     expect(
-      screen.getByRole('radio', { name: "Tüm şehirli keyword'leri hariç tut" })
+      screen.getByRole('radio', { name: 'Tüm şehirli kelimeleri hariç tut' })
     ).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'Yalnız seçtiğim şehirler kalsın' })).not.toBeChecked()
   })
@@ -176,15 +176,15 @@ describe('LocationPolicyControl', () => {
 
   it('muafiyet alanı yalnız aktif modlarda (exclude_all/focus_only) görünür', () => {
     const { rerender } = render(<LocationPolicyControl {...baseProps({ mode: 'none' })} />)
-    expect(screen.queryByText('Lokasyon filtresi muafiyetleri')).not.toBeInTheDocument()
+    expect(screen.queryByText('Şehir filtresi muafiyetleri')).not.toBeInTheDocument()
 
     rerender(<LocationPolicyControl {...baseProps({ mode: 'exclude_all' })} />)
-    expect(screen.getByText('Lokasyon filtresi muafiyetleri')).toBeInTheDocument()
+    expect(screen.getByText('Şehir filtresi muafiyetleri')).toBeInTheDocument()
 
     rerender(
       <LocationPolicyControl {...baseProps({ mode: 'focus_only', focusCities: ['İstanbul'] })} />
     )
-    expect(screen.getByText('Lokasyon filtresi muafiyetleri')).toBeInTheDocument()
+    expect(screen.getByText('Şehir filtresi muafiyetleri')).toBeInTheDocument()
   })
 
   it('marka adı bir il adı içerince uyarı gösterir ama OTOMATİK muafiyet eklemez', () => {
@@ -201,7 +201,7 @@ describe('LocationPolicyControl', () => {
 
     const warning = screen.getByTestId('brand-city-warning')
     expect(warning).toHaveTextContent('Van')
-    expect(warning).toHaveTextContent('OTOMATİK muaf tutmaz')
+    expect(warning).toHaveTextContent('otomatik olarak muaf tutmaz')
     expect(onExemptTermsChange).not.toHaveBeenCalled()
   })
 

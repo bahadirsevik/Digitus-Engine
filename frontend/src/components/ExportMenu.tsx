@@ -225,7 +225,7 @@ export default function ExportMenu({ channel, runId, disabled }: Props) {
                     {job.policy_outdated && (
                       <span
                         className="exm-outdated"
-                        title="Bu rapor üretiminden sonra politika/profil değişti — güncel rapor için yeniden export alın"
+                        title="Bu rapor üretiminden sonra politika/profil değişti — güncel rapor için yeniden indirin"
                       >
                         eski politika
                       </span>

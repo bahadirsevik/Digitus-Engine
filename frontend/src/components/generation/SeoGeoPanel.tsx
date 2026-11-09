@@ -187,7 +187,7 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
   const reviewReasons = (review?.critical_failures || []).map((f, i) => (
     <li key={`f${i}`}>
       <span className="seox-review-src">
-        {f.source === 'geo_ai' ? 'AI değerlendirmesi' : 'Otomatik kontrol'}
+        {f.source === 'geo_ai' ? 'Yapay zekâ değerlendirmesi' : 'Otomatik kontrol'}
       </span>{' '}
       {f.detail || f.criterion}
     </li>
@@ -195,7 +195,7 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
   const stats = [
     item.word_count ? `${item.word_count} kelime` : null,
     subs.length ? `${subs.length} alt başlık` : null,
-    item.keyword_density != null ? `%${item.keyword_density} yoğunluk` : null,
+    item.keyword_density != null ? `anahtar kelime yoğunluğu %${item.keyword_density}` : null,
   ].filter(Boolean)
 
   const links = [
@@ -592,7 +592,7 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       {failedKeywords.length > 0 && (polling.isCompleted || polling.isFailed) && (
         <div className="adsx-span adsx-sets-empty" role="status">
           {requestedCount != null && producedCount != null
-            ? `${requestedCount} kelimeden ${producedCount} içerik üretildi; ${requestedCount - producedCount} kelime üretilemedi:`
+            ? `${requestedCount} kelimeden ${producedCount} tanesi için içerik üretildi; ${requestedCount - producedCount} kelime için içerik üretilemedi:`
             : `${failedKeywords.length} kelime için içerik üretilemedi:`}
           <ul>
             {failedKeywords.slice(0, FAILED_KEYWORDS_SHOWN).map((f) => (

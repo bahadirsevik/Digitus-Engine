@@ -47,7 +47,7 @@ describe('summarizeTask', () => {
         generation_set_id: 46,
       },
     })
-    expect(r.summary).toBe('1 reklam grubu üretildi (set v1).')
+    expect(r.summary).toBe('1 reklam grubu üretildi (sürüm 1).')
     expect(r.warnings).toEqual([])
     expect(r.link?.to).toBe('/ads?run_id=97&set_id=46')
   })

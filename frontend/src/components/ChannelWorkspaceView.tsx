@@ -52,10 +52,17 @@ interface RunTask {
   error_message?: string | null
 }
 
+// Kanal sayfası alt başlığı: sayfada ne yapıldığını kanal özelinde söyler
+const CHANNEL_SUBTITLES: Record<ChannelName, string> = {
+  ADS: 'Analizin reklam havuzu ve Google Ads RSA reklam metinleri',
+  SEO: 'Analizin SEO havuzu ve blog içerikleri',
+  SOCIAL: 'Analizin sosyal medya havuzu, brief’ler ve paylaşım içerikleri',
+}
+
 const CHANNEL_LABELS: Record<ChannelName, string> = {
   ADS: 'ADS',
   SEO: 'SEO+GEO',
-  SOCIAL: 'Social',
+  SOCIAL: 'Sosyal Medya',
 }
 
 // Tasarım: havuz tablosu kapalıyken gösterilen satır sayısı
@@ -512,7 +519,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
         <div className="chx-header-left">
           <div>
             <h1>{CHANNEL_LABELS[channel]}</h1>
-            <p>Kanal havuzu ve içerik üretimi</p>
+            <p>{CHANNEL_SUBTITLES[channel]}</p>
           </div>
           {runs.length > 0 && (
             <div className="chx-run-pill">

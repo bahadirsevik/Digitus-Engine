@@ -12,7 +12,7 @@ export type LocationFilterMode = 'none' | 'exclude_all' | 'focus_only'
 
 export const LOCATION_MODE_OPTIONS: { value: LocationFilterMode; label: string }[] = [
   { value: 'none', label: 'Şehir filtresi yok' },
-  { value: 'exclude_all', label: "Tüm şehirli keyword'leri hariç tut" },
+  { value: 'exclude_all', label: 'Tüm şehirli kelimeleri hariç tut' },
   { value: 'focus_only', label: 'Yalnız seçtiğim şehirler kalsın' },
 ]
 
@@ -204,7 +204,7 @@ export function findBrandCityMatches(companyName: string, brandTerms: string[]):
 }
 
 export const LOCATION_REASON_LABELS: Record<string, string> = {
-  LOCATION_CITY_FILTER: "Şehir filtresi (tüm şehirli keyword'ler hariç)",
+  LOCATION_CITY_FILTER: 'Şehir filtresi (tüm şehirli kelimeler hariç)',
   LOCATION_NON_FOCUS_CITY: 'Odak dışı şehir',
 }
 

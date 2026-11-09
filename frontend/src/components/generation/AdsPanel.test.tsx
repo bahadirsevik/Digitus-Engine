@@ -124,7 +124,7 @@ describe('AdsPanel autofill', () => {
     render(<AdsPanel runId={1} />)
     expect(await screen.findByText(/Güncel aktif reklam seti yok/)).toBeTruthy()
     expect(screen.getByText('Taslak')).toBeTruthy()
-    expect(screen.getAllByText('Bayat').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Güncel değil').length).toBeGreaterThan(0)
   })
 })
 
@@ -181,14 +181,14 @@ describe('AdsPanel standart raporu', () => {
     showGroup(baseReport)
     await waitFor(() =>
       expect(document.querySelector('.adsx-std-summary')?.textContent).toBe(
-        "15 KW · 15 başlık · 4 KW'li açıklama · 3 CTA"
+        '15 kelime · 15 başlık · 4 kelimeli açıklama · 3 CTA'
       )
     )
     expect(screen.getByTitle(/Kural tabanlı sayım/)).toBeTruthy()
     expect(screen.queryByText(/teslim standardının altında/)).toBeNull()
     expect(screen.queryByText(/standart 15/)).toBeNull()
-    expect(screen.queryByText(/Başlıklarda kullanılan KW/)).toBeNull()
-    expect(screen.queryByText(/Hiç kullanılmayan KW/)).toBeNull()
+    expect(screen.queryByText(/Başlıklarda kullanılan kelimeler/)).toBeNull()
+    expect(screen.queryByText(/Hiç kullanılmayan kelimeler/)).toBeNull()
   })
 
   it('standart altı rozeti yalnız eksik olan parçayı yazar', async () => {
@@ -198,7 +198,7 @@ describe('AdsPanel standart raporu', () => {
       missing_headlines: 2,
       below_standard: true,
     })
-    expect(await screen.findByText('15 KW teslim standardının altında')).toBeTruthy()
+    expect(await screen.findByText('15 kelime teslim standardının altında')).toBeTruthy()
     expect(screen.getByText('Eksik: 2 başlık')).toBeTruthy()
   })
 
@@ -209,14 +209,14 @@ describe('AdsPanel standart raporu', () => {
       missing_kw_descriptions: 1,
       below_standard: true,
     })
-    expect(await screen.findByText("Eksik: 3 başlık, 1 KW'li açıklama")).toBeTruthy()
+    expect(await screen.findByText('Eksik: 3 başlık, 1 kelimeli açıklama')).toBeTruthy()
   })
 
   it('eksik CTA sayısını yazar', async () => {
     showGroup({ ...baseReport, cta_count: 1, missing_cta: 2, below_standard: true })
     await waitFor(() =>
       expect(document.querySelector('.adsx-std-summary')?.textContent).toBe(
-        "15 KW · 15 başlık · 4 KW'li açıklama · 1 CTA"
+        '15 kelime · 15 başlık · 4 kelimeli açıklama · 1 CTA'
       )
     )
     expect(screen.getByTitle(/Kural tabanlı sayım/)).toBeTruthy()
@@ -225,7 +225,7 @@ describe('AdsPanel standart raporu', () => {
 
   it('havuz hedefin altındaysa KW sayısını yazar', async () => {
     showGroup({ ...baseReport, keyword_count: 12, pool_below_target: true })
-    expect(await screen.findByText('Bu grupta 12 KW var (standart 15)')).toBeTruthy()
+    expect(await screen.findByText('Bu grupta 12 kelime var (standart 15)')).toBeTruthy()
   })
 
   it('yalnız dolu KW listeleri çizilir', async () => {
@@ -234,12 +234,12 @@ describe('AdsPanel standart raporu', () => {
       keywords_unused: ['kalem'],
       fill_keywords: ['defter'],
     })
-    expect(await screen.findByText("Hiç kullanılmayan KW'ler (1)")).toBeTruthy()
-    expect(screen.getByText("15'e tamamlamak için eklenen KW'ler (1)")).toBeTruthy()
+    expect(await screen.findByText('Hiç kullanılmayan kelimeler (1)')).toBeTruthy()
+    expect(screen.getByText("15'e tamamlamak için eklenen kelimeler (1)")).toBeTruthy()
     expect(screen.getByText('kalem')).toBeTruthy()
     expect(screen.getByText('defter')).toBeTruthy()
-    expect(screen.queryByText(/Başlıklarda kullanılan KW/)).toBeNull()
-    expect(screen.queryByText(/Yalnız açıklamada geçen KW/)).toBeNull()
+    expect(screen.queryByText(/Başlıklarda kullanılan kelimeler/)).toBeNull()
+    expect(screen.queryByText(/Yalnız açıklamada geçen kelimeler/)).toBeNull()
   })
 
   it.each([null, undefined])('rapor %s ise ek bir şey çizilmez', async (report) => {
@@ -349,7 +349,7 @@ describe('AdsPanel iddia incelemesi', () => {
     fireEvent.click(await screen.findByText('Profili güncelledim, yeniden değerlendir'))
     expect(
       await screen.findByText(
-        'Yeniden değerlendirildi — RSA: 2 temizlendi, 1 hâlâ kontrol gerekli; SEO: 0 temizlendi, 0 hâlâ kontrol gerekli; Sosyal: 0 temizlendi, 4 hâlâ kontrol gerekli'
+        'Yeniden değerlendirildi — RSA: 2 iddia uyarısı kalktı, 1 uyarı hâlâ kontrol bekliyor; SEO: 0 iddia uyarısı kalktı, 0 uyarı hâlâ kontrol bekliyor; Sosyal: 0 iddia uyarısı kalktı, 4 uyarı hâlâ kontrol bekliyor'
       )
     ).toBeTruthy()
   })

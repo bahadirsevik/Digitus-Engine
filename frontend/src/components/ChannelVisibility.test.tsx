@@ -22,7 +22,7 @@ describe('kanal görünürlüğü: yalnız açık kanallar', () => {
     )
     expect(btn(/ADS/)).toBeInTheDocument()
     expect(btn(/SEO\+GEO/)).not.toBeInTheDocument()
-    expect(btn(/Social/)).not.toBeInTheDocument()
+    expect(btn(/Sosyal Medya/)).not.toBeInTheDocument()
     expect(screen.getByText(/İçerik üretimini ADS sayfasından yapabilirsiniz/)).toBeInTheDocument()
   })
 
@@ -33,8 +33,8 @@ describe('kanal görünürlüğü: yalnız açık kanallar', () => {
       </MemoryRouter>
     )
     expect(btn(/SEO\+GEO/)).toBeInTheDocument()
-    expect(btn(/Social/)).toBeInTheDocument()
-    expect(screen.getByText(/ADS, SEO\+GEO ve Social sayfalarından/)).toBeInTheDocument()
+    expect(btn(/Sosyal Medya/)).toBeInTheDocument()
+    expect(screen.getByText(/ADS, SEO\+GEO ve Sosyal Medya sayfalarından/)).toBeInTheDocument()
   })
 
   it('toast (done): ADS-only tek link', () => {
@@ -51,7 +51,7 @@ describe('kanal görünürlüğü: yalnız açık kanallar', () => {
     )
     expect(btn(/ADS/)).toBeInTheDocument()
     expect(btn(/SEO\+GEO/)).not.toBeInTheDocument()
-    expect(btn(/Social/)).not.toBeInTheDocument()
+    expect(btn(/Sosyal Medya/)).not.toBeInTheDocument()
   })
 
   it.each([
@@ -69,13 +69,13 @@ describe('kanal görünürlüğü: yalnız açık kanallar', () => {
     expect(await screen.findByText('kelime')).toBeInTheDocument()
     expect(btn(/^ADS/)).toBeInTheDocument()
     expect(btn(/^SEO/)).not.toBeInTheDocument()
-    expect(btn(/^SOCIAL/)).not.toBeInTheDocument()
+    expect(btn(/^Sosyal Medya/)).not.toBeInTheDocument()
     unmount()
 
     render(<ScoreResults runId={1} workspaceId={2} />)
     expect(await screen.findByText('kelime')).toBeInTheDocument()
     expect(btn(/^SEO/)).toBeInTheDocument()
-    expect(btn(/^SOCIAL/)).toBeInTheDocument()
+    expect(btn(/^Sosyal Medya/)).toBeInTheDocument()
   })
 
   it('ScoreResults: ADS kapalı run ilk sorguyu açık kanalın skoruna göre sıralar', async () => {

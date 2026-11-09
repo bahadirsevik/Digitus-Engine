@@ -213,10 +213,10 @@ export default function LocationPolicyControl({
         ))}
       </div>
       <p className="bpx-section-hint">
-        <b>Şehir filtresi yok:</b> şehir içeren keyword'ler normal değerlendirilir.{' '}
-        <b>Tüm şehirli keyword'leri hariç tut:</b> desteklenen bir il adı geçen her keyword elenir.{' '}
+        <b>Şehir filtresi yok:</b> şehir içeren kelimeler normal değerlendirilir.{' '}
+        <b>Tüm şehirli kelimeleri hariç tut:</b> desteklenen bir il adı geçen her kelime elenir.{' '}
         <b>Yalnız seçtiğim şehirler kalsın:</b> yalnız aşağıda seçtiğiniz odak şehirleri (veya
-        şehirsiz keyword'ler) kalır.
+        şehirsiz kelimeler) kalır.
       </p>
 
       <div className="bpx-focus-cities">
@@ -231,7 +231,7 @@ export default function LocationPolicyControl({
             </>
           )}
           {!focusOnly && focusCities.length === 0 && (
-            <> Yalnız "Yalnız seçtiğim şehirler kalsın" modunda etkilidir.</>
+            <> "Yalnız seçtiğim şehirler kalsın" seçiliyken geçerlidir.</>
           )}
         </p>
         <div className="bpx-chiprow">
@@ -335,11 +335,11 @@ export default function LocationPolicyControl({
 
       {active && (
         <div className="bpx-exempt-terms">
-          <label className="bpx-label">Lokasyon filtresi muafiyetleri</label>
+          <label className="bpx-label">Şehir filtresi muafiyetleri</label>
           <p className="bpx-section-hint">
             Şehir adı içerse bile korunacak terimler — örn. <i>gaziantep fıstığı</i>,{' '}
-            <i>batman filmi</i>, <i>uşak arayanlar</i>. Bu ardışık kelime dizisini içeren
-            keyword'ler lokasyon nedeniyle elenmez.
+            <i>batman filmi</i>, <i>uşak arayanlar</i>. Bu ardışık kelime dizisini içeren kelimeler
+            şehir adı nedeniyle elenmez.
           </p>
           <div className="bpx-chiprow">
             {exemptTerms.map((term) => (
@@ -397,12 +397,12 @@ export default function LocationPolicyControl({
               içeriyor. Bu şehir filtresi{' '}
               {brandCityAffectedCount > 0 ? (
                 <>
-                  şu anki kelime havuzunda <b>{brandCityAffectedCount}</b> keyword'ü etkileyebilir
+                  şu anki kelime havuzunda <b>{brandCityAffectedCount}</b> kelimeyi etkileyebilir
                 </>
               ) : (
-                "markanızla ilgili keyword'leri de etkileyebilir"
+                'markanızla ilgili kelimeleri de etkileyebilir'
               )}
-              . Sistem bunu OTOMATİK muaf tutmaz — gerekirse tam marka ifadesini yukarıdaki
+              . Sistem bunu otomatik olarak muaf tutmaz — gerekirse tam marka ifadesini yukarıdaki
               muafiyetler alanına siz eklemelisiniz.
             </p>
             {brandCityExamples.length > 0 && (
@@ -433,7 +433,7 @@ export default function LocationPolicyControl({
           </p>
         )}
         {!previewError && preview && !preview.has_keywords && (
-          <p className="bpx-section-hint">Önizlenecek keyword yok (havuz henüz boş).</p>
+          <p className="bpx-section-hint">Önizlenecek kelime yok (havuz henüz boş).</p>
         )}
         {!previewError && preview && preview.has_keywords && (
           <div className="bpx-location-summary" data-testid="location-preview-summary">

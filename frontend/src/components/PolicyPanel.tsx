@@ -30,9 +30,9 @@ const CHANNELS: Array<'ads' | 'seo' | 'social'> = ['ads', 'seo', 'social']
 function provenanceLabel(term: PolicyTermEntry): string {
   if (term.legacy) return 'eski kayıt'
   const fromUrl = term.source_urls.length > 0
-  if (fromUrl && term.manual_approved) return 'Rakip URL + Manuel'
+  if (fromUrl && term.manual_approved) return 'Rakip URL + elle onaylandı'
   if (fromUrl) return 'Rakip URL'
-  return 'Manuel'
+  return 'Elle eklendi'
 }
 
 export default function PolicyPanel({
@@ -211,14 +211,14 @@ export default function PolicyPanel({
             <div className="polx-channels">
               {CHANNELS.map((ch) => (
                 <label key={ch} className="polx-channel">
-                  <span>{ch.toUpperCase()}</span>
+                  <span>{ch === 'social' ? 'Sosyal Medya' : ch.toUpperCase()}</span>
                   <select
                     value={policy.competitor_policy[ch]}
                     onChange={(e) => setChannel(ch, e.target.value)}
                     disabled={busy}
                   >
                     <option value="block">Engelle</option>
-                    <option value="allow">İzin ver (conquest)</option>
+                    <option value="allow">İzin ver (rakip adıyla reklam)</option>
                   </select>
                 </label>
               ))}
@@ -228,11 +228,11 @@ export default function PolicyPanel({
           {approvedAliases.length > 0 && (
             <div className="polx-block">
               <span className="polx-label">
-                <Ban size={13} /> Eski alias kuralları
+                <Ban size={13} /> Eski yazım varyantı kuralları
               </span>
               <p className="polx-hint">
                 Önceki panelden kalan yazım-varyantı engelleri — görünür kalır, kaldırılabilir; yeni
-                alias eklenmez (konu dışlamaları "Kesin dışlama"dan yönetilir).
+                yazım varyantı eklenmez (konu dışlamaları "Kesin dışlama"dan yönetilir).
               </p>
               <div className="polx-terms">
                 {approvedAliases.map((t) => (

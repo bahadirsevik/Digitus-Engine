@@ -255,17 +255,17 @@ const STANDARD_KW_LISTS: Array<{
   key: 'keywords_in_headlines' | 'keywords_description_only' | 'keywords_unused' | 'fill_keywords'
   label: string
 }> = [
-  { key: 'keywords_in_headlines', label: "Başlıklarda kullanılan KW'ler" },
-  { key: 'keywords_description_only', label: "Yalnız açıklamada geçen KW'ler" },
-  { key: 'keywords_unused', label: "Hiç kullanılmayan KW'ler" },
-  { key: 'fill_keywords', label: "15'e tamamlamak için eklenen KW'ler" },
+  { key: 'keywords_in_headlines', label: 'Başlıklarda kullanılan kelimeler' },
+  { key: 'keywords_description_only', label: 'Yalnız açıklamada geçen kelimeler' },
+  { key: 'keywords_unused', label: 'Hiç kullanılmayan kelimeler' },
+  { key: 'fill_keywords', label: "15'e tamamlamak için eklenen kelimeler" },
 ]
 
 function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
   if (!report) return null
   const missing = [
     report.missing_headlines > 0 ? `${report.missing_headlines} başlık` : '',
-    report.missing_kw_descriptions > 0 ? `${report.missing_kw_descriptions} KW'li açıklama` : '',
+    report.missing_kw_descriptions > 0 ? `${report.missing_kw_descriptions} kelimeli açıklama` : '',
     report.missing_cta > 0 ? `${report.missing_cta} CTA` : '',
   ]
     .filter(Boolean)
@@ -273,8 +273,8 @@ function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
   return (
     <div className="adsx-std">
       <div className="adsx-std-summary">
-        {report.keyword_count} KW · {report.headline_count} başlık · {report.kw_description_count}{' '}
-        KW'li açıklama ·{' '}
+        {report.keyword_count} kelime · {report.headline_count} başlık ·{' '}
+        {report.kw_description_count} kelimeli açıklama ·{' '}
         <span title="Kural tabanlı sayım: başlık bilinen bir eylem kalıbıyla bitiyorsa CTA sayılır">
           {report.cta_count} CTA
         </span>
@@ -285,12 +285,14 @@ function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
       </div>
       {report.below_standard && (
         <div className="adsx-std-note">
-          <span className="adsx-set-badge is-draft">15 KW teslim standardının altında</span>
+          <span className="adsx-set-badge is-draft">15 kelime teslim standardının altında</span>
           {missing && <span>Eksik: {missing}</span>}
         </div>
       )}
       {report.pool_below_target && (
-        <div className="adsx-std-note">Bu grupta {report.keyword_count} KW var (standart 15)</div>
+        <div className="adsx-std-note">
+          Bu grupta {report.keyword_count} kelime var (standart 15)
+        </div>
       )}
       {STANDARD_KW_LISTS.map(({ key, label }) =>
         report[key].length > 0 ? (
@@ -416,11 +418,9 @@ function AdGroupCard({
           headlines.map((headline, hIdx) => (
             <div key={headline.id ?? hIdx} className="adsx-line">
               {headline.text}
-              {headline.validation_action && (
+              {headline.validation_action && HEADLINE_ACTION_LABEL[headline.validation_action] && (
                 <small title={reasonFor(headline.text)}>
-                  {headline.validation_action === 'claim_review'
-                    ? 'İnceleme gerekli'
-                    : headline.validation_action}
+                  {HEADLINE_ACTION_LABEL[headline.validation_action]}
                 </small>
               )}
             </div>
@@ -447,6 +447,13 @@ function AdGroupCard({
       </div>
     </div>
   )
+}
+
+// Başlık doğrulama sonucu; tanınmayan/eski iç kodlar ekrana basılmaz
+const HEADLINE_ACTION_LABEL: Record<string, string> = {
+  claim_review: 'İnceleme gerekli',
+  shortened: 'Kısaltıldı',
+  regenerated: 'Yeniden üretildi',
 }
 
 export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringRun | null }) {
@@ -645,7 +652,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       await fetchSets()
     } catch (err: unknown) {
       if (scopeRef.current !== requestScope) return
-      setError(apiErrorMessage(err, 'Set aktive edilemedi'))
+      setError(apiErrorMessage(err, 'Reklam seti aktif yapılamadı'))
     } finally {
       if (scopeRef.current === requestScope) setActivating(false)
     }
@@ -869,14 +876,14 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                   className={`adsx-set-chip${isShown ? ' is-shown' : ''}`}
                   onClick={() => setSelectedSetId(s.id === activeSetId ? null : s.id)}
                   title={`v${s.version_number} — ${SET_STATUS_LABELS[s.status]}${
-                    s.is_stale ? ' (bayat)' : ''
+                    s.is_stale ? ' (güncel değil)' : ''
                   }`}
                 >
                   v{s.version_number}
                   <span className={`adsx-set-badge is-${s.status}`}>
                     {SET_STATUS_LABELS[s.status]}
                   </span>
-                  {s.is_stale && <span className="adsx-set-badge is-stale">Bayat</span>}
+                  {s.is_stale && <span className="adsx-set-badge is-stale">Güncel değil</span>}
                   {s.review_required && (
                     <span className="adsx-set-badge is-draft">İnceleme gerekli</span>
                   )}
@@ -916,7 +923,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                 ? `RSA Seti v${shownSet.version_number} (${SET_STATUS_LABELS[shownSet.status]})`
                 : 'RSA Üretimi Tamamlandı'}
             </h2>
-            {shownSet?.is_stale && <span className="adsx-set-badge is-stale">Bayat</span>}
+            {shownSet?.is_stale && <span className="adsx-set-badge is-stale">Güncel değil</span>}
             {shownSet && canActivateSet(shownSet) && (
               <button
                 type="button"

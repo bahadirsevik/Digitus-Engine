@@ -110,7 +110,10 @@ export default function SocialBriefDetail({
       setStateError(null)
       if (res.data.is_stale && !brief.is_stale) onBriefChanged()
     } catch (err) {
-      if (alive.current) setStateError(socialErrorText(err, 'Brief durumu okunamadı.'))
+      if (alive.current)
+        setStateError(
+          socialErrorText(err, 'Brief durumu yüklenemedi. Sayfayı yenileyip tekrar deneyin.')
+        )
     } finally {
       if (alive.current) setLoading(false)
     }
@@ -208,7 +211,7 @@ export default function SocialBriefDetail({
   const canOpenIdeas = (state?.categories.length ?? 0) > 0
   const canOpenContents = ideas.length > 0 || (state?.content_attempts.length ?? 0) > 0
   const stages = [
-    { number: 1, title: 'Kategoriler', subtitle: 'Temaları seçin' },
+    { number: 1, title: 'Kategoriler', subtitle: 'Kategorileri seçin' },
     { number: 2, title: 'Fikirler', subtitle: 'Fikirleri seçin' },
     { number: 3, title: 'İçerikler', subtitle: 'Sonuçları görün' },
   ] as const

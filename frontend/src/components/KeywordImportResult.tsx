@@ -11,21 +11,21 @@ type ImportResult =
 const formatImportSummary = (r: KeywordImportResponse): string => {
   const parts = [
     `${r.created} eklendi`,
-    `${r.skipped} atlandi`,
+    `${r.skipped} atlandı`,
     `toplam ${r.total_before} -> ${r.total_after}`,
   ]
   if ((r.linked_existing || 0) > 0) {
-    parts.splice(1, 0, `${r.created_new || 0} yeni kayit, ${r.linked_existing} mevcut baglandi`)
+    parts.splice(1, 0, `${r.created_new || 0} yeni kayıt, ${r.linked_existing} mevcut bağlandı`)
   }
   if ((r.skipped_limit || 0) > 0) {
-    parts.push(`${r.skipped_limit} satir havuz limiti nedeniyle atlandi`)
+    parts.push(`${r.skipped_limit} satır havuz limiti nedeniyle atlandı`)
   }
   if ((r.skipped_junk || 0) > 0) {
     parts.push(
-      `${r.skipped_junk} satir gecersiz kelime (bos / yalniz sayi veya sembol) nedeniyle atlandi`
+      `${r.skipped_junk} satır geçersiz kelime (boş / yalnız sayı veya sembol) nedeniyle atlandı`
     )
   }
-  return `${r.requested} satir islendi: ${parts.join(' | ')}`
+  return `${r.requested} satır işlendi: ${parts.join(' | ')}`
 }
 
 export default function KeywordImportResult({
@@ -81,7 +81,7 @@ export default function KeywordImportResult({
         <>
           <button type="button" className="skipped-toggle" onClick={() => setShowThemed((v) => !v)}>
             {showThemed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            Yasakli temayla elendi ({themed.length}) — {showThemed ? 'gizle' : 'goruntule'}
+            Yasaklı temayla elendi ({themed.length}) — {showThemed ? 'gizle' : 'görüntüle'}
           </button>
           {showThemed && (
             <ul className="skipped-list themed-list">
@@ -124,7 +124,7 @@ export default function KeywordImportResult({
             onClick={() => setShowSkipped((v) => !v)}
           >
             {showSkipped ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            Atlanan kelimeleri {showSkipped ? 'gizle' : 'goster'} ({skipped.length})
+            Atlanan kelimeleri {showSkipped ? 'gizle' : 'göster'} ({skipped.length})
           </button>
           {showSkipped && (
             <ul className="skipped-list">

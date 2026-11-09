@@ -81,7 +81,7 @@ export function summarizeTask(task: TaskLike): TaskSummary {
       return {
         summary:
           groups !== null
-            ? `${groups} reklam grubu üretildi${version !== null ? ` (set v${version})` : ''}.`
+            ? `${groups} reklam grubu üretildi${version !== null ? ` (sürüm ${version})` : ''}.`
             : null,
         warnings: failed > 0 ? [`${failed} reklam grubu üretilemedi.`] : [],
         // Geçmiş görev, o an aktif olan sete değil kendi ürettiği sete götürür

@@ -89,7 +89,7 @@ export default function CompetitorReviewCard({ review }: { review: UseCompetitor
           tespit et
         </button>
         <p className="bpx-section-hint">
-          Rakip olarak işaretlenenler onayla birlikte ADS, SEO ve SOCIAL kanallarında otomatik
+          Rakip olarak işaretlenenler onayla birlikte ADS, SEO ve sosyal medya kanallarında otomatik
           engellenecek — yanlışsa &quot;Rakip değil&quot; seçin.
         </p>
       </div>

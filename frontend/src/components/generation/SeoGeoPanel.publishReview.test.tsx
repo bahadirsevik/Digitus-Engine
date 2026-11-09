@@ -70,7 +70,7 @@ describe('SeoGeoPanel yayın öncesi inceleme', () => {
     expect(top).toHaveTextContent(DETAIL_A)
     expect(top).toHaveTextContent(DETAIL_B)
     expect(top).toHaveTextContent('Otomatik kontrol')
-    expect(top).toHaveTextContent('AI değerlendirmesi')
+    expect(top).toHaveTextContent('Yapay zekâ değerlendirmesi')
 
     expect((container.querySelector('.seox-review-box') as HTMLDetailsElement).open).toBe(true)
   })

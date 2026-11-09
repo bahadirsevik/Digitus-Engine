@@ -72,32 +72,33 @@ const TABS: {
 }[] = [
   {
     id: 'google-ads',
-    label: 'Seed Keywordler',
+    label: 'Başlangıç Kelimeleri',
     description: 'Profildeki 10 kelime hazır gelir; Google Ads ile hacim ve rekabet verisi al',
     icon: Megaphone,
   },
   {
     id: 'url',
     label: "URL'den Çıkar",
-    description: "Kendi siteniz ya da herhangi bir URL'den keyword önerileri üret",
+    description: "Kendi siteniz ya da herhangi bir URL'den anahtar kelime önerileri üret",
     icon: Link2,
   },
   {
     id: 'competitor',
     label: "Rakip URL'leri",
-    description: 'Profildeki rakip siteler hazır buton olarak; rakip keywordlerini keşfet',
+    description:
+      'Profildeki rakip siteler hazır buton olarak; rakiplerin anahtar kelimelerini keşfet',
     icon: Users,
   },
   {
     id: 'manual',
-    label: 'Manuel Ekle',
-    description: 'Tekil kelimeyi hızlıca çalışma alanına bağla',
+    label: 'Elle Ekle',
+    description: 'Tekil kelimeyi hızlıca marka çalışmasına bağla',
     icon: Keyboard,
   },
   {
     id: 'csv',
     label: 'CSV Yükle',
-    description: 'Hazır keyword listesini toplu içe aktar',
+    description: 'Hazır anahtar kelime listesini toplu içe aktar',
     icon: FileSpreadsheet,
   },
 ]
@@ -106,7 +107,7 @@ const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
   csv: { label: 'CSV', className: 'source-badge source-csv' },
   google_ads_api: { label: 'Google Ads', className: 'source-badge source-gads' },
   url_seed: { label: 'URL', className: 'source-badge source-url' },
-  manual: { label: 'Manuel', className: 'source-badge source-manual' },
+  manual: { label: 'Elle eklendi', className: 'source-badge source-manual' },
 }
 
 interface Keyword {
@@ -207,7 +208,7 @@ const formatKeywordImportStatus = (result: {
     details.splice(
       1,
       0,
-      `${result.created_new || 0} yeni kayıt, ${result.linked_existing || 0} mevcut keyword bağlandı`
+      `${result.created_new || 0} yeni kayıt, ${result.linked_existing || 0} mevcut kelime bağlandı`
     )
   }
 
@@ -411,7 +412,7 @@ export default function Keywords() {
     } catch (err) {
       setError(
         apiErrorStatus(err) === 0
-          ? 'API bağlantısı kurulamadı. Backend çalışıyor mu?'
+          ? 'Sunucuya ulaşılamadı; bağlantınızı kontrol edip sayfayı yenileyin.'
           : `Anahtar kelime listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
       )
       setKeywords([])
@@ -618,7 +619,7 @@ export default function Keywords() {
       const e = err as { message?: string; detail?: unknown }
       setManualImportResult({
         kind: 'error',
-        message: e?.message || String(e?.detail || 'Manuel ekleme basarisiz oldu'),
+        message: e?.message || String(e?.detail || 'Kelime eklenemedi'),
       })
     }
   }
@@ -849,7 +850,7 @@ export default function Keywords() {
         </div>
       )}
 
-      <div className="keyword-view-toggle" role="tablist" aria-label="Anahtar kelime gorunumu">
+      <div className="keyword-view-toggle" role="tablist" aria-label="Anahtar kelime görünümü">
         <button
           type="button"
           role="tab"
@@ -944,7 +945,7 @@ export default function Keywords() {
                   (activeWorkspace?.suggested_keywords?.length || 0) > 0 && (
                     <span className="kwx-loaded-pill">
                       <CheckCircle size={12} strokeWidth={2.4} /> Marka profilinden{' '}
-                      {activeWorkspace?.suggested_keywords?.length} seed kelime yüklendi
+                      {activeWorkspace?.suggested_keywords?.length} başlangıç kelimesi yüklendi
                     </span>
                   )}
               </div>
@@ -971,7 +972,7 @@ export default function Keywords() {
                     <div className="kwx-dropzone-sub">
                       {uploadedFile
                         ? 'Dosya hazır — analiz edip içe aktarabilirsiniz'
-                        : 'Hazır keyword listesini toplu içe aktar'}
+                        : 'Hazır anahtar kelime listesini toplu içe aktar'}
                     </div>
                     <input
                       ref={fileInputRef}
@@ -1094,7 +1095,7 @@ export default function Keywords() {
               {!workspaceDisabled && activeTab === 'manual' && (
                 <div className="kwx-manual-form">
                   <label className="kwx-field">
-                    <span className="kwx-field-label">Keyword</span>
+                    <span className="kwx-field-label">Anahtar Kelime</span>
                     <input
                       className="kwx-input"
                       value={newKeyword.keyword}
@@ -1304,7 +1305,7 @@ export default function Keywords() {
           {poolTotal >= WORKSPACE_KEYWORD_LIMIT && (
             <div className="field-warning">
               <AlertCircle size={13} />
-              Havuz limiti dolu — yeni keyword eklemek için önce mevcutlardan silin.
+              Havuz limiti dolu — yeni kelime eklemek için önce mevcutlardan silin.
             </div>
           )}
 
@@ -1371,12 +1372,12 @@ export default function Keywords() {
               <table className="kwx-table">
                 <thead>
                   <tr>
-                    <th className="is-left pad-first">Keyword</th>
+                    <th className="is-left pad-first">Anahtar Kelime</th>
                     <th className="is-left">Kaynak</th>
                     <th className="is-left">Sektör</th>
                     <th>Aylık Arama</th>
-                    <th>Trend 12M</th>
-                    <th>Trend 3M</th>
+                    <th>12 Aylık Trend</th>
+                    <th>3 Aylık Trend</th>
                     <th>Rekabet</th>
                     <th className="is-center">İşlem</th>
                   </tr>
