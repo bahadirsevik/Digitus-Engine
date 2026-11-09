@@ -104,7 +104,7 @@ def _resolve_active_run(
         if run is None or run.brand_profile_id != workspace_id:
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=404, detail="scoring run not found in workspace")
+            raise HTTPException(status_code=404, detail="Analiz bu marka çalışmasında bulunamadı.")
         return run
     return (
         db.query(ScoringRun)

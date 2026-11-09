@@ -132,7 +132,7 @@ def create_export(
         run_export_task.delay(export_id)
     except Exception as exc:
         job.status = "failed"
-        job.error_message = safe_500_detail(exc, "Export kuyruğa alınamadı")
+        job.error_message = safe_500_detail(exc, "Dışa aktarım başlatılamadı. Lütfen tekrar deneyin.")
         db.commit()
         db.refresh(job)
 
@@ -162,7 +162,11 @@ def download_export(
     if job.status != "completed":
         raise HTTPException(
             status_code=400,
-            detail=f"Export henüz tamamlanmadı. Durum: {job.status}",
+            detail=(
+                "Dışa aktarım başarısız olduğu için dosya yok; dışa aktarımı yeniden başlatın."
+                if job.status == "failed"
+                else "Dışa aktarım henüz tamamlanmadı; bitmesini bekleyin."
+            ),
         )
 
     filepath = job.filepath
@@ -229,7 +233,7 @@ def create_simple_export(
     try:
         format_enum = ExportFormatEnum(format.lower())
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid format: {format}")
+        raise HTTPException(status_code=400, detail=f"Geçersiz dosya biçimi: {format}")
 
     exporters = {
         ExportFormatEnum.DOCX: DocxExporter,
@@ -256,7 +260,7 @@ def create_simple_export(
     )
 
     return {
-        "message": "Export oluşturuldu",
+        "message": "Dışa aktarım oluşturuldu",
         "format": format,
         "filename": filename,
         "filepath": filepath,

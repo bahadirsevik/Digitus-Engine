@@ -52,13 +52,6 @@ export default function Layout({ children }: LayoutProps) {
             </Link>
           ))}
         </nav>
-
-        <div className="sidebar-footer">
-          <div className="api-status">
-            <div className="status-dot"></div>
-            <span>API Bagli</span>
-          </div>
-        </div>
       </aside>
 
       <main className="main-content">

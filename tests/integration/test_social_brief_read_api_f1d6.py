@@ -271,7 +271,7 @@ def test_07_non_existent_brief_returns_404_brief_not_found(
     r = client.get("/api/v1/generation/social/briefs/999999", params={"brand_profile_id": ws.id})
     assert r.status_code == 404
     assert r.json()["detail"]["code"] == "BRIEF_NOT_FOUND"
-    assert r.json()["detail"]["message"] == "Social brief not found."
+    assert r.json()["detail"]["message"] == "Brief bulunamadı."
 
 
 def test_08_other_workspace_brief_returns_404_brief_not_found(

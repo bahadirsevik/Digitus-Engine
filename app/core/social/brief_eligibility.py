@@ -109,7 +109,7 @@ def validate_social_brief_eligibility(
     if workspace is None:
         raise SocialBriefEligibilityError(
             error_code="RUN_NOT_FOUND",
-            message=f"Workspace bulunamadı veya silinmiş: {brand_profile_id}",
+            message="Marka çalışması bulunamadı veya arşivlenmiş",
             field="brand_profile_id",
         )
 
@@ -127,7 +127,7 @@ def validate_social_brief_eligibility(
     if run is None:
         raise SocialBriefEligibilityError(
             error_code="RUN_NOT_FOUND",
-            message=f"ScoringRun bulunamadı veya workspace'e ait değil: {validated.scoring_run_id}",
+            message="Analiz bu marka çalışmasında bulunamadı.",
             field="scoring_run_id",
         )
 
@@ -136,7 +136,7 @@ def validate_social_brief_eligibility(
     if assignment_version is None:
         raise SocialBriefEligibilityError(
             error_code="RUN_NOT_FOUND",
-            message=f"ScoringRun {run.id} channel_assignment_version değeri tanımsız.",
+            message="Bu analizde kanal ataması tamamlanmamış. Önce kanal atamasını yapın.",
             field="scoring_run_id",
         )
 
@@ -145,7 +145,7 @@ def validate_social_brief_eligibility(
     if freshness.channel_pool_stale:
         raise SocialBriefEligibilityError(
             error_code="POOL_STALE",
-            message="Kanal havuzları güncel değil (stale). Yeni brief oluşturulamaz.",
+            message="Kanal havuzu güncel değil; yeni brief oluşturulamaz. Önce kanal atamasını yenileyin.",
             field="scoring_run_id",
             details=freshness.as_dict(),
         )
@@ -171,8 +171,8 @@ def validate_social_brief_eligibility(
         raise SocialBriefEligibilityError(
             error_code="SOCIAL_KEYWORD_NOT_ELIGIBLE",
             message=(
-                f"Seçilen keyword'ler SOCIAL havuzunda bulunamadı veya bu run'a ait değil: "
-                f"{missing_keyword_ids}"
+                f"Seçilen {len(missing_keyword_ids)} anahtar kelime bu analizin Sosyal medya "
+                "havuzunda yok. Sayfayı yenileyip seçiminizi kontrol edin."
             ),
             field="keyword_ids",
             details={
@@ -200,7 +200,7 @@ def validate_social_brief_eligibility(
     if invalid_snapshot_ids:
         raise SocialBriefEligibilityError(
             error_code="SOCIAL_KEYWORD_NOT_ELIGIBLE",
-            message=f"Seçilen keyword metin snapshot'ı boş veya geçersiz: {invalid_snapshot_ids}",
+            message=f"Seçilen {len(invalid_snapshot_ids)} anahtar kelimenin metni boş veya geçersiz. Bu kelimeleri seçimden çıkarın.",
             field="keyword_ids",
             details={
                 "requested_keyword_ids": list(validated.keyword_ids),

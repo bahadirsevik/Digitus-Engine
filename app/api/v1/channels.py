@@ -60,8 +60,8 @@ def run_channel_assignment(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Active content generation task exists for this run. "
-                "Wait until it completes before re-running channel assignment."
+                "Bu analiz için içerik üretimi sürüyor. Kanal atamasını "
+                "yeniden çalıştırmadan önce üretimin bitmesini bekleyin."
             ),
         )
 
@@ -300,14 +300,14 @@ def export_channel_pool_xlsx(
 
     channel = channel.upper()
     if channel not in ["ADS", "SEO", "SOCIAL"]:
-        raise HTTPException(status_code=400, detail="Invalid channel")
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. ADS, SEO veya Sosyal medya seçin.")
 
     scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
     require_fresh_channel_pool(db, scoring_run)
 
     rows = collect_channel_pool(db, run_id, channel)
     if not rows:
-        raise HTTPException(status_code=400, detail=f"{channel} havuzu boş — önce kanal ataması yapın")
+        raise HTTPException(status_code=400, detail=f"{'Sosyal medya' if channel == 'SOCIAL' else channel} havuzu boş — önce kanal ataması yapın.")
 
     wb = Workbook()
     ws = wb.active
@@ -365,7 +365,7 @@ def get_single_channel_pool(
 ):
     """Get pool for a specific channel."""
     if channel.upper() not in ["ADS", "SEO", "SOCIAL"]:
-        raise HTTPException(status_code=400, detail="Invalid channel")
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. ADS, SEO veya Sosyal medya seçin.")
 
     scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
     engine = ChannelEngine(db, ai)

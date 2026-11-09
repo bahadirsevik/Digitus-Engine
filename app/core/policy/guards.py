@@ -30,6 +30,23 @@ GUARDED_TASK_TYPES = (
 )
 ACTIVE_EXPORT_STATUSES = ("pending", "processing")
 
+# Kullanıcıya gösterilen iş adları (mesajlarda ham task_type/ID gösterilmez).
+TASK_TYPE_LABELS = {
+    "channel_assignment": "kanal ataması",
+    "seo_content": "SEO içerik üretimi",
+    "ads": "reklam üretimi",
+    "social": "sosyal medya içerik üretimi",
+    "social_content": "sosyal medya içerik üretimi",
+    "corpus_screening": "ön tarama",
+    "competitor_discovery": "rakip keşfi",
+    "policy_preview": "rakip önizlemesi",
+    "export": "dışa aktarım",
+}
+
+
+def task_type_label(task_type: Optional[str]) -> str:
+    return TASK_TYPE_LABELS.get(task_type or "", "bir arka plan işlemi")
+
 
 def find_active_workspace_work(db: Session, workspace_id: int) -> Optional[str]:
     """Workspace'te süren atama/üretim/export işi varsa kısa açıklama döndürür.
@@ -60,7 +77,7 @@ def find_active_workspace_work(db: Session, workspace_id: int) -> Optional[str]:
             TaskResult.brand_profile_id == workspace_id
         ).first()
     if task:
-        return f"{task.task_type} görevi sürüyor (task {task.task_id})"
+        return f"{task_type_label(task.task_type)} sürüyor"
 
     export = (
         db.query(ExportJob)
@@ -71,5 +88,5 @@ def find_active_workspace_work(db: Session, workspace_id: int) -> Optional[str]:
         .first()
     )
     if export:
-        return f"export işi sürüyor (job {export.id})"
+        return "dışa aktarım sürüyor"
     return None

@@ -105,7 +105,7 @@ def test_google_ads_health_error_is_safe(monkeypatch):
     assert SECRET not in out["error"]
 
     monkeypatch.setattr(svc, "_build_client", lambda: (_ for _ in ()).throw(RuntimeError("invalid_grant: x")))
-    assert "refresh token" in svc.health_check()["error"]
+    assert "yetkisi geçersiz" in svc.health_check()["error"]
 
 
 def test_url_reachability_error_hides_raw_text(monkeypatch):

@@ -446,7 +446,7 @@ def generate_ads_task(
             # Set'siz çağrı desteklenmez (dispatch her zaman set yaratır)
             update_task_status(
                 task_id, status="failed",
-                error_message="generation_set_id eksik — dispatch akışı kullanılmalı",
+                error_message="Reklam üretimi başlatılamadı. Reklam üretimini yeniden başlatın.",
             )
             return {"status": "failed", "reason": "missing_generation_set"}
 
@@ -479,8 +479,8 @@ def generate_ads_task(
             finalize_ads_failure(
                 db, gen_set,
                 error_message=(
-                    "Kanal ataması üretim başlamadan yenilendi — set bayatladı. "
-                    "Yeni ADS üretimi çalıştırın."
+                    "Kanal ataması üretim başlamadan yenilendi; bu reklam seti güncel değil. "
+                    "Reklam üretimini yeniden başlatın."
                 ),
             )
             logger.warning(
@@ -504,7 +504,7 @@ def generate_ads_task(
             if source_group is None or source_set_id is None:
                 finalize_ads_failure(
                     db, gen_set,
-                    error_message="Regenerate kaynağı bulunamadı",
+                    error_message="Yeniden üretilecek reklam grubu bulunamadı. Sayfayı yenileyip reklam setlerini kontrol edin.",
                 )
                 return {"status": "failed", "reason": "missing_source"}
 
@@ -568,12 +568,12 @@ def generate_ads_task(
             if groups_count == 0:
                 if result.total_keywords == 0:
                     error_message = (
-                        "ADS havuzu bos - once kanal atamasi yapin, sonra reklam uretin."
+                        "ADS havuzu boş — önce kanal ataması yapın, sonra reklam üretin."
                     )
                 else:
                     error_message = (
-                        "Hic reklam grubu uretilemedi: AI yanitlari islenemedi. "
-                        "Yeniden deneyin; sorun surerse worker loglarina bakin."
+                        "Hiç reklam grubu üretilemedi: yapay zekâ yanıtları işlenemedi. "
+                        "Yeniden deneyin; sorun sürerse sistem yöneticinize başvurun."
                     )
                 finalize_ads_failure(
                     db, gen_set, error_message=error_message,
@@ -681,8 +681,8 @@ def generate_social_task(
             status='failed',
             progress=100,
             error_message=(
-                "Bu gorev kaldirildi. Yeni sosyal icerik akisi icin brief "
-                "uclarini kullanin (/generation/social/briefs)."
+                "Bu toplu sosyal medya üretimi kaldırıldı. Sosyal medya içeriklerini "
+                "Sosyal Medya sayfasındaki brief akışıyla oluşturun."
             ),
         )
         db.close()
@@ -747,8 +747,8 @@ def generate_social_task(
                 progress=100,
                 result_data=result_data,
                 error_message=(
-                    "Tum icerikler desteklenmeyen iddia nedeniyle reddedildi. "
-                    "Ilgili fikirleri yeniden uretin."
+                    "Tüm içerikler desteklenmeyen iddia nedeniyle reddedildi. "
+                    "İlgili fikirleri yeniden üretin."
                 ),
             )
             logger.error("Social bulk: all contents claim-rejected")
@@ -869,13 +869,13 @@ def social_contents_task(
         if not content_ids:
             if warnings or policy_warnings:
                 error_message = (
-                    "Tum icerikler desteklenmeyen iddia nedeniyle reddedildi. "
-                    "Ilgili fikirleri yeniden uretin."
+                    "Tüm içerikler desteklenmeyen iddia nedeniyle reddedildi. "
+                    "İlgili fikirleri yeniden üretin."
                 )
             else:
                 error_message = (
-                    "Hic sosyal icerik uretilemedi: fikirler bulunamadi veya AI "
-                    "yanitlari islenemedi. Yeniden deneyin."
+                    "Hiç sosyal medya içeriği üretilemedi: fikirler bulunamadı veya "
+                    "yapay zekâ yanıtları işlenemedi. Yeniden deneyin."
                 )
             update_task_status(
                 task_id,
@@ -1002,7 +1002,7 @@ def _finalize_social_ideas_bootstrap_failure(
             attempt_id=attempt_id,
             task_id=task_id,
             reason_code="worker_bootstrap_failed",
-            error_message="Fikir üretimi worker hazırlığı tamamlanamadı.",
+            error_message="Fikir üretimi sunucuda başlatılamadı. Fikir üretimini yeniden başlatın.",
         )
         db.commit()
     except Exception:
@@ -1179,7 +1179,7 @@ def _finalize_social_ideas_retry_bootstrap_failure(
             attempt_id=attempt_id,
             task_id=task_id,
             reason_code="worker_bootstrap_failed",
-            error_message="Fikir üretimi worker hazırlığı tamamlanamadı.",
+            error_message="Fikir üretimi sunucuda başlatılamadı. Fikir üretimini yeniden başlatın.",
         )
         db.commit()
     except Exception:
@@ -1370,7 +1370,7 @@ def _finalize_social_contents_bootstrap_failure(
             attempt_id=attempt_id,
             task_id=task_id,
             reason_code="worker_bootstrap_failed",
-            error_message="Sosyal içerik worker hazırlığı tamamlanamadı.",
+            error_message="Sosyal medya içerik üretimi sunucuda başlatılamadı. İçerik üretimini yeniden başlatın.",
         )
         db.commit()
     except Exception:

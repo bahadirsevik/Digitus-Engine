@@ -26,7 +26,7 @@ def test_verify_scoring_run_requires_brand_profile_id(db_session, make_workspace
     with pytest.raises(HTTPException) as exc:
         verify_scoring_run(db_session, run.id, brand_profile_id=None)
     assert exc.value.status_code == 400
-    assert exc.value.detail == "brand_profile_id is required"
+    assert exc.value.detail == "Önce bir marka çalışması seçin."
 
 
 def test_verify_scoring_run_returns_run_when_workspace_matches(
@@ -50,7 +50,7 @@ def test_verify_scoring_run_404_when_workspace_mismatch(
     with pytest.raises(HTTPException) as exc:
         verify_scoring_run(db_session, run_in_a.id, brand_profile_id=ws_b.id)
     assert exc.value.status_code == 404
-    assert "not found" in exc.value.detail
+    assert "bulunamadı" in exc.value.detail
 
 
 def test_verify_scoring_run_404_when_run_missing(db_session, make_workspace):

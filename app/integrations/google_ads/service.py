@@ -196,8 +196,8 @@ class GoogleAdsService:
             # Ham metin kullanıcıya gitmez; yenilenebilir tek durum ayrı bildirilir
             if "invalid_grant" in str(exc):
                 message = (
-                    "Google Ads refresh token geçersiz veya süresi dolmuş. "
-                    "GOOGLE_ADS_REFRESH_TOKEN yenilenmeli."
+                    "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                    "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
                 )
             else:
                 message = "Google Ads bağlantısı kurulamadı. Lütfen biraz sonra tekrar deneyin."

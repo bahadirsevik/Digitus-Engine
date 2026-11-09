@@ -43,7 +43,7 @@ from app.tasks.generation_tasks import (
 )
 
 T0 = datetime(2026, 9, 26, 12, 0, 0, tzinfo=timezone.utc)
-SAFE_CONTENTS_ERROR_MSG = "Sosyal içerik worker hazırlığı tamamlanamadı."
+SAFE_CONTENTS_ERROR_MSG = "Sosyal medya içerik üretimi sunucuda başlatılamadı. İçerik üretimini yeniden başlatın."
 
 
 @pytest.fixture

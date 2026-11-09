@@ -61,7 +61,7 @@ def _translate_invalid_argument(raw: str) -> str:
         )
 
     if "customer" in lower and ("not found" in lower or "invalid" in lower):
-        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. customer_id değerini kontrol edin."
+        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. Seçili Google Ads hesabını kontrol edin."
 
     return f"Google Ads geçersiz parametre: {raw}"
 
@@ -71,7 +71,7 @@ def _get_service() -> GoogleAdsService:
     if not svc.is_configured():
         raise HTTPException(
             status_code=503,
-            detail="Google Ads kimlik bilgileri tanımlı değil. Sunucu yapılandırmasını (.env) kontrol edin."
+            detail="Google Ads bağlantısı bu sunucuda kurulmamış. Bağlantının kurulması için sistem yöneticinize başvurun."
         )
     return svc
 
@@ -83,14 +83,14 @@ def _raise_google_ads_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Google Ads yetkilendirmesi gecersiz veya suresi dolmus. "
-                "GOOGLE_ADS_REFRESH_TOKEN yenilenmeli."
+                "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
             ),
         )
     if exc_name == "ResourceExhausted":
         raise HTTPException(
             status_code=429,
-            detail="Google Ads kotasi doldu, daha sonra tekrar deneyin",
+            detail="Google Ads istek kotası doldu; biraz sonra tekrar deneyin.",
         )
     if exc_name in {"InvalidArgument", "GoogleAdsException"}:
         raise HTTPException(status_code=400, detail=_translate_invalid_argument(detail))
@@ -539,7 +539,7 @@ def keyword_ideas_by_url(
         or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
     )
     if not customer_id:
-        raise HTTPException(status_code=400, detail="customer_id gerekli")
+        raise HTTPException(status_code=400, detail="Önce bir Google Ads hesabı seçin.")
 
     keyword_seeds = workspace.suggested_keywords or []
     seeds_hash = _keyword_seed_hash(keyword_seeds) if payload.include_keyword_seed else "none"

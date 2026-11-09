@@ -90,8 +90,8 @@ def _gads_health(*, refresh: bool) -> Tuple[Optional[str], Optional[str]]:
         error = result.get("error")
         if isinstance(error, str) and "invalid_grant" in error:
             error = (
-                "Google Ads refresh token geçersiz veya süresi dolmuş. "
-                "GOOGLE_ADS_REFRESH_TOKEN yenilenmeli."
+                "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
             )
     except Exception as exc:
         logger.debug(f"google ads health probe failed: {exc}")
@@ -119,7 +119,7 @@ def _resolve_active_run_id(
     if active_run_id is not None:
         run = db.query(ScoringRun).filter(ScoringRun.id == active_run_id).first()
         if run is None or run.brand_profile_id != workspace_id:
-            raise HTTPException(status_code=404, detail="scoring run not found in workspace")
+            raise HTTPException(status_code=404, detail="Analiz bu marka çalışmasında bulunamadı.")
         return active_run_id
 
     latest = (

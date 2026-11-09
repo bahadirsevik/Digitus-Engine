@@ -85,8 +85,8 @@ def require_relevance_not_v3(run: Any) -> None:
 
 def legacy_run_message(algorithm_version: Optional[str]) -> str:
     return (
-        f"Bu analiz eski motorla ({algorithm_version or 'v2'}) üretilmiştir ve "
-        "yalnız okunabilir. Yeni üretim için V3 analizi oluşturun."
+        "Bu analiz eski analiz motoruyla üretildiği için yalnız görüntülenebilir. "
+        "Yeni içerik üretmek için yeni bir analiz başlatın."
     )
 
 

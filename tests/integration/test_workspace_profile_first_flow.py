@@ -358,7 +358,7 @@ def test_active_competitor_discovery_blocks_keyword_start(
         json={"rerun_keywords": True},
     )
     assert response.status_code == 409
-    assert "competitor_discovery" in str(response.json()["detail"])
+    assert "rakip keşfi sürüyor" in str(response.json()["detail"])
 
 
 def test_keyword_task_excludes_approved_competitor_terms(

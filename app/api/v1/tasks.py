@@ -61,7 +61,7 @@ def get_task(
     fail_stale_tasks(task_id=task_id)  # takılı running/pending -> failed (okuma anında)
     status = get_task_status(task_id)
     if not status:
-        raise HTTPException(status_code=404, detail="Task bulunamadı")
+        raise HTTPException(status_code=404, detail="İşlem bulunamadı.")
 
     return TaskStatusResponse(**status)
 
@@ -98,12 +98,16 @@ def cancel_task(
 
     status = get_task_status(task_id)
     if not status:
-        raise HTTPException(status_code=404, detail="Task bulunamadı")
+        raise HTTPException(status_code=404, detail="İşlem bulunamadı.")
 
     if status['status'] in ['completed', 'failed', 'cancelled']:
         raise HTTPException(
             status_code=400,
-            detail=f"Task zaten tamamlanmış: {status['status']}",
+            detail={
+                "completed": "İşlem zaten tamamlanmış; iptal edilemez.",
+                "failed": "İşlem zaten başarısız olmuş; iptal edilemez.",
+                "cancelled": "İşlem zaten iptal edilmiş.",
+            }[status['status']],
         )
 
     # Önce koşullu yazım: görev bu arada bittiyse iptal EDİLMEZ (revoke da gitmez)

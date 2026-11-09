@@ -174,8 +174,8 @@ def _apply_location_policy(
             raise HTTPException(status_code=400, detail={
                 "code": "INVALID_LOCATION_LIST",
                 "message": (
-                    f"'{field}' bir liste olmalidir; "
-                    f"{type(incoming.get(field)).__name__} gonderildi."),
+                    ("Odak şehirleri" if field == "focus_cities" else "Muafiyet terimleri")
+                    + " liste olarak gönderilmelidir."),
             })
 
     if LOCATION_MODE_FIELD in incoming:
@@ -187,8 +187,8 @@ def _apply_location_policy(
             raise HTTPException(status_code=400, detail={
                 "code": "INVALID_LOCATION_FILTER_MODE",
                 "message": (
-                    f"Gecersiz lokasyon filtresi modu: {raw_mode!r}. "
-                    f"Gecerli degerler: {', '.join(VALID_MODES)}."),
+                    "Geçersiz lokasyon filtresi seçimi. Lokasyon filtresi "
+                    "seçeneklerinden birini seçin."),
             })
     else:
         mode = str(existing.get(LOCATION_MODE_FIELD) or MODE_NONE).strip().lower()
@@ -208,19 +208,19 @@ def _apply_location_policy(
         raise HTTPException(status_code=400, detail={
             "code": "UNSUPPORTED_FOCUS_CITY",
             "message": (
-                "Yalnizca 81 resmi il adi secilebilir; ilce/mahalle "
-                f"desteklenmez. Taninmayan: {', '.join(unsupported[:5])}"),
+                "Yalnızca 81 resmi il adı seçilebilir; ilçe/mahalle "
+                f"desteklenmez. Tanınmayan: {', '.join(unsupported[:5])}"),
         })
     if len(canonical) > MAX_FOCUS_CITIES:
         raise HTTPException(status_code=400, detail={
             "code": "TOO_MANY_FOCUS_CITIES",
-            "message": f"En fazla {MAX_FOCUS_CITIES} odak sehri secilebilir.",
+            "message": f"En fazla {MAX_FOCUS_CITIES} odak şehri seçilebilir.",
         })
     if mode == MODE_FOCUS_ONLY and not canonical:
         raise HTTPException(status_code=400, detail={
             "code": "FOCUS_CITIES_REQUIRED",
             "message": (
-                "'Yalniz sectigim sehirler kalsin' modu en az bir odak sehri "
+                "'Yalnız seçtiğim şehirler kalsın' seçeneği en az bir odak şehri "
                 "gerektirir."),
         })
     sanitized["focus_cities"] = canonical
@@ -453,6 +453,17 @@ def _trigger_latest_run_relevance(
     return
 
 
+def _profile_not_confirmable_text(status: Optional[str]) -> str:
+    """Profil onayı reddinde ham durum kodu yerine kullanıcıya ne yapacağını söyler."""
+    if status in ("pending", "running"):
+        return "Site analizi sürüyor; analiz bitince profili onaylayabilirsiniz."
+    if status == "failed":
+        return "Site analizi başarısız oldu; profili onaylamak için analizi yeniden başlatın."
+    if status == "confirmed":
+        return "Profil zaten onaylanmış."
+    return "Profil şu an onaylanamaz. Sayfayı yenileyip profilin güncel durumunu kontrol edin."
+
+
 def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
     if not isinstance(profile_data, dict) or not profile_data:
         raise HTTPException(
@@ -464,7 +475,7 @@ def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
     if not anchor_texts:
         raise HTTPException(
             status_code=400,
-            detail="Profil onaylanamaz: anchor text olusmadi. Once profil analizini tamamlayin veya profil alanlarini doldurun.",
+            detail="Profil onaylanamaz: profilden kelime eşleştirmede kullanılacak tanım metinleri çıkarılamadı. Önce profil analizini tamamlayın veya profil alanlarını doldurun.",
         )
 
 
@@ -486,7 +497,7 @@ def get_profile(
     )
 
     if not profile:
-        raise HTTPException(status_code=404, detail="Bu run için profil bulunamadı")
+        raise HTTPException(status_code=404, detail="Bu analiz için marka profili bulunamadı.")
 
     # Lazy takılı-profil kontrolü: startup janitörü tek seferlik olduğu için
     # restart sonrası taze görünüp sonra sonsuza dek running kalan satırları
@@ -513,7 +524,7 @@ def compute_relevance(
     if not settings.ENABLE_RELEVANCE_RERANK:
         raise HTTPException(
             status_code=400,
-            detail="Relevance rerank devre dışı (ENABLE_RELEVANCE_RERANK=false)"
+            detail="Alaka düzeyi hesaplaması bu sunucuda kapalı. Sistem yöneticinize başvurun."
         )
 
     # Eski motor run'ı salt-okunur: embedding çağrısından ÖNCE tipli 409
@@ -701,7 +712,7 @@ def create_workspace(
         if crawl_scope != "site" or request.flow_version != "profile_first":
             raise HTTPException(
                 status_code=400,
-                detail="Alt sayfa yalnız profil-önce akışta ve site kapsamlı markada istenebilir",
+                detail="Alt sayfa yalnız yeni kurulum akışıyla oluşturulmuş ve tüm siteyi kapsayan marka çalışmalarına eklenebilir.",
             )
         try:
             pending_focus_url, _ = _validate_focus_url(
@@ -816,7 +827,7 @@ def _create_focus_core(
     # kilit beklenirken marka arsivlenmis olabilir; arsivli markaya aktif odak eklenmez
     if parent.deleted_at is not None:
         raise FocusCreateError(
-            404, f"Marka çalışması (id={parent.id}) bulunamadı veya arşivlenmiş"
+            404, "Marka çalışması bulunamadı veya arşivlenmiş"
         )
     if parent.parent_brand_profile_id is not None or parent.crawl_scope != "site":
         raise FocusCreateError(400, "Alt sayfa yalnız marka çalışmasına eklenebilir")
@@ -896,7 +907,7 @@ def create_focus(
     if parent is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Marka çalışması (id={workspace_id}) bulunamadı veya arşivlenmiş",
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
         )
     try:
         focus, created = _create_focus_core(db, parent, request.url)
@@ -1432,15 +1443,17 @@ def approve_workspace_keywords(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Keyword onayi icin durum '{detail_status}' uygun degil "
-                "(keywords_review veya failed+keyword gerekli)"
+                "Site analizi sürüyor; kelime önerileri hazır olunca onaylayabilirsiniz."
+                if detail_status in ("pending", "running")
+                else "Onaylanacak kelime önerisi yok. Kelime önerileri, profil ve "
+                "rakip adımları tamamlandıktan sonra onaylanabilir."
             ),
         )
 
     keywords = _normalize_seed_keywords(request.keywords)
     if not keywords:
         db.rollback()
-        raise HTTPException(status_code=400, detail="En az 1 keyword gerekli")
+        raise HTTPException(status_code=400, detail="En az 1 anahtar kelime seçin.")
 
     # Kanal tercihleri OPSIYONEL: gonderilmezse bugunku davranis birebir
     # korunur (plan9 §10). Gonderilirse ayri yapisal tabloya yazilir.
@@ -1531,7 +1544,7 @@ def _lock_active_workspace(db: Session, workspace_id: int) -> BrandProfile:
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail=f"Marka çalışması (id={workspace_id}) bulunamadı veya arşivlenmiş",
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
         )
     return brand
 
@@ -1595,7 +1608,7 @@ def retry_workspace_analysis(
     if workspace.onboarding_flow != "profile_first":
         db.rollback()
         raise HTTPException(
-            status_code=400, detail="Bu çalışma profil-önce akışta değil"
+            status_code=400, detail="Bu marka çalışması eski kurulum akışıyla oluşturulmuş; bu adım bu çalışmada kullanılamaz."
         )
     if workspace.status in ("pending", "running"):
         db.rollback()
@@ -1652,7 +1665,7 @@ def approve_workspace_profile(
     if workspace.onboarding_flow != "profile_first":
         raise HTTPException(
             status_code=400,
-            detail="Bu çalışma profil-önce akışta değil (onboarding_flow=legacy)",
+            detail="Bu marka çalışması eski kurulum akışıyla oluşturulmuş; bu adım bu çalışmada kullanılamaz.",
         )
 
     initial_status = workspace.status
@@ -1664,10 +1677,7 @@ def approve_workspace_profile(
     if not allowed:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Profil onayı için durum '{workspace.status}' uygun değil "
-                "(profile_review, competitor_review veya keywords_review gerekli)"
-            ),
+            detail=_profile_not_confirmable_text(workspace.status),
         )
 
     active_work = find_active_workspace_work(db, workspace_id)
@@ -1804,7 +1814,7 @@ def confirm_workspace(
     if workspace.status not in ("draft", "confirmed"):
         raise HTTPException(
             status_code=400,
-            detail=f"Profil durumu '{workspace.status}', onaylanamaz (draft veya confirmed olmalı)"
+            detail=_profile_not_confirmable_text(workspace.status),
         )
 
     active_work = find_active_workspace_work(db, workspace_id)
@@ -2167,9 +2177,8 @@ def get_location_audit(
         raise HTTPException(status_code=409, detail={
             "code": "RUN_NOT_COMPLETED",
             "message": (
-                f"Run {run_id} durumu 'channel_assigned' değil "
-                f"('{run.status}') — lokasyon denetimi yalnız tamamlanmış "
-                "run için kullanılabilir."
+                "Lokasyon denetimi yalnız kanal ataması tamamlanmış "
+                "analizlerde kullanılabilir."
             ),
         })
 
@@ -2263,9 +2272,9 @@ def review_workspace_policy(
         raise HTTPException(
             status_code=409 if workspace.status in ("pending", "running") else 400,
             detail=(
-                f"Politika incelemesi için durum '{workspace.status}' uygun değil"
-                + (" (analiz sürüyor, bitince deneyin)"
-                   if workspace.status in ("pending", "running") else "")
+                "Site analizi sürüyor; politika incelemesini analiz bitince yapabilirsiniz."
+                if workspace.status in ("pending", "running")
+                else "Politika incelemesi için önce site analizinin başarıyla tamamlanması gerekir."
             ),
         )
     active_work = find_active_workspace_work(db, workspace_id)
@@ -2487,10 +2496,10 @@ def start_competitor_preview(
         if task:
             logger.error(f"Competitor preview enqueue failed: {exc}")
             task.status = "failed"
-            task.error_message = "Preview görevi kuyruğa alınamadı. Lütfen tekrar deneyin."
+            task.error_message = "Rakip önizlemesi başlatılamadı. Lütfen tekrar deneyin."
             db.commit()
         raise HTTPException(
-            status_code=502, detail="Preview görevi kuyruğa alınamadı"
+            status_code=502, detail="Rakip önizlemesi başlatılamadı. Lütfen tekrar deneyin."
         )
 
     return {"task_id": task_id, "status": "pending"}
@@ -2515,7 +2524,7 @@ def get_competitor_preview(
         .first()
     )
     if not task:
-        raise HTTPException(status_code=404, detail="Preview görevi bulunamadı")
+        raise HTTPException(status_code=404, detail="Rakip önizlemesi bulunamadı.")
     return {
         "task_id": task.task_id,
         "status": task.status,
@@ -2630,7 +2639,7 @@ def start_competitor_discovery(
             db.commit()
         raise HTTPException(
             status_code=502,
-            detail={"code": "BROKER_ERROR", "message": "Rakip keşfi kuyruğa alınamadı."},
+            detail={"code": "BROKER_ERROR", "message": "Rakip keşfi başlatılamadı. Lütfen tekrar deneyin."},
         )
     return {"task_id": task_id, "status": "pending", "reused": False}
 
@@ -2827,7 +2836,7 @@ def refresh_workspace_keywords(
         .all()
     )
     if not rows:
-        raise HTTPException(status_code=400, detail="Bu workspace'te yenilenecek keyword yok")
+        raise HTTPException(status_code=400, detail="Bu marka çalışmasında yenilenecek anahtar kelime yok.")
 
     existing = [
         ExistingWorkspaceKeyword(
@@ -2858,7 +2867,7 @@ def refresh_workspace_keywords(
         or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
     )
     if not customer_id:
-        raise HTTPException(status_code=400, detail="customer_id gerekli")
+        raise HTTPException(status_code=400, detail="Önce bir Google Ads hesabı seçin.")
 
     svc = _get_service()
     refreshed_ideas = []
@@ -3010,7 +3019,7 @@ def _run_keyword_suggestion(
         if crawl["error"] and not crawl["site_content"]:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                f"Anahtar kelime onerisi basarisiz: {crawl['error']}",
+                f"Anahtar kelime önerisi başarısız: {crawl['error']}",
             )
             return
 
@@ -3030,7 +3039,7 @@ def _run_keyword_suggestion(
         workspace.suggested_keywords = _normalize_seed_keywords(suggestions)[:10] or None
         if not workspace.suggested_keywords:
             workspace.status = "failed"
-            workspace.error_message = "Anahtar kelime onerisi basarisiz: AI keyword dondurmedi"
+            workspace.error_message = "Anahtar kelime önerisi başarısız: yapay zekâ kelime önerisi döndürmedi"
         else:
             workspace.status = "keywords_review"
             workspace.error_message = None
@@ -3044,7 +3053,7 @@ def _run_keyword_suggestion(
             db.rollback()
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu"),
+                safe_500_detail(e, "Anahtar kelime önerisi başarısız oldu"),
             )
         except Exception:
             pass
@@ -3097,7 +3106,7 @@ def _run_profile_analysis_first(
         if crawl["error"] and not crawl["site_content"]:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                f"Profil analizi basarisiz: {crawl['error']}",
+                f"Profil analizi başarısız: {crawl['error']}",
             )
             return
 
@@ -3148,7 +3157,7 @@ def _run_profile_analysis_first(
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
                 # kaynak-yetersiz hatasi guvenli Turkce mesaj tasir; kullanici acik nedeni gormeli
-                f"Profil analizi basarisiz: {e}"
+                f"Profil analizi başarısız: {e}"
                 if isinstance(e, CrawlContentUnusable)
                 else safe_500_detail(e, "Profil analizi başarısız oldu"),
             )
@@ -3226,7 +3235,7 @@ def _run_keyword_suggestion_from_profile(
         if content_error:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                f"Anahtar kelime onerisi basarisiz: {content_error}",
+                f"Anahtar kelime önerisi başarısız: {content_error}",
             )
             return
 
@@ -3274,7 +3283,7 @@ def _run_keyword_suggestion_from_profile(
         workspace.suggested_keywords = _normalize_seed_keywords(suggestions)[:10] or None
         if not workspace.suggested_keywords:
             workspace.status = "failed"
-            workspace.error_message = "Anahtar kelime onerisi basarisiz: AI keyword dondurmedi"
+            workspace.error_message = "Anahtar kelime önerisi başarısız: yapay zekâ kelime önerisi döndürmedi"
         else:
             workspace.status = "keywords_review"
             workspace.error_message = None
@@ -3292,7 +3301,7 @@ def _run_keyword_suggestion_from_profile(
             db.rollback()
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu"),
+                safe_500_detail(e, "Anahtar kelime önerisi başarısız oldu"),
             )
         except Exception:
             pass
@@ -3351,7 +3360,7 @@ def _run_profile_from_keywords(
         if content_error:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                f"Profil uretimi basarisiz: {content_error}",
+                f"Profil üretimi başarısız: {content_error}",
             )
             return
 
@@ -3359,7 +3368,7 @@ def _run_profile_from_keywords(
         if not approved_keywords:
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                "Profil uretimi basarisiz: En az 1 keyword gerekli",
+                "Profil üretimi başarısız: en az 1 anahtar kelime gerekli",
             )
             return
 
@@ -3409,7 +3418,7 @@ def _run_profile_from_keywords(
             db.rollback()
             mark_failed_if_current(
                 db, workspace_id, attempt_id,
-                safe_500_detail(e, "Profil uretimi basarisiz oldu"),
+                safe_500_detail(e, "Profil üretimi başarısız oldu"),
             )
         except Exception:
             pass

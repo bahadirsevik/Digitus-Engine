@@ -89,7 +89,8 @@ def reconcile_stale_ads(db: Session, scoring_run_id: int) -> None:
         if linked_set is None or linked_set.status == SET_GENERATING:
             task.status = "failed"
             task.error_message = (
-                "Stale: ADS task süre aşımı — üretim yarım kaldı"
+                "Reklam üretimi zaman aşımına uğradı ve yarım kaldı. "
+                "Reklam üretimini yeniden başlatın."
             )
             task.completed_at = _utcnow()
             if linked_set is not None:
@@ -265,7 +266,7 @@ def dispatch_ads_generation(
         .first()
     )
     if run is None:
-        raise ValueError(f"Scoring run {scoring_run_id} bulunamadı")
+        raise ValueError("Analiz bulunamadı.")
 
     # 2a. Stale reconciliation (kilit altında)
     reconcile_stale_ads(db, scoring_run_id)
@@ -534,18 +535,18 @@ def activate_set(db: Session, gen_set: AdGenerationSet) -> AdGenerationSet:
     """
     if gen_set.status not in (SET_DRAFT, SET_ARCHIVED):
         raise ValueError(
-            f"Yalnız draft/archived setler aktive edilebilir (durum: {gen_set.status})"
+            "Yalnız tamamlanmış taslak veya arşivlenmiş reklam setleri etkinleştirilebilir."
         )
     if gen_set.is_stale:
         raise ValueError(
-            "Stale set aktive edilemez — kanal ataması yenilendi, "
-            "yeni ADS üretimi gerekli"
+            "Bu reklam seti güncel değil (kanal ataması yenilendi); etkinleştirilemez. "
+            "Reklam üretimini yeniden başlatın."
         )
     group_count = (
         db.query(AdGroup).filter(AdGroup.generation_set_id == gen_set.id).count()
     )
     if group_count == 0:
-        raise ValueError("Boş set aktive edilemez")
+        raise ValueError("Reklam grubu olmayan bir reklam seti etkinleştirilemez.")
 
     # Run kilidi: eşzamanlı aktivasyon/dispatch serileşir
     db.query(ScoringRun).filter(

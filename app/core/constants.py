@@ -294,7 +294,7 @@ ADS_TASK_STALE_SECONDS = 1200
 TASK_RUNNING_STALE_SECONDS = 3600 + 300
 TASK_PENDING_STALE_SECONDS = 2 * 3600
 TASK_STALE_ERROR_MESSAGE = (
-    "Görev zaman aşımına uğradı veya worker yeniden başladı; "
+    "Görev zaman aşımına uğradı veya sunucu yeniden başladı; "
     "işlemi yeniden başlatabilirsiniz."
 )
 SCREENING_NOT_USED_MESSAGE = "Ön tarama tamamlanamadı; sonuçları kullanılmadı."

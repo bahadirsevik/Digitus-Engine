@@ -422,7 +422,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
               <thead>
                 <tr>
                   <th className="left rank">#</th>
-                  <th className="left">KEYWORD</th>
+                  <th className="left">ANAHTAR KELİME</th>
                   <th>HACİM</th>
                   <th>SKOR</th>
                   <th className="action" aria-label="İşlem"></th>

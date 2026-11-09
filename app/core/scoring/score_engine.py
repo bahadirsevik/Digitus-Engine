@@ -118,7 +118,8 @@ class ScoreEngine:
                 from fastapi import HTTPException
                 raise HTTPException(
                     400,
-                    f"{len(invalid)} keyword bu workspace'e ait değil veya pasif"
+                    f"Seçilen {len(invalid)} anahtar kelime bu marka çalışmasında yok veya pasif; "
+                    "kelime listesini yenileyip seçiminizi kontrol edin."
                 )
             base_query = base_query.filter(Keyword.id.in_(valid_ids))
 

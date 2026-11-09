@@ -377,8 +377,8 @@ def test_legacy_detail_contract():
     detail = legacy_run_detail(run)
     assert detail["code"] == LEGACY_RUN_READ_ONLY
     assert detail["algorithm_version"] == "v2_1"
-    assert "yalnız okunabilir" in detail["message"]
-    assert "V3" in detail["message"]
+    assert "yalnız görüntülenebilir" in detail["message"]
+    assert "yeni bir analiz başlatın" in detail["message"]
 
 
 # ==================== API sınırı: blok ====================
@@ -399,7 +399,7 @@ def test_blocked_endpoint_refuses_legacy_run(label, api, db_session, legacy,
     detail = resp.json()["detail"]
     assert detail["code"] == LEGACY_RUN_READ_ONLY, (label, detail)
     assert detail["algorithm_version"] == legacy["run"].algorithm_version
-    assert "yalnız okunabilir" in detail["message"]
+    assert "yalnız görüntülenebilir" in detail["message"]
     assert paid_calls == [], (label, paid_calls)
     assert _counts(db_session) == before_counts, label
     assert _run_state(db_session, legacy["run"].id) == before_run, label

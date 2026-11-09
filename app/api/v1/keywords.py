@@ -121,7 +121,7 @@ def _verify_keyword_in_workspace(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="keyword not found in workspace")
+        raise HTTPException(status_code=404, detail="Anahtar kelime bu marka çalışmasında bulunamadı.")
     keyword, wk = row
     return keyword, wk
 
@@ -207,7 +207,7 @@ def export_keyword_pool_xlsx(
     )
 
     if not rows:
-        raise HTTPException(status_code=400, detail="Kelime havuzu boş — önce keyword ekleyin")
+        raise HTTPException(status_code=400, detail="Kelime havuzu boş — önce anahtar kelime ekleyin.")
 
     wb = Workbook()
     ws = wb.active
@@ -254,7 +254,7 @@ async def upload_csv_keywords(
 ):
     """Analyze a Google Ads CSV file and return a dry-run import plan."""
     if not dry_run:
-        raise HTTPException(status_code=400, detail="CSV import önce dry-run olarak analiz edilmelidir")
+        raise HTTPException(status_code=400, detail="CSV dosyasını kaydetmeden önce önizlemesini alın.")
     workspace = verify_workspace(db, brand_profile_id)
     markets.workspace_market(workspace)  # pazar yoksa onizleme de 409 MARKET_NOT_SET
 
@@ -301,7 +301,7 @@ def commit_csv_keywords(
     workspace = verify_workspace(db, payload.brand_profile_id, lock=True)
     plan_payload = _load_import_plan(payload.dry_run_token)
     if int(plan_payload.get("brand_profile_id")) != payload.brand_profile_id:
-        raise HTTPException(status_code=403, detail="Bu import token'ı bu workspace için geçerli değil")
+        raise HTTPException(status_code=403, detail="Bu önizleme başka bir marka çalışmasına ait; dosyayı bu marka çalışmasında yeniden yükleyin.")
     for item in plan_payload.get("accepted_plan") or []:
         item["keyword_data"] = item.get("keyword_data") or {}
     stamp_rows_market(
@@ -352,7 +352,7 @@ def create_keyword(
     `brand_profile_id` zorunludur (request body içinden gelir).
     """
     if keyword_data.brand_profile_id is None:
-        raise HTTPException(status_code=400, detail="brand_profile_id is required")
+        raise HTTPException(status_code=400, detail="Önce bir marka çalışması seçin.")
     workspace = verify_workspace(db, keyword_data.brand_profile_id, lock=True)
     rows = stamp_rows_market(
         [keyword_data.model_dump(exclude={"brand_profile_id"})], workspace
@@ -386,14 +386,14 @@ def create_keyword(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Keyword yasaklı temayla eşleşti: {matched}. force_include ile ekleyebilirsiniz.",
+            detail=f"Anahtar kelime yasaklı bir temayla eşleştiği için eklenmedi ({matched}).",
         )
     if isinstance(result, dict) and result.get("skipped_limit"):
         raise HTTPException(
             status_code=400,
-            detail=f"Havuz limiti dolu ({WORKSPACE_KEYWORD_LIMIT}). Önce keyword silin.",
+            detail=f"Kelime havuzu dolu ({WORKSPACE_KEYWORD_LIMIT}). Yeni kelime eklemek için önce mevcutlardan silin.",
         )
-    raise HTTPException(status_code=400, detail="Keyword could not be created")
+    raise HTTPException(status_code=400, detail="Anahtar kelime eklenemedi.")
 
 
 @router.put("/{keyword_id}", response_model=KeywordResponse)
@@ -420,7 +420,7 @@ def update_keyword(
     if link_count > 1:
         raise HTTPException(
             status_code=409,
-            detail="keyword is linked to multiple workspaces; update would affect other workspaces",
+            detail="Bu anahtar kelime başka marka çalışmalarında da kullanılıyor; değişiklik onları da etkileyeceği için güncellenemez.",
         )
 
     keyword = crud.update_keyword(
@@ -429,7 +429,7 @@ def update_keyword(
         keyword_data.model_dump(exclude_unset=True),
     )
     if not keyword:
-        raise HTTPException(status_code=404, detail="keyword not found")
+        raise HTTPException(status_code=404, detail="Anahtar kelime bulunamadı.")
     return KeywordResponse.model_validate(keyword)
 
 
@@ -470,7 +470,7 @@ def delete_keyword(
 
     success = crud.remove_workspace_keyword_by_id(db, wk_id, brand_profile_id)
     if not success:
-        raise HTTPException(status_code=404, detail="keyword not found in workspace")
+        raise HTTPException(status_code=404, detail="Anahtar kelime bu marka çalışmasında bulunamadı.")
     return None
 
 
@@ -481,7 +481,7 @@ def import_keywords(
 ):
     """Bulk import keywords into a workspace. `brand_profile_id` zorunlu."""
     if import_data.brand_profile_id is None:
-        raise HTTPException(status_code=400, detail="brand_profile_id is required")
+        raise HTTPException(status_code=400, detail="Önce bir marka çalışması seçin.")
     workspace = verify_workspace(db, import_data.brand_profile_id, lock=True)
     # Tüm liste DB yazımından ÖNCE doğrulanır (crud 200'lük chunk'larla commit eder)
     rows = stamp_rows_market(

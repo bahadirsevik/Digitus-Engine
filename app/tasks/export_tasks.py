@@ -84,7 +84,7 @@ def execute_export_job(export_job_id: str) -> None:
             format_enum = ExportFormatEnum(job.format)
         except ValueError:
             job.status = "failed"
-            job.error_message = f"Unsupported format: {job.format}"
+            job.error_message = f"Desteklenmeyen dosya biçimi: {job.format}"
             db.commit()
             return
 
@@ -137,7 +137,7 @@ def execute_export_job(export_job_id: str) -> None:
             db.commit()
 
         _NO_CONTENT_MSG = (
-            "NO_CONTENT: bu bölüm için export edilebilir içerik yok — "
+            "Bu bölüm için dışa aktarılabilecek içerik yok — "
             "önce içerik üretin."
         )
 
@@ -199,8 +199,8 @@ def execute_export_job(export_job_id: str) -> None:
                 job = db.query(ExportJob).filter(ExportJob.id == export_job_id).first()
                 job.status = "failed"
                 job.error_message = (
-                    "POLICY_VERSION_CHANGED: export sürerken politika/profil "
-                    "değişti — rapor kaydedilmedi, yeniden deneyin."
+                    "Dışa aktarım sürerken marka politikası veya profili "
+                    "değişti; rapor kaydedilmedi. Dışa aktarımı yeniden başlatın."
                 )
                 db.commit()
                 try:
@@ -229,7 +229,7 @@ def execute_export_job(export_job_id: str) -> None:
             job = db.query(ExportJob).filter(ExportJob.id == export_job_id).first()
             if job:
                 job.status = "failed"
-                job.error_message = safe_500_detail(exc, "Export basarisiz oldu")
+                job.error_message = safe_500_detail(exc, "Dışa aktarım başarısız oldu.")
                 db.commit()
         except Exception:
             pass

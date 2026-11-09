@@ -166,7 +166,7 @@ def test_single_endpoint_requires_scoring_run_id(client, generated_content):
         json={"keyword_id": 1},
     )
     assert res.status_code == 400
-    assert "scoring_run_id" in res.json()["detail"]
+    assert "analiz seçin" in res.json()["detail"]
 
     res = client.post(
         f"/api/v1/generation/seo-geo?brand_profile_id={ws.id + 999}",

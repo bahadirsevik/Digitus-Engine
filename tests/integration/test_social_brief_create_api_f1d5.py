@@ -325,7 +325,7 @@ def test_09_feature_flag_disabled_returns_404(
     assert resp.status_code == 404
     data = resp.json()
     assert data["detail"]["code"] == "FEATURE_DISABLED"
-    assert data["detail"]["message"] == "Social brief flow is not enabled."
+    assert data["detail"]["message"] == "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun."
 
 
 def test_10_flag_disabled_calls_zero_persistence_service(
@@ -577,7 +577,7 @@ def test_24_integrity_error_returns_409_brief_persistence_conflict(
 
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == "BRIEF_PERSISTENCE_CONFLICT"
-    assert "Brief could not be created because the underlying data changed." in r.json()["detail"]["message"]
+    assert "Brief oluşturulurken veriler değişti." in r.json()["detail"]["message"]
 
 
 def test_25_integrity_error_does_not_leak_sql_details(
