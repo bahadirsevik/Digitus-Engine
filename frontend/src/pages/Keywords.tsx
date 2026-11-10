@@ -22,6 +22,7 @@ import {
 import {
   apiErrorMessage,
   apiErrorStatus,
+  brandProfileApi,
   downloadBlobResponse,
   keywordsApi,
   scoringApi,
@@ -236,6 +237,10 @@ export default function Keywords() {
   const [search, setSearch] = useState('')
   const [keywordPage, setKeywordPage] = useState(0)
   const [competitorUrl, setCompetitorUrl] = useState<string | null>(null)
+  // Google ile bulunup onaylanan rakipler politika kayıtlarında (competitor_terms) durur;
+  // profildeki elle girilen rakip URL'leri (competitor_urls) ile birlikte gösterilir.
+  const [discoveredCompetitorUrls, setDiscoveredCompetitorUrls] = useState<string[]>([])
+  const [discoveredCompetitorsError, setDiscoveredCompetitorsError] = useState<string | null>(null)
   const [showStartModal, setShowStartModal] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
@@ -298,6 +303,33 @@ export default function Keywords() {
     setKeywordPage(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id])
+
+  useEffect(() => {
+    setDiscoveredCompetitorUrls([])
+    setDiscoveredCompetitorsError(null)
+    setCompetitorUrl(null)
+    const workspaceId = activeWorkspace?.id
+    if (!workspaceId || activeTab !== 'competitor') return
+    let cancelled = false
+    brandProfileApi
+      .getPolicy(workspaceId)
+      .then((res) => {
+        if (cancelled) return
+        const urls = (res.data.competitor_terms || [])
+          .filter((t) => t.status === 'approved' && t.discovery_id && t.candidate_url)
+          .map((t) => t.candidate_url as string)
+        setDiscoveredCompetitorUrls(urls)
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setDiscoveredCompetitorsError(
+            `Google ile bulunan rakipler yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+          )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeWorkspace?.id, activeTab])
 
   useEffect(() => {
     if (view === 'scores') {
@@ -811,6 +843,25 @@ export default function Keywords() {
   )
 
   const workspaceDisabled = !activeWorkspace
+  const competitorHost = (url: string) =>
+    url
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/.*$/, '')
+  const profileCompetitorUrls = activeWorkspace?.competitor_urls || []
+  const profileHosts = new Set(profileCompetitorUrls.map(competitorHost))
+  const competitorChoices = [
+    ...profileCompetitorUrls.map((url) => ({ url, discovered: false })),
+    ...discoveredCompetitorUrls
+      .filter(
+        (url, i, all) =>
+          !profileHosts.has(competitorHost(url)) &&
+          all.findIndex((u) => competitorHost(u) === competitorHost(url)) === i
+      )
+      .map((url) => ({ url, discovered: true })),
+  ]
   const disableMessage = workspaceDisabled ? 'Önce Marka Çalışması seçin' : undefined
   const activeSourceTab = TABS.find((t) => t.id === activeTab)
 
@@ -1146,22 +1197,31 @@ export default function Keywords() {
               {/* Rakip URL'leri */}
               {!workspaceDisabled && activeTab === 'competitor' && (
                 <div className="kwx-competitor-form">
-                  {(activeWorkspace?.competitor_urls?.length || 0) === 0 ? (
+                  {discoveredCompetitorsError && (
+                    <p className="form-hint">{discoveredCompetitorsError}</p>
+                  )}
+                  {competitorChoices.length === 0 ? (
                     <p className="form-hint">
-                      Marka profilinde rakip URL'si tanımlı değil. Profil kartlarından rakip
-                      ekleyebilirsiniz.
+                      Bu marka çalışmasında rakip adresi yok. Marka profilinden rakip URL'si
+                      ekleyebilir ya da "AI ile Engellenecek Rakipler" bölümünde Google ile rakip
+                      bulup onaylayabilirsiniz.
                     </p>
                   ) : (
                     <>
                       <div className="kwx-chips">
-                        {(activeWorkspace?.competitor_urls || []).map((url) => (
+                        {competitorChoices.map(({ url, discovered }) => (
                           <button
                             key={url}
                             type="button"
                             className={`kwx-chip is-clickable${competitorUrl === url ? ' is-selected' : ''}`}
                             onClick={() => setCompetitorUrl(url)}
+                            title={
+                              discovered
+                                ? 'Google ile bulunup onaylanan rakip'
+                                : 'Marka profilindeki rakip'
+                            }
                           >
-                            {url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                            {url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
                           </button>
                         ))}
                       </div>

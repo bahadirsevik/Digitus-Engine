@@ -36,6 +36,11 @@ interface Props {
 
 const ideaVolume = (idea: EnrichedKeywordOut) => idea.avg_monthly_searches || 0
 
+// Google Ads API GenerateKeywordIdeas: tek istekte en fazla 20 başlangıç kelimesi
+// (KeywordSeed). Backend de aynı sınırla doğrular (EnrichRequest.seeds).
+export const MAX_SEED_KEYWORDS = 20
+const SEED_LIMIT_TEXT = `Google Ads tek aramada en fazla ${MAX_SEED_KEYWORDS} başlangıç kelimesi kabul eder.`
+
 export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForceInclude }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const setSeedDraft = useBrandStore((s) => s.setSeedDraft)
@@ -63,6 +68,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showLowVolume, setShowLowVolume] = useState(false)
   const [showThemePreview, setShowThemePreview] = useState(false)
+  const [seedLimitHit, setSeedLimitHit] = useState(false)
   const excludeThemes = useMemo(
     () => getExcludeThemesFromProfile(activeWorkspace?.profile_data),
     [activeWorkspace?.profile_data]
@@ -124,6 +130,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
     )
     setAdding(false)
     setDraft('')
+    setSeedLimitHit(false)
     setIdeas([])
     setError(null)
     setShowThemePreview(false)
@@ -136,12 +143,22 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
 
   const addDraftWord = () => {
     const v = draft.trim()
-    if (v && !words.includes(v)) saveWords([...words, v])
+    if (v && !words.includes(v)) {
+      if (words.length >= MAX_SEED_KEYWORDS) {
+        setSeedLimitHit(true)
+        return
+      }
+      saveWords([...words, v])
+    }
     setDraft('')
     draftInputRef.current?.focus()
   }
 
-  const removeWord = (w: string) => saveWords(words.filter((x) => x !== w))
+  const removeWord = (w: string) => {
+    setSeedLimitHit(false)
+    saveWords(words.filter((x) => x !== w))
+  }
+  const overSeedLimit = words.length > MAX_SEED_KEYWORDS
 
   useEffect(() => {
     if (adding) draftInputRef.current?.focus()
@@ -270,6 +287,16 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
             <span className="kwx-chips-empty">Henüz kelime yok — "Ekle" ile başlayın.</span>
           )}
         </div>
+        {(seedLimitHit || overSeedLimit) && (
+          <div className="field-warning" role="alert">
+            <AlertCircle size={13} />
+            {overSeedLimit
+              ? `${SEED_LIMIT_TEXT} Listede ${words.length} kelime var; aramak için ${
+                  words.length - MAX_SEED_KEYWORDS
+                } tanesini silin.`
+              : `${SEED_LIMIT_TEXT} Yeni kelime eklemek için önce birini silin.`}
+          </div>
+        )}
       </div>
 
       {/* Pazar (konum + dil) çalışmadan gelir; burada düzenlenmez */}
@@ -342,7 +369,7 @@ export default function GoogleAdsKeywordSearch({ onImport, initialSeeds, onForce
           type="button"
           className="kwx-run-btn"
           onClick={handleSearch}
-          disabled={loading || !customerId || words.length === 0}
+          disabled={loading || !customerId || words.length === 0 || overSeedLimit}
         >
           {loading ? (
             <Loader2 size={15} className="spin-icon" />
