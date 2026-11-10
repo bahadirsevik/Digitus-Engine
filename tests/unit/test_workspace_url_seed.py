@@ -304,7 +304,7 @@ def test_url_seed_timeout_becomes_warning(monkeypatch):
     status, warnings = _inspect_url_for_seed("https://example.com/")
 
     assert status.reachable is False
-    assert "timed out" in status.warning
+    assert "timed out" not in status.warning and "ulaşılamadı" in status.warning
     assert warnings == [status.warning]
 
 

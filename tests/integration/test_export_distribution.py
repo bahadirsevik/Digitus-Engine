@@ -460,7 +460,7 @@ def test_worker_no_content_race_marks_failed_without_file(
     db_session.expire_all()
     job = db_session.query(ExportJob).filter(ExportJob.id == export_id).one()
     assert job.status == "failed"
-    assert "NO_CONTENT" in (job.error_message or "")
+    assert "dışa aktarılabilecek içerik yok" in (job.error_message or "")
     assert not job.filepath  # dosya OLUŞMADI
 
 
@@ -570,7 +570,7 @@ def test_worker_post_export_recheck_deletes_file(
     db_session.expire_all()
     job = db_session.query(ExportJob).filter(ExportJob.id == export_id).one()
     assert job.status == "failed"
-    assert "NO_CONTENT" in (job.error_message or "")
+    assert "dışa aktarılabilecek içerik yok" in (job.error_message or "")
     assert not job.filepath
     assert not _os.path.exists(produced["path"])  # dosya SİLİNDİ
 

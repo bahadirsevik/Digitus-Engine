@@ -192,11 +192,20 @@ class GoogleAdsService:
                 "accessible_customers_count": len(list(resp.resource_names)),
             }
         except Exception as exc:
+            logger.warning(f"Google Ads health check failed: {exc}")
+            # Ham metin kullanıcıya gitmez; yenilenebilir tek durum ayrı bildirilir
+            if "invalid_grant" in str(exc):
+                message = (
+                    "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                    "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
+                )
+            else:
+                message = "Google Ads bağlantısı kurulamadı. Lütfen biraz sonra tekrar deneyin."
             return {
                 "status": "error",
                 "auth_ok": False,
                 "permission_ok": False,
-                "error": str(exc),
+                "error": message,
             }
 
     def list_customer_ids(self) -> List[str]:

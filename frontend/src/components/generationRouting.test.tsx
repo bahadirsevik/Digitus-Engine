@@ -92,6 +92,6 @@ describe('SocialPanel', () => {
         />
       </MemoryRouter>
     )
-    expect(screen.getByText(/SOCIAL kanalı devre dışı/)).toBeTruthy()
+    expect(screen.getByText(/sosyal medya kanalı seçilmemiş/)).toBeTruthy()
   })
 })

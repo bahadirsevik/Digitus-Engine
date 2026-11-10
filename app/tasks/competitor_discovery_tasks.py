@@ -120,6 +120,9 @@ def run_competitor_discovery_task(self, workspace_id: int, start_fingerprint: st
         db.commit()
         return {"status": "completed", **task.result_data}
     except Exception as exc:
+        from loguru import logger
+
+        logger.exception("Rakip keşfi görevi başarısız")
         db.rollback()
         usage = collector.finalize()
         task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
@@ -127,7 +130,7 @@ def run_competitor_discovery_task(self, workspace_id: int, start_fingerprint: st
             task.status = "failed"
             task.progress = 100
             task.completed_at = datetime.now(timezone.utc)
-            task.error_message = str(exc)[:500]
+            task.error_message = "Rakip keşfi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
             task.result_data = {
                 **(task.result_data or {}),
                 "code": "DISCOVERY_FAILED",

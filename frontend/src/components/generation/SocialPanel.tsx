@@ -44,7 +44,7 @@ export default function SocialPanel({
   return (
     <div className="social-panel">
       {channelDisabled && (
-        <p className="channel-disabled-hint">Bu çalışmada SOCIAL kanalı devre dışı.</p>
+        <p className="channel-disabled-hint">Bu analizde sosyal medya kanalı seçilmemiş.</p>
       )}
 
       {historyOpen && workspaceId && (

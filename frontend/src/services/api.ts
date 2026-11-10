@@ -26,6 +26,10 @@ const api = axios.create({
  */
 export const UNAUTHENTICATED_EVENT = 'digitus:unauthenticated'
 
+// Görev/deneme/export DURUM yoklamaları için sonlu zaman aşımı (genel timeout YOK:
+// yükleme ve uzun istekler bozulmasın). Askıda kalan yoklama bir hata sayılır.
+export const STATUS_POLL_TIMEOUT_MS = 15000
+
 export interface ApiError {
   status: number
   message: string
@@ -122,20 +126,105 @@ export function apiErrorStatus(err: unknown): number {
   return 0
 }
 
-// FastAPI 422 detayını (Pydantic hata listesi) okunur mesaja çevirir.
+// FastAPI 422 detayını (Pydantic hata listesi) okunur Türkçe mesaja çevirir.
 // Hem `{detail: [...]}`ten gelen array'i hem doğrudan array/string formunu kapsar.
+// İç alan adı yerine formdaki Türkçe adı gösterilir (eşleme yoksa genel ifade);
+// sınır değerleri (en az/en fazla) korunur. Backend'in Türkçe doğrulama metni
+// ("Value error, ...") olduğu gibi geçer.
+const VALIDATION_FIELD_LABEL: Record<string, string> = {
+  keyword: 'Anahtar kelime',
+  keywords: 'Anahtar kelime listesi',
+  seeds: 'Başlangıç kelimeleri',
+  selected_keyword_ids: 'Seçilen kelimeler',
+  keyword_ids: 'Seçilen kelimeler',
+  url: 'URL',
+  urls: 'URL listesi',
+  competitor_urls: "Rakip URL'leri",
+  company_url: 'Web sitesi URL',
+  website_url: 'Web sitesi URL',
+  min_volume: 'En az aylık arama',
+  max_results: 'En fazla sonuç',
+  monthly_volume: 'Aylık arama',
+  competition_score: 'Rekabet',
+  sector: 'Sektör',
+  target_market: 'Hedef pazar',
+  markets: 'Pazarlar',
+  run_name: 'Analiz adı',
+  ads_capacity: 'ADS kelime sayısı',
+  seo_capacity: 'SEO kelime sayısı',
+  social_capacity: 'Sosyal medya kelime sayısı',
+  limit: 'Limit',
+  keyword_limit: 'Kelime sayısı',
+  max_categories: 'Kategori sayısı',
+  ideas_per_category: 'Kategori başına fikir sayısı',
+  max_contents: 'İçerik sayısı',
+  target_word_count: 'Hedef kelime sayısı',
+  brand_name: 'Marka adı',
+  name: 'Ad',
+  usps: "USP'ler",
+  term: 'Terim',
+  title: 'Başlık',
+}
+
+function validationItemText(row: {
+  type?: string
+  msg?: string
+  loc?: unknown[]
+  ctx?: Record<string, unknown>
+}): string {
+  const msg = row.msg ?? ''
+  if (msg.startsWith('Value error, ')) return msg.slice('Value error, '.length)
+  const field = Array.isArray(row.loc)
+    ? [...row.loc].reverse().find((p): p is string => typeof p === 'string' && p !== 'body')
+    : undefined
+  const label = field ? VALIDATION_FIELD_LABEL[field] : undefined
+  const c = row.ctx ?? {}
+  const value = label ?? 'Bir değer'
+  const text = label ?? 'Bir metin'
+  switch (row.type) {
+    case 'missing':
+      return label ? `${label} alanı zorunlu.` : 'Zorunlu bir alan boş bırakılmış.'
+    case 'greater_than_equal':
+      return `${value} en az ${c.ge} olmalı.`
+    case 'greater_than':
+      return `${value} ${c.gt} değerinden büyük olmalı.`
+    case 'less_than_equal':
+      return `${value} en fazla ${c.le} olmalı.`
+    case 'less_than':
+      return `${value} ${c.lt} değerinden küçük olmalı.`
+    case 'string_too_short':
+      return `${text} en az ${c.min_length} karakter olmalı.`
+    case 'string_too_long':
+      return `${text} en fazla ${c.max_length} karakter olabilir.`
+    case 'too_short':
+      return label
+        ? `${label}: en az ${c.min_length} seçim yapılmalı.`
+        : `En az ${c.min_length} seçim yapılmalı.`
+    case 'too_long':
+      return label
+        ? `${label}: en fazla ${c.max_length} seçim yapılabilir.`
+        : `En fazla ${c.max_length} seçim yapılabilir.`
+  }
+  // Türkçe yazılmış özel mesaj ise koru; İngilizce ham mesajı gösterme
+  if (/[çğıöşüÇĞİÖŞÜ]/.test(msg)) return msg
+  return label ? `${label} alanındaki değer geçersiz.` : 'Girilen değerlerden biri geçersiz.'
+}
+
 export function formatValidationDetail(raw: unknown): string | null {
   if (typeof raw === 'string') return raw
   if (!Array.isArray(raw)) return null
   const msgs = raw
     .map((item) => {
-      const row = item as { loc?: unknown[]; msg?: string }
-      if (!row?.msg) return ''
-      const field = Array.isArray(row.loc) ? String(row.loc[row.loc.length - 1] ?? '') : ''
-      return field && field !== 'body' ? `${field}: ${row.msg}` : row.msg
+      const row = item as {
+        type?: string
+        msg?: string
+        loc?: unknown[]
+        ctx?: Record<string, unknown>
+      }
+      return row?.msg ? validationItemText(row) : ''
     })
     .filter(Boolean)
-  return msgs.length ? msgs.join(' · ') : null
+  return msgs.length ? Array.from(new Set(msgs)).join(' · ') : null
 }
 
 // Blob response'u tarayıcı indirmesine çevirir (plan v4: Export.tsx'ten ortak util'e).
@@ -212,12 +301,17 @@ api.interceptors.response.use(
       message =
         formatValidationDetail(raw) || detailMessage || 'Gönderilen değerler doğrulamadan geçemedi.'
     } else if (status === 401) {
-      message = 'Kimlik doğrulama gerekli. Lütfen oturum açın.'
       // Oturum düşmüş: arayüzü giriş ekranına al. Auth uçlarının kendi
       // 401'leri hariç — giriş denemesinin başarısız olması oturum
       // düşmesi değildir ve ekranı sıfırlamamalı.
       const url = err.config?.url ?? ''
-      if (!url.startsWith('/auth') && !url.includes('/auth/')) {
+      const isAuthCall = url.startsWith('/auth') || url.includes('/auth/')
+      message = isAuthCall
+        ? typeof raw === 'string'
+          ? raw
+          : detailMessage || 'Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.'
+        : 'Oturumunuz sona erdi. Lütfen yeniden giriş yapın.'
+      if (!isAuthCall) {
         try {
           window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
         } catch {
@@ -233,7 +327,16 @@ api.interceptors.response.use(
     } else if (status === 503 && typeof raw === 'string') {
       message = raw
     } else if (status >= 500) {
-      message = 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+      // Backend 5xx detayı güvenli Türkçe metindir (ham istisna yalnız logda); boşsa jenerik
+      // Nesne detay ({code, message}, ör. 502 BROKER_ERROR) mesajını da taşır
+      message =
+        typeof raw === 'string' && raw.trim()
+          ? raw
+          : detailMessage.trim() || 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+    } else if (status === 0 && err.code === 'ECONNABORTED') {
+      message = 'İstek zaman aşımına uğradı; biraz sonra tekrar deneyin.'
+    } else if (status === 0 && err.code !== 'ERR_CANCELED') {
+      message = 'Sunucuya ulaşılamadı; bağlantınızı kontrol edip tekrar deneyin.'
     } else {
       message = typeof raw === 'string' ? raw : detailMessage || err.message
     }
@@ -353,7 +456,9 @@ export const workspaceApi = {
       params: { include_archived: includeArchived },
     }),
 
-  get: (id: number) => api.get(`/brand-profile/workspaces/${id}`),
+  // Analiz durumu yoklamaları da buradan geçer: askıda kalan istek sonlu sürede hata olur
+  get: (id: number) =>
+    api.get(`/brand-profile/workspaces/${id}`, { timeout: STATUS_POLL_TIMEOUT_MS }),
 
   // Pazar seçimi (ülke/dil listesi + konum arama) — plan_pazar_dil_secimi.md Faz 1
   marketOptions: () => api.get<MarketOptions>('/brand-profile/market-options'),
@@ -591,7 +696,10 @@ export const exportApi = {
     api.post('/export/', data, { params: { brand_profile_id } }),
 
   status: (exportId: string, brand_profile_id?: number) =>
-    api.get(`/export/${exportId}/status`, { params: { brand_profile_id } }),
+    api.get(`/export/${exportId}/status`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
 
   download: (exportId: string, brand_profile_id?: number) =>
     api.get(`/export/${exportId}/download`, {
@@ -733,7 +841,10 @@ export interface TaskStatusInfo {
 
 export const tasksApi = {
   getStatus: (taskId: string, brand_profile_id?: number) =>
-    api.get<TaskStatusInfo>(`/tasks/${taskId}`, { params: { brand_profile_id } }),
+    api.get<TaskStatusInfo>(`/tasks/${taskId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
 
   listByRun: (runId: number, brand_profile_id?: number) =>
     api.get(`/tasks/run/${runId}`, { params: { brand_profile_id } }),
@@ -1100,7 +1211,7 @@ export function poolFreshnessLabel(
   return (
     [
       f.policy_stale && 'Politika değişti',
-      f.relevance_stale && 'Profil değişti (relevance bayat)',
+      f.relevance_stale && 'Marka profili değişti',
       f.strategy_stale && 'Kanal stratejisi değişti',
     ]
       .filter(Boolean)
@@ -1889,7 +2000,7 @@ export const socialBriefApi = {
   getIdeasAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialIdeasGenerateResponse>(
       `/generation/social/briefs/${brief_id}/ideas/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   retryIdeas: (brief_id: number, data: SocialBriefIdeasRetryRequest, brand_profile_id: number) =>
@@ -1902,7 +2013,7 @@ export const socialBriefApi = {
   getIdeasRetryAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialIdeasGenerateResponse>(
       `/generation/social/briefs/${brief_id}/ideas/retry/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   generateContents: (
@@ -1919,7 +2030,7 @@ export const socialBriefApi = {
   getContentsAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialBriefContentsAttemptResponse>(
       `/generation/social/briefs/${brief_id}/contents/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   // Workspace geneli sosyal içerik geçmişi (K13); brief_id verilirse yalnız o brief

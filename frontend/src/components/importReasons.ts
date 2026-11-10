@@ -4,19 +4,19 @@ import { SkippedKeywordDetail } from '../services/api'
 export const reasonLabel = (detail: SkippedKeywordDetail): string => {
   switch (detail.reason) {
     case 'skipped_exact':
-      return "Workspace'te ayni metriklerle zaten var"
+      return 'Bu marka çalışmasında aynı metriklerle zaten var'
     case 'skipped_fuzzy':
       return detail.matched
-        ? `Workspace'te benzer kelime var: "${detail.matched}"`
-        : "Workspace'te benzer kelime var"
+        ? `Bu marka çalışmasında benzer kelime var: "${detail.matched}"`
+        : 'Bu marka çalışmasında benzer kelime var'
     case 'batch_duplicate':
       return detail.matched
         ? `Bu listede benzer kelime: "${detail.matched}"`
         : 'Bu listede benzer kelime'
     case 'skipped_theme':
       return detail.matched
-        ? `Yasakli temayla elendi: "${detail.matched}"`
-        : 'Yasakli temayla elendi'
+        ? `Yasaklı temayla elendi: "${detail.matched}"`
+        : 'Yasaklı temayla elendi'
     case 'limit_exceeded':
       return 'Havuz limiti doldu'
     case 'skipped_junk':

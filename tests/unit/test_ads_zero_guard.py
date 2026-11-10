@@ -106,7 +106,7 @@ def test_zero_groups_empty_pool_marks_failed(db_session, monkeypatch, scoring_ru
 
     row = _task_row(db_session, task_id)
     assert row.status == "failed"
-    assert "havuzu bos" in (row.error_message or "")
+    assert "havuzu boş" in (row.error_message or "")
 
 
 def test_zero_groups_ai_failure_marks_failed(db_session, monkeypatch, scoring_run):
@@ -121,7 +121,7 @@ def test_zero_groups_ai_failure_marks_failed(db_session, monkeypatch, scoring_ru
 
     row = _task_row(db_session, task_id)
     assert row.status == "failed"
-    assert "AI yanitlari islenemedi" in (row.error_message or "")
+    assert "yapay zekâ yanıtları işlenemedi" in (row.error_message or "")
     assert (row.result_data or {}).get("failed_groups") == 3
 
 

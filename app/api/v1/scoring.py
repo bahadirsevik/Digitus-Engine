@@ -13,6 +13,7 @@ from sqlalchemy import asc, desc, func, nullslast
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
+from app.core.error_responses import safe_500_detail
 from app.core.http_headers import content_disposition, download_filename
 from app.core.scoring.score_engine import ScoreEngine
 from app.core.trial_authorization import (
@@ -202,7 +203,7 @@ def create_scoring_run(
     if run_data.brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     workspace = verify_workspace(db, run_data.brand_profile_id, lock=True)
@@ -256,8 +257,8 @@ def create_scoring_run(
     if not _settings.ENABLE_ENGINE_V3:
         raise HTTPException(status_code=409, detail={
             "code": "ENGINE_V3_DISABLED",
-            "message": "Motor v3 deney bayrağı kapalı "
-                       "(ENABLE_ENGINE_V3) — v3 koşusu oluşturulamaz.",
+            "message": "Analiz motoru bu sunucuda açık değil; yeni analiz "
+                       "oluşturulamaz. Sistem yöneticinize başvurun.",
         })
     # K14 — v3 tek koşu sözleşmesi: kullanıcı execute'tan sonra ikinci
     # bir işlem yapmaz, motor kendiliğinden başlar. auto_assign_channels
@@ -266,10 +267,9 @@ def create_scoring_run(
     if not run_data.auto_assign_channels:
         raise HTTPException(status_code=409, detail={
             "code": "ENGINE_V3_SINGLE_RUN_REQUIRED",
-            "message": "v3 tek koşu sözleşmesiyle çalışır; "
-                       "auto_assign_channels=true zorunludur — false "
-                       "ile oluşturulan bir v3 run'ında motor hiçbir "
-                       "zaman başlamaz.",
+            "message": "Analiz, kanal ataması otomatik yapılacak şekilde "
+                       "başlatılmalıdır; bu ayar kapalıyken analiz "
+                       "hiç çalışmaz.",
         })
 
 
@@ -514,13 +514,11 @@ def execute_scoring(
 
         # 1. pending -> scoring CAS geçişi (mükerrer/yarışan execute tipli 409)
         if not transition_atomic(db, run, target="scoring", from_status="pending"):
-            fresh = db.query(ScoringRun).filter(ScoringRun.id == run.id).first()
-            current_status = fresh.status if fresh else "unknown"
             raise HTTPException(
                 status_code=409,
                 detail={
                     "code": "RUN_NOT_PENDING",
-                    "message": f"Run {run.id} durumu 'pending' değil ('{current_status}') — mükerrer veya yarışan execute çağrısı reddedildi.",
+                    "message": "Bu analiz zaten başlatılmış. Sonucu görmek için sayfayı yenileyin.",
                 },
             )
 
@@ -539,7 +537,7 @@ def execute_scoring(
                 raise HTTPException(status_code=400, detail=str(exc))
             raise HTTPException(
                 status_code=500,
-                detail=f"Snapshot oluşturulamadı: {exc}",
+                detail=safe_500_detail(exc, "Çalıştırma için veri anlık görüntüsü oluşturulamadı."),
             )
 
         # 2b. LOKASYON KAPISI (Faz 6a, plan §5.7 — create->execute yarışına
@@ -600,7 +598,7 @@ def execute_scoring(
                 status_code=409,
                 detail={
                     "code": "RUN_TRANSITION_FAILED",
-                    "message": f"Run {run.id} scoring -> scored geçişi yapılamadı (mevcut durum: '{fresh.status if fresh else 'unknown'}').",
+                    "message": "Analiz skorlama adımını tamamlayamadı; analizin durumu başka bir işlemle değişmiş olabilir. Sayfayı yenileyip analizin durumunu kontrol edin.",
                 },
             )
         fresh = db.query(ScoringRun).filter(ScoringRun.id == run.id).first()
@@ -719,7 +717,7 @@ def delete_scoring_run(
     success = crud.delete_scoring_run(db, run_id)
     if not success:
         # Çok rare race: verify sonrası başkası silmiş.
-        raise HTTPException(status_code=404, detail="scoring run not found")
+        raise HTTPException(status_code=404, detail="Analiz bulunamadı.")
     return None
 
 
@@ -890,7 +888,7 @@ def get_top_by_channel(
 ):
     """Get top scoring keywords for a specific channel."""
     if channel.upper() not in ["ADS", "SEO", "SOCIAL"]:
-        raise HTTPException(status_code=400, detail="Invalid channel. Use ADS, SEO, or SOCIAL")
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. ADS, SEO veya Sosyal medya seçin.")
 
     verify_scoring_run(db, run_id, brand_profile_id)
 

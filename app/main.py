@@ -86,7 +86,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
     return JSONResponse(
         status_code=500,
-        content={"message": "Internal Server Error", "detail": str(exc) if settings.DEBUG else "Unexpected error"},
+        content={"message": "Internal Server Error", "detail": str(exc) if settings.DEBUG else "Beklenmeyen bir sunucu hatası oluştu. Lütfen tekrar deneyin."},
     )
 
 # Include API router

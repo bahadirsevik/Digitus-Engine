@@ -122,9 +122,9 @@ class ChannelEngine:
         if not (policy_matches and anchor_matches):
             self.db.rollback()  # kilit bırakılır, bekleyen yazım varsa atılır
             raise PolicyVersionChangedError(
-                f"{POLICY_VERSION_CHANGED}: atama sürerken workspace "
-                f"politika/profil sürümü değişti — havuz aktive edilmedi, "
-                f"yeniden atama gerekli."
+                f"{POLICY_VERSION_CHANGED}: kanal ataması sürerken marka "
+                f"politikası veya profili değişti; havuz güncellenmedi. "
+                f"Kanal atamasını yeniden başlatın."
             )
 
         scoring_run.channel_pool_policy_version = requested_policy_version
@@ -230,9 +230,9 @@ class ChannelEngine:
         ):
             self.db.rollback()
             raise StrategyChangedError(
-                f"{STRATEGY_CHANGED}: atama sürerken onaylı kanal stratejisi "
-                f"değişti (istenen {requested_strategy_version}, güncel "
-                f"{current}) — havuz aktive edilmedi, yeniden atama gerekli."
+                f"{STRATEGY_CHANGED}: kanal ataması sürerken onaylı kanal "
+                f"stratejisi değişti; havuz güncellenmedi. Kanal atamasını "
+                f"yeniden başlatın."
             )
         scoring_run.channel_pool_strategy_version = int(requested_strategy_version)
 
@@ -329,9 +329,9 @@ class ChannelEngine:
                     # istendigi halde onayli profil yoksa havuz eski/notr
                     # relevance ile kurulamaz.
                     raise RelevanceRefreshError(
-                        "Relevance tazelenemedi: run'a bagli workspace "
-                        "onaylanmis degil veya arsivlenmis. Profili onaylayip "
-                        "kanal atamasini yeniden baslatin."
+                        "Alaka düzeyi güncellenemedi: marka profili onaylanmış değil "
+                        "veya marka çalışması arşivlenmiş. Profili onaylayıp "
+                        "kanal atamasını yeniden başlatın."
                     )
                 if requested_anchor_version is not None:
                     # P1.3: harcama ledger'a baglanir. Onceden collector

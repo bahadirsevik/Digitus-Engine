@@ -45,7 +45,7 @@ export default function MarketSelect({
   if (geo) {
     if (picked?.id === geo) currentLabel = picked.label
     else if (knownLocation?.geo_target_id === geo) currentLabel = knownLocation.label
-    else currentLabel = countryLabel ?? `Tanımlanamayan mevcut seçim (${geo})`
+    else currentLabel = countryLabel ?? 'Kayıtlı konum tanınamadı; lütfen yeniden seçin'
   }
 
   const pick = (item: LocationItem) => {

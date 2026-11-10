@@ -56,7 +56,7 @@ class LoginRequest(BaseModel):
     def _normalize_email(cls, value: str) -> str:
         normalized = value.strip().lower()
         if "@" not in normalized:
-            raise ValueError("Gecerli bir e-posta adresi girin.")
+            raise ValueError("Geçerli bir e-posta adresi girin.")
         return normalized
 
 
@@ -153,7 +153,7 @@ def login(
                 detail={
                     "code": "TOO_MANY_ATTEMPTS",
                     "message": (
-                        f"Cok fazla basarisiz deneme. "
+                        f"Çok fazla başarısız deneme. "
                         f"{settings.LOGIN_ATTEMPT_WINDOW_MINUTES} dakika sonra tekrar deneyin."
                     ),
                 },
@@ -182,7 +182,7 @@ def login(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
                     "code": "INVALID_CREDENTIALS",
-                    "message": "E-posta veya parola hatali.",
+                    "message": "E-posta veya parola hatalı.",
                 },
             )
 
@@ -217,7 +217,7 @@ def login(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "SESSION_BACKEND_UNAVAILABLE",
-                "message": "Giris su an yapilamiyor, lutfen tekrar deneyin.",
+                "message": "Giriş şu an yapılamıyor, lütfen tekrar deneyin.",
             },
         )
 
@@ -287,7 +287,7 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "INVALID_CURRENT_PASSWORD",
-                "message": "Mevcut parola hatali.",
+                "message": "Mevcut parola hatalı.",
             },
         )
 
@@ -305,7 +305,7 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "PASSWORD_UNCHANGED",
-                "message": "Yeni parola mevcut parolayla ayni olamaz.",
+                "message": "Yeni parola mevcut parolayla aynı olamaz.",
             },
         )
 

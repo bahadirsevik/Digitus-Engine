@@ -29,7 +29,7 @@ interface StepDef {
 const CHANNEL_LINKS = [
   { key: 'ads', path: '/ads', label: 'ADS', icon: DollarSign },
   { key: 'seo', path: '/seo-geo', label: 'SEO+GEO', icon: Search },
-  { key: 'social', path: '/social', label: 'Social', icon: Share2 },
+  { key: 'social', path: '/social', label: 'Sosyal Medya', icon: Share2 },
 ] as const
 
 /** Açık kanal bağlantıları (undefined = açık, buildSteps ile aynı anlam). */
@@ -51,7 +51,7 @@ function buildSteps(channels?: AnalysisChannels): StepDef[] {
   if (ads || seo) steps.push({ key: 'family', label: 'Kelime aileleri', at: 15 })
   if (ads) steps.push({ key: 'ads', label: 'ADS', at: 40 })
   if (seo) steps.push({ key: 'seo', label: 'SEO', at: 65 })
-  if (social) steps.push({ key: 'social', label: 'SOCIAL', at: 85 })
+  if (social) steps.push({ key: 'social', label: 'Sosyal Medya', at: 85 })
   steps.push({ key: 'pool', label: 'Havuz teslimi', at: 92 })
   return steps
 }

@@ -337,7 +337,7 @@ describe('Fikir üretimi, yoklama, kapsama ve tekrar deneme', () => {
     await act(async () =>
       slow.resolve({ data: ideasResponse(301, 'partial', [idea(1, 1), idea(2, 2)]) })
     )
-    expect(await screen.findAllByText('Kota altında')).toHaveLength(2)
+    expect(await screen.findAllByText('Planlanandan az')).toHaveLength(2)
     expect(screen.queryByText('Fikirler yükleniyor...')).not.toBeInTheDocument()
   })
 
@@ -377,7 +377,7 @@ describe('Fikir üretimi, yoklama, kapsama ve tekrar deneme', () => {
     renderWorkspace()
     await openBrief()
     expect(await screen.findByText(/Yapay zekâ servisi hata verdi/)).toBeInTheDocument()
-    expect(screen.getByText(/Sahte yedek fikir oluşturulmaz/)).toBeInTheDocument()
+    expect(screen.getByText(/Aşağıdan yeniden başlatabilirsiniz/)).toBeInTheDocument()
     expect(screen.queryByText('Eksik hedefleri tekrar dene')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Fikirleri Yeniden Üret'))
     await waitFor(() => expect(mocks.generateIdeas).toHaveBeenCalledTimes(1))
@@ -392,7 +392,7 @@ describe('Fikir üretimi, yoklama, kapsama ve tekrar deneme', () => {
     })
     renderWorkspace()
     await openBrief()
-    expect(await screen.findAllByText('Kota altında')).toHaveLength(2)
+    expect(await screen.findAllByText('Planlanandan az')).toHaveLength(2)
     expect(screen.getByText(/her hedef en az bir fikre sahip/)).toBeInTheDocument()
     expect(screen.queryByText('Eksik hedefleri tekrar dene')).not.toBeInTheDocument()
   })

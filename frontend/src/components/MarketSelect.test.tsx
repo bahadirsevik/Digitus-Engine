@@ -130,9 +130,9 @@ describe('MarketSelect', () => {
     expect(spy).toHaveBeenCalledWith({ geo_target_id: '2276', language_id: '1001' })
   })
 
-  it('bilinmeyen mevcut konum "Tanımlanamayan mevcut seçim" olarak gösterilir', async () => {
+  it('bilinmeyen mevcut konum kimlik göstermeden yeniden seçim ister', async () => {
     render(<Harness initial={{ geo_target_id: '999999', language_id: '1031' }} />)
-    expect(await screen.findByText('Tanımlanamayan mevcut seçim (999999)')).toBeTruthy()
+    expect(await screen.findByText('Kayıtlı konum tanınamadı; lütfen yeniden seçin')).toBeTruthy()
   })
 
   it('kilitli: alanlar pasif, mesaj görünür, arama yapılmaz', async () => {

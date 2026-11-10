@@ -1,15 +1,47 @@
 """
 Celery tasks for intent analysis.
 """
+import re
+
 from loguru import logger
 
 from app.tasks.celery_app import celery_app
 from app.database.connection import SessionLocal
-from app.core.channel.channel_engine import ChannelEngine
+from app.core.channel.channel_engine import (
+    ChannelEngine,
+    PolicyVersionChangedError,
+    StrategyChangedError,
+)
+from app.core.relevance import RelevanceRefreshError
 from app.core.engine.orchestrator import run_v3_orchestration
 from app.core.scoring.state_machine import transition
 from app.generators.ai_service import get_ai_service
 from app.tasks.task_status import update_task_status
+
+_CURATED_ASSIGNMENT_ERRORS = (
+    PolicyVersionChangedError, StrategyChangedError, RelevanceRefreshError,
+)
+
+
+def assignment_error_text(exc: BaseException) -> str:
+    """Kullanıcıya gösterilecek hata metni: Türkçe mesajlı alan hataları ham
+    kalır ("KOD: " öneki atılır); beklenmeyen istisnalar jenerik metne iner."""
+    from app.core.engine.ai_runner import AiStageError
+    from app.core.engine.family.rules import FamilyStageError
+    from app.core.engine.seo.runner import SeoStageError
+    from app.core.engine.social.runner import SocialStageError
+    from app.core.telemetry.ai_cost_budget import BudgetExceeded
+
+    if isinstance(exc, _CURATED_ASSIGNMENT_ERRORS):
+        return re.sub(r"^[A-Z][A-Z_]+:\s*", "", str(exc))
+    if isinstance(exc, BudgetExceeded):
+        return ("Bu analiz için onaylanan yapay zekâ bütçe tavanına ulaşıldı; "
+                "kanal ataması durduruldu.")
+    if isinstance(exc, (AiStageError, FamilyStageError, SeoStageError, SocialStageError)):
+        return ("Kanal atamasının analiz adımlarından biri tamamlanamadı (genellikle "
+                "yapay zekâ servisi yanıt vermediğinde ya da geçersiz yanıt verdiğinde "
+                "olur). Lütfen biraz sonra tekrar deneyin.")
+    return "Kanal atama beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
 
 
 # time_limit 1800→3600 (soft 3300): pencere-çarpanlı deney koşuları (4×
@@ -195,12 +227,12 @@ def run_channel_assignment_task(
     except Exception as exc:  # noqa: BLE001
         # Muhasebe kurulamadiysa KOSU DURUR: bagli olmayan harcama
         # "birlesik cap" vaadini bozar (fail-closed)
-        logger.error(f"downstream ledger kurulamadi: {exc}")
-        update_task_status(task_id, status='failed',
-                           error_message=f'Butce muhasebesi kurulamadi: {exc}')
+        logger.exception("downstream ledger kurulamadi")
+        ledger_error = "Bütçe muhasebesi kurulamadı; işlem güvenlik için durduruldu. Lütfen tekrar deneyin."
+        update_task_status(task_id, status='failed', error_message=ledger_error)
         try_finish_attempt(db, parent_task_id=task_id,
                            error_code='LEDGER_BIND_FAILED',
-                           error_message=str(exc))
+                           error_message=ledger_error)
         try:
             if run_row and getattr(run_row, "algorithm_version", "v2") == "v3":
                 if run_row.status in ("scored", "channel_assigning"):
@@ -288,9 +320,11 @@ def run_channel_assignment_task(
         }
 
     except Exception as e:
+        logger.exception("Kanal atama görevi başarısız")
+        assign_error = assignment_error_text(e)
         usage = collector.finalize()  # failure yolunda da persist (plan C)
         update_task_status(
-            task_id, status='failed', error_message=str(e),
+            task_id, status='failed', error_message=assign_error,
             result_data={
                 'scoring_run_id': scoring_run_id, 'usage': usage,
                 'algorithm_version': getattr(run_row, "algorithm_version", "v2"),
@@ -301,7 +335,7 @@ def run_channel_assignment_task(
         )
         try_finish_attempt(db, parent_task_id=task_id,
                            error_code='ASSIGNMENT_FAILED',
-                           error_message=str(e))
+                           error_message=assign_error)
         # v3 hata durumunda run status'ünü 'failed' yap (state machine)
         try:
             if run_row and run_row.status in ("scored", "channel_assigning"):

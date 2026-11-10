@@ -11,7 +11,7 @@ import type { ClaimReevaluateChannel } from '../../services/api'
 import '../../pages/Generation.css'
 
 const channelText = (label: string, c?: ClaimReevaluateChannel) =>
-  `${label}: ${c?.cleared ?? 0} temizlendi, ${c?.still_flagged ?? 0} hâlâ kontrol gerekli`
+  `${label}: ${c?.cleared ?? 0} iddia uyarısı kalktı, ${c?.still_flagged ?? 0} uyarı hâlâ kontrol bekliyor`
 
 export default function ClaimReevaluateButton({
   runId,

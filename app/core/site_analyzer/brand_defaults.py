@@ -86,7 +86,7 @@ class BrandDefaultsResolver:
     def run_id_from_category(self, category_ids: List[int]) -> int:
         """category_ids -> SocialCategory.scoring_run_id"""
         if not category_ids:
-            raise BrandResolveError("Kategori ID listesi bos", code="empty_list")
+            raise BrandResolveError("Kategori seçilmedi.", code="empty_list")
 
         categories = self.db.query(SocialCategory).filter(
             SocialCategory.id.in_(category_ids)
@@ -96,13 +96,13 @@ class BrandDefaultsResolver:
         missing = set(category_ids) - found_ids
         if missing:
             raise BrandResolveError(
-                f"Kategori bulunamadi: {sorted(missing)}", code="not_found"
+                "Seçilen kategorilerden bazıları bulunamadı. Sayfayı yenileyin.", code="not_found"
             )
 
         run_ids = {c.scoring_run_id for c in categories}
         if len(run_ids) > 1:
             raise BrandResolveError(
-                f"Kategoriler farkli scoring run'lara ait: {sorted(run_ids)}",
+                "Seçilen kategoriler farklı analizlere ait; tek bir analizden seçin.",
                 code="mixed_run",
             )
 
@@ -111,7 +111,7 @@ class BrandDefaultsResolver:
     def run_id_from_idea(self, idea_ids: List[int]) -> int:
         """idea_ids -> SocialIdea.category_id -> SocialCategory.scoring_run_id"""
         if not idea_ids:
-            raise BrandResolveError("Fikir ID listesi bos", code="empty_list")
+            raise BrandResolveError("Fikir seçilmedi.", code="empty_list")
 
         ideas = (
             self.db.query(SocialIdea, SocialCategory.scoring_run_id)
@@ -124,13 +124,13 @@ class BrandDefaultsResolver:
         missing = set(idea_ids) - found_ids
         if missing:
             raise BrandResolveError(
-                f"Fikir bulunamadi: {sorted(missing)}", code="not_found"
+                "Seçilen fikirlerden bazıları bulunamadı. Sayfayı yenileyin.", code="not_found"
             )
 
         run_ids = {run_id for _, run_id in ideas}
         if len(run_ids) > 1:
             raise BrandResolveError(
-                f"Fikirler farkli scoring run'lara ait: {sorted(run_ids)}",
+                "Seçilen fikirler farklı analizlere ait; tek bir analizden seçin.",
                 code="mixed_run",
             )
 
@@ -148,7 +148,7 @@ class BrandDefaultsResolver:
 
         if not row:
             raise BrandResolveError(
-                f"Content bulunamadi: {content_id}", code="not_found"
+                "İçerik bulunamadı.", code="not_found"
             )
 
         return row[0]
@@ -158,7 +158,7 @@ class BrandDefaultsResolver:
         group = self.db.query(AdGroup).filter(AdGroup.id == group_id).first()
         if not group:
             raise BrandResolveError(
-                f"Ad group bulunamadi: {group_id}", code="not_found"
+                "Reklam grubu bulunamadı.", code="not_found"
             )
         return group.scoring_run_id
 

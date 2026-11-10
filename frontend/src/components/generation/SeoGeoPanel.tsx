@@ -24,6 +24,8 @@ import {
   useScopedTaskId,
   getWorkspaceTaskKey,
   setStoredTaskId,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
 } from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
 import ClaimReevaluateButton from './ClaimReevaluateButton'
@@ -41,6 +43,21 @@ const SEO_STEPS = [
   'İç/dış link önerileri çıkarılıyor',
   'SEO & GEO skorları hesaplanıyor',
 ]
+
+// Başarısız kelime listesi uzunsa ilk N satır görünür, kalanı açılır bölümde
+const FAILED_KEYWORDS_SHOWN = 5
+
+const numberOrNull = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+
+function failedKeywordsFrom(raw: unknown): Array<{ keyword: string; reason: string }> {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    const row = item as { keyword?: unknown; reason?: unknown }
+    return typeof row?.keyword === 'string' && row.keyword
+      ? [{ keyword: row.keyword, reason: typeof row.reason === 'string' ? row.reason : '' }]
+      : []
+  })
+}
 
 const TONES = [
   { value: 'informative', label: 'Bilgilendirici' },
@@ -170,7 +187,7 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
   const reviewReasons = (review?.critical_failures || []).map((f, i) => (
     <li key={`f${i}`}>
       <span className="seox-review-src">
-        {f.source === 'geo_ai' ? 'AI değerlendirmesi' : 'Otomatik kontrol'}
+        {f.source === 'geo_ai' ? 'Yapay zekâ değerlendirmesi' : 'Otomatik kontrol'}
       </span>{' '}
       {f.detail || f.criterion}
     </li>
@@ -178,7 +195,7 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
   const stats = [
     item.word_count ? `${item.word_count} kelime` : null,
     subs.length ? `${subs.length} alt başlık` : null,
-    item.keyword_density != null ? `%${item.keyword_density} yoğunluk` : null,
+    item.keyword_density != null ? `anahtar kelime yoğunluğu %${item.keyword_density}` : null,
   ].filter(Boolean)
 
   const links = [
@@ -371,15 +388,23 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
   const [results, setResults] = useState<SEOGeoItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Sonuç listesi YÜKLEME hatası (üretim hatasından ayrı): yalnız yeniden yükleme sunar
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(true)
 
   const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_seo === false
 
+  // Kısmi başarı (backend result_data sözleşmesi; alan yoksa uyarı yok)
+  const failedKeywords = failedKeywordsFrom(polling.resultData?.failed_keywords)
+  const requestedCount = numberOrNull(polling.resultData?.requested_count)
+  const producedCount = numberOrNull(polling.resultData?.total)
+
   // Run/workspace değişince önceki run'ın sonuçları ve devam eden istek durumu taşınmaz
   useEffect(() => {
     setResults([])
     setError(null)
+    setLoadError(null)
     setLoading(false)
   }, [scopeKey])
 
@@ -390,8 +415,10 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
       if (scopeRef.current !== requestScope) return
       setResults((res.data as { items?: SEOGeoItem[] }).items || [])
+      setLoadError(null)
     } catch (e) {
-      console.error('Failed to fetch SEO results:', e)
+      if (scopeRef.current !== requestScope) return
+      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId])
 
@@ -432,7 +459,8 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
     }
   }
 
-  const generating = loading || polling.isActive
+  // Durum bilinmiyorken yeni üretim başlatılmaz; önce durum yeniden kontrol edilir
+  const generating = loading || polling.isActive || polling.pollFailed
   const host = hostFrom(activeWorkspace?.company_url)
   const brandName = (activeWorkspace?.profile_data?.company_name as string) || activeWorkspace?.name
 
@@ -529,6 +557,28 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
           <GenBanner progress={polling.progress} />
         </div>
       )}
+      {polling.pollFailed && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={POLL_FAILED_MESSAGE}
+            onRetry={polling.recheck}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
+        </div>
+      )}
+      {loadError && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={`${
+              polling.isCompleted
+                ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
+                : 'SEO içerik sonuçları yüklenemedi.'
+            } ${loadError}`}
+            onRetry={() => void fetchResults()}
+            retryLabel="Sonuçları yeniden yükle"
+          />
+        </div>
+      )}
       {polling.isFailed && (
         <div className="adsx-span">
           <ErrorBanner
@@ -536,6 +586,35 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
             onDismiss={() => setTaskId(null)}
             onRetry={() => setTaskId(null)}
           />
+        </div>
+      )}
+
+      {failedKeywords.length > 0 && (polling.isCompleted || polling.isFailed) && (
+        <div className="adsx-span adsx-sets-empty" role="status">
+          {requestedCount != null && producedCount != null
+            ? `${requestedCount} kelimeden ${producedCount} tanesi için içerik üretildi; ${requestedCount - producedCount} kelime için içerik üretilemedi:`
+            : `${failedKeywords.length} kelime için içerik üretilemedi:`}
+          <ul>
+            {failedKeywords.slice(0, FAILED_KEYWORDS_SHOWN).map((f) => (
+              <li key={f.keyword}>
+                {f.keyword}
+                {f.reason ? ` — ${f.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+          {failedKeywords.length > FAILED_KEYWORDS_SHOWN && (
+            <details>
+              <summary>Tümünü göster ({failedKeywords.length})</summary>
+              <ul>
+                {failedKeywords.slice(FAILED_KEYWORDS_SHOWN).map((f) => (
+                  <li key={f.keyword}>
+                    {f.keyword}
+                    {f.reason ? ` — ${f.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 

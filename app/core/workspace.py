@@ -47,7 +47,7 @@ def verify_workspace(
     if not workspace:
         raise HTTPException(
             status_code=404,
-            detail=f"Marka çalışması (id={brand_profile_id}) bulunamadı veya arşivlenmiş",
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
         )
 
     return workspace
@@ -60,9 +60,9 @@ def market_change_blocker(db: Session, ws: BrandProfile) -> Optional[str]:
     if db.query(WorkspaceKeyword.id).filter(WorkspaceKeyword.brand_profile_id == ws.id).first():
         return "çalışmada kelime var"
     if db.query(ScoringRun.id).filter(ScoringRun.brand_profile_id == ws.id).first():
-        return "çalışmada analiz (run) var"
+        return "çalışmada analiz var"
     if db.query(ExportJob.id).filter(ExportJob.brand_profile_id == ws.id).first():
-        return "çalışmada rapor (export) var"
+        return "çalışmada dışa aktarım var"
     return find_active_workspace_work(db, ws.id)
 
 
@@ -147,7 +147,7 @@ def verify_scoring_run(
     if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     verify_workspace(db, brand_profile_id)
@@ -156,13 +156,13 @@ def verify_scoring_run(
     if not run:
         raise HTTPException(
             status_code=404,
-            detail="scoring run not found",
+            detail="Analiz bulunamadı.",
         )
 
     if run.brand_profile_id != brand_profile_id:
         raise HTTPException(
             status_code=404,
-            detail="scoring run not found in workspace",
+            detail="Analiz bu marka çalışmasında bulunamadı.",
         )
 
     return run
@@ -195,7 +195,7 @@ def require_fresh_channel_pool(db: Session, run: ScoringRun):
         if freshness.policy_stale:
             reasons.append("politika değişti")
         if freshness.relevance_stale:
-            reasons.append("profil değişti (relevance bayat)")
+            reasons.append("marka profili değişti")
         if freshness.strategy_stale:
             reasons.append("kanal stratejisi değişti")
         if freshness.assignment_in_progress:
@@ -231,7 +231,7 @@ def verify_task_in_workspace(
     if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     verify_workspace(db, brand_profile_id)
@@ -244,7 +244,7 @@ def verify_task_in_workspace(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="task not found in workspace")
+        raise HTTPException(status_code=404, detail="İşlem bu marka çalışmasında bulunamadı.")
     return row[0]
 
 
@@ -264,7 +264,7 @@ def verify_export_in_workspace(
     if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     verify_workspace(db, brand_profile_id)
@@ -278,5 +278,5 @@ def verify_export_in_workspace(
         .first()
     )
     if not job:
-        raise HTTPException(status_code=404, detail="export not found in workspace")
+        raise HTTPException(status_code=404, detail="Dışa aktarım bu marka çalışmasında bulunamadı.")
     return job

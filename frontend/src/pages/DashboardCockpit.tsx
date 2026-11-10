@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Activity,
@@ -158,16 +158,43 @@ function WorkspaceSwitcher({ currentId }: { currentId?: number }) {
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
   const [workspaces, setWorkspaces] = useState<WorkspaceListRow[]>([])
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const aliveRef = useRef(true)
+
+  const loadWorkspaces = useCallback(() => {
+    setLoadError(null)
     workspaceApi
       .list()
-      .then((res) => setWorkspaces((res.data as WorkspaceListRow[]) || []))
-      .catch(() => {})
+      .then((res) => {
+        if (aliveRef.current) setWorkspaces((res.data as WorkspaceListRow[]) || [])
+      })
+      .catch((err: unknown) => {
+        if (aliveRef.current)
+          setLoadError(`Çalışma listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
+      })
   }, [])
+
+  useEffect(() => {
+    aliveRef.current = true
+    loadWorkspaces()
+    return () => {
+      aliveRef.current = false
+    }
+  }, [loadWorkspaces])
 
   // Değiştirilecek başka çalışma yoksa seçici gereksiz.
   const hasAlternative =
     workspaces.length > 1 || (workspaces.length === 1 && workspaces[0].id !== currentId)
+  if (loadError) {
+    return (
+      <div className="cockpit-workspace-switch" role="alert">
+        <span>{loadError}</span>{' '}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={loadWorkspaces}>
+          Yeniden yükle
+        </button>
+      </div>
+    )
+  }
   if (!hasAlternative) return null
 
   return (

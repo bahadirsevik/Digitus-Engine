@@ -3,8 +3,10 @@
 // Codex post-review: geçmişteki pending/processing job devralınıp poll'lanır;
 // kullanıcının bu oturumda başlattığı job tamamlanınca OTOMATİK indirilir.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { MAX_POLL_FAILURES } from './useTaskPolling'
 import {
   apiErrorMessage,
+  apiErrorStatus,
   downloadBlobResponse,
   exportApi,
   ExportRequest,
@@ -13,6 +15,8 @@ import {
 } from '../services/api'
 
 const POLL_INTERVAL_MS = 2000
+export const EXPORT_POLL_FAILED_MESSAGE =
+  'Dışa aktarımın durumu alınamıyor. İşlem arka planda devam ediyor olabilir.'
 const HISTORY_LIMIT = 5
 
 function isFinal(status: ExportStatusResponse['status']) {
@@ -27,10 +31,20 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
   const [activeJob, setActiveJob] = useState<ExportStatusResponse | null>(null)
   const [history, setHistory] = useState<ExportStatusResponse[]>([])
   const [error, setError] = useState<string | null>(null)
+  // Geçmiş listesi YÜKLEME hatası ("geçmiş yok" ile karışmasın); yeniden yükleme sunulur
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const scopeRef = useRef(`${runId}:${workspaceId}`)
+  scopeRef.current = `${runId}:${workspaceId}`
   const [busy, setBusy] = useState(false)
   // Yalnız KULLANICININ başlattığı job biter bitmez otomatik indirilir;
   // geçmişten devralınan job'da sürpriz indirme olmaz.
   const autoDownloadRef = useRef(false)
+  // Üst üste MAX_POLL_FAILURES durum hatası: export'un durumu bilinmiyor (başarısız DEĞİL)
+  const [pollFailed, setPollFailed] = useState(false)
+  const failuresRef = useRef(0)
+  const activeIdRef = useRef<string | null>(null)
+  // Aynı job için ikinci durum isteği başlatılmaz (recheck + zamanlayıcı çakışmasın)
+  const pollInFlightRef = useRef<string | null>(null)
 
   const downloadJob = useCallback(
     async (job: ExportStatusResponse) => {
@@ -50,8 +64,11 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
       setHistory([])
       return
     }
+    const requestScope = scopeRef.current
     try {
       const res = await exportApi.listForRun(runId, workspaceId, HISTORY_LIMIT)
+      if (scopeRef.current !== requestScope) return
+      setHistoryError(null)
       const jobs = (res.data?.exports || []) as ExportStatusResponse[]
       setHistory(jobs)
       // Devral: sayfaya dönüşte süren job varsa poll'a alınır — sonsuza
@@ -62,26 +79,35 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
         setBusy(true)
       }
     } catch (err) {
-      console.error('Export history failed:', err)
+      if (scopeRef.current !== requestScope) return
+      setHistoryError(
+        `Dışa aktarım geçmişi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+      )
     }
   }, [runId, workspaceId])
 
   useEffect(() => {
     setActiveJob(null)
     setError(null)
+    setHistoryError(null)
     setBusy(false)
+    setPollFailed(false)
+    failuresRef.current = 0
     autoDownloadRef.current = false
     void refreshHistory()
   }, [refreshHistory])
 
-  // Aktif job'ı final duruma kadar poll'la; geçmiş listesini de tazele
-  useEffect(() => {
-    if (!activeJob || !workspaceId || isFinal(activeJob.status)) return
-
-    const interval = window.setInterval(async () => {
+  const pollOnce = useCallback(
+    async (exportId: string): Promise<void> => {
+      if (!workspaceId || pollInFlightRef.current === exportId) return
+      pollInFlightRef.current = exportId
       try {
-        const res = await exportApi.status(activeJob.export_id, workspaceId)
+        const res = await exportApi.status(exportId, workspaceId)
+        // Kapsam değiştiyse (başka job/workspace) geç yanıt yazılmaz
+        if (activeIdRef.current !== exportId) return
         const next = res.data as ExportStatusResponse
+        failuresRef.current = 0
+        setPollFailed(false)
         setActiveJob(next)
         setHistory((prev) => [next, ...prev.filter((job) => job.export_id !== next.export_id)])
         if (isFinal(next.status)) {
@@ -95,23 +121,65 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
           }
         }
       } catch (err) {
-        setError(apiErrorMessage(err, 'Export durumu alınamadı'))
-        setBusy(false)
+        if (activeIdRef.current !== exportId) return
+        // 404: job artık yok — "durum bilinmiyor" değil; takip bırakılır, yeni export alınabilir
+        if (apiErrorStatus(err) === 404) {
+          setActiveJob(null)
+          setBusy(false)
+          setPollFailed(false)
+          failuresRef.current = 0
+          setHistory((prev) => prev.filter((job) => job.export_id !== exportId))
+          return
+        }
+        failuresRef.current += 1
+        // Durum BİLİNMİYOR (job başarısız sayılmaz): busy/takip korunur, kullanıcı yeniden kontrol eder
+        if (failuresRef.current >= MAX_POLL_FAILURES) setPollFailed(true)
+      } finally {
+        if (pollInFlightRef.current === exportId) pollInFlightRef.current = null
       }
-    }, POLL_INTERVAL_MS)
+    },
+    [workspaceId, downloadJob]
+  )
 
-    return () => window.clearInterval(interval)
-  }, [activeJob, workspaceId, downloadJob])
+  // Aktif job'ı final duruma kadar sıralı poll'la (istekler çakışmaz)
+  const activeId = activeJob && !isFinal(activeJob.status) ? activeJob.export_id : null
+  activeIdRef.current = activeId
+  useEffect(() => {
+    if (!activeId || !workspaceId || pollFailed) return
+    let cancelled = false
+    let timer: number | undefined
+    const loop = async () => {
+      await pollOnce(activeId)
+      if (!cancelled) timer = window.setTimeout(loop, POLL_INTERVAL_MS)
+    }
+    timer = window.setTimeout(loop, POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [activeId, workspaceId, pollFailed, pollOnce])
+
+  // "Durumu tekrar kontrol et": sayaç sıfırlanır, poll sürer
+  const recheck = useCallback(() => {
+    failuresRef.current = 0
+    setPollFailed(false)
+    if (activeIdRef.current) void pollOnce(activeIdRef.current)
+  }, [pollOnce])
 
   const startExport = useCallback(
     async (req: ExportRequest) => {
       if (!workspaceId || busy) return
+      // Yanıt/hata geldiğinde kapsam (run/workspace) değiştiyse A'nın sonucu B'ye yazılmaz
+      const requestScope = scopeRef.current
       setBusy(true)
       setError(null)
+      setPollFailed(false)
+      failuresRef.current = 0
       setActiveJob(null)
       autoDownloadRef.current = true
       try {
         const res = await exportApi.create(req, workspaceId)
+        if (scopeRef.current !== requestScope) return
         const job = res.data as ExportStatusResponse
         setActiveJob(job)
         setHistory((prev) => [job, ...prev.filter((item) => item.export_id !== job.export_id)])
@@ -125,6 +193,7 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
           }
         }
       } catch (err) {
+        if (scopeRef.current !== requestScope) return
         // 409 bayat havuz kendi mesajıyla; 422 NO_CONTENT detail.message'ı apiErrorMessage getirir
         const stale = policyStaleFromError(err)
         setError(stale ? stale.message : apiErrorMessage(err, 'Dışa aktarım başlatılamadı'))
@@ -135,5 +204,17 @@ export function useExportJob(runId: number | null, workspaceId: number | undefin
     [workspaceId, busy, downloadJob]
   )
 
-  return { activeJob, history, error, busy, startExport, downloadJob, refreshHistory, setError }
+  return {
+    activeJob,
+    history,
+    historyError,
+    error,
+    busy,
+    pollFailed,
+    recheck,
+    startExport,
+    downloadJob,
+    refreshHistory,
+    setError,
+  }
 }

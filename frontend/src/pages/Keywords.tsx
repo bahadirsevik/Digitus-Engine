@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import {
   apiErrorMessage,
+  apiErrorStatus,
   downloadBlobResponse,
   keywordsApi,
   scoringApi,
@@ -46,7 +47,17 @@ import { UrlSeedIdea } from '../services/api'
 import { WORKSPACE_KEYWORD_LIMIT } from '../constants'
 import { Users, X } from 'lucide-react'
 import type { ScoringRun } from '../types/models'
-import { getWorkspaceTaskKey, useScopedTaskId, useTaskPolling } from '../hooks/useTaskPolling'
+import {
+  getWorkspaceTaskKey,
+  MAX_POLL_FAILURES,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+  useScopedTaskId,
+  useTaskPolling,
+} from '../hooks/useTaskPolling'
+import ErrorBanner from '../components/ErrorBanner'
+import TablePager from '../components/TablePager'
+import { runStatusLabel } from '../components/statusLabels'
 import { useAnalysisToastStore } from '../stores/analysisToastStore'
 import './Keywords.css'
 
@@ -61,32 +72,33 @@ const TABS: {
 }[] = [
   {
     id: 'google-ads',
-    label: 'Seed Keywordler',
+    label: 'Başlangıç Kelimeleri',
     description: 'Profildeki 10 kelime hazır gelir; Google Ads ile hacim ve rekabet verisi al',
     icon: Megaphone,
   },
   {
     id: 'url',
     label: "URL'den Çıkar",
-    description: "Kendi siteniz ya da herhangi bir URL'den keyword önerileri üret",
+    description: "Kendi siteniz ya da herhangi bir URL'den anahtar kelime önerileri üret",
     icon: Link2,
   },
   {
     id: 'competitor',
     label: "Rakip URL'leri",
-    description: 'Profildeki rakip siteler hazır buton olarak; rakip keywordlerini keşfet',
+    description:
+      'Profildeki rakip siteler hazır buton olarak; rakiplerin anahtar kelimelerini keşfet',
     icon: Users,
   },
   {
     id: 'manual',
-    label: 'Manuel Ekle',
-    description: 'Tekil kelimeyi hızlıca çalışma alanına bağla',
+    label: 'Elle Ekle',
+    description: 'Tekil kelimeyi hızlıca marka çalışmasına bağla',
     icon: Keyboard,
   },
   {
     id: 'csv',
     label: 'CSV Yükle',
-    description: 'Hazır keyword listesini toplu içe aktar',
+    description: 'Hazır anahtar kelime listesini toplu içe aktar',
     icon: FileSpreadsheet,
   },
 ]
@@ -95,7 +107,7 @@ const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
   csv: { label: 'CSV', className: 'source-badge source-csv' },
   google_ads_api: { label: 'Google Ads', className: 'source-badge source-gads' },
   url_seed: { label: 'URL', className: 'source-badge source-url' },
-  manual: { label: 'Manuel', className: 'source-badge source-manual' },
+  manual: { label: 'Elle eklendi', className: 'source-badge source-manual' },
 }
 
 interface Keyword {
@@ -196,12 +208,14 @@ const formatKeywordImportStatus = (result: {
     details.splice(
       1,
       0,
-      `${result.created_new || 0} yeni kayıt, ${result.linked_existing || 0} mevcut keyword bağlandı`
+      `${result.created_new || 0} yeni kayıt, ${result.linked_existing || 0} mevcut kelime bağlandı`
     )
   }
 
   return `✓ ${result.requested} satır işlendi: ${details.join(' · ')}`
 }
+
+const KEYWORD_PAGE_SIZE = 50
 
 export default function Keywords() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -220,6 +234,7 @@ export default function Keywords() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [keywordPage, setKeywordPage] = useState(0)
   const [competitorUrl, setCompetitorUrl] = useState<string | null>(null)
   const [showStartModal, setShowStartModal] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -241,6 +256,11 @@ export default function Keywords() {
     Number.isNaN(initialRunId) || initialRunId <= 0 ? null : initialRunId
   )
   const [scoreRunsLoading, setScoreRunsLoading] = useState(false)
+  // Analiz listesi yüklenemedi (boş liste ile karışmasın) ve arka plan durum yoklama uyarısı
+  const [scoreRunsError, setScoreRunsError] = useState<string | null>(null)
+  const [statusNotice, setStatusNotice] = useState<string | null>(null)
+  const workspaceIdRef = useRef(activeWorkspace?.id)
+  workspaceIdRef.current = activeWorkspace?.id
   const [taskDiscoveryActive, setTaskDiscoveryActive] = useState(false)
   // Analiz zinciri banner/toast durumu.
   const [chainActive, setChainActive] = useState(false)
@@ -275,6 +295,7 @@ export default function Keywords() {
   useEffect(() => {
     fetchKeywords()
     setLastImport(null)
+    setKeywordPage(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id])
 
@@ -294,6 +315,11 @@ export default function Keywords() {
     }
   }, [searchParams])
 
+  // Run/workspace değişince önceki bağlamın uyarıları taşınmaz
+  useEffect(() => {
+    setStatusNotice(null)
+  }, [selectedScoreRunId, activeWorkspace?.id])
+
   useEffect(() => {
     if (!selectedScoreRunId || view !== 'scores' || !activeWorkspace?.id) {
       setTaskDiscoveryActive(false)
@@ -301,23 +327,41 @@ export default function Keywords() {
     }
 
     let cancelled = false
+    // Üst üste biten istekler çakışmasın: önceki yanıt gelmeden yeni yoklama başlamaz
+    let inFlight = false
+    let failures = 0
+    const repeating = taskDiscoveryActive && !assignTaskId
     const findTask = async () => {
+      if (inFlight) return
+      inFlight = true
       try {
         const task = await discoverChannelAssignmentTask(selectedScoreRunId)
-        if (cancelled || !task) return
+        if (cancelled) return
+        failures = 0
+        setStatusNotice(null)
+        if (!task) return
         setAssignTaskId(task.task_id)
         if (!isActiveTask(task)) {
           setTaskDiscoveryActive(false)
         }
       } catch {
-        if (!cancelled) setTaskDiscoveryActive(false)
+        if (cancelled) return
+        // Tek seferlik arama hemen, tekrarlayan yoklama 3 ardışık hatadan sonra bildirir
+        failures += 1
+        if (failures >= (repeating ? MAX_POLL_FAILURES : 1)) {
+          setTaskDiscoveryActive(false)
+          setStatusNotice(
+            'Kanal atama durumu alınamadı; görev çalışıyor olabilir. Bağlantıyı kontrol edip durumu tekrar kontrol edin.'
+          )
+        }
+      } finally {
+        inFlight = false
       }
     }
 
     void findTask()
     // Cleanup HER durumda döner: run değişince uçuştaki keşif yanıtı yok sayılır
-    const interval =
-      taskDiscoveryActive && !assignTaskId ? window.setInterval(findTask, 3000) : null
+    const interval = repeating ? window.setInterval(findTask, 3000) : null
     return () => {
       cancelled = true
       if (interval !== null) window.clearInterval(interval)
@@ -365,8 +409,12 @@ export default function Keywords() {
       })
       setKeywords(res.data.items || [])
       setPoolTotal(res.data.total ?? (res.data.items || []).length)
-    } catch {
-      setError('API bağlantısı kurulamadı. Backend çalışıyor mu?')
+    } catch (err) {
+      setError(
+        apiErrorStatus(err) === 0
+          ? 'Sunucuya ulaşılamadı; bağlantınızı kontrol edip sayfayı yenileyin.'
+          : `Anahtar kelime listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+      )
       setKeywords([])
       setPoolTotal(0)
     }
@@ -379,16 +427,21 @@ export default function Keywords() {
       setSelectedScoreRunId(null)
       return
     }
+    const requestWorkspaceId = activeWorkspace.id
     setScoreRunsLoading(true)
     try {
-      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      const res = await scoringApi.listRuns({ brand_profile_id: requestWorkspaceId })
+      if (workspaceIdRef.current !== requestWorkspaceId) return
       const runs = (Array.isArray(res.data) ? res.data : []) as ScoringRun[]
       setScoreRuns(runs)
+      setScoreRunsError(null)
       if (!selectedScoreRunId && runs.length > 0) {
         setSelectedScoreRunId(runs[0].id)
       }
-    } catch {
+    } catch (err) {
+      if (workspaceIdRef.current !== requestWorkspaceId) return
       setScoreRuns([])
+      setScoreRunsError(`Analiz listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
       setScoreRunsLoading(false)
     }
@@ -418,12 +471,28 @@ export default function Keywords() {
     if (!chainActive || !selectedScoreRunId || !activeWorkspace?.id) return
     if (assignTaskId && assignPolling.isActive) return // task varken status'a gerek yok
     let cancelled = false
+    let inFlight = false
+    let failures = 0
     const tick = async () => {
+      if (inFlight) return
+      inFlight = true
       try {
         const res = await scoringApi.getRun(selectedScoreRunId, activeWorkspace.id)
-        if (!cancelled) setChainRunStatus((res.data as ScoringRun).status)
+        if (cancelled) return
+        failures = 0
+        setStatusNotice(null)
+        setChainRunStatus((res.data as ScoringRun).status)
       } catch {
-        /* sessiz */
+        // Her başarısız yoklamada uyarı basılmaz; ardışık hatadan sonra TEK uyarı
+        if (cancelled) return
+        failures += 1
+        if (failures === MAX_POLL_FAILURES) {
+          setStatusNotice(
+            'Analiz durumu şu an alınamıyor; yoklama sürüyor, bağlantı düzelince ekran güncellenir.'
+          )
+        }
+      } finally {
+        inFlight = false
       }
     }
     void tick()
@@ -512,7 +581,13 @@ export default function Keywords() {
       language_id: detail.language_id || undefined,
       force_include: true,
     }
-    await keywordsApi.import([row], activeWorkspace.id)
+    try {
+      await keywordsApi.import([row], activeWorkspace.id)
+    } catch (err) {
+      setError(`"${detail.keyword}" geri alınamadı: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
+      // Çağıranlar "eklendi" işaretini yalnız başarıda koysun diye hata yeniden fırlatılır
+      throw err
+    }
     fetchKeywords()
   }
 
@@ -544,7 +619,7 @@ export default function Keywords() {
       const e = err as { message?: string; detail?: unknown }
       setManualImportResult({
         kind: 'error',
-        message: e?.message || String(e?.detail || 'Manuel ekleme basarisiz oldu'),
+        message: e?.message || String(e?.detail || 'Kelime eklenemedi'),
       })
     }
   }
@@ -554,7 +629,8 @@ export default function Keywords() {
       await keywordsApi.delete(wk_id, activeWorkspace?.id)
       fetchKeywords()
     } catch (err) {
-      setKeywords(keywords.filter((k) => k.wk_id !== wk_id))
+      // Satır silinemedi: listede KALIR, gerçek hata gösterilir
+      setError(`Kelime silinemedi, listede korundu: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }
 
@@ -569,7 +645,7 @@ export default function Keywords() {
       await keywordsApi.deleteAll(activeWorkspace.id)
       fetchKeywords()
     } catch (err) {
-      setError('Silme başarısız oldu')
+      setError(`Kelimeler silinemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }
 
@@ -718,14 +794,20 @@ export default function Keywords() {
       fetchKeywords()
       return res.data
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string }
-      setError(`Hata: ${e?.response?.data?.detail || e?.message || 'Bilinmeyen hata'}`)
+      setError(`Hata: ${apiErrorMessage(err, 'Bilinmeyen hata')}`)
       throw err
     }
   }
 
   const filteredKeywords = keywords.filter((kw) =>
     kw.keyword.toLowerCase().includes(search.toLowerCase())
+  )
+  // Silme/yenileme sonrası liste kısalırsa son geçerli sayfada kal
+  const keywordLastPage = Math.max(0, Math.ceil(filteredKeywords.length / KEYWORD_PAGE_SIZE) - 1)
+  const currentKeywordPage = Math.min(keywordPage, keywordLastPage)
+  const pagedKeywords = filteredKeywords.slice(
+    currentKeywordPage * KEYWORD_PAGE_SIZE,
+    (currentKeywordPage + 1) * KEYWORD_PAGE_SIZE
   )
 
   const workspaceDisabled = !activeWorkspace
@@ -768,7 +850,7 @@ export default function Keywords() {
         </div>
       )}
 
-      <div className="keyword-view-toggle" role="tablist" aria-label="Anahtar kelime gorunumu">
+      <div className="keyword-view-toggle" role="tablist" aria-label="Anahtar kelime görünümü">
         <button
           type="button"
           role="tab"
@@ -863,7 +945,7 @@ export default function Keywords() {
                   (activeWorkspace?.suggested_keywords?.length || 0) > 0 && (
                     <span className="kwx-loaded-pill">
                       <CheckCircle size={12} strokeWidth={2.4} /> Marka profilinden{' '}
-                      {activeWorkspace?.suggested_keywords?.length} seed kelime yüklendi
+                      {activeWorkspace?.suggested_keywords?.length} başlangıç kelimesi yüklendi
                     </span>
                   )}
               </div>
@@ -890,7 +972,7 @@ export default function Keywords() {
                     <div className="kwx-dropzone-sub">
                       {uploadedFile
                         ? 'Dosya hazır — analiz edip içe aktarabilirsiniz'
-                        : 'Hazır keyword listesini toplu içe aktar'}
+                        : 'Hazır anahtar kelime listesini toplu içe aktar'}
                     </div>
                     <input
                       ref={fileInputRef}
@@ -971,19 +1053,20 @@ export default function Keywords() {
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm restore-btn"
-                              onClick={() =>
-                                handleForceInclude({
-                                  keyword: d.keyword || '',
-                                  reason: 'skipped_theme',
-                                  monthly_volume: d.monthly_volume,
-                                  trend_3m: d.trend_3m,
-                                  trend_12m: d.trend_12m,
-                                  competition_score: d.competition_score,
-                                  data_source:
-                                    (d.data_source as KeywordCreate['data_source']) || 'csv',
-                                  geo_target_id: d.geo_target_id,
-                                  language_id: d.language_id,
-                                })
+                              onClick={
+                                () =>
+                                  handleForceInclude({
+                                    keyword: d.keyword || '',
+                                    reason: 'skipped_theme',
+                                    monthly_volume: d.monthly_volume,
+                                    trend_3m: d.trend_3m,
+                                    trend_12m: d.trend_12m,
+                                    competition_score: d.competition_score,
+                                    data_source:
+                                      (d.data_source as KeywordCreate['data_source']) || 'csv',
+                                    geo_target_id: d.geo_target_id,
+                                    language_id: d.language_id,
+                                  }).catch(() => {}) // hata handleForceInclude'da gösterildi
                               }
                             >
                               Geri al
@@ -1012,7 +1095,7 @@ export default function Keywords() {
               {!workspaceDisabled && activeTab === 'manual' && (
                 <div className="kwx-manual-form">
                   <label className="kwx-field">
-                    <span className="kwx-field-label">Keyword</span>
+                    <span className="kwx-field-label">Anahtar Kelime</span>
                     <input
                       className="kwx-input"
                       value={newKeyword.keyword}
@@ -1124,10 +1207,35 @@ export default function Keywords() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {statusNotice && (
+        <ErrorBanner
+          error={statusNotice}
+          onRetry={() => {
+            setStatusNotice(null)
+            setTaskDiscoveryActive(true)
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+          onDismiss={() => setStatusNotice(null)}
+        />
+      )}
+      {assignTaskId && assignPolling.pollFailed && (
+        <ErrorBanner
+          error={POLL_FAILED_MESSAGE}
+          onRetry={assignPolling.recheck}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
 
       {view === 'scores' ? (
         <div className="keyword-list-section">
           <h3 className="kwx-scores-title">Skorlama Sonuçları</h3>
+          {scoreRunsError && (
+            <ErrorBanner
+              error={scoreRunsError}
+              onRetry={() => void fetchScoreRuns()}
+              retryLabel="Listeyi yeniden yükle"
+            />
+          )}
           <div className="kwx-run-row">
             <select
               title="Analiz seç"
@@ -1140,7 +1248,7 @@ export default function Keywords() {
               </option>
               {scoreRuns.map((run) => (
                 <option key={run.id} value={run.id}>
-                  #{run.id} {run.run_name || 'Analiz'} — {run.status}
+                  #{run.id} {run.run_name || 'Analiz'} — {runStatusLabel(run.status)}
                 </option>
               ))}
             </select>
@@ -1197,7 +1305,7 @@ export default function Keywords() {
           {poolTotal >= WORKSPACE_KEYWORD_LIMIT && (
             <div className="field-warning">
               <AlertCircle size={13} />
-              Havuz limiti dolu — yeni keyword eklemek için önce mevcutlardan silin.
+              Havuz limiti dolu — yeni kelime eklemek için önce mevcutlardan silin.
             </div>
           )}
 
@@ -1210,7 +1318,10 @@ export default function Keywords() {
                 type="text"
                 placeholder="Ara…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setKeywordPage(0)
+                }}
               />
             </div>
             <button
@@ -1261,18 +1372,18 @@ export default function Keywords() {
               <table className="kwx-table">
                 <thead>
                   <tr>
-                    <th className="is-left pad-first">Keyword</th>
+                    <th className="is-left pad-first">Anahtar Kelime</th>
                     <th className="is-left">Kaynak</th>
                     <th className="is-left">Sektör</th>
                     <th>Aylık Arama</th>
-                    <th>Trend 12M</th>
-                    <th>Trend 3M</th>
+                    <th>12 Aylık Trend</th>
+                    <th>3 Aylık Trend</th>
                     <th>Rekabet</th>
                     <th className="is-center">İşlem</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredKeywords.map((kw) => {
+                  {pagedKeywords.map((kw) => {
                     const monthlyVolume = kw.wk_monthly_volume ?? kw.monthly_volume
                     const trend12m = kw.wk_trend_12m ?? kw.trend_12m
                     const trend3m = kw.wk_trend_3m ?? kw.trend_3m
@@ -1316,6 +1427,15 @@ export default function Keywords() {
                 </tbody>
               </table>
             </div>
+          )}
+          {!loading && (
+            <TablePager
+              page={currentKeywordPage}
+              pageSize={KEYWORD_PAGE_SIZE}
+              total={filteredKeywords.length}
+              unit="kelime"
+              onPage={setKeywordPage}
+            />
           )}
         </div>
       )}

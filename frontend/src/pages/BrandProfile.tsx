@@ -57,6 +57,8 @@ import {
   WorkspacePhase,
 } from './brandProfileState'
 import PolicyPanel from '../components/PolicyPanel'
+import ErrorBanner from '../components/ErrorBanner'
+import { MAX_POLL_FAILURES, POLL_RECHECK_LABEL } from '../hooks/useTaskPolling'
 import ProfileReviewCards from './brandProfile/ProfileReviewCards'
 import PolicyReviewSection from './brandProfile/PolicyReviewSection'
 import KeywordAnchorReview from './brandProfile/KeywordAnchorReview'
@@ -207,7 +209,7 @@ const ANALYZE_STEPS = [
 ]
 const GENERATE_STEPS = [
   'Profil analiz ediliyor',
-  'Keyword havuzu oluşturuluyor',
+  'Anahtar kelime havuzu oluşturuluyor',
   'Marka odakları eşleştiriliyor',
 ]
 
@@ -233,7 +235,7 @@ const SCOPE_OPTIONS: ReadonlyArray<{ value: ScopeChoice; title: string; desc: st
   {
     value: 'both',
     title: 'Ana marka + bu alt sayfa',
-    desc: 'Ana sayfa ve ilgili birkaç sayfadan marka profili hazırlanır. Marka çalışmasını tamamlayınca (profil, rakipler, keyword onayı) bu alt sayfa markanın altında kendiliğinden hazırlanır ve onu da onaylarsınız. Alt sayfa markanın rakip, dışlama ve konum ayarlarını alır.',
+    desc: 'Ana sayfa ve ilgili birkaç sayfadan marka profili hazırlanır. Marka çalışmasını tamamlayınca (profil, rakipler, anahtar kelime onayı) bu alt sayfa markanın altında kendiliğinden hazırlanır ve onu da onaylarsınız. Alt sayfa markanın rakip, dışlama ve konum ayarlarını alır.',
   },
   {
     value: 'brand',
@@ -454,6 +456,9 @@ function WorkspaceModal({
   const [focusBusy, setFocusBusy] = useState(false)
   const [stripError, setStripError] = useState('')
   const [retryingAnalysis, setRetryingAnalysis] = useState(false)
+  // Üst üste MAX_POLL_FAILURES yoklama hatası: analiz durumu bilinmiyor (başarısız DEĞİL)
+  const [wsPollFailed, setWsPollFailed] = useState(false)
+  const [wsPollAttempt, setWsPollAttempt] = useState(0)
 
   // Legacy formlar (keyword-önce çalışmalar + confirmed düzenleme)
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
@@ -532,19 +537,36 @@ function WorkspaceModal({
   // içinde ilerler; kullanıcı kapatırsa sayfa polling'i zaten devam eder)
   useEffect(() => {
     if (!ws || !LOADING_PHASES.includes(phase as WorkspacePhase)) return
-    const timer = window.setInterval(async () => {
+    let cancelled = false
+    let timer: number | undefined
+    let failures = 0
+    setWsPollFailed(false)
+    // Sıralı yoklama: sonraki istek öncekinin bitmesinden sonra planlanır
+    const tick = async () => {
       try {
         const res = await workspaceApi.get(ws.id)
+        if (cancelled) return
+        failures = 0
         const fresh = workspaceResponseToListRow(res.data as WorkspaceResponse, ws)
         setWs(fresh)
         onWorkspaceUpdated(res.data as WorkspaceResponse)
       } catch {
-        /* poll hatası sessiz — sonraki tikte tekrar dener */
+        if (cancelled) return
+        failures += 1
+        if (failures >= MAX_POLL_FAILURES) {
+          setWsPollFailed(true)
+          return
+        }
       }
-    }, MODAL_POLL_MS)
-    return () => window.clearInterval(timer)
+      timer = window.setTimeout(tick, MODAL_POLL_MS)
+    }
+    timer = window.setTimeout(tick, MODAL_POLL_MS)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ws?.id, phase])
+  }, [ws?.id, phase, wsPollAttempt])
 
   const createWorkspace = async (choice: ScopeChoice | 'root') => {
     setCreating(true)
@@ -822,7 +844,7 @@ function WorkspaceModal({
               disabled={startingKeywords}
             >
               {startingKeywords ? <Loader2 size={15} className="spin-icon" /> : null}
-              Şimdi değil, keywordleri üret
+              Şimdi değil, anahtar kelimeleri üret
             </button>
             <button
               type="button"
@@ -967,7 +989,7 @@ function WorkspaceModal({
     if (phase === 'generating_keywords') {
       return (
         <LoadingStep
-          title="Keyword önerileri hazırlanıyor…"
+          title="Anahtar kelime önerileri hazırlanıyor…"
           sub="Onayladığınız profile göre size özel anahtar kelimeler ve marka odakları üretiliyor."
           steps={GENERATE_STEPS}
         />
@@ -1005,7 +1027,9 @@ function WorkspaceModal({
             </div>
           ) : canRetryKeywords ? (
             <div className="error-banner bpx-banner-action">
-              <span>Keyword üretimi tamamlanamadı. Profil hazır; site yeniden taranmaz.</span>
+              <span>
+                Anahtar kelime üretimi tamamlanamadı. Profil hazır; site yeniden taranmaz.
+              </span>
               <button
                 type="button"
                 className="bpx-btn-raised"
@@ -1013,7 +1037,7 @@ function WorkspaceModal({
                 disabled={startingKeywords}
               >
                 {startingKeywords && <Loader2 size={14} className="spin-icon" />}
-                Keyword üretimini tekrar dene
+                Anahtar kelime üretimini tekrar dene
               </button>
             </div>
           ) : (
@@ -1083,8 +1107,8 @@ function WorkspaceModal({
             title={phase === 'analyzing_keywords' ? 'Site okunuyor…' : 'Marka profili üretiliyor…'}
             sub={
               phase === 'analyzing_keywords'
-                ? 'İlk 10 keyword önerisi hazırlanıyor.'
-                : 'Onaylanan keywordlere göre marka profili üretiliyor.'
+                ? 'İlk 10 anahtar kelime önerisi hazırlanıyor.'
+                : 'Onaylanan anahtar kelimelere göre marka profili üretiliyor.'
             }
             steps={phase === 'analyzing_keywords' ? ANALYZE_STEPS : GENERATE_STEPS}
           />
@@ -1093,7 +1117,7 @@ function WorkspaceModal({
         {canEditKeywordsLegacy && (
           <div className="suggested-keywords">
             <div className="section-title-row">
-              <h4>Onerilen Keywordler</h4>
+              <h4>Önerilen Anahtar Kelimeler</h4>
               <button
                 type="button"
                 className="bpx-btn-raised"
@@ -1111,7 +1135,7 @@ function WorkspaceModal({
                   <input
                     type="text"
                     value={kw}
-                    placeholder={`Keyword ${idx + 1}`}
+                    placeholder={`Kelime ${idx + 1}`}
                     onChange={(e) =>
                       setKeywordDraft((items) =>
                         items.map((item, i) => (i === idx ? e.target.value : item))
@@ -1142,7 +1166,7 @@ function WorkspaceModal({
                 ) : (
                   <CheckCircle2 size={14} />
                 )}
-                {approvingKeywords ? 'Profil Uretiliyor...' : 'Keywordleri Onayla'}
+                {approvingKeywords ? 'Profil Üretiliyor...' : 'Anahtar Kelimeleri Onayla'}
               </button>
             </div>
           </div>
@@ -1283,6 +1307,13 @@ function WorkspaceModal({
       <div className="bpx-modal" onClick={(e) => e.stopPropagation()}>
         {renderHeader()}
         {restoreError && <div className="error-banner">{restoreError}</div>}
+        {wsPollFailed && isLoadingPhase && (
+          <ErrorBanner
+            error={ANALYSIS_POLL_FAILED_MESSAGE}
+            onRetry={() => setWsPollAttempt((n) => n + 1)}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
+        )}
         <div className={`bpx-modal-body${isLoadingPhase ? ' is-loading' : ''}`}>{renderBody()}</div>
       </div>
     </div>
@@ -1553,6 +1584,8 @@ function BrandCard({
 
 const POLLING_STATUSES = new Set(['pending', 'running'])
 const POLL_INTERVAL_MS = 3000
+const ANALYSIS_POLL_FAILED_MESSAGE =
+  'Analiz durumu alınamıyor. Analiz arka planda devam ediyor olabilir.'
 
 // Türkçe duyarsız arama: "İstanbul" / "istanbul" / "ISTANBUL" ve "akıllı" / "akilli" eşleşir
 function normalizeSearchText(value: string): string {
@@ -1601,6 +1634,10 @@ export default function BrandProfile() {
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
   const [marketSource, setMarketSource] = useState<WorkspaceListRow | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Liste yoklaması: ardışık hata sayacı efekt yeniden kurulsa da korunur
+  const listPollFailuresRef = useRef(0)
+  const [listPollFailed, setListPollFailed] = useState(false)
+  const [listPollAttempt, setListPollAttempt] = useState(0)
 
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true)
@@ -1633,7 +1670,7 @@ export default function BrandProfile() {
     if (!workspaceIdParam) return
     const workspaceId = Number(workspaceIdParam)
     if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-      setError('Gecersiz marka calismasi id parametresi.')
+      setError('Bağlantıdaki marka çalışması geçersiz. Listeden bir çalışma seçin.')
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
@@ -1654,7 +1691,9 @@ export default function BrandProfile() {
         if (workspace.deleted_at) {
           setSelectedWs(null)
           setModalOpen(false)
-          setError('Bu marka calismasi arsivlenmis. Panel acilmadi.')
+          setError(
+            'Bu marka çalışması arşivlenmiş. Görmek için "Arşivlenmiş Çalışmaları Göster" seçeneğini açın.'
+          )
           setSearchParams(
             (prev) => {
               const next = new URLSearchParams(prev)
@@ -1672,7 +1711,7 @@ export default function BrandProfile() {
         if (cancelled) return
         setSelectedWs(null)
         setModalOpen(false)
-        setError(`Marka calismasi acilamadi: ${extractErrorMessage(err)}`)
+        setError(`Marka çalışması açılamadı: ${extractErrorMessage(err)}`)
         setSearchParams(
           (prev) => {
             const next = new URLSearchParams(prev)
@@ -1701,9 +1740,15 @@ export default function BrandProfile() {
 
     if (pollingIds.length === 0) return
 
+    // Efekt yeniden kurulunca uçuştaki eski tick yeni zinciri çiftlemesin / yetim zamanlayıcı bırakmasın
+    let cancelled = false
     const tick = async () => {
+      if (cancelled) return
       try {
         const results = await Promise.all(pollingIds.map((id) => workspaceApi.get(id)))
+        if (cancelled) return
+        listPollFailuresRef.current = 0
+        setListPollFailed(false)
         const updated = results.map((r) => r.data as WorkspaceListRow)
         setWorkspaces((prev) =>
           prev.map((ws) => {
@@ -1722,17 +1767,24 @@ export default function BrandProfile() {
           }
         })
       } catch {
-        /* sessiz — poll devam eder */
+        if (cancelled) return
+        listPollFailuresRef.current += 1
+        if (listPollFailuresRef.current >= MAX_POLL_FAILURES) {
+          setListPollFailed(true)
+          return
+        }
       }
+      if (cancelled) return
       pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
 
     pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
 
     return () => {
+      cancelled = true
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
     }
-  }, [workspaces, activeWorkspace, setActiveWorkspace])
+  }, [workspaces, activeWorkspace, setActiveWorkspace, listPollAttempt])
 
   const handleArchive = async (id: number) => {
     // Arşivde onay yoktu; yalnız aktif alt sayfası olan markada, etkisini bildirmek için sorulur
@@ -1951,6 +2003,17 @@ export default function BrandProfile() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {listPollFailed && (
+        <ErrorBanner
+          error={ANALYSIS_POLL_FAILED_MESSAGE}
+          onRetry={() => {
+            listPollFailuresRef.current = 0
+            setListPollFailed(false)
+            setListPollAttempt((n) => n + 1)
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
 
       {loading && workspaces.length === 0 && <div className="loading-indicator">Yükleniyor...</div>}
 

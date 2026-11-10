@@ -319,7 +319,7 @@ def test_01_feature_flag_disabled_returns_404_no_db_no_dispatch(
     assert resp.status_code == 404
     body = resp.json()
     assert body["detail"]["code"] == "FEATURE_DISABLED"
-    assert "not enabled" in body["detail"]["message"].lower()
+    assert "açık değil" in body["detail"]["message"].lower()
 
     # Celery dispatch yapılmamalı
     assert mock_celery_task.call_count == 0

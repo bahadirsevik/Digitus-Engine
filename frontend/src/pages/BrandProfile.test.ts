@@ -148,7 +148,7 @@ describe('getWorkspacePhase — profil-önce sihirbaz matrisi', () => {
   it('statusLabel yeni fazlar için Türkçe etiket döner', () => {
     expect(statusLabel('profile_cards_review')).toBe('Profil Onayı Bekliyor')
     expect(statusLabel('competitor_review')).toBe('Rakip İncelemesi')
-    expect(statusLabel('keyword_anchor_review')).toBe('Keyword & Odak Onayı')
+    expect(statusLabel('keyword_anchor_review')).toBe('Anahtar Kelime ve Odak Onayı')
     expect(statusLabel('analyzing_site')).toBe('Site İnceleniyor')
   })
 })

@@ -40,7 +40,7 @@ class SocialBriefNotFoundError(ValueError):
 
     error_code: str = "BRIEF_NOT_FOUND"
 
-    def __init__(self, message: str = "Social brief not found."):
+    def __init__(self, message: str = "Brief bulunamadı."):
         super().__init__(message)
         self.message = message
 

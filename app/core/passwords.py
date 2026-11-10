@@ -59,9 +59,9 @@ def validate_password_strength(password: str) -> str | None:
     edilebilir kaliplara itmez.
     """
     if password is None or not password.strip():
-        return "Parola bos olamaz."
+        return "Parola boş olamaz."
     if len(password) < MIN_PASSWORD_LENGTH:
-        return f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalidir."
+        return f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalıdır."
     if len(password) > MAX_PASSWORD_LENGTH:
         return f"Parola en fazla {MAX_PASSWORD_LENGTH} karakter olabilir."
     return None

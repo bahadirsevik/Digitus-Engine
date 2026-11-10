@@ -111,6 +111,8 @@
 /* Main Content */
 .main-content {
   flex: 1;
+  /* İçerik ekran genişliğini aşmaz: uzun ad/tablo sayfayı yatay kaydırmaya zorlamaz */
+  min-width: 0;
   margin-left: var(--sidebar-width);
   padding: var(--space-xl);
   min-height: 100vh;

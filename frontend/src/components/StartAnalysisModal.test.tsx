@@ -126,12 +126,11 @@ describe('StartAnalysisModal v3 ürün akışı', () => {
     useBrandStore.setState({ activeWorkspace: null })
   })
 
-  it('motoru salt-okunur v3 olarak gösterir; seçim alanı sunmaz', async () => {
+  it('motor sürümünü göstermez; seçim alanı sunmaz', async () => {
     setup()
 
-    expect(await screen.findByLabelText('Analiz motoru')).toHaveTextContent(
-      'v3 — kilitli üretim motoru'
-    )
+    expect((await screen.findAllByText(/skorlanacak/)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/v3/)).toBeNull()
     expect(screen.queryByRole('combobox', { name: 'Analiz motoru' })).toBeNull()
   })
 
@@ -193,19 +192,26 @@ describe('StartAnalysisModal v3 ürün akışı', () => {
   it('v3 kapalıysa legacy motora düşmez ve başlatmayı engeller', async () => {
     setup({ v3: false })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Motor v3 sunucuda kapalı')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Analiz motoru sunucuda kapalı')
     const start = screen.getByRole('button', { name: /Başlat/ })
     expect(start).toBeDisabled()
     fireEvent.click(start)
     expect(mockedScoring.createRun).not.toHaveBeenCalled()
   })
 
-  it('capability çağrısı başarısızsa legacy motora düşmez', async () => {
+  it('capability çağrısı başarısızsa legacy motora düşmez ve "kapalı" demez, tekrar dene sunar', async () => {
     setup({ capabilityError: true })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Motor v3 sunucuda kapalı')
+    const alert = await screen.findByTestId('engine-check-error')
+    expect(alert).toHaveTextContent('kontrol edilemedi')
+    expect(screen.queryByText(/sunucuda kapalı/)).toBeNull()
     expect(screen.getByRole('button', { name: /Başlat/ })).toBeDisabled()
     expect(mockedScoring.createRun).not.toHaveBeenCalled()
+
+    mockedScoring.getCapabilities.mockResolvedValue(response({ engine_v3_enabled: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tekrar dene' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Başlat/ })).toBeEnabled())
+    expect(screen.queryByTestId('engine-check-error')).toBeNull()
   })
 
   it('tüm kanallar kapatıldığında başlatmayı engeller', async () => {
@@ -342,7 +348,7 @@ describe('StartAnalysisModal lokasyon filtresi kapısı', () => {
 
     await waitFor(() => expect(mockedScoring.executeRun).toHaveBeenCalled())
     expect(onStarted).not.toHaveBeenCalled()
-    expect(await screen.findByText(/bayatladığı için/)).toBeInTheDocument()
+    expect(await screen.findByText(/güncel olmadığı için/)).toBeInTheDocument()
   })
 })
 

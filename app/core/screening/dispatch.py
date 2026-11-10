@@ -352,7 +352,7 @@ def enqueue_screening_child(db, *, attempt: ChannelAssignmentAttempt,
         job.error_code = "ENQUEUE_FAILED"
         job.error_message = str(exc)[:2000]
         child.status = "failed"
-        child.error_message = str(exc)[:2000]
+        child.error_message = "Ön tarama kuyruğa alınamadı. Lütfen tekrar deneyin."
         db.commit()
         # Codex 11. tur #6: tarama hiç başlamadı — parent bitmişse attempt
         # AÇIK KALMAMALI (bir sonraki dispatch'i bloke eder)

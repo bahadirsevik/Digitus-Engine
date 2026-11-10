@@ -195,7 +195,7 @@ def test_channel_assignment_refuses_recompute_for_unconfirmed_profile(
             requested_anchor_version=3,
         )
 
-    assert "onaylanmis degil" in str(exc_info.value)
+    assert "onaylanmış değil" in str(exc_info.value)
     # Run basarisiz isaretlenir (channel_engine disaridaki except blogu)
     db_session.expire_all()
     assert db_session.get(ScoringRun, run.id).status == "failed"

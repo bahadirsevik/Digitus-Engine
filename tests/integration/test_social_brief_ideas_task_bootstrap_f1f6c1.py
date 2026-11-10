@@ -56,7 +56,7 @@ from app.tasks.generation_tasks import (
 )
 
 T0 = datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc)
-SAFE_BOOTSTRAP_ERROR_MSG = "Fikir üretimi worker hazırlığı tamamlanamadı."
+SAFE_BOOTSTRAP_ERROR_MSG = "Fikir üretimi sunucuda başlatılamadı. Fikir üretimini yeniden başlatın."
 
 
 @pytest.fixture

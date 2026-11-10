@@ -104,7 +104,7 @@ def _resolve_active_run(
         if run is None or run.brand_profile_id != workspace_id:
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=404, detail="scoring run not found in workspace")
+            raise HTTPException(status_code=404, detail="Analiz bu marka çalışmasında bulunamadı.")
         return run
     return (
         db.query(ScoringRun)
@@ -234,6 +234,9 @@ def _build_channel_group(
 
 
 def _active_tasks(db: Session, run_id: int) -> Tuple[List[TaskSummary], Optional[TaskSummary]]:
+    from app.tasks.task_status import fail_stale_tasks
+
+    fail_stale_tasks(scoring_run_id=run_id)  # takılı görev "bloklayıcı" kalmasın
     tasks = (
         db.query(TaskResult)
         .filter(

@@ -206,9 +206,9 @@ def test_activation_guards_generating_failed_stale_empty(
     for bad in (generating, failed):
         with pytest.raises(ValueError):
             activate_set(db_session, bad)
-    with pytest.raises(ValueError, match="Stale"):
+    with pytest.raises(ValueError, match="güncel değil"):
         activate_set(db_session, stale_draft)
-    with pytest.raises(ValueError, match="Boş"):
+    with pytest.raises(ValueError, match="Reklam grubu olmayan"):
         activate_set(db_session, empty_draft)
 
 
@@ -354,7 +354,7 @@ def test_reassignment_marks_sets_stale_and_next_success_is_draft(
     # Stale set aktive edilemez (yeniden)
     stale_active.status = SET_ARCHIVED
     db_session.commit()
-    with pytest.raises(ValueError, match="Stale"):
+    with pytest.raises(ValueError, match="güncel değil"):
         activate_set(db_session, stale_active)
 
     # Stale-sonrası yeni üretim: run'da set VAR (stale da olsa) → DRAFT
@@ -420,7 +420,7 @@ def test_mid_generation_reassignment_keeps_set_stale_draft(
     assert (task.result_data or {}).get("status") == SET_DRAFT
     assert active_ad_groups(db_session, run_id).count() == 0
     assert get_active_set(db_session, run_id) is None
-    with pytest.raises(ValueError, match="Stale"):
+    with pytest.raises(ValueError, match="güncel değil"):
         activate_set(db_session, final)
 
 

@@ -60,7 +60,7 @@ describe('jobTypeLabel', () => {
       'SEO+GEO içerikleri · PDF'
     )
     expect(jobTypeLabel({ sections: ['social'], format: 'excel' })).toBe(
-      'Social içerikleri · Excel'
+      'Sosyal medya içerikleri · Excel'
     )
   })
 

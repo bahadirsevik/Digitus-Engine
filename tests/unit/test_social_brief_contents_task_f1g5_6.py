@@ -579,7 +579,7 @@ def test_29_finalize_social_contents_bootstrap_failure_success():
                 attempt_id=42,
                 task_id="task-bf-1",
                 reason_code="worker_bootstrap_failed",
-                error_message="Sosyal içerik worker hazırlığı tamamlanamadı.",
+                error_message="Sosyal medya içerik üretimi sunucuda başlatılamadı. İçerik üretimini yeniden başlatın.",
             )
             mock_db.commit.assert_called_once()
             mock_db.close.assert_called_once()

@@ -12,12 +12,14 @@ from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import httpx
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
 from app.config import settings
 from app.core import markets
+from app.core.error_responses import safe_500_detail
 from app.core.keyword_normalize import normalize_keyword
 from app.integrations.google_ads.service import (
     CAMPAIGN_IMPORT_DISABLED_DETAIL,
@@ -59,7 +61,7 @@ def _translate_invalid_argument(raw: str) -> str:
         )
 
     if "customer" in lower and ("not found" in lower or "invalid" in lower):
-        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. customer_id değerini kontrol edin."
+        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. Seçili Google Ads hesabını kontrol edin."
 
     return f"Google Ads geçersiz parametre: {raw}"
 
@@ -69,7 +71,7 @@ def _get_service() -> GoogleAdsService:
     if not svc.is_configured():
         raise HTTPException(
             status_code=503,
-            detail="Google Ads credentials not configured. Check .env file."
+            detail="Google Ads bağlantısı bu sunucuda kurulmamış. Bağlantının kurulması için sistem yöneticinize başvurun."
         )
     return svc
 
@@ -81,18 +83,23 @@ def _raise_google_ads_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Google Ads yetkilendirmesi gecersiz veya suresi dolmus. "
-                "GOOGLE_ADS_REFRESH_TOKEN yenilenmeli."
+                "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
             ),
         )
     if exc_name == "ResourceExhausted":
         raise HTTPException(
             status_code=429,
-            detail="Google Ads kotasi doldu, daha sonra tekrar deneyin",
+            detail="Google Ads istek kotası doldu; biraz sonra tekrar deneyin.",
         )
     if exc_name in {"InvalidArgument", "GoogleAdsException"}:
         raise HTTPException(status_code=400, detail=_translate_invalid_argument(detail))
-    raise HTTPException(status_code=502, detail=f"Google Ads isteği başarısız oldu: {detail}")
+    raise HTTPException(
+        status_code=502,
+        detail=safe_500_detail(
+            exc, "Google Ads isteği başarısız oldu. Lütfen biraz sonra tekrar deneyin."
+        ),
+    )
 
 
 # --- Request/Response Modelleri ---
@@ -338,7 +345,11 @@ def _assert_url_reachable(url: str) -> None:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"URL erişilemedi: {exc}")
+        logger.warning(f"URL erişim kontrolü başarısız ({url}): {exc}")
+        raise HTTPException(
+            status_code=422,
+            detail="URL'ye ulaşılamadı; adresi kontrol edip tekrar deneyin.",
+        )
 
 
 def _inspect_url_for_seed(url: str) -> tuple[UrlSeedSourceStatus, list[str]]:
@@ -355,7 +366,10 @@ def _inspect_url_for_seed(url: str) -> tuple[UrlSeedSourceStatus, list[str]]:
             try:
                 resp = client.get(current)
             except Exception as exc:
-                warning = f"URL sunucu kontrolünde erişilemedi: {exc}"
+                logger.warning(f"URL seed erişim kontrolü başarısız ({current}): {exc}")
+                warning = (
+                    "URL'ye sunucumuzdan ulaşılamadı; adresin doğru olduğunu kontrol edin."
+                )
                 warnings.append(warning)
                 return (
                     UrlSeedSourceStatus(
@@ -525,7 +539,7 @@ def keyword_ideas_by_url(
         or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
     )
     if not customer_id:
-        raise HTTPException(status_code=400, detail="customer_id gerekli")
+        raise HTTPException(status_code=400, detail="Önce bir Google Ads hesabı seçin.")
 
     keyword_seeds = workspace.suggested_keywords or []
     seeds_hash = _keyword_seed_hash(keyword_seeds) if payload.include_keyword_seed else "none"

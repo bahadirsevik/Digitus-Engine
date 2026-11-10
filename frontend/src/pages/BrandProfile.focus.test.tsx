@@ -376,7 +376,7 @@ describe('Bekleyen alt sayfa: onay, devam şeridi, tekrar deneme', () => {
     expect(Array.from(steps.querySelectorAll('li')).map((li) => li.textContent)).toEqual([
       'Profil',
       'Rakipler',
-      "Keyword'ler",
+      'Anahtar Kelimeler',
       'Alt sayfa',
     ])
     expect(
@@ -491,10 +491,10 @@ describe('Bekleyen alt sayfa: onay, devam şeridi, tekrar deneme', () => {
   it('başarısız ama profilli çalışma: yalnız keyword üretimi tekrar denenir', async () => {
     approveProfile.mockResolvedValue({ data: { ...flowRows[6], status: 'running' } })
     renderAt('/brand-profile?workspace_id=71')
-    expect(await screen.findByText(/Keyword üretimi tamamlanamadı/)).toBeTruthy()
+    expect(await screen.findByText(/Anahtar kelime üretimi tamamlanamadı/)).toBeTruthy()
     expect(screen.queryByText(/Yeni bir çalışma oluşturmayı/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Analizi tekrar dene' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Keyword üretimini tekrar dene' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Anahtar kelime üretimini tekrar dene' }))
     await waitFor(() => expect(approveProfile).toHaveBeenCalledWith(71, { rerun_keywords: true }))
     expect(retryAnalysis).not.toHaveBeenCalled()
   })

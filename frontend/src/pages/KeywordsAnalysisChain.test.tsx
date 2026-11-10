@@ -95,7 +95,7 @@ describe('Keywords V3 analysis chain', () => {
     const labels = Array.from(document.querySelectorAll('.kwx-banner .kwx-step')).map((el) =>
       (el.textContent ?? '').trim()
     )
-    expect(labels).toEqual(['Analiz başladı', 'SOCIAL', 'Havuz teslimi'])
+    expect(labels).toEqual(['Analiz başladı', 'Sosyal Medya', 'Havuz teslimi'])
     expect(screen.queryByText(/İlgi skoru/)).not.toBeInTheDocument()
   })
 
