@@ -517,7 +517,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       {/* Tasarım: başlık + inline analiz seçici + aktif marka pili + yenile */}
       <header className="chx-header">
         <div className="chx-header-left">
-          <div>
+          <div className="chx-title">
             <h1>{CHANNEL_LABELS[channel]}</h1>
             <p>{CHANNEL_SUBTITLES[channel]}</p>
           </div>
@@ -550,18 +550,25 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
             </div>
           )}
         </div>
-        {activeWorkspace && (
-          <span className="chx-brand-pill">
-            <span className="muted">Aktif Marka</span>
-            <b>{activeWorkspace.name}</b>
-            <MarketBadge label={activeWorkspace.market_label} />
-          </span>
-        )}
-        <ExportMenu channel={channel} runId={selectedRunId} disabled={!canEditPool} />
-        <button type="button" className="chx-btn" onClick={() => void fetchRuns()}>
-          <RefreshCw size={14} />
-          Yenile
-        </button>
+        <div className="chx-header-right">
+          {activeWorkspace && (
+            <span
+              className="chx-brand-pill"
+              title={[activeWorkspace.name, activeWorkspace.market_label]
+                .filter(Boolean)
+                .join(' · ')}
+            >
+              <span className="muted">Aktif Marka</span>
+              <b>{activeWorkspace.name}</b>
+              <MarketBadge label={activeWorkspace.market_label} />
+            </span>
+          )}
+          <ExportMenu channel={channel} runId={selectedRunId} disabled={!canEditPool} />
+          <button type="button" className="chx-btn" onClick={() => void fetchRuns()}>
+            <RefreshCw size={14} />
+            Yenile
+          </button>
+        </div>
       </header>
 
       {!activeWorkspace && (
