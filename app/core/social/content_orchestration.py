@@ -40,6 +40,7 @@ from app.core.social.content_worker_input import (
     SocialContentWorkerPreparation,
     prepare_social_content_worker_inputs,
 )
+from app.generators.output_language import output_context_for_run
 from app.generators.social.attempt_state import (
     ALLOWED_CONTENTS_FAILURE_REASONS,
     AttemptNotClaimableError,
@@ -351,6 +352,7 @@ def _finalize_failure(
     task_id: str,
     exc: Exception,
     now: datetime,
+    pending_claimed: bool = False,
 ) -> None:
     """Hata durumunda bağımsız transaction ile attempt'i canonical kilit sırasıyla failed durumuna geçirir."""
     fail_session = session_factory()
@@ -363,6 +365,7 @@ def _finalize_failure(
             reason_code=reason_code,
             error_message=safe_message,
             now=now,
+            pending_claimed=pending_claimed,
         )
         fail_session.commit()
     except Exception:
@@ -441,6 +444,8 @@ def run_social_content_generation(
             task_id=task_id,
             now=current_time,
         )
+        # Çalışma pazarı: AI aşamasında DB yok, burada okunur
+        output_ctx = output_context_for_run(prep_session, preparation.scoring_run_id)
         prep_session.commit()
     except Exception as exc:
         prep_session.rollback()
@@ -450,6 +455,9 @@ def run_social_content_generation(
             task_id=task_id,
             exc=exc,
             now=_resolve_now(now_provider),
+            # Claim başarılıydı ama rollback attempt'i pending'e döndürdü; deterministik
+            # girdi hatası lease süresini beklemeden failed olmalı (aksi halde ~25 dk asılı kalır)
+            pending_claimed=isinstance(exc, SocialContentWorkerInputError),
         )
         raise
     finally:
@@ -510,6 +518,7 @@ def run_social_content_generation(
             preparation=preparation,
             on_item_finished=on_item_finished,
             clock=batch_clock,
+            output_ctx=output_ctx,
         )
     except Exception as exc:
         _finalize_failure(

@@ -222,6 +222,7 @@ class SocialContentWarning(BaseModel):
     idea_id: int
     reason_code: str  # 'ungrounded_claim'
     claims: List[str] = []
+    kind: str = ""  # 'risk' | 'unverified' (rev.4: içerik silinmez, incelemeye işaretlenir)
 
 
 class SocialContentsResponse(BaseModel):

@@ -9,7 +9,7 @@ import { AlertTriangle, Check, Loader2 } from 'lucide-react'
 import { brandProfileApi } from '../../services/api'
 import CompetitorReviewCard from './CompetitorReviewCard'
 import { useCompetitorReview } from './useCompetitorReview'
-import { extractErrorMessage } from '../brandProfileState'
+import { extractErrorMessage, HARD_EXCLUDE_HELP, HARD_EXCLUDE_LABEL } from '../brandProfileState'
 import AiCompetitorDiscovery from './AiCompetitorDiscovery'
 
 export default function PolicyReviewSection({
@@ -65,8 +65,15 @@ export default function PolicyReviewSection({
         confirmed={workspace.status === 'confirmed'}
         onChanged={onSaved}
       />
-      <label className="bpx-label">Mutlaka olmaması gerekenler</label>
+      <label className="bpx-label" htmlFor="policy-hard-exclude">
+        {HARD_EXCLUDE_LABEL}
+      </label>
+      <p className="bpx-section-hint" id="policy-hard-exclude-help">
+        {HARD_EXCLUDE_HELP}
+      </p>
       <textarea
+        id="policy-hard-exclude"
+        aria-describedby="policy-hard-exclude-help"
         className="bpx-textarea"
         rows={2}
         placeholder='Dışlanacak konuları yazın — örn. "kripto para, temettü takibi"'

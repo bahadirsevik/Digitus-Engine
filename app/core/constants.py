@@ -42,6 +42,13 @@ ADS_FINAL_CAPACITY = 60
 SEO_FINAL_CAPACITY = 30
 SOCIAL_FINAL_CAPACITY = 30
 
+# ADS reklam grubu başına hedef KW sayısı (15 KW teslim standardı, plan_ads_15kw_standardi K2)
+ADS_KEYWORDS_PER_GROUP = 15
+# RSA grup başına hedef metin sayıları (Google üst sınırı: 15 başlık / 4 açıklama)
+ADS_HEADLINES_PER_GROUP = 15
+ADS_DESCRIPTIONS_PER_GROUP = 4
+ADS_MIN_CTA_HEADLINES = 3  # teslim şartı: seçilen 15 başlığın en az 3'ü CTA (plan_ads_15kw_standardi §10)
+
 # Havuz çarpanı (testlerde kullanılıyor olabilir)
 POOL_MULTIPLIER = 2.0
 
@@ -227,6 +234,8 @@ AI_STAGES = (
     "ads_funnel", "ads_intent",
     "seo_rel", "seo_bp", "seo_subintent", "seo_authority", "seo_urlgroup",
     "social_rel", "social_v4", "social_intent", "social_normbounds",
+    # Gemini->Claude kiyasi: DeepSeek ikili hakem (plan K4); uretimde kullanilmaz
+    "pairwise_judge",
 )
 # Prompt/config surumu — run manifest'ine yazilir (plan C)
 # v2.1 Faz D (23.07): SEO strategy_fit sözleşmesi + ADS/SOCIAL v2_1 blokları
@@ -275,6 +284,27 @@ STOP_CHANNEL_DISABLED = "channel_disabled"
 # ADS task hard limiti 900s; bunu aşan pending/running task veya
 # TaskResult'sız 'generating' set stale sayılır (E2d reconciliation).
 ADS_TASK_STALE_SECONDS = 1200
+
+# ==================== GENEL TASK BAYATLIK (okuma-ani uzlastirma) ====================
+# `running`: celery task_time_limit (3600s) worker'i ZORLA oldurur; ustune 5 dk
+# pay birakilir. Bu sureyi asan running kayit, worker'in oldugu/yeniden
+# basladigi anlamina gelir. `pending`: normalde saniyeler icinde alinir; sonsuz
+# beklemeyi kesmek icin 2 saat (en uzun task'in 2 kati) — kuyruk gecici
+# tikansa bile mesru bekleme bunu asmaz.
+TASK_RUNNING_STALE_SECONDS = 3600 + 300
+TASK_PENDING_STALE_SECONDS = 2 * 3600
+TASK_STALE_ERROR_MESSAGE = (
+    "Görev zaman aşımına uğradı veya sunucu yeniden başladı; "
+    "işlemi yeniden başlatabilirsiniz."
+)
+SCREENING_NOT_USED_MESSAGE = "Ön tarama tamamlanamadı; sonuçları kullanılmadı."
+# Kendi uzlastirmasi olan task turleri (ADS set reconcile, screening attempt
+# reconcile) bu genel mekanizmadan MUAF: iki uzlastirici ayni satiri
+# yarismamali. Sosyal brief attempt'lerinin TaskResult satiri yoktur.
+# `seo_content`: chord PARENT'i — gercek is chunk task'larinda, parent yalniz
+# finalize'da biter; toplam sure tek task limitini asabilir (yanlis failed ->
+# finalize'in completed yazimi yok sayilirdi). Projedeki tek chord budur.
+TASK_STALE_EXEMPT_TYPES = ("ads", "corpus_screening", "seo_content")
 
 # Backoff sabitleri (pre-filter retry'ları için)
 PREFILTER_BASE_DELAY = 2  # seconds

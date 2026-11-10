@@ -25,10 +25,29 @@ function formatMoney(value: number): string {
   return moneyFormatter.format(value)
 }
 
+const HEALTH_LABEL: Record<string, string> = {
+  'kontrol ediliyor': 'Bağlantı kontrol ediliyor',
+  ok: 'Bağlantı çalışıyor',
+  not_configured: 'Bağlantı kurulmamış',
+  error: 'Bağlantı hatası',
+}
+
+const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
+  ENABLED: 'Etkin',
+  PAUSED: 'Duraklatıldı',
+  REMOVED: 'Kaldırıldı',
+}
+
+const MATCH_TYPE_LABEL: Record<string, string> = {
+  EXACT: 'Tam eşleme',
+  PHRASE: 'Sıralı eşleme',
+  BROAD: 'Geniş eşleme',
+}
+
 function apiErrorMessage(err: unknown, fallback: string): string {
   const friendly = (message: string) =>
     message.includes('invalid_grant')
-      ? 'Google Ads refresh token geçersiz veya süresi dolmuş. GOOGLE_ADS_REFRESH_TOKEN yenilenmeli.'
+      ? 'Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. Bağlantının yenilenmesi için sistem yöneticinize başvurun.'
       : message
 
   if (err && typeof err === 'object') {
@@ -64,10 +83,10 @@ export default function GoogleAdsExplorer() {
       if (status !== 'ok') {
         setError(
           status === 'not_configured'
-            ? 'Google Ads baglantisi yapilandirilmamis. .env dosyasinda GOOGLE_ADS_* degiskenlerini doldurun.'
+            ? 'Google Ads bağlantısı kurulmamış. Kurulum için sistem yöneticinize başvurun.'
             : apiErrorMessage(
                 { message: healthRes.data?.error },
-                'Google Ads baglantisi acik degil. Yapilandirmayi kontrol edin.'
+                'Google Ads bağlantısı şu an kullanılamıyor. Biraz sonra Yenile ile tekrar deneyin; sürerse sistem yöneticinize başvurun.'
               )
         )
         setCustomers([])
@@ -77,14 +96,17 @@ export default function GoogleAdsExplorer() {
       const items = customerRes.data || []
       setCustomers(items)
       if (!selectedCustomer && items[0]) {
-        setSelectedCustomer(items[0].customer_id)
+        // Varsayılan hesap: 956 ile biten; yoksa ilk hesap
+        setSelectedCustomer(
+          (items.find((c) => c.customer_id.endsWith('956')) ?? items[0]).customer_id
+        )
       }
       if (refresh && selectedCustomer) {
         await loadCustomerContext(selectedCustomer, true)
       }
     } catch (err) {
       setHealth((current) => (current === 'kontrol ediliyor' ? 'error' : current))
-      setError(apiErrorMessage(err, 'Google Ads bilgileri alinamadi'))
+      setError(apiErrorMessage(err, 'Google Ads bilgileri alınamadı'))
     } finally {
       setLoading(false)
     }
@@ -108,7 +130,7 @@ export default function GoogleAdsExplorer() {
           : ''
       })
     } catch (err) {
-      setError(apiErrorMessage(err, 'Kampanya bilgileri alinamadi'))
+      setError(apiErrorMessage(err, 'Kampanya bilgileri alınamadı'))
       setCampaigns([])
     } finally {
       setLoading(false)
@@ -130,7 +152,7 @@ export default function GoogleAdsExplorer() {
       })
       setKeywords(res.data.keywords || [])
     } catch (err) {
-      setError(apiErrorMessage(err, 'Kampanya keyword metrikleri alinamadi'))
+      setError(apiErrorMessage(err, 'Kampanya anahtar kelime metrikleri alınamadı'))
       setKeywords([])
     } finally {
       setKeywordLoading(false)
@@ -164,8 +186,8 @@ export default function GoogleAdsExplorer() {
     <div className="google-ads-explorer animate-fade-in">
       <header className="page-header">
         <div>
-          <h1>Google Ads Explorer</h1>
-          <p>Kampanya ve keyword metrikleri icin salt okunur onizleme</p>
+          <h1>Google Ads Gezgini</h1>
+          <p>Kampanya ve anahtar kelime metriklerini görüntüleyin (yalnızca okuma)</p>
         </div>
         <button
           className="btn btn-secondary"
@@ -181,9 +203,9 @@ export default function GoogleAdsExplorer() {
 
       <section className="gads-toolbar">
         <label>
-          <span>Customer</span>
+          <span>Google Ads hesabı</span>
           <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)}>
-            <option value="">Hesap secin</option>
+            <option value="">Hesap seçin</option>
             {customers.map((customer) => (
               <option key={customer.customer_id} value={customer.customer_id}>
                 {customer.customer_id}
@@ -193,7 +215,7 @@ export default function GoogleAdsExplorer() {
         </label>
         <div className={`gads-health gads-health-${health}`}>
           <Eye size={16} />
-          {health}
+          {HEALTH_LABEL[health] || 'Bağlantı durumu bilinmiyor'}
         </div>
       </section>
 
@@ -226,7 +248,7 @@ export default function GoogleAdsExplorer() {
               className={`campaign-row ${selectedCampaign === '' ? 'active' : ''}`}
               onClick={() => setSelectedCampaign('')}
             >
-              <span>Tum kampanyalar</span>
+              <span>Tüm kampanyalar</span>
               <small>{campaigns.length} kampanya</small>
             </button>
             {campaigns.map((campaign) => (
@@ -239,12 +261,13 @@ export default function GoogleAdsExplorer() {
               >
                 <span>{campaign.campaign_name}</span>
                 <small>
-                  {campaign.status} · {campaign.campaign_id}
+                  {CAMPAIGN_STATUS_LABEL[campaign.status] || campaign.status} ·{' '}
+                  {campaign.campaign_id}
                 </small>
               </button>
             ))}
             {!loading && campaigns.length === 0 && (
-              <div className="gads-empty">Bu hesapta kampanya bulunamadi.</div>
+              <div className="gads-empty">Bu hesapta kampanya bulunamadı.</div>
             )}
           </div>
         </div>
@@ -252,20 +275,20 @@ export default function GoogleAdsExplorer() {
         <div className="gads-panel">
           <div className="panel-title">
             <Filter size={18} />
-            Keyword Metrikleri
+            Anahtar Kelime Metrikleri
           </div>
           <div className="metric-filters">
             <label>
               <span>Tarih</span>
               <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRange)}>
-                <option value="LAST_7_DAYS">Son 7 gun</option>
-                <option value="LAST_14_DAYS">Son 14 gun</option>
-                <option value="LAST_30_DAYS">Son 30 gun</option>
-                <option value="ALL_TIME">Tum zamanlar</option>
+                <option value="LAST_7_DAYS">Son 7 gün</option>
+                <option value="LAST_14_DAYS">Son 14 gün</option>
+                <option value="LAST_30_DAYS">Son 30 gün</option>
+                <option value="ALL_TIME">Tüm zamanlar</option>
               </select>
             </label>
             <label>
-              <span>Min impression</span>
+              <span>En az gösterim</span>
               <input
                 type="number"
                 min={0}
@@ -274,7 +297,7 @@ export default function GoogleAdsExplorer() {
               />
             </label>
             <label>
-              <span>Limit</span>
+              <span>En fazla satır</span>
               <input
                 type="number"
                 min={1}
@@ -297,25 +320,25 @@ export default function GoogleAdsExplorer() {
               disabled={!selectedCustomer || keywordLoading}
             >
               <RefreshCw size={16} className={keywordLoading ? 'animate-spin' : ''} />
-              Taze Veri
+              Google Ads'ten yeniden çek
             </button>
           </div>
 
           <div className="gads-summary-grid">
             <div>
-              <span>Keyword</span>
+              <span>Anahtar kelime</span>
               <strong>{formatNumber(keywords.length)}</strong>
             </div>
             <div>
-              <span>Impression</span>
+              <span>Gösterim</span>
               <strong>{formatNumber(totals.impressions)}</strong>
             </div>
             <div>
-              <span>Click</span>
+              <span>Tıklama</span>
               <strong>{formatNumber(totals.clicks)}</strong>
             </div>
             <div>
-              <span>Cost</span>
+              <span>Maliyet</span>
               <strong>{formatMoney(totals.cost)}</strong>
             </div>
             <div>
@@ -328,13 +351,13 @@ export default function GoogleAdsExplorer() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Keyword</th>
-                  <th>Match</th>
+                  <th>Anahtar kelime</th>
+                  <th>Eşleme</th>
                   <th>Kampanya</th>
-                  <th>Ad group</th>
-                  <th>Imp.</th>
-                  <th>Click</th>
-                  <th>Cost</th>
+                  <th>Reklam grubu</th>
+                  <th>Gösterim</th>
+                  <th>Tıklama</th>
+                  <th>Maliyet</th>
                   <th>CPC</th>
                   <th>CTR</th>
                 </tr>
@@ -345,7 +368,7 @@ export default function GoogleAdsExplorer() {
                     key={`${keyword.campaign_id}-${keyword.ad_group_name}-${keyword.keyword}-${index}`}
                   >
                     <td>{keyword.keyword}</td>
-                    <td>{keyword.match_type}</td>
+                    <td>{MATCH_TYPE_LABEL[keyword.match_type] || keyword.match_type}</td>
                     <td>{keyword.campaign_name}</td>
                     <td>{keyword.ad_group_name}</td>
                     <td>{formatNumber(keyword.impressions)}</td>
@@ -358,15 +381,15 @@ export default function GoogleAdsExplorer() {
               </tbody>
             </table>
             {!keywordLoading && keywords.length === 0 && (
-              <div className="gads-empty">Filtrelere uygun keyword metrigi yok.</div>
+              <div className="gads-empty">Filtrelere uyan anahtar kelime metriği yok.</div>
             )}
-            {keywordLoading && <div className="gads-empty">Metrikler yukleniyor...</div>}
+            {keywordLoading && <div className="gads-empty">Metrikler yükleniyor...</div>}
           </div>
         </div>
       </section>
       <div className="gads-note">
         <CreditCard size={16} />
-        Bu ekran kampanya performans metriklerini inceler; keyword havuzuna veri aktarmaz.
+        Bu ekran yalnızca kampanya performansını gösterir; anahtar kelime havuzunuza veri eklemez.
       </div>
     </div>
   )

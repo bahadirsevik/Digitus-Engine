@@ -27,7 +27,7 @@ from app.core.engine.ads import prompts as P
 from app.core.engine.context import EngineInputError
 from app.core.engine.family.rules import UNMATCHED
 from app.core.engine.persistence import (
-    StageContext, load_stage_results, write_stage_results,
+    StageContext, load_stage_results, stage_route, write_stage_results,
 )
 from app.database.models import ScoringRun
 
@@ -63,9 +63,11 @@ def ads_models() -> Dict[str, str]:
     return {stage: ADS_MODEL for stage in ADS_STAGES}
 
 
-def _context(stage: str, firm_block_sha256: str) -> StageContext:
-    return StageContext(model=ADS_MODEL, prompt_sha=ads_prompt_shas()[stage],
-                        firm_block_sha256=firm_block_sha256)
+def _context(run: ScoringRun, stage: str, firm_block_sha256: str) -> StageContext:
+    # provider+model MUHURLU manifest'ten (global route'tan DEGIL)
+    provider, model = stage_route(run, stage)
+    return StageContext(model=model, prompt_sha=ads_prompt_shas()[stage],
+                        firm_block_sha256=firm_block_sha256, provider=provider)
 
 
 def _rows_payload(rows: Sequence[Any]) -> List[Dict[str, Any]]:
@@ -79,7 +81,7 @@ def _signal_stage(db: Session, *, run: ScoringRun, stage: str,
                   required_fields: Sequence[str], ai: Any,
                   firm_sha: str) -> Dict[int, Dict[str, Any]]:
     """Ortak sinyal asamasi: resume + batch + tek seferde kayit."""
-    ctx = _context(stage, firm_sha)
+    ctx = _context(run, stage, firm_sha)
     cached = load_stage_results(db, run=run, stage=stage,
                                 scope_type=SCOPE_KEYWORD, context=ctx)
     out: Dict[int, Dict[str, Any]] = {int(k): dict(v) for k, v in cached.items()}
@@ -87,7 +89,8 @@ def _signal_stage(db: Session, *, run: ScoringRun, stage: str,
 
     def _job(batch):
         def run():                       # WORKER: yalniz AI + dogrulama
-            got = AI.run_batch(ai, stage=stage, model=ADS_MODEL,
+            got = AI.run_batch(ai, stage=stage, model=ctx.model,
+                               provider=ctx.provider,
                                thinking_level=ADS_THINKING, rows=batch,
                                build_prompt=build_prompt, schema=schema,
                                max_tokens=max_tokens, result_key="results")

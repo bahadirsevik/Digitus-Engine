@@ -62,11 +62,14 @@ export default function StartAnalysisModal({
 }) {
   const [on, setOn] = useState({ ads: true, seo: true, social: true })
   const [counts, setCounts] = useState({
-    ads: DEFAULT_CAPACITIES.ads,
-    seo: DEFAULT_CAPACITIES.seo,
-    social: DEFAULT_CAPACITIES.social,
+    ads: String(DEFAULT_CAPACITIES.ads),
+    seo: String(DEFAULT_CAPACITIES.seo),
+    social: String(DEFAULT_CAPACITIES.social),
   })
   const [engineV3Enabled, setEngineV3Enabled] = useState<boolean | null>(null)
+  // Motor durumu sorgusu başarısız (ağ/sunucu) — "kapalı" cevabından ayrı bir durum
+  const [capsCheckFailed, setCapsCheckFailed] = useState(false)
+  const [capsAttempt, setCapsAttempt] = useState(0)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
 
@@ -100,7 +103,7 @@ export default function StartAnalysisModal({
       if (!res.data.has_keywords || res.data.kept_count <= 0) {
         setLocationStatus('error')
         setLocationError(
-          'Lokasyon filtresi sonrası kalacak keyword yok — analiz başlatılamaz. Filtre ayarlarını gözden geçirin.'
+          'Şehir filtresi sonrası kalacak kelime yok — analiz başlatılamaz. Filtre ayarlarını gözden geçirin.'
         )
         return
       }
@@ -108,7 +111,7 @@ export default function StartAnalysisModal({
     } catch (err: unknown) {
       setLocationPreview(null)
       setLocationStatus('error')
-      setLocationError(apiErrorMessage(err, 'Lokasyon filtresi önizlemesi alınamadı'))
+      setLocationError(apiErrorMessage(err, 'Şehir filtresi önizlemesi alınamadı'))
     }
   }, [brandProfileId])
 
@@ -125,19 +128,21 @@ export default function StartAnalysisModal({
   useEffect(() => {
     if (!open) return
     setEngineV3Enabled(null)
+    setCapsCheckFailed(false)
     let cancelled = false
     void (async () => {
       try {
         const caps = await scoringApi.getCapabilities()
         if (!cancelled) setEngineV3Enabled(Boolean(caps.data?.engine_v3_enabled))
       } catch {
-        if (!cancelled) setEngineV3Enabled(false)
+        // Durum bilinmiyor: motor "kapalı" sayılmaz; başlatma yine engelli (engineV3Enabled !== true)
+        if (!cancelled) setCapsCheckFailed(true)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, capsAttempt])
 
   // (b) Birincil düzeltme: modal her açılışta workspace'i SUNUCUDAN taze
   // çeker; kararı store DEĞİL bu çağrı belirler. Bu sayede kayıtlı mod
@@ -181,6 +186,11 @@ export default function StartAnalysisModal({
   if (!open) return null
 
   const validation = validateStartAnalysis(on)
+  const invalidCapacity = CHANNELS.some(
+    (channel) =>
+      on[channel.id] &&
+      (!/^[1-9]\d*$/.test(counts[channel.id]) || !Number.isSafeInteger(Number(counts[channel.id])))
+  )
   const engineUnavailable = engineV3Enabled === false
 
   // (a) Belt-and-braces: bir önizleme BAŞARIYLA yüklendiyse (ör. create'in
@@ -203,7 +213,7 @@ export default function StartAnalysisModal({
   const locationBlocked = locationUnknown || (locationModeActive && locationStatus !== 'ready')
 
   const handleStart = async () => {
-    if (validation || engineV3Enabled !== true || locationBlocked) return
+    if (validation || invalidCapacity || engineV3Enabled !== true || locationBlocked) return
     setStarting(true)
     setError('')
     try {
@@ -213,9 +223,9 @@ export default function StartAnalysisModal({
         ads: on.ads,
         seo: on.seo,
         social: on.social,
-        adsCapacity: counts.ads,
-        seoCapacity: counts.seo,
-        socialCapacity: counts.social,
+        adsCapacity: Number(counts.ads),
+        seoCapacity: Number(counts.seo),
+        socialCapacity: Number(counts.social),
         locationGate:
           locationModeActive && locationPreview
             ? {
@@ -232,7 +242,7 @@ export default function StartAnalysisModal({
       } catch (execErr: unknown) {
         if (LOCATION_RETRY_CODES.has(apiErrorCode(execErr) || '')) {
           setError(
-            'Lokasyon önizlemesi bayatladığı için bu koşu başarısız oldu. Önizleme yenilendi — lütfen tekrar başlatın.'
+            'Konum önizlemesi güncel olmadığı için analiz başlatılamadı. Önizleme yenilendi; kontrol edip analizi yeniden başlatın.'
           )
           void refreshLocationPreview()
           return
@@ -242,7 +252,9 @@ export default function StartAnalysisModal({
       onStarted(runId)
     } catch (err: unknown) {
       if (LOCATION_RETRY_CODES.has(apiErrorCode(err) || '')) {
-        setError('Lokasyon önizlemesi güncel değil. Önizleme yenilendi — lütfen tekrar başlatın.')
+        setError(
+          'Şehir filtresi önizlemesi güncel değil. Önizleme yenilendi — lütfen tekrar başlatın.'
+        )
         void refreshLocationPreview()
         return
       }
@@ -258,16 +270,9 @@ export default function StartAnalysisModal({
       <div className="kwx-modal">
         <h2>Bu analizi ne için yapıyoruz?</h2>
         <p className="kwx-modal-sub">
-          Havuzdaki <b>{poolCount}</b> keyword skorlanacak; seçtiğiniz amaçlara göre kanal atamaları
+          Havuzdaki <b>{poolCount}</b> kelime skorlanacak; seçtiğiniz amaçlara göre kanal atamaları
           yapılır.
         </p>
-
-        <div className="kwx-count-field kwx-engine-field">
-          <span className="lbl">Analiz motoru</span>
-          <div className="kwx-engine-value" aria-label="Analiz motoru">
-            v3 — kilitli üretim motoru
-          </div>
-        </div>
 
         <div className="kwx-channel-grid">
           {CHANNELS.map((c) => {
@@ -289,9 +294,10 @@ export default function StartAnalysisModal({
                   <input
                     type="number"
                     min={1}
+                    step={1}
                     value={counts[c.id]}
                     disabled={!active || starting}
-                    onChange={(e) => setCounts((s) => ({ ...s, [c.id]: Number(e.target.value) }))}
+                    onChange={(e) => setCounts((s) => ({ ...s, [c.id]: e.target.value }))}
                   />
                 </label>
               </div>
@@ -305,10 +311,35 @@ export default function StartAnalysisModal({
             <span>{validation.message}</span>
           </div>
         )}
+        {invalidCapacity && (
+          <div className="kwx-modal-warning" role="alert">
+            <AlertTriangle size={14} />
+            <span>Seçili kanalların kelime sayısı 1 veya daha büyük bir tam sayı olmalı.</span>
+          </div>
+        )}
         {engineUnavailable && (
           <div className="kwx-modal-warning" role="alert">
             <AlertTriangle size={14} />
-            <span>Motor v3 sunucuda kapalı veya doğrulanamadı. Analiz başlatılmadı.</span>
+            <span>
+              Analiz motoru sunucuda kapalı olduğu için analiz başlatılamıyor. Sistem yöneticinize
+              başvurun.
+            </span>
+          </div>
+        )}
+        {capsCheckFailed && (
+          <div className="kwx-modal-warning" role="alert" data-testid="engine-check-error">
+            <AlertTriangle size={14} />
+            <span>
+              Motor durumu şu an kontrol edilemedi; bağlantıyı kontrol edip tekrar deneyin.{' '}
+              <button
+                type="button"
+                className="kwx-modal-cancel"
+                style={{ padding: '2px 10px', marginLeft: 6 }}
+                onClick={() => setCapsAttempt((n) => n + 1)}
+              >
+                Tekrar dene
+              </button>
+            </span>
           </div>
         )}
 
@@ -316,7 +347,7 @@ export default function StartAnalysisModal({
           <div className="kwx-modal-warning" role="alert" data-testid="location-gate-error">
             <AlertTriangle size={14} />
             <span>
-              Marka çalışması bilgisi alınamadı — lokasyon filtresi durumu doğrulanamadı.{' '}
+              Marka çalışması bilgisi alınamadı — şehir filtresi durumu doğrulanamadı.{' '}
               <button
                 type="button"
                 className="kwx-modal-cancel"
@@ -337,7 +368,7 @@ export default function StartAnalysisModal({
         {locationModeActive && locationStatus === 'loading' && (
           <div className="kwx-modal-warning" role="status" data-testid="location-gate-loading">
             <Loader2 size={14} className="spin-icon" />
-            <span>Lokasyon filtresi etkisi kontrol ediliyor…</span>
+            <span>Şehir filtresi etkisi kontrol ediliyor…</span>
           </div>
         )}
         {locationModeActive && locationStatus === 'ready' && locationPreview && (
@@ -345,8 +376,8 @@ export default function StartAnalysisModal({
             <AlertTriangle size={14} />
             <span>
               Şehir politikası: <b>{locationModeLabel(effectiveLocationMode || '')}</b> —{' '}
-              <b>{locationPreview.excluded_count}</b> keyword lokasyon filtresi nedeniyle hariç
-              tutulacak, <b>{locationPreview.kept_count}</b> keyword skorlanacak.
+              <b>{locationPreview.excluded_count}</b> kelime şehir filtresi nedeniyle hariç
+              tutulacak, <b>{locationPreview.kept_count}</b> kelime skorlanacak.
             </span>
           </div>
         )}
@@ -354,7 +385,7 @@ export default function StartAnalysisModal({
           <div className="kwx-modal-warning" role="alert" data-testid="location-gate-error">
             <AlertTriangle size={14} />
             <span>
-              {locationError || 'Lokasyon filtresi önizlemesi alınamadı.'}{' '}
+              {locationError || 'Şehir filtresi önizlemesi alınamadı.'}{' '}
               <button
                 type="button"
                 className="kwx-modal-cancel"
@@ -378,7 +409,11 @@ export default function StartAnalysisModal({
             className="kwx-modal-start"
             onClick={handleStart}
             disabled={
-              starting || validation !== null || engineV3Enabled !== true || locationBlocked
+              starting ||
+              validation !== null ||
+              invalidCapacity ||
+              engineV3Enabled !== true ||
+              locationBlocked
             }
           >
             {starting ? (

@@ -397,6 +397,11 @@
   line-height: 1.5;
 }
 
+.seox-review-top {
+  margin: 10px 0 0;
+  color: var(--text-primary);
+}
+
 .seox-review-list.is-manual {
   color: var(--text-muted);
 }
@@ -756,4 +761,85 @@
 .adsx-regen-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* İddia incelemesi: yeniden değerlendirme + gerekçe tablosu */
+.adsx-reeval {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.adsx-reeval .adsx-regen-btn {
+  margin-left: 0;
+}
+
+.adsx-reeval-result {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.adsx-review {
+  margin: 10px 0;
+  font-size: 12.5px;
+}
+
+.adsx-review > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #b45309;
+}
+
+.adsx-review-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+}
+
+.adsx-review-table th,
+.adsx-review-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.adsx-review-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.adsx-review-sub {
+  margin: 10px 0 4px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 15 KW teslim standardı özeti (grup kartı) */
+.adsx-std {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.adsx-std-summary {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.adsx-std-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.adsx-std-details {
+  margin-top: 6px;
+}
+
+.adsx-std-details > summary {
+  cursor: pointer;
 }

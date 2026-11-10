@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from celery.exceptions import SoftTimeLimitExceeded
 from loguru import logger
 
+from app.core.constants import SCREENING_NOT_USED_MESSAGE
 from app.tasks.celery_app import celery_app
 
 CORPUS_SCREENING_QUEUE = "corpus_screening"
@@ -95,9 +96,10 @@ def _release_deferred_parent(payload) -> bool:
             )
             from app.core.screening.dispatch import fail_attempt
 
-            set_task_failed(session, parent_task_id, str(exc))
+            enqueue_error = "Kanal atama görevi kuyruğa alınamadı. Lütfen tekrar deneyin."
+            set_task_failed(session, parent_task_id, enqueue_error)
             fail_attempt(session, parent_task_id, code="ENQUEUE_FAILED",
-                         message=str(exc))
+                         message=enqueue_error)
             previous = dispatch["previous_status"]
             if previous:
                 rollback_assignment_status(
@@ -437,7 +439,7 @@ def run_corpus_screening_task(self, *, job_id: int, attempt_id: int,
                       error_message=str(exc), task_id=task_id)
             _mark_child_task(
                 session, task_id, status=_child_task_status(job_status),
-                progress=100, error_message=str(exc),
+                progress=100, error_message=SCREENING_NOT_USED_MESSAGE,
                 result_data={"status": job_status,
                              "reason": getattr(exc, "error_code",
                                                type(exc).__name__)})
@@ -457,7 +459,7 @@ def run_corpus_screening_task(self, *, job_id: int, attempt_id: int,
                       error_code="UNEXPECTED", error_message=str(exc),
                       task_id=task_id)
             _mark_child_task(session, task_id, status="failed", progress=100,
-                             error_message=str(exc))
+                             error_message="Ön tarama beklenmeyen bir hata nedeniyle durdu.")
             try_finish_attempt(session, attempt_id=attempt_id)
         finally:
             session.close()

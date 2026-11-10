@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, Ban, ChevronDown, ChevronRight, Plus, Settings2, X } from 'lucide-react'
 import {
+  apiErrorMessage,
   brandProfileApi,
   dashboardApi,
   PolicyTermEntry,
@@ -21,6 +22,7 @@ import {
   poolFreshnessLabel,
   WorkspacePolicyResponse,
 } from '../services/api'
+import ErrorBanner from './ErrorBanner'
 import './PolicyPanel.css'
 
 const CHANNELS: Array<'ads' | 'seo' | 'social'> = ['ads', 'seo', 'social']
@@ -28,9 +30,9 @@ const CHANNELS: Array<'ads' | 'seo' | 'social'> = ['ads', 'seo', 'social']
 function provenanceLabel(term: PolicyTermEntry): string {
   if (term.legacy) return 'eski kayıt'
   const fromUrl = term.source_urls.length > 0
-  if (fromUrl && term.manual_approved) return 'Rakip URL + Manuel'
+  if (fromUrl && term.manual_approved) return 'Rakip URL + elle onaylandı'
   if (fromUrl) return 'Rakip URL'
-  return 'Manuel'
+  return 'Elle eklendi'
 }
 
 export default function PolicyPanel({
@@ -54,8 +56,9 @@ export default function PolicyPanel({
     try {
       const res = await brandProfileApi.getPolicy(workspaceId)
       setPolicy(res.data)
-    } catch {
-      setError('Politika yüklenemedi')
+      setError(null)
+    } catch (err) {
+      setError(`Politika yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
     // Freshness prop'la gelmediyse dashboard özetinden alınır — band yalnız
     // testte değil gerçek ekranda da görünmeli. refresh:true ile cache bypass:
@@ -87,8 +90,8 @@ export default function PolicyPanel({
     try {
       await fn()
       await load()
-    } catch {
-      setError('İşlem başarısız')
+    } catch (err) {
+      setError(`İşlem başarısız: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
       setBusy(false)
     }
@@ -119,7 +122,12 @@ export default function PolicyPanel({
     )
   }
 
-  if (!policy) return null
+  // İlk yükleme başarısızsa panel sessizce kaybolmaz: neden + yeniden yükleme
+  if (!policy) {
+    return error ? (
+      <ErrorBanner error={error} onRetry={() => void load()} retryLabel="Yeniden yükle" />
+    ) : null
+  }
 
   const approvedTerms = policy.competitor_terms.filter((t) => t.status === 'approved')
   const approvedAliases = (policy.topic_policy?.excluded_aliases || []).filter(
@@ -203,14 +211,14 @@ export default function PolicyPanel({
             <div className="polx-channels">
               {CHANNELS.map((ch) => (
                 <label key={ch} className="polx-channel">
-                  <span>{ch.toUpperCase()}</span>
+                  <span>{ch === 'social' ? 'Sosyal Medya' : ch.toUpperCase()}</span>
                   <select
                     value={policy.competitor_policy[ch]}
                     onChange={(e) => setChannel(ch, e.target.value)}
                     disabled={busy}
                   >
                     <option value="block">Engelle</option>
-                    <option value="allow">İzin ver (conquest)</option>
+                    <option value="allow">İzin ver (rakip adıyla reklam)</option>
                   </select>
                 </label>
               ))}
@@ -220,11 +228,11 @@ export default function PolicyPanel({
           {approvedAliases.length > 0 && (
             <div className="polx-block">
               <span className="polx-label">
-                <Ban size={13} /> Eski alias kuralları
+                <Ban size={13} /> Eski yazım varyantı kuralları
               </span>
               <p className="polx-hint">
                 Önceki panelden kalan yazım-varyantı engelleri — görünür kalır, kaldırılabilir; yeni
-                alias eklenmez (konu dışlamaları "Mutlaka olmaması gerekenler"den yönetilir).
+                yazım varyantı eklenmez (konu dışlamaları "Kesin dışlama"dan yönetilir).
               </p>
               <div className="polx-terms">
                 {approvedAliases.map((t) => (

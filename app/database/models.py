@@ -587,6 +587,9 @@ class AdGroup(Base):
     group_theme = Column(Text)
     target_keyword_ids = Column(JSON)  # [1, 5, 12, ...]
     target_keywords = Column(JSON)     # ["kelime1", "kelime2", ...]
+    # 15 KW'ye tamamlamak için gruplayıcının yerleştirdiği/taşıdığı KW id'leri
+    # (target_keyword_ids'in alt kümesi). NULL = bilinmiyor (eski kayıt).
+    fill_keyword_ids = Column(JSON, nullable=True)
     
     # Validation stats
     headlines_generated = Column(Integer, default=0)
@@ -975,6 +978,12 @@ class AiUsageEvent(Base):
     retry_reason = Column(String(255), nullable=True)
     cache_status = Column(String(20), nullable=True)
     price_snapshot = Column(JSON, nullable=True)
+    # Saglayici-bagimsiz telemetri (Claude karsilastirmasi); eski satirlarda NULL
+    provider = Column(String(20), nullable=True)
+    cache_read_tokens = Column(Integer, nullable=True)
+    cache_creation_tokens = Column(Integer, nullable=True)
+    queue_wait_ms = Column(Integer, nullable=True)
+    http_attempts = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -1046,7 +1055,17 @@ class BrandProfile(Base):
     is_system_default = Column(Boolean, nullable=False, default=False, server_default="false")
 
     company_url = Column(String(500), nullable=False)
+    # Crawl kapsami: site (ana sayfa + onemli sayfalar) | page (yalniz girilen sayfa); olusturmada sabit
+    crawl_scope = Column(String(10), nullable=False, default="site", server_default="site")
     competitor_urls = Column(JSON)  # ["url1", "url2", "url3"] — yalniz oneri kaynagi
+    # Odak (alt sayfa) iliskisi: dolu = bu satir bir markanin odagi (tek seviye, crawl_scope='page').
+    # Arsiv soft-delete oldugu icin FK duz; archived_with_parent: ebeveynle birlikte arsivlendi.
+    parent_brand_profile_id = Column(Integer, ForeignKey("brand_profiles.id"), nullable=True, index=True)
+    archived_with_parent = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Marka onayindan sonra kendiliginden acilacak alt sayfa istegi (Faz 3e);
+    # hata metni kullaniciya gosterilir, adres hata halinde SILINMEZ.
+    pending_focus_url = Column(String(2048), nullable=True)
+    pending_focus_error = Column(String(500), nullable=True)
 
     # ── Kalite+maliyet plani A/B/F (plan_kalite_maliyet.md) ──
     # DIKKAT: JSON kolon guncellemelerinde in-place mutation'a guvenme —
@@ -1110,6 +1129,14 @@ class BrandProfile(Base):
     source_pages = Column(JSON)  # [{"url": "...", "title": "...", "status": 200}]
     crawl_content_cache = Column(Text, nullable=True)  # AI'a verilen hazirlanmis site icerigi
     error_message = Column(Text)
+
+    # Arka plan profil analizi "attempt" token'i (plan_yapilacaklar.md 2.2).
+    # Her baslatma (create / keywords-approve / profile-approve rerun) satir
+    # kilidi altinda yeni bir uuid4 yazar; task'in butun status/profile
+    # yazimlari ve janitor yazimlari bu degere KOSULLUDUR. Token'i degismis
+    # (eski) bir attempt hicbir sey yazamaz. Mantik: app/core/site_analyzer/
+    # analysis_attempt.py. NULL = hic analiz baslatilmamis / eski satir.
+    analysis_attempt_id = Column(String(36), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -1526,7 +1553,7 @@ class CorpusScreeningJob(Base):
             "status IN ('pending', 'running', 'completed', 'failed', "
             "'fallback', 'not_needed')",
             name="ck_screening_job_status"),
-        CheckConstraint("provider IN ('gemini', 'deepseek')",
+        CheckConstraint("provider IN ('gemini', 'deepseek', 'anthropic')",
                         name="ck_screening_job_provider"),
         CheckConstraint("batch_size >= 1",
                         name="ck_screening_job_batch_size"),

@@ -42,6 +42,7 @@ from app.core.social.content_contract import (
     validate_social_content_output,
 )
 from app.core.social.content_quality import SocialContentQualityDecision
+from app.generators.claim_review import social_has_open_flags
 from app.database.models import (
     ScoringRun,
     SocialBrief,
@@ -186,6 +187,11 @@ class PersistedSocialContentResult:
 # ==================== SAF PRIVATE VALIDATORLAR ====================
 
 
+def _technical_codes(quality_decision: SocialContentQualityDecision) -> tuple[str, ...]:
+    """reason_codes'tan bilgi amaçlı 'ungrounded_claim' çıkarılır (rev.4: iddia reddetmez, işaretler)."""
+    return tuple(c for c in quality_decision.reason_codes if c != "ungrounded_claim")
+
+
 def _validate_content_quality_consistency(
     content: ValidatedSocialContent,
     quality_decision: SocialContentQualityDecision,
@@ -212,18 +218,19 @@ def _validate_content_quality_consistency(
             brief_id=brief_id,
         )
 
-    if quality_decision.grounding_clean is not True:
+    # rev.4: kalan iddia bulgusu REDDETMEZ ama sessiz de kalmaz — her bulgu
+    # claim_risk:/claim_unverified: uyarısıyla kayda yansımak zorundadır.
+    if quality_decision.grounding_clean is not (quality_decision.claims == ()):
         raise SocialContentPersistenceError(
-            "Grounding temiz olmayan içerik kaydedilemez.",
+            "grounding_clean ile claims tutarsız.",
             error_code=CONTENT_PERSISTENCE_REJECTED,
             field="quality_decision",
             idea_id=idea_id,
             brief_id=brief_id,
         )
-
-    if quality_decision.claims != ():
+    if quality_decision.claims != () and not social_has_open_flags(quality_decision.warnings):
         raise SocialContentPersistenceError(
-            "İddia (claim) içeren içerik kaydedilemez.",
+            "İddia içeren içerik inceleme uyarısı olmadan kaydedilemez.",
             error_code=CONTENT_PERSISTENCE_REJECTED,
             field="quality_decision",
             idea_id=idea_id,
@@ -248,7 +255,7 @@ def _validate_content_quality_consistency(
                 idea_id=idea_id,
                 brief_id=brief_id,
             )
-        if quality_decision.reason_codes != ("duration_mismatch",):
+        if _technical_codes(quality_decision) != ("duration_mismatch",):
             raise SocialContentPersistenceError(
                 "Duration mismatch durumunda reason_codes ('duration_mismatch',) olmalıdır.",
                 error_code=CONTENT_PERSISTENCE_INCONSISTENT,
@@ -273,7 +280,7 @@ def _validate_content_quality_consistency(
                 idea_id=idea_id,
                 brief_id=brief_id,
             )
-        if quality_decision.reason_codes != ():
+        if _technical_codes(quality_decision) != ():
             raise SocialContentPersistenceError(
                 "Valid veya not_applicable durumunda reason_codes boş olmalıdır.",
                 error_code=CONTENT_PERSISTENCE_INCONSISTENT,

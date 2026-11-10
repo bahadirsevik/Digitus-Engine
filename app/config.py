@@ -159,6 +159,12 @@ class Settings(BaseSettings):
     CORPUS_DOWNSTREAM_MAX_APPROVED_USD: float = 8.00
     DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    # Claude karsilastirmasi (plan_claude_gemini_karsilastirma.md): anahtar yoksa
+    # anthropic route'u ilk kullanimda fail-closed; limitler None = sinirsiz.
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_RPM: Optional[int] = None
+    ANTHROPIC_ITPM: Optional[int] = None
+    ANTHROPIC_OTPM: Optional[int] = None
     # V3 motor paralelligi (plan_engine_paralellik.md). IKI AYRI ayar:
     #   ENGINE_AI_CONCURRENCY     -> TEK kosunun thread sayisi. 1 = bugunku
     #                                seri yol (varsayilan; davranis degismez).
@@ -238,6 +244,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "CORS_ORIGINS='*' production'da yasaktir. Virgul ile ayrilmis "
                     "whitelist kullanin (ornek: https://app.example.com)."
+                )
+            if self.DEBUG:
+                raise ValueError(
+                    "DEBUG=true production'da yasaktir (ham hata metni ve "
+                    "init_db() acilir). Ortamda DEBUG=false ayarlayin."
                 )
         return self
 

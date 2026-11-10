@@ -180,7 +180,7 @@ def select_run_keywords(db: Session, run: ScoringRun) -> List[Any]:
 
     if run.keyword_selection_mode == "top_n":
         if not run.keyword_limit:
-            raise EngineInputError("top_n modu keyword_limit ister")
+            raise EngineInputError("Analize alınacak anahtar kelime sayısını girin.")
         # DIKKAT: `.limit()` uygulanmis bir Query uzerinde tekrar
         # `.order_by()` cagirmak SQLAlchemy'de InvalidRequestError uretir.
         # Secim hacme gore yapilir, teslim sirasi keyword_id'dir.
@@ -191,15 +191,15 @@ def select_run_keywords(db: Session, run: ScoringRun) -> List[Any]:
 
     if run.keyword_selection_mode == "specific":
         if not run.selected_keyword_ids:
-            raise EngineInputError("specific modu selected_keyword_ids ister")
+            raise EngineInputError("Analize alınacak anahtar kelimeleri seçin.")
         valid = {row[0] for row in
                  query.filter(Keyword.id.in_(run.selected_keyword_ids))
                       .with_entities(Keyword.id).all()}
         invalid = set(run.selected_keyword_ids) - valid
         if invalid:
             raise EngineInputError(
-                f"{len(invalid)} keyword bu workspace'e ait degil veya pasif: "
-                f"{sorted(invalid)[:5]}")
+                f"Seçilen {len(invalid)} anahtar kelime bu marka çalışmasında yok "
+                f"veya pasif; kelime listesini yenileyip seçiminizi kontrol edin.")
         query = query.filter(Keyword.id.in_(valid))
 
     return query.order_by(Keyword.id.asc()).all()

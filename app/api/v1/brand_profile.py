@@ -2,16 +2,18 @@
 Brand Profile API endpoints.
 Site analysis, profile management, and relevance scoring.
 """
+import copy
 import logging
 from datetime import datetime, timedelta, timezone
 import re
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_ai
 from app.generators.ai_service import AIService
+from app.generators.output_language import output_context
 from app.config import settings
 from app.core.error_responses import safe_500_detail
 from app.database.models import (
@@ -19,16 +21,19 @@ from app.database.models import (
     TaskResult, WorkspaceKeyword,
 )
 from app.schemas.brand_profile import (
-    ProfileAnalyzeRequest, ProfileConfirmRequest,
+    ProfileConfirmRequest,
     BrandProfileResponse, ChannelSeedInput, ChannelSeedResponse,
     KeywordRelevanceResponse, RelevanceComputeResponse,
-    WorkspaceCreateRequest, WorkspaceResponse, WorkspaceListResponse,
+    WorkspaceCreateRequest, WorkspaceResponse, WorkspaceListResponse, FocusCreateRequest,
+    FocusSettingsPreviewResponse, FocusSettingsApplyResponse,
     WorkspaceKeywordApproveRequest, WorkspaceKeywordRefreshRequest,
     WorkspaceKeywordRefreshResponse,
     WorkspaceProfileApproveRequest, AnchorPreviewRequest, AnchorPreviewResponse,
     AnchorGroupResponse,
     LocationFilterPreviewRequest, LocationFilterPreviewResponse,
     LocationPreviewCityCount, LocationPreviewSample, LocationPreviewExemptSample,
+    MarketOptionsResponse, MarketLocationSearchResponse,
+    MarketCopyRequest, MarketCopyResponse, MarketCopySkipped,
 )
 from app.schemas.location_gate import LocationAuditResponse, LocationAuditRow
 from app.core.channel_seed import (
@@ -38,24 +43,45 @@ from app.core.engine_version_gate import (
     LEGACY_RUN_READ_ONLY,
     is_legacy_run,
     require_non_legacy_run,
+    require_relevance_not_v3,
     run_algorithm_version,
 )
-from app.core.workspace import verify_scoring_run, verify_workspace
+from app.core.workspace import (
+    market_change_blocker,
+    set_workspace_market,
+    verify_scoring_run,
+    verify_workspace,
+)
+from app.core.site_analyzer.crawler import (
+    CrawlContentUnusable, _is_same_site_url, _page_key,
+)
 from app.core.site_analyzer.stuck_janitor import fail_if_stuck
+from app.core.site_analyzer.analysis_attempt import (
+    lock_if_current,
+    lock_workspace_row,
+    mark_failed_if_current,
+    new_attempt_id,
+    start_attempt,
+)
 from app.core.policy import (
     PolicyValidationError,
     apply_competitor_review,
     apply_profile_data_update,
 )
 from app.core.policy.guards import find_active_workspace_work
+from app.core.policy.topic_policy import (
+    merge_normalized,
+    parse_excluded_info,
+    remove_normalized,
+)
 from app.core.policy.review import policy_effect_snapshot
 from app.core.scoring.state_machine import (
     invalidate_workspace_outputs,
     transition,
-    transition_atomic,
 )
 from app.core.telemetry import UsageCollector
 from app.core.keyword_normalize import normalize_keyword
+from app.core import markets
 from app.core.workspace_refresh import (
     ExistingWorkspaceKeyword,
     build_refreshed_workspace_keywords,
@@ -97,6 +123,24 @@ EDITABLE_LIST_FIELDS = {
 
 # Skaler (liste olmayan) lokasyon alanı — enum, ayrı doğrulanır.
 LOCATION_MODE_FIELD = "location_filter_mode"
+# Odak olusturmada ebeveynden kopyalanan ve analizde korunan konum alanlari
+LOCATION_PROFILE_KEYS = (LOCATION_MODE_FIELD, "focus_cities", "location_exempt_terms")
+
+
+def _carry_location_fields(workspace: BrandProfile, profile: Dict[str, Any]) -> None:
+    """Mevcut satirdaki konum alanlarini AI profiline tasir (AI semasinda yoklar);
+    aksi halde analiz/yeniden analiz kullanicinin konum politikasini siler."""
+    existing = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
+    for key in LOCATION_PROFILE_KEYS:
+        if key in existing:
+            profile[key] = copy.deepcopy(existing[key])
+
+
+def _has_analyzed_profile(profile_data: Any) -> bool:
+    """Odak satiri analizden once yalniz konum alanlari tasir; bu bir profil sayilmaz."""
+    return isinstance(profile_data, dict) and any(
+        key not in LOCATION_PROFILE_KEYS for key in profile_data
+    )
 
 # Onizleme yanitindaki ornek keyword listeleri icin ust sinir (plan §5.7:
 # "sinirli sayida ornek" — tam keyword metinleri toplu cogaltilmaz).
@@ -130,8 +174,8 @@ def _apply_location_policy(
             raise HTTPException(status_code=400, detail={
                 "code": "INVALID_LOCATION_LIST",
                 "message": (
-                    f"'{field}' bir liste olmalidir; "
-                    f"{type(incoming.get(field)).__name__} gonderildi."),
+                    ("Odak şehirleri" if field == "focus_cities" else "Muafiyet terimleri")
+                    + " liste olarak gönderilmelidir."),
             })
 
     if LOCATION_MODE_FIELD in incoming:
@@ -143,8 +187,8 @@ def _apply_location_policy(
             raise HTTPException(status_code=400, detail={
                 "code": "INVALID_LOCATION_FILTER_MODE",
                 "message": (
-                    f"Gecersiz lokasyon filtresi modu: {raw_mode!r}. "
-                    f"Gecerli degerler: {', '.join(VALID_MODES)}."),
+                    "Geçersiz lokasyon filtresi seçimi. Lokasyon filtresi "
+                    "seçeneklerinden birini seçin."),
             })
     else:
         mode = str(existing.get(LOCATION_MODE_FIELD) or MODE_NONE).strip().lower()
@@ -164,19 +208,19 @@ def _apply_location_policy(
         raise HTTPException(status_code=400, detail={
             "code": "UNSUPPORTED_FOCUS_CITY",
             "message": (
-                "Yalnizca 81 resmi il adi secilebilir; ilce/mahalle "
-                f"desteklenmez. Taninmayan: {', '.join(unsupported[:5])}"),
+                "Yalnızca 81 resmi il adı seçilebilir; ilçe/mahalle "
+                f"desteklenmez. Tanınmayan: {', '.join(unsupported[:5])}"),
         })
     if len(canonical) > MAX_FOCUS_CITIES:
         raise HTTPException(status_code=400, detail={
             "code": "TOO_MANY_FOCUS_CITIES",
-            "message": f"En fazla {MAX_FOCUS_CITIES} odak sehri secilebilir.",
+            "message": f"En fazla {MAX_FOCUS_CITIES} odak şehri seçilebilir.",
         })
     if mode == MODE_FOCUS_ONLY and not canonical:
         raise HTTPException(status_code=400, detail={
             "code": "FOCUS_CITIES_REQUIRED",
             "message": (
-                "'Yalniz sectigim sehirler kalsin' modu en az bir odak sehri "
+                "'Yalnız seçtiğim şehirler kalsın' seçeneği en az bir odak şehri "
                 "gerektirir."),
         })
     sanitized["focus_cities"] = canonical
@@ -278,6 +322,28 @@ def _merge_exclude_themes(user_excluded: Any, ai_excluded: Any) -> List[str]:
     )
 
 
+def _preserve_hard_exclusions(
+    sanitized: Dict[str, Any], excluded_info: Any
+) -> Dict[str, Any]:
+    """exclude_themes = kesin dışlama terimleri (B) ∪ kullanıcının A listesi.
+
+    Kutu A ("Kaçınılacak temalar") yalnız kendi terimlerini gönderir; kutu B
+    ("Kesin dışlama" = `excluded_info`) terimlerini `apply_competitor_review`
+    exclude_themes'e de birleştirir. Eski/bayat bir istemci listesi B'nin yeni
+    eklediği terimleri ezmesin diye bu birleşim SUNUCUDA yeniden kurulur.
+    Sıra deterministiktir (B önce — `apply_competitor_review` ile aynı), tema
+    kümesi değişmedikçe `policy_version` artmaz. `excluded_info` boşsa dokunmaz.
+    """
+    from app.core.policy.topic_policy import merge_normalized
+
+    hard_terms = _parse_excluded_info(excluded_info)
+    if hard_terms:
+        sanitized["exclude_themes"] = merge_normalized(
+            hard_terms, sanitized.get("exclude_themes")
+        )
+    return sanitized
+
+
 def _normalize_seed_keywords(keywords: List[str]) -> List[str]:
     """Normalize and de-duplicate user-approved seed keywords; preserve display text."""
     seen = set()
@@ -304,12 +370,14 @@ def _generate_anchor_texts(profile: Dict[str, Any]) -> List[str]:
 def _apply_profile_review_data(
     incoming: Dict[str, Any],
     existing: Dict[str, Any],
+    excluded_info: Any = None,
 ) -> Dict[str, Any]:
     """Profil-önce akışın 5-kart onayı: kart alanları düzenlenebilir.
 
     `_sanitize_profile_data`'dan farkı: target_audience ve brand_summary bu
     akışta kullanıcı tarafından DÜZENLENEBİLİR (kart 1 ve 4). company_name ve
     sector kilitli kalır. anchor_texts her zaman yeniden türetilir.
+    `excluded_info` verilirse kesin dışlama terimleri exclude_themes'te korunur.
     """
     sanitized: Dict[str, Any] = dict(existing or {})
     incoming = incoming or {}
@@ -328,6 +396,7 @@ def _apply_profile_review_data(
         else:
             sanitized[field] = _normalize_list_items(existing.get(field, []))
 
+    _preserve_hard_exclusions(sanitized, excluded_info)
     _apply_location_policy(sanitized, incoming, existing)
     sanitized["anchor_texts"] = _generate_anchor_texts(sanitized)
     return sanitized
@@ -335,7 +404,8 @@ def _apply_profile_review_data(
 
 def _sanitize_profile_data(
     incoming: Dict[str, Any],
-    existing: Dict[str, Any]
+    existing: Dict[str, Any],
+    excluded_info: Any = None,
 ) -> Dict[str, Any]:
     """
     Protect locked fields and normalize editable lists.
@@ -359,6 +429,7 @@ def _sanitize_profile_data(
         else:
             sanitized[field] = _normalize_list_items(existing.get(field, []))
 
+    _preserve_hard_exclusions(sanitized, excluded_info)
     _apply_location_policy(sanitized, incoming, existing)
     sanitized["anchor_texts"] = _generate_anchor_texts(sanitized)
 
@@ -370,36 +441,27 @@ def _trigger_latest_run_relevance(
     background_tasks: BackgroundTasks,
     workspace: BrandProfile,
 ) -> None:
-    """Path A: workspace'in en son scored run'ı için relevance hesaplamasını tetikler."""
-    if not settings.ENABLE_RELEVANCE_RERANK:
-        return
-    anchor_texts = (workspace.profile_data or {}).get("anchor_texts", [])
-    if not anchor_texts:
-        return
-    latest_scored_run = (
-        db.query(ScoringRun)
-            .filter(
-                ScoringRun.brand_profile_id == workspace.id,
-                ScoringRun.status == "scored",
-                ScoringRun.skip_relevance == False,
-                # Eski motor run'ları salt-okunur: otomatik relevance
-                # (embedding) yalnız v3 run'larında tetiklenir
-                ScoringRun.algorithm_version == "v3",
-            )
-            .order_by(ScoringRun.created_at.desc())
-            .first()
-    )
-    if latest_scored_run and transition_atomic(
-        db, latest_scored_run, "relevance_computing", "scored"
-    ):
-        background_tasks.add_task(
-            _run_relevance_computation,
-            scoring_run_id=latest_scored_run.id,
-        )
-        logger.info(
-            f"Path A: Auto-triggered relevance for run {latest_scored_run.id} "
-            f"(workspace {workspace.id})"
-        )
+    """Path A: otomatik relevance (embedding) tetikleyicisi — KAPALI (no-op).
+
+    Eski motor (v2/v2_1) run'ları salt-okunurdur (embedding çağrısı yok);
+    v3 motoru embedding relevance'ı hiç okumaz (kendi seo_rel/social_rel AI
+    aşamaları vardır) ve v3 execute zaten `scored` -> kanal ataması zincirine
+    relevance'sız geçer. Dolayısıyla hiçbir run için otomatik relevance
+    seçilmez/dispatch edilmez; çağıranlar (profil onayı, keyword onayı,
+    refresh) değişmeden bu fonksiyonu çağırmaya devam eder.
+    """
+    return
+
+
+def _profile_not_confirmable_text(status: Optional[str]) -> str:
+    """Profil onayı reddinde ham durum kodu yerine kullanıcıya ne yapacağını söyler."""
+    if status in ("pending", "running"):
+        return "Site analizi sürüyor; analiz bitince profili onaylayabilirsiniz."
+    if status == "failed":
+        return "Site analizi başarısız oldu; profili onaylamak için analizi yeniden başlatın."
+    if status == "confirmed":
+        return "Profil zaten onaylanmış."
+    return "Profil şu an onaylanamaz. Sayfayı yenileyip profilin güncel durumunu kontrol edin."
 
 
 def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
@@ -413,7 +475,7 @@ def _ensure_confirmable_profile(profile_data: Dict[str, Any]):
     if not anchor_texts:
         raise HTTPException(
             status_code=400,
-            detail="Profil onaylanamaz: anchor text olusmadi. Once profil analizini tamamlayin veya profil alanlarini doldurun.",
+            detail="Profil onaylanamaz: profilden kelime eşleştirmede kullanılacak tanım metinleri çıkarılamadı. Önce profil analizini tamamlayın veya profil alanlarını doldurun.",
         )
 
 
@@ -435,144 +497,13 @@ def get_profile(
     )
 
     if not profile:
-        raise HTTPException(status_code=404, detail="Bu run için profil bulunamadı")
+        raise HTTPException(status_code=404, detail="Bu analiz için marka profili bulunamadı.")
 
     # Lazy takılı-profil kontrolü: startup janitörü tek seferlik olduğu için
     # restart sonrası taze görünüp sonra sonsuza dek running kalan satırları
     # bu OKUMA anında yakalar (bkz. stuck_janitor.py modül docstring'i).
     if fail_if_stuck(db, profile):
         db.refresh(profile)
-
-    return BrandProfileResponse.model_validate(profile)
-
-
-@router.post(
-    "/runs/{run_id}/profile/analyze",
-    response_model=BrandProfileResponse,
-)
-def analyze_profile(
-    run_id: int,
-    request: ProfileAnalyzeRequest,
-    background_tasks: BackgroundTasks,
-    brand_profile_id: int = Query(..., description="Workspace scope"),
-    db: Session = Depends(get_db),
-    ai: AIService = Depends(get_ai),
-):
-    """
-    Start site profile analysis (async).
-    Crawls the company website, extracts brand profile, and optionally validates
-    against competitor sites.
-    """
-    if not settings.ENABLE_SITE_PROFILE_ANALYSIS:
-        raise HTTPException(
-            status_code=400,
-            detail="Site profil analizi devre dışı (ENABLE_SITE_PROFILE_ANALYSIS=false)"
-        )
-
-    scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
-    # Eski motor run'ı salt-okunur: run üzerinden crawl + AI profil analizi
-    # başlatılmaz ve run'ın URL alanları yeniden yazılmaz (workspace
-    # düzeyindeki profil akışı bundan etkilenmez).
-    require_non_legacy_run(scoring_run)
-
-    # Upsert into the workspace BrandProfile linked to this scoring run
-    profile = (
-        db.query(BrandProfile).filter(BrandProfile.id == scoring_run.brand_profile_id).first()
-        if scoring_run.brand_profile_id else None
-    )
-
-    if not profile:
-        profile = BrandProfile(
-            scoring_run_id=run_id,
-            company_url=request.company_url,
-            competitor_urls=request.competitor_urls,
-            status="pending",
-        )
-        db.add(profile)
-    else:
-        profile.company_url = request.company_url
-        profile.competitor_urls = request.competitor_urls
-        profile.status = "pending"
-        profile.error_message = None
-
-    # Update ScoringRun URL fields
-    scoring_run.company_url = request.company_url
-    scoring_run.competitor_urls = request.competitor_urls
-
-    db.commit()
-    db.refresh(profile)
-
-    # Run analysis in background
-    background_tasks.add_task(
-        _run_profile_analysis,
-        profile_id=profile.id,
-        company_url=request.company_url,
-        competitor_urls=request.competitor_urls,
-    )
-
-    return BrandProfileResponse.model_validate(profile)
-
-
-@router.put(
-    "/runs/{run_id}/profile/confirm",
-    response_model=BrandProfileResponse,
-)
-def confirm_profile(
-    run_id: int,
-    request: ProfileConfirmRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    """
-    Confirm or edit a draft profile.
-    Only confirmed profiles are used for relevance scoring.
-    Automatically triggers relevance computation in the background.
-    """
-    scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
-    profile = (
-        db.query(BrandProfile).filter(BrandProfile.id == scoring_run.brand_profile_id).first()
-        if scoring_run and scoring_run.brand_profile_id else None
-    )
-
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profil bulunamadı")
-    # Eski motor run'ı salt-okunur: bu run-kapsamlı onay ucu run için
-    # relevance (embedding) üretimini tetikler — profil mutasyonundan ÖNCE
-    # reddedilir. Workspace onayı /workspaces/{id}/confirm ile yapılır.
-    require_non_legacy_run(scoring_run)
-
-    if profile.status not in ("draft", "confirmed"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Profil durumu '{profile.status}', onaylanamaz (draft veya confirmed olmalı)"
-        )
-
-    # Row lock + gate (plan v13): anchor diff → anchor_version + stale
-    profile = (
-        db.query(BrandProfile)
-        .filter(BrandProfile.id == profile.id)
-        .with_for_update()
-        .first()
-    )
-    existing_data = profile.profile_data if isinstance(profile.profile_data, dict) else {}
-    incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
-    sanitized = _sanitize_profile_data(incoming_data, existing_data)
-    _ensure_confirmable_profile(sanitized)
-    apply_profile_data_update(db, profile, sanitized)
-
-    profile.status = "confirmed"
-    db.commit()
-    db.refresh(profile)
-
-    # Auto-trigger relevance computation in the background
-    if settings.ENABLE_RELEVANCE_RERANK:
-        anchor_texts = (profile.profile_data or {}).get("anchor_texts", [])
-        if anchor_texts:
-            background_tasks.add_task(
-                _run_relevance_computation,
-                scoring_run_id=run_id,
-            )
-            logger.info(f"Auto-triggered relevance computation for run_id={run_id}")
 
     return BrandProfileResponse.model_validate(profile)
 
@@ -593,11 +524,14 @@ def compute_relevance(
     if not settings.ENABLE_RELEVANCE_RERANK:
         raise HTTPException(
             status_code=400,
-            detail="Relevance rerank devre dışı (ENABLE_RELEVANCE_RERANK=false)"
+            detail="Alaka düzeyi hesaplaması bu sunucuda kapalı. Sistem yöneticinize başvurun."
         )
 
     # Eski motor run'ı salt-okunur: embedding çağrısından ÖNCE tipli 409
-    require_non_legacy_run(verify_scoring_run(db, run_id, brand_profile_id))
+    _gated_run = verify_scoring_run(db, run_id, brand_profile_id)
+    require_non_legacy_run(_gated_run)
+    # V3 motoru embedding relevance'ı okumaz: ücretli çağrı + DB yazımı YOK
+    require_relevance_not_v3(_gated_run)
 
     # Yeni mimari: ScoringRun.brand_profile_id üzerinden; eski 1:1 fallback
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == run_id).first()
@@ -687,6 +621,38 @@ def get_relevance_scores(
     ]
 
 
+# ==================== MARKET OPTIONS (hedef konum + cikti dili) ====================
+
+@router.get("/market-options", response_model=MarketOptionsResponse)
+def get_market_options():
+    """Ülke listesi, 5 çıktı dili ve varsayılan pazar (ID'ler yalnız teknik alan)."""
+    return {
+        "countries": [
+            {**c, "label": markets.location_label(c["geo_target_id"])}
+            for c in markets.COUNTRIES
+        ],
+        "languages": markets.LANGUAGES,
+        "default": {
+            "geo_target_id": settings.GOOGLE_ADS_GEO_TARGET_ID or "2792",
+            "language_id": settings.GOOGLE_ADS_LANGUAGE_ID or "1037",
+        },
+    }
+
+
+@router.get("/market-options/locations", response_model=MarketLocationSearchResponse)
+def search_market_locations(
+    q: str = Query("", max_length=100, description="Konum adı (en az 2 karakter; kısaysa yalnız ülkeler)"),
+    country: Optional[str] = Query(None, max_length=2, description="ISO alpha-2 ülke kodu ile daralt"),
+):
+    """Ülke + şehir + il/bölge araması (en fazla 20 sonuç)."""
+    try:
+        items, total = markets.search_locations_page(q, country, limit=20)
+    except markets.MarketCatalogError as exc:
+        logger.error("Konum katalogu okunamadi: %s", exc)
+        raise HTTPException(status_code=503, detail="Konum kataloğu şu an kullanılamıyor.")
+    return {"items": items, "total": total}
+
+
 # ==================== WORKSPACE CRUD ENDPOINTS ====================
 
 @router.post(
@@ -704,6 +670,10 @@ def create_workspace(
     Yeni marka çalışması oluştur.
     Background task'ta site crawl + AI profile extraction başlatılır.
     """
+    market_geo, market_lang = markets.validate_market_input(
+        request.default_geo_target_id, request.default_language_id
+    )
+
     # Erken URL doğrulaması (plan v13): geçersiz/tekrarlı rakip URL'si crawl
     # ve AI süreci hiç başlamadan reddedilir.
     if request.competitor_urls:
@@ -724,25 +694,49 @@ def create_workspace(
             seen_keys.add(key)
 
     must_have_info = request.must_have_info or request.preliminary_info
+    from urllib.parse import urlparse
+    parsed = urlparse(
+        request.company_url if "//" in request.company_url else f"https://{request.company_url}"
+    )
     name = (request.name or "").strip()
     if not name:
         # Sihirbaz akışında tek zorunlu alan URL — adı domain'den türet
-        from urllib.parse import urlparse
-        parsed = urlparse(
-            request.company_url if "//" in request.company_url else f"https://{request.company_url}"
-        )
         name = (parsed.hostname or request.company_url).removeprefix("www.")
+    # Kapsam: açıkça verilmediyse URL yolundan türet (kök → site, alt sayfa → page)
+    crawl_scope = request.crawl_scope or ("site" if parsed.path in ("", "/") else "page")
 
+    # Faz 3e: onaydan sonra otomatik acilacak alt sayfa — create_focus ile AYNI kurallar,
+    # gecersizse calisma satiri hic olusmaz
+    pending_focus_url = None
+    if (request.pending_focus_url or "").strip():
+        if crawl_scope != "site" or request.flow_version != "profile_first":
+            raise HTTPException(
+                status_code=400,
+                detail="Alt sayfa yalnız yeni kurulum akışıyla oluşturulmuş ve tüm siteyi kapsayan marka çalışmalarına eklenebilir.",
+            )
+        try:
+            pending_focus_url, _ = _validate_focus_url(
+                request.pending_focus_url, request.company_url
+            )
+        except FocusCreateError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    # Yeni satır henüz kimseye görünmediği için kilit gerekmez: attempt token'ı
+    # satırla AYNI insert'te yazılır (analiz kapalıysa dispatch yok → token yok).
+    attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
     workspace = BrandProfile(
         name=name,
         company_url=request.company_url,
+        crawl_scope=crawl_scope,
         competitor_urls=request.competitor_urls,
         preliminary_info=must_have_info,
         excluded_info=request.excluded_info,
-        default_geo_target_id=request.default_geo_target_id,
-        default_language_id=request.default_language_id,
+        default_geo_target_id=market_geo,
+        default_language_id=market_lang,
         status="pending",
         onboarding_flow=request.flow_version,
+        analysis_attempt_id=attempt_id,
+        pending_focus_url=pending_focus_url,
     )
     db.add(workspace)
     db.commit()
@@ -756,6 +750,7 @@ def create_workspace(
                 workspace_id=workspace.id,
                 company_url=request.company_url,
                 competitor_urls=request.competitor_urls,
+                attempt_id=attempt_id,
             )
         else:
             # Legacy akış: ilk aşama keyword önerisi
@@ -766,9 +761,558 @@ def create_workspace(
                 competitor_urls=request.competitor_urls,
                 must_have_info=must_have_info,
                 excluded_info=request.excluded_info,
+                attempt_id=attempt_id,
             )
 
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = False  # yeni çalışmada veri yok
+    return response
+
+
+# capabilities BİLEREK yok: ürüne özgü olabilir ve hiçbir kod okumuyor
+# competitor_urls terimlerin source_urls desteğiyle birlikte taşınır: URL'siz kopya,
+# boş URL listesiyle yapılan ilk kayıtta URL kaynaklı engelleri serbest bırakırdı
+_FOCUS_INHERITED_FIELDS = (
+    "competitor_urls", "competitor_terms", "competitor_url_decisions",
+    "competitor_policy", "topic_policy",
+    "excluded_info", "default_geo_target_id", "default_language_id",
+)
+
+
+def _with_scheme(url: str) -> str:
+    url = (url or "").strip()
+    return url if "//" in url else f"https://{url}"
+
+
+class FocusCreateError(Exception):
+    """Odak olusturma cekirdeginin dogrulama hatasi (HTTP durumu + Turkce kullanici metni)."""
+
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def _validate_focus_url(raw_url: str, brand_company_url: str) -> Tuple[str, str]:
+    """Alt sayfa adresi kurallari (create_focus + pending_focus_url ORTAK).
+
+    Doner: (semali normalize adres, sayfa anahtari). Hata: FocusCreateError(400).
+    """
+    from urllib.parse import urlparse
+
+    url = _with_scheme(raw_url)
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise FocusCreateError(400, "Geçersiz alt sayfa adresi")
+    brand_url = _with_scheme(brand_company_url)
+    if not _is_same_site_url(url, brand_url):
+        raise FocusCreateError(400, "Alt sayfa markanın sitesiyle aynı sitede olmalı")
+    page_key = _page_key(url)
+    if page_key == _page_key(brand_url):
+        raise FocusCreateError(400, "Ana sayfa zaten markanın kendisi")
+    return url, page_key
+
+
+def _create_focus_core(
+    db: Session, parent: BrandProfile, raw_url: str
+) -> Tuple[BrandProfile, bool]:
+    """Odak olusturma cekirdegi — COMMIT YOK (yalniz flush); `parent` KILITLI gelmeli.
+
+    Ayni sayfa icin AKTIF odak varsa onu (created=False) dondurur; yoksa satiri + miras
+    kopyasini ekler (created=True). Dogrulama hatasi FocusCreateError. Analiz dispatch
+    ve commit cagiranin isidir (yeni odagin attempt token'i `focus.analysis_attempt_id`).
+    """
+    from urllib.parse import urlparse
+
+    # kilit beklenirken marka arsivlenmis olabilir; arsivli markaya aktif odak eklenmez
+    if parent.deleted_at is not None:
+        raise FocusCreateError(
+            404, "Marka çalışması bulunamadı veya arşivlenmiş"
+        )
+    if parent.parent_brand_profile_id is not None or parent.crawl_scope != "site":
+        raise FocusCreateError(400, "Alt sayfa yalnız marka çalışmasına eklenebilir")
+    if parent.status != "confirmed":
+        raise FocusCreateError(409, "Önce marka profilini onaylayın")
+
+    url, page_key = _validate_focus_url(raw_url, parent.company_url)
+    active_focuses = db.query(BrandProfile).filter(
+        BrandProfile.parent_brand_profile_id == parent.id,
+        BrandProfile.deleted_at.is_(None),
+    ).all()
+    for existing in active_focuses:
+        if _page_key(_with_scheme(existing.company_url)) == page_key:
+            return existing, False
+
+    parent_url = _with_scheme(parent.company_url)
+    parent_profile = parent.profile_data if isinstance(parent.profile_data, dict) else {}
+    location = {
+        key: copy.deepcopy(parent_profile[key])
+        for key in LOCATION_PROFILE_KEYS if key in parent_profile
+    }
+    # None alanlar HİÇ verilmez: JSON kolona açık None 'null' JSON'u yazar (SQL NULL değil)
+    inherited = {
+        field: copy.deepcopy(getattr(parent, field))
+        for field in _FOCUS_INHERITED_FIELDS if getattr(parent, field) is not None
+    }
+    if location:
+        inherited["profile_data"] = location
+    brand_label = parent.name or (urlparse(parent_url).hostname or "")
+    attempt_id = new_attempt_id() if settings.ENABLE_SITE_PROFILE_ANALYSIS else None
+    focus = BrandProfile(
+        name=f"{brand_label} — {urlparse(url).path.rstrip('/')[:80] or '/'}"[:200],
+        company_url=url,
+        crawl_scope="page",
+        onboarding_flow="profile_first",
+        parent_brand_profile_id=parent.id,
+        status="pending",
+        analysis_attempt_id=attempt_id,
+        **inherited,
+    )
+    db.add(focus)
+    db.flush()
+    return focus, True
+
+
+def _dispatch_analysis(background_tasks: BackgroundTasks, row: BrandProfile) -> None:
+    """Profil-once analizi kuyruga alir (odakta rakip kesfi/dogrulamasi calismaz)."""
+    if settings.ENABLE_SITE_PROFILE_ANALYSIS:
+        background_tasks.add_task(
+            _run_profile_analysis_first,
+            workspace_id=row.id,
+            company_url=row.company_url,
+            competitor_urls=None if row.parent_brand_profile_id is not None
+            else row.competitor_urls,
+            attempt_id=row.analysis_attempt_id,
+        )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/focuses",
+    response_model=WorkspaceResponse,
+    status_code=201,
+)
+def create_focus(
+    workspace_id: int,
+    request: FocusCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Onaylı markanın altına alt sayfa odağı ekle (normal bir workspace olarak).
+
+    Ebeveyn satırı kilitlenir: aynı sayfa için eşzamanlı çift istek serileşir.
+    Politika alanları oluşturma anında KOPYALANIR (capabilities hariç).
+    """
+    verify_workspace(db, workspace_id)
+    parent = lock_workspace_row(db, workspace_id)
+    if parent is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
+        )
+    try:
+        focus, created = _create_focus_core(db, parent, request.url)
+    except FocusCreateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    if not created:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bu sayfa için zaten bir odak var")
+    db.commit()
+    db.refresh(focus)
+
+    _dispatch_analysis(background_tasks, focus)
+    return WorkspaceResponse.model_validate(focus)
+
+
+def _run_keyword_suggestions_for_copy(workspace_id: int) -> None:
+    """Background task (pazar kopyası): onaylı kopyaya YALNIZ `suggested_keywords` yazar.
+
+    `_run_keyword_suggestion_from_profile` status'u running -> keywords_review yaptığı için
+    kullanılmaz. Burada status, profile_data, analysis_attempt_id, policy_version ve
+    profile_approved_at'a dokunulmaz; hata halinde kopya `confirmed` kalır, öneri boş kalır.
+    İdempotent: öneri zaten varsa AI çağrılmaz.
+    """
+    from app.database.connection import SessionLocal
+    from app.generators.ai_service import get_ai_service
+    from app.core.site_analyzer.profile_extractor import (
+        ProfileExtractor,
+        resolve_site_content,
+    )
+    from app.core.policy.competitor_policy import approved_competitor_terms, match_term
+
+    def _eligible(ws: Optional[BrandProfile]) -> bool:
+        return bool(
+            ws is not None
+            and ws.deleted_at is None
+            and ws.status == "confirmed"
+            and ws.parent_brand_profile_id is None
+            and not ws.suggested_keywords
+        )
+
+    db = SessionLocal()
+    ai = None
+    try:
+        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
+        if not _eligible(workspace):
+            return
+
+        ai = get_ai_service(api_key=settings.GEMINI_API_KEY)
+        ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
+        extractor = ProfileExtractor(ai)
+        profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
+        competitor_terms = approved_competitor_terms(workspace)
+        preliminary_info = workspace.preliminary_info
+        excluded_info = workspace.excluded_info
+        output_ctx = output_context(workspace)
+        site_content, _pages, content_error = resolve_site_content(
+            extractor, workspace.company_url, workspace.crawl_content_cache,
+            crawl_scope=workspace.crawl_scope,
+        )
+        if content_error:
+            logger.warning(f"Market copy suggestions skipped for workspace_id={workspace_id}: {content_error}")
+            return
+        suggestions = extractor.suggest_keywords_from_profile(
+            site_content,
+            profile,
+            must_have_info=preliminary_info,
+            excluded_info=excluded_info,
+            competitor_terms=competitor_terms,
+            output_ctx=output_ctx,
+        )
+        suggestions = [k for k in suggestions if match_term(k, competitor_terms) is None]
+        keywords = _normalize_seed_keywords(suggestions)[:10]
+        if not keywords:
+            return
+
+        workspace = lock_workspace_row(db, workspace_id)  # AI sürerken durum değişmiş olabilir
+        if not _eligible(workspace):
+            db.rollback()
+            return
+        workspace.suggested_keywords = keywords
+        db.commit()
+    except Exception as exc:
+        logger.warning(f"Market copy keyword suggestions failed for workspace_id={workspace_id}: {exc}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        _close_ai_quietly(ai)
+        db.close()
+
+
+# Pazar kopyası (plan_pazar_dil_secimi Faz 3). capabilities / suggested_keywords /
+# validation_data / policy_version / anchor_version / pending_focus_* BİLEREK kopyalanmaz.
+_MARKET_COPY_FIELDS = (
+    "competitor_urls", "competitor_terms", "competitor_url_decisions",
+    "competitor_policy", "topic_policy", "channel_strategy",
+    "preliminary_info", "excluded_info", "source_pages", "crawl_content_cache",
+)
+
+
+def _canonical_market(geo: Any, lang: Any) -> Optional[Tuple[str, str]]:
+    """Kayıtlı (geo, dil) → kanonik çift; boş/geçersiz eski kayıt None (eşleşmez)."""
+    try:
+        g, l = markets.validate_market_input(geo, lang)
+    except HTTPException:
+        return None
+    return (g, l) if g and l else None
+
+
+def _site_key(url: str) -> str:
+    return _with_scheme(url).strip().lower().rstrip("/")
+
+
+@router.post(
+    "/workspaces/{workspace_id}/markets",
+    response_model=MarketCopyResponse,
+    status_code=201,
+)
+def create_market_copies(
+    workspace_id: int,
+    request: MarketCopyRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Onaylı markadan, seçilen her (hedef konum, dil) için bağımsız pazar kopyası aç.
+
+    Kaynak FOR UPDATE kilitli; tek transaction, tek commit. Mevcut pazarlar `skipped`
+    olur (üst düzey 409 yalnız TÜMÜ atlanırsa). Öneri kelimeler commit SONRASI kopya
+    başına arka planda üretilir (`_run_keyword_suggestions_for_copy`; status'a dokunmaz).
+    """
+    # Tüm liste önce doğrulanır (hiçbir şey yazılmadan); kanonik değerler kullanılır
+    items: List[Tuple[str, str]] = []
+    for item in request.markets:
+        geo, lang = markets.validate_market_input(item.geo_target_id, item.language_id)
+        if (geo, lang) in items:
+            raise HTTPException(
+                status_code=422,
+                detail="Aynı pazar (hedef konum + dil) listede birden fazla kez seçilmiş.",
+            )
+        items.append((geo, lang))
+
+    source = _lock_workspace_for_policy_mutation(db, workspace_id)
+    if source.parent_brand_profile_id is not None or source.status != "confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "MARKET_COPY_SOURCE_INVALID",
+                "message": "Pazar yalnız onaylanmış bir marka çalışmasından eklenebilir "
+                "(alt sayfa odağından veya onaysız çalışmadan değil).",
+            },
+        )
+
+    from urllib.parse import urlparse
+
+    source_key = _site_key(source.company_url)
+    existing: Dict[Tuple[str, str], str] = {}
+    siblings = db.query(BrandProfile).filter(
+        BrandProfile.deleted_at.is_(None),
+        BrandProfile.crawl_scope == "site",
+        BrandProfile.parent_brand_profile_id.is_(None),
+    ).all()
+    for row in siblings:
+        market = _canonical_market(row.default_geo_target_id, row.default_language_id)
+        if market and _site_key(row.company_url) == source_key:
+            existing.setdefault(market, row.name or row.company_url)
+
+    brand_label = source.name or (urlparse(_with_scheme(source.company_url)).hostname or "")
+    own = _canonical_market(source.default_geo_target_id, source.default_language_id)
+    if own:
+        own_suffix = f" — {markets.location_short_label(own[0])}/{markets.language_name(own[1])}"
+        if brand_label.endswith(own_suffix):
+            brand_label = brand_label[: -len(own_suffix)]  # kopyanın kopyasında ek üst üste binmesin
+
+    profile = source.profile_data if isinstance(source.profile_data, dict) else None
+    copies: List[BrandProfile] = []
+    skipped: List[MarketCopySkipped] = []
+    for geo, lang in items:
+        if (geo, lang) in existing:
+            skipped.append(MarketCopySkipped(
+                geo_target_id=geo,
+                language_id=lang,
+                market_label=markets.market_label(
+                    BrandProfile(default_geo_target_id=geo, default_language_id=lang)
+                ),
+                reason=f"Bu pazar için çalışma zaten var: {existing[(geo, lang)]}",
+            ))
+            continue
+        # None alanlar HİÇ verilmez (JSON kolona açık None 'null' yazar)
+        inherited = {
+            f: copy.deepcopy(getattr(source, f))
+            for f in _MARKET_COPY_FIELDS if getattr(source, f) is not None
+        }
+        if profile is not None:
+            # konum politikası alanları atılır: kopyada filtre modu 'none' (alan yok = none)
+            inherited["profile_data"] = {
+                k: copy.deepcopy(v) for k, v in profile.items() if k not in LOCATION_PROFILE_KEYS
+            }
+        suffix = f" — {markets.location_short_label(geo)}/{markets.language_name(lang)}"
+        copies.append(BrandProfile(
+            name=f"{brand_label[: 200 - len(suffix)]}{suffix}",
+            company_url=source.company_url,
+            crawl_scope=source.crawl_scope,
+            strategy_version=source.strategy_version or 0,
+            status="confirmed",
+            profile_approved_at=datetime.now(timezone.utc),
+            onboarding_flow="profile_first",
+            default_geo_target_id=geo,
+            default_language_id=lang,
+            **inherited,
+        ))
+
+    if not copies:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MARKET_COPY_ALL_EXIST",
+                "message": "Seçilen pazarların hepsi için çalışma zaten var.",
+                "skipped": [s.model_dump() for s in skipped],
+            },
+        )
+    db.add_all(copies)
+    db.commit()
+    created = []
+    for row in copies:
+        db.refresh(row)
+        response = WorkspaceResponse.model_validate(row)
+        response.market_locked = False  # yeni kopyada veri yok
+        created.append(response)
+        background_tasks.add_task(_run_keyword_suggestions_for_copy, workspace_id=row.id)
+    return MarketCopyResponse(created=created, skipped=skipped, source_id=source.id)
+
+
+_FOCUS_FIELD_LABELS = {
+    "competitor_urls": "Rakip adresleri",
+    "competitor_terms": "Rakip terimleri",
+    "competitor_url_decisions": "Rakip URL kararları",
+    "competitor_policy": "Rakip kanal politikası",
+    "topic_policy": "Konu politikası",
+    "excluded_info": "Dışlanacak konular",
+    "default_geo_target_id": "Ülke",
+    "default_language_id": "Dil",
+    "location_filter_mode": "Konum filtresi",
+    "focus_cities": "Odak şehirler",
+    "location_exempt_terms": "Konum muafiyetleri",
+}
+
+
+def _brand_for_focus_settings(db: Session, workspace_id: int) -> BrandProfile:
+    brand = verify_workspace(db, workspace_id)
+    if brand.parent_brand_profile_id is not None or brand.crawl_scope != "site":
+        raise HTTPException(
+            status_code=400, detail="Yalnız marka çalışmasında kullanılabilir"
+        )
+    return brand
+
+
+def _active_focuses(db: Session, brand_id: int) -> List[BrandProfile]:
+    return (
+        db.query(BrandProfile)
+        .filter(
+            BrandProfile.parent_brand_profile_id == brand_id,
+            BrandProfile.deleted_at.is_(None),
+        )
+        .order_by(BrandProfile.id)
+        .all()
+    )
+
+
+# Pazar alanları setattr ile DEĞİL set_workspace_market ile yazılır; kıyas kanonik (1055 == 1037)
+_FOCUS_MARKET_CLEANERS = {
+    "default_geo_target_id": markets._clean_geo,
+    "default_language_id": markets._clean_language,
+}
+
+
+def _focus_setting_diff(brand: BrandProfile, focus: BrandProfile) -> List[str]:
+    """Marka ile odak arasında farklı miras alanları (= ezilecek yerel düzenlemeler)."""
+    diff = [
+        f for f in _FOCUS_INHERITED_FIELDS
+        if (
+            _FOCUS_MARKET_CLEANERS[f](getattr(focus, f)) != _FOCUS_MARKET_CLEANERS[f](getattr(brand, f))
+            if f in _FOCUS_MARKET_CLEANERS
+            else getattr(focus, f) != getattr(brand, f)
+        )
+    ]
+    b = brand.profile_data if isinstance(brand.profile_data, dict) else {}
+    f = focus.profile_data if isinstance(focus.profile_data, dict) else {}
+    diff += [k for k in LOCATION_PROFILE_KEYS if f.get(k) != b.get(k)]
+    return diff
+
+
+@router.post(
+    "/workspaces/{workspace_id}/focuses/settings/preview",
+    response_model=FocusSettingsPreviewResponse,
+)
+def preview_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
+    """Marka ayarlarını alt sayfalara uygulamanın önizlemesi (salt-okunur)."""
+    brand = _brand_for_focus_settings(db, workspace_id)
+    items = []
+    for focus in _active_focuses(db, brand.id):
+        busy = focus.status in ("pending", "running") or bool(
+            find_active_workspace_work(db, focus.id)
+        )
+        diff = _focus_setting_diff(brand, focus)
+        # Odakta veri varsa pazar uygulanmaz (apply ile ayni kural) — degisiklik olarak gosterme
+        market_locked = bool(
+            any(f in _FOCUS_MARKET_CLEANERS for f in diff) and market_change_blocker(db, focus)
+        )
+        items.append({
+            "id": focus.id,
+            "name": focus.name,
+            "busy": busy,
+            "market_locked": market_locked,
+            "changes": [
+                {"field": f, "label": _FOCUS_FIELD_LABELS[f]}
+                for f in diff
+                if not (market_locked and f in _FOCUS_MARKET_CLEANERS)
+            ],
+        })
+    return {"focuses": items}
+
+
+@router.post(
+    "/workspaces/{workspace_id}/focuses/settings/apply",
+    response_model=FocusSettingsApplyResponse,
+)
+def apply_focus_settings(workspace_id: int, db: Session = Depends(get_db)):
+    """Marka politika/konum ayarlarını her aktif odağa uygula (capabilities hariç).
+
+    Her odak kendi transaction'ında, mevcut politika mutasyon yolundan geçer;
+    işi süren odak atlanır, döngü durmaz.
+    """
+    brand = _brand_for_focus_settings(db, workspace_id)
+    focus_ids = [(f.id, f.name) for f in _active_focuses(db, brand.id)]
+    applied, skipped = [], []
+
+    for focus_id, focus_name in focus_ids:
+        try:
+            db.expire_all()  # kilitli SELECT taze status/profile_data döndürsün
+            focus = _lock_workspace_for_policy_mutation(db, focus_id)
+            # Her odak commit/rollback'ten sonra marka taze okunur (expire_on_commit)
+            brand_profile = brand.profile_data if isinstance(brand.profile_data, dict) else {}
+            if not _has_analyzed_profile(focus.profile_data):
+                # Profil yok: konum yazmak anchor_texts ekleyip 'analiz edilmiş' gösterirdi
+                db.rollback()
+                skipped.append({"id": focus_id, "name": focus_name,
+                                "reason": "profil analizi tamamlanmadı"})
+                continue
+            diff = _focus_setting_diff(brand, focus)
+            before = policy_effect_snapshot(focus)
+            old_user_terms = parse_excluded_info(focus.excluded_info)
+            market_warning = None
+            if any(f in _FOCUS_MARKET_CLEANERS for f in diff):
+                try:
+                    set_workspace_market(
+                        db, focus, brand.default_geo_target_id, brand.default_language_id
+                    )
+                except HTTPException as exc:
+                    if not (isinstance(exc.detail, dict) and exc.detail.get("code") == "MARKET_LOCKED"):
+                        raise
+                    market_warning = "pazar değişmez (odakta veri var)"
+                    diff = [f for f in diff if f not in _FOCUS_MARKET_CLEANERS]
+            for field in diff:
+                if field in _FOCUS_INHERITED_FIELDS and field not in _FOCUS_MARKET_CLEANERS:
+                    setattr(focus, field, copy.deepcopy(getattr(brand, field)))
+            location_diff = [k for k in diff if k in LOCATION_PROFILE_KEYS]
+            anchor_changed = False
+            if location_diff or "excluded_info" in diff:
+                new_profile = dict(focus.profile_data)
+                for key in location_diff:
+                    if brand_profile.get(key) is None:
+                        new_profile.pop(key, None)
+                    else:
+                        new_profile[key] = copy.deepcopy(brand_profile[key])
+                if "excluded_info" in diff:
+                    # apply_competitor_review ile aynı kural: eski kullanıcı terimleri
+                    # çıkar, yeniler girer; odağın kendi AI temaları korunur
+                    ai_only = remove_normalized(new_profile.get("exclude_themes"), old_user_terms)
+                    new_profile["exclude_themes"] = merge_normalized(
+                        parse_excluded_info(focus.excluded_info), ai_only
+                    )
+                anchor_changed = apply_profile_data_update(
+                    db, focus, new_profile,
+                    invalidate_outputs=False, manage_policy_version=False,
+                )
+            if not _bump_policy_version_if_changed(db, focus, before) and anchor_changed:
+                invalidate_workspace_outputs(db, focus.id)
+            db.commit()
+            applied.append({"id": focus_id, "name": focus_name, "changed": bool(diff),
+                            "warning": market_warning})
+        except HTTPException as exc:
+            db.rollback()
+            if exc.status_code != 409:
+                raise
+            skipped.append({"id": focus_id, "name": focus_name, "reason": "işlem sürüyor"})
+        except Exception:
+            db.rollback()
+            logger.exception("focus settings apply failed for focus %s", focus_id)
+            skipped.append({"id": focus_id, "name": focus_name,
+                            "reason": "uygulanamadı, tekrar deneyin"})
+
+    return {"applied": applied, "skipped": skipped}
 
 
 @router.get(
@@ -797,6 +1341,11 @@ def list_workspaces(
             id=ws.id,
             name=ws.name,
             company_url=ws.company_url,
+            crawl_scope=ws.crawl_scope,
+            parent_brand_profile_id=ws.parent_brand_profile_id,
+            archived_with_parent=ws.archived_with_parent,
+            pending_focus_url=ws.pending_focus_url,
+            pending_focus_error=ws.pending_focus_error,
             status=ws.status,
             onboarding_flow=ws.onboarding_flow or "legacy",
             profile_approved_at=ws.profile_approved_at,
@@ -828,7 +1377,9 @@ def get_workspace(workspace_id: int, db: Session = Depends(get_db)):
     # yolunu açar (bkz. stuck_janitor.py modül docstring'i).
     if fail_if_stuck(db, workspace):
         db.refresh(workspace)
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = bool(market_change_blocker(db, workspace))
+    return response
 
 
 @router.get(
@@ -878,23 +1429,31 @@ def approve_workspace_keywords(
     db: Session = Depends(get_db),
 ):
     """Approve/edit the suggested seed keywords and start profile generation."""
-    workspace = verify_workspace(db, workspace_id)
+    verify_workspace(db, workspace_id)
+    # Row lock + TAZE okuma (2.2): durum kontrolü ile attempt token'ı yazımı
+    # aynı kilit altında; eşzamanlı iki onay ikincisinde 400 alır.
+    workspace = lock_workspace_row(db, workspace_id)
 
     can_approve = workspace.status == "keywords_review" or (
         workspace.status == "failed" and bool(workspace.suggested_keywords)
     )
     if not can_approve:
+        detail_status = workspace.status
+        db.rollback()  # satır kilidini hemen bırak
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Keyword onayi icin durum '{workspace.status}' uygun degil "
-                "(keywords_review veya failed+keyword gerekli)"
+                "Site analizi sürüyor; kelime önerileri hazır olunca onaylayabilirsiniz."
+                if detail_status in ("pending", "running")
+                else "Onaylanacak kelime önerisi yok. Kelime önerileri, profil ve "
+                "rakip adımları tamamlandıktan sonra onaylanabilir."
             ),
         )
 
     keywords = _normalize_seed_keywords(request.keywords)
     if not keywords:
-        raise HTTPException(status_code=400, detail="En az 1 keyword gerekli")
+        db.rollback()
+        raise HTTPException(status_code=400, detail="En az 1 anahtar kelime seçin.")
 
     # Kanal tercihleri OPSIYONEL: gonderilmezse bugunku davranis birebir
     # korunur (plan9 §10). Gonderilirse ayri yapisal tabloya yazilir.
@@ -914,15 +1473,19 @@ def approve_workspace_keywords(
         workspace.suggested_keywords = keywords
         workspace.status = "confirmed"
         workspace.error_message = None
+        # Faz 3e: marka onayi ile bekleyen alt sayfa AYNI kilitli islemde acilir;
+        # hata markanin onayini BOZMAZ (adres korunur, hata metni yazilir)
+        handoff = _hand_off_pending_focus(db, workspace) if workspace.pending_focus_url else None
         db.commit()
         db.refresh(workspace)
 
         _trigger_latest_run_relevance(db, background_tasks, workspace)
-        return WorkspaceResponse.model_validate(workspace)
+        return _workspace_response_with_handoff(workspace, handoff, background_tasks)
 
     workspace.suggested_keywords = keywords
     workspace.status = "running"
     workspace.error_message = None
+    attempt_id = start_attempt(workspace)
     db.commit()
     db.refresh(workspace)
 
@@ -930,8 +1493,143 @@ def approve_workspace_keywords(
         _run_profile_from_keywords,
         workspace_id=workspace.id,
         keywords=keywords,
+        attempt_id=attempt_id,
     )
 
+    return WorkspaceResponse.model_validate(workspace)
+
+
+def _hand_off_pending_focus(
+    db: Session, brand: BrandProfile
+) -> Optional[Tuple[BrandProfile, bool]]:
+    """`brand` (KILITLI, confirmed) icin bekleyen alt sayfayi SAVEPOINT icinde acar. Commit YOK.
+
+    Basari: alanlar temizlenir, (odak, yeni_mi) doner. Hata (dogrulama/beklenmeyen):
+    savepoint geri alinir, adres KORUNUR, `pending_focus_error` yazilir, None doner.
+    """
+    try:
+        with db.begin_nested():
+            focus, created = _create_focus_core(db, brand, brand.pending_focus_url)
+    except FocusCreateError as exc:
+        brand.pending_focus_error = exc.detail[:500]
+        return None
+    except Exception:
+        logger.exception(f"Bekleyen alt sayfa acilamadi: brand_id={brand.id}")
+        brand.pending_focus_error = "Alt sayfa hazırlanamadı, lütfen tekrar deneyin."
+        return None
+    brand.pending_focus_url = None
+    brand.pending_focus_error = None
+    return focus, created
+
+
+def _workspace_response_with_handoff(
+    brand: BrandProfile,
+    handoff: Optional[Tuple[BrandProfile, bool]],
+    background_tasks: BackgroundTasks,
+) -> WorkspaceResponse:
+    """Commit sonrasi: yeni olusan odagin analizini kuyruga alir, cevaba odak id'sini koyar."""
+    response = WorkspaceResponse.model_validate(brand)
+    if handoff is not None:
+        focus, created = handoff
+        if created:
+            _dispatch_analysis(background_tasks, focus)
+        response.focus_handoff_id = focus.id
+    return response
+
+
+def _lock_active_workspace(db: Session, workspace_id: int) -> BrandProfile:
+    verify_workspace(db, workspace_id)
+    brand = lock_workspace_row(db, workspace_id)
+    if brand is None or brand.deleted_at is not None:
+        db.rollback()
+        raise HTTPException(
+            status_code=404,
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
+        )
+    return brand
+
+
+@router.post(
+    "/workspaces/{workspace_id}/pending-focus/retry",
+    response_model=WorkspaceResponse,
+)
+def retry_pending_focus(
+    workspace_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Bekleyen alt sayfayı yeniden dene (marka confirmed olmalı). Hata 200 + hata metni."""
+    brand = _lock_active_workspace(db, workspace_id)
+    if brand.status != "confirmed" or not brand.pending_focus_url:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Bekleyen alt sayfa yok ya da marka henüz onaylanmadı",
+        )
+    handoff = _hand_off_pending_focus(db, brand)
+    db.commit()
+    db.refresh(brand)
+    return _workspace_response_with_handoff(brand, handoff, background_tasks)
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/pending-focus",
+    response_model=WorkspaceResponse,
+)
+def delete_pending_focus(workspace_id: int, db: Session = Depends(get_db)):
+    """Bekleyen alt sayfa isteğinden vazgeç (adres + hata temizlenir)."""
+    brand = _lock_active_workspace(db, workspace_id)
+    brand.pending_focus_url = None
+    brand.pending_focus_error = None
+    db.commit()
+    db.refresh(brand)
+    return WorkspaceResponse.model_validate(brand)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/analysis/retry",
+    response_model=WorkspaceResponse,
+)
+def retry_workspace_analysis(
+    workspace_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Başarısız profil analizini aynı kayıtta yeniden başlat (marka ve odak).
+
+    Yalnız profile_first + failed + analiz edilmiş profil YOK. Satır kilitli + yeni attempt
+    token: ikinci istek pending'i görüp 409 alır (çift analiz yok).
+    """
+    workspace = verify_workspace(db, workspace_id)
+    # takili pending/running satir okuma aninda failed'a doner (get_workspace ile ayni yol)
+    fail_if_stuck(db, workspace)
+    workspace = _lock_active_workspace(db, workspace_id)
+
+    if workspace.onboarding_flow != "profile_first":
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="Bu marka çalışması eski kurulum akışıyla oluşturulmuş; bu adım bu çalışmada kullanılamaz."
+        )
+    if workspace.status in ("pending", "running"):
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Analiz zaten sürüyor")
+    if workspace.status != "failed" or _has_analyzed_profile(workspace.profile_data):
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Analizi yeniden deneme yalnız başarısız ve profili olmayan çalışmada mümkün",
+        )
+    if not settings.ENABLE_SITE_PROFILE_ANALYSIS:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Profil analizi şu an kapalı")
+
+    workspace.status = "pending"
+    workspace.error_message = None
+    start_attempt(workspace)
+    db.commit()
+    db.refresh(workspace)
+
+    _dispatch_analysis(background_tasks, workspace)
     return WorkspaceResponse.model_validate(workspace)
 
 
@@ -955,34 +1653,31 @@ def approve_workspace_profile(
     apply_profile_data_update kapısından (anchor sürümlemesi).
     """
     verify_workspace(db, workspace_id)
+    market_geo, market_lang = markets.validate_market_input(
+        request.default_geo_target_id, request.default_language_id
+    )
     # Row lock (plan v13): status/profile_data dahil her okuma kilitli satırdan —
     # eşzamanlı politika mutasyonu / background analiz yarışları kapanır.
-    workspace = (
-        db.query(BrandProfile)
-        .filter(BrandProfile.id == workspace_id)
-        .with_for_update()
-        .first()
-    )
+    # populate_existing: verify_workspace satırı identity map'e zaten yükledi;
+    # bayat status ile karar verilmesin (2.2: token yazımı bu kilitle yapılır).
+    workspace = lock_workspace_row(db, workspace_id)
 
     if workspace.onboarding_flow != "profile_first":
         raise HTTPException(
             status_code=400,
-            detail="Bu çalışma profil-önce akışta değil (onboarding_flow=legacy)",
+            detail="Bu marka çalışması eski kurulum akışıyla oluşturulmuş; bu adım bu çalışmada kullanılamaz.",
         )
 
     initial_status = workspace.status
     allowed = workspace.status in (
         "profile_review", "competitor_review", "keywords_review"
     ) or (
-        workspace.status == "failed" and bool(workspace.profile_data)
+        workspace.status == "failed" and _has_analyzed_profile(workspace.profile_data)
     )
     if not allowed:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Profil onayı için durum '{workspace.status}' uygun değil "
-                "(profile_review, competitor_review veya keywords_review gerekli)"
-            ),
+            detail=_profile_not_confirmable_text(workspace.status),
         )
 
     active_work = find_active_workspace_work(db, workspace_id)
@@ -992,27 +1687,36 @@ def approve_workspace_profile(
             detail=f"Şu an {active_work} — bitince tekrar deneyin.",
         )
 
+    # Pazar degisimi (veri yoksa serbest, varsa 409) — hicbir seyi yazmadan ONCE
+    if market_geo is not None or market_lang is not None:
+        set_workspace_market(
+            db,
+            workspace,
+            market_geo if market_geo is not None else workspace.default_geo_target_id,
+            market_lang if market_lang is not None else workspace.default_language_id,
+        )
+
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
-    profile = _apply_profile_review_data(incoming_data, existing_data)
+    profile = _apply_profile_review_data(
+        incoming_data, existing_data, excluded_info=workspace.excluded_info
+    )
     # Kart düzenlemeleri TEK yazma kapısından (anchor diff + sürümleme)
     apply_profile_data_update(db, workspace, profile)
 
     if request.must_have_info is not None:
         workspace.preliminary_info = request.must_have_info.strip() or None
-    if request.default_geo_target_id is not None:
-        workspace.default_geo_target_id = request.default_geo_target_id
-    if request.default_language_id is not None:
-        workspace.default_language_id = request.default_language_id
 
     # Rakip URL/karar + excluded_info: paylaşılan çekirdek (provenance'lı
     # exclude_themes yeniden birleşimi + topic senkronu + sürümleme + stale)
+    # Odakta rakip adımı yok: onay yükündeki URL/karar listesi miras kayıtlara dokunmaz
+    is_focus = workspace.parent_brand_profile_id is not None
     try:
         apply_competitor_review(
             db,
             workspace,
-            competitor_urls=request.competitor_urls,
-            decisions=request.competitor_decisions,
+            competitor_urls=None if is_focus else request.competitor_urls,
+            decisions=None if is_focus else request.competitor_decisions,
             excluded_info=request.excluded_info,
         )
     except PolicyValidationError as exc:
@@ -1022,16 +1726,22 @@ def approve_workspace_profile(
     if initial_status == "profile_review":
         workspace.profile_approved_at = datetime.utcnow()
 
-    if request.rerun_keywords:
+    # Odak (alt sayfa) rakip adımına HİÇ girmez: ilk onay doğrudan keyword üretimine gider
+    rerun_keywords = request.rerun_keywords or (
+        workspace.parent_brand_profile_id is not None and initial_status == "profile_review"
+    )
+    if rerun_keywords:
         # Eski öneriler ekranda/response'ta kalmasın; yeni liste üretilecek
         workspace.suggested_keywords = None
         workspace.status = "running"
         workspace.error_message = None
+        attempt_id = start_attempt(workspace)
         db.commit()
         db.refresh(workspace)
         background_tasks.add_task(
             _run_keyword_suggestion_from_profile,
             workspace_id=workspace.id,
+            attempt_id=attempt_id,
         )
     else:
         # Profil kartlari onaylandi; rakip kesfi/karari keyword uretiminden
@@ -1042,7 +1752,9 @@ def approve_workspace_profile(
         db.commit()
         db.refresh(workspace)
 
-    return WorkspaceResponse.model_validate(workspace)
+    response = WorkspaceResponse.model_validate(workspace)
+    response.market_locked = bool(market_change_blocker(db, workspace))
+    return response
 
 
 @router.post(
@@ -1065,7 +1777,9 @@ def preview_workspace_anchors(
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
 
     if isinstance(request.profile_data, dict) and request.profile_data:
-        profile = _apply_profile_review_data(request.profile_data, existing_data)
+        profile = _apply_profile_review_data(
+            request.profile_data, existing_data, excluded_info=workspace.excluded_info
+        )
     else:
         profile = existing_data
 
@@ -1100,7 +1814,7 @@ def confirm_workspace(
     if workspace.status not in ("draft", "confirmed"):
         raise HTTPException(
             status_code=400,
-            detail=f"Profil durumu '{workspace.status}', onaylanamaz (draft veya confirmed olmalı)"
+            detail=_profile_not_confirmable_text(workspace.status),
         )
 
     active_work = find_active_workspace_work(db, workspace_id)
@@ -1112,7 +1826,12 @@ def confirm_workspace(
 
     existing_data = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
     incoming_data = request.profile_data if isinstance(request.profile_data, dict) else {}
-    sanitized = _sanitize_profile_data(incoming_data, existing_data)
+    # B'nin (excluded_info) kesin dışlama terimleri bayat istemci listesiyle
+    # ezilmesin: sunucu exclude_themes'i kullanıcı A terimleri ∪ B terimleri
+    # olarak yeniden kurar (plan_yapilacaklar 3.1).
+    sanitized = _sanitize_profile_data(
+        incoming_data, existing_data, excluded_info=workspace.excluded_info
+    )
     _ensure_confirmable_profile(sanitized)
     # TEK yazma kapısı: anchor diff → anchor_version + çıktı stale (plan v13)
     apply_profile_data_update(db, workspace, sanitized)
@@ -1458,9 +2177,8 @@ def get_location_audit(
         raise HTTPException(status_code=409, detail={
             "code": "RUN_NOT_COMPLETED",
             "message": (
-                f"Run {run_id} durumu 'channel_assigned' değil "
-                f"('{run.status}') — lokasyon denetimi yalnız tamamlanmış "
-                "run için kullanılabilir."
+                "Lokasyon denetimi yalnız kanal ataması tamamlanmış "
+                "analizlerde kullanılabilir."
             ),
         })
 
@@ -1554,9 +2272,9 @@ def review_workspace_policy(
         raise HTTPException(
             status_code=409 if workspace.status in ("pending", "running") else 400,
             detail=(
-                f"Politika incelemesi için durum '{workspace.status}' uygun değil"
-                + (" (analiz sürüyor, bitince deneyin)"
-                   if workspace.status in ("pending", "running") else "")
+                "Site analizi sürüyor; politika incelemesini analiz bitince yapabilirsiniz."
+                if workspace.status in ("pending", "running")
+                else "Politika incelemesi için önce site analizinin başarıyla tamamlanması gerekir."
             ),
         )
     active_work = find_active_workspace_work(db, workspace_id)
@@ -1776,11 +2494,12 @@ def start_competitor_preview(
     except Exception as exc:
         task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
         if task:
+            logger.error(f"Competitor preview enqueue failed: {exc}")
             task.status = "failed"
-            task.error_message = str(exc)
+            task.error_message = "Rakip önizlemesi başlatılamadı. Lütfen tekrar deneyin."
             db.commit()
         raise HTTPException(
-            status_code=502, detail="Preview görevi kuyruğa alınamadı"
+            status_code=502, detail="Rakip önizlemesi başlatılamadı. Lütfen tekrar deneyin."
         )
 
     return {"task_id": task_id, "status": "pending"}
@@ -1805,7 +2524,7 @@ def get_competitor_preview(
         .first()
     )
     if not task:
-        raise HTTPException(status_code=404, detail="Preview görevi bulunamadı")
+        raise HTTPException(status_code=404, detail="Rakip önizlemesi bulunamadı.")
     return {
         "task_id": task.task_id,
         "status": task.status,
@@ -1915,11 +2634,12 @@ def start_competitor_discovery(
         task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
         if task:
             task.status = "failed"
-            task.error_message = str(exc)[:500]
+            logger.error(f"Competitor discovery enqueue failed: {exc}")
+            task.error_message = "Rakip keşfi kuyruğa alınamadı. Lütfen tekrar deneyin."
             db.commit()
         raise HTTPException(
             status_code=502,
-            detail={"code": "BROKER_ERROR", "message": "Rakip keşfi kuyruğa alınamadı."},
+            detail={"code": "BROKER_ERROR", "message": "Rakip keşfi başlatılamadı. Lütfen tekrar deneyin."},
         )
     return {"task_id": task_id, "status": "pending", "reused": False}
 
@@ -2027,9 +2747,31 @@ def decide_discovered_competitors(
     response_model=WorkspaceResponse,
 )
 def archive_workspace(workspace_id: int, db: Session = Depends(get_db)):
-    """Marka çalışmasını arşivle (soft delete)."""
-    workspace = verify_workspace(db, workspace_id)
-    workspace.deleted_at = datetime.utcnow()
+    """Marka çalışmasını arşivle (soft delete).
+
+    Marka arşivlenince aktif odakları da (aynı transaction) arşivlenir ve
+    `archived_with_parent` işaretlenir; odak doğrudan arşivlenirse bayrak false kalır.
+    """
+    verify_workspace(db, workspace_id)
+    workspace = lock_workspace_row(db, workspace_id)  # create_focus ile serileşir
+    if workspace.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Marka çalışması bulunamadı veya arşivlenmiş")
+    now = datetime.utcnow()
+    if workspace.parent_brand_profile_id is None:
+        focuses = (
+            db.query(BrandProfile)
+            .filter(
+                BrandProfile.parent_brand_profile_id == workspace.id,
+                BrandProfile.deleted_at.is_(None),
+            )
+            .with_for_update()
+            .all()
+        )
+        for focus in focuses:
+            focus.deleted_at = now
+            focus.archived_with_parent = True
+    workspace.deleted_at = now
+    workspace.archived_with_parent = False
     db.commit()
     db.refresh(workspace)
     return WorkspaceResponse.model_validate(workspace)
@@ -2040,14 +2782,32 @@ def archive_workspace(workspace_id: int, db: Session = Depends(get_db)):
     response_model=WorkspaceResponse,
 )
 def restore_workspace(workspace_id: int, db: Session = Depends(get_db)):
-    """Arşivden çıkar."""
-    workspace = db.query(BrandProfile).filter(
-        BrandProfile.id == workspace_id,
-        BrandProfile.deleted_at.isnot(None),
-    ).first()
-    if not workspace:
+    """Arşivden çıkar. Marka dönünce yalnız onunla birlikte arşivlenen odaklar döner.
+
+    Kilit sırası arşivleme/odak eklemeyle aynı: önce marka, sonra odak (ters sıra
+    deadlock; kilitsiz ebeveyn okuması arşivlenmiş markanın altında aktif odak bırakır).
+    """
+    target = db.get(BrandProfile, workspace_id)
+    parent = None
+    if target is not None and target.parent_brand_profile_id is not None:
+        parent = lock_workspace_row(db, target.parent_brand_profile_id)
+    workspace = lock_workspace_row(db, workspace_id)
+    if workspace is None or workspace.deleted_at is None:
         raise HTTPException(status_code=404, detail="Arşivlenmiş çalışma bulunamadı")
+    if workspace.parent_brand_profile_id is not None:
+        if parent is None or parent.deleted_at is not None:
+            raise HTTPException(status_code=409, detail="Önce markayı arşivden çıkarın")
+    else:
+        db.query(BrandProfile).filter(
+            BrandProfile.parent_brand_profile_id == workspace.id,
+            BrandProfile.deleted_at.isnot(None),
+            BrandProfile.archived_with_parent.is_(True),
+        ).update(
+            {"deleted_at": None, "archived_with_parent": False},
+            synchronize_session=False,
+        )
     workspace.deleted_at = None
+    workspace.archived_with_parent = False
     db.commit()
     db.refresh(workspace)
     return WorkspaceResponse.model_validate(workspace)
@@ -2067,6 +2827,7 @@ def refresh_workspace_keywords(
     Network çağrısı DB delete+insert transaction'ından önce tamamlanır.
     """
     workspace = verify_workspace(db, workspace_id)
+    market_geo, market_lang = markets.workspace_market(workspace)  # NULL → 409
     rows = (
         db.query(WorkspaceKeyword, Keyword)
         .join(Keyword, WorkspaceKeyword.keyword_id == Keyword.id)
@@ -2075,7 +2836,7 @@ def refresh_workspace_keywords(
         .all()
     )
     if not rows:
-        raise HTTPException(status_code=400, detail="Bu workspace'te yenilenecek keyword yok")
+        raise HTTPException(status_code=400, detail="Bu marka çalışmasında yenilenecek anahtar kelime yok.")
 
     existing = [
         ExistingWorkspaceKeyword(
@@ -2106,7 +2867,7 @@ def refresh_workspace_keywords(
         or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
     )
     if not customer_id:
-        raise HTTPException(status_code=400, detail="customer_id gerekli")
+        raise HTTPException(status_code=400, detail="Önce bir Google Ads hesabı seçin.")
 
     svc = _get_service()
     refreshed_ideas = []
@@ -2116,8 +2877,8 @@ def refresh_workspace_keywords(
             customer_id=customer_id,
             seeds=chunk,
             max_results=request.max_results,
-            language_id=workspace.default_language_id,
-            geo_target_id=workspace.default_geo_target_id,
+            language_id=market_lang,
+            geo_target_id=market_geo,
         )
         if request.min_volume > 0:
             ideas = [idea for idea in ideas if idea.avg_monthly_searches >= request.min_volume]
@@ -2128,6 +2889,8 @@ def refresh_workspace_keywords(
         refreshed_ideas,
         include_new_ideas=request.include_new_ideas,
         data_source="google_ads_api",
+        geo_target_id=market_geo,
+        language_id=market_lang,
     )
 
     existing_keywords_by_norm = {
@@ -2136,6 +2899,22 @@ def refresh_workspace_keywords(
     }
 
     try:
+        # Ag cagrisi sirasinda onceki commit kilidi biraktigi icin yazimdan once yeniden tut.
+        # Bu arada kelimeler silinip pazar degistiyse ESKI pazarin olcumleri yazilmaz
+        # (Codex Faz 0-3 #1): kilitli TAZE satirdan pazar yeniden okunur ve karsilastirilir.
+        db.expire_all()
+        locked = verify_workspace(db, workspace_id, lock=True)
+        if markets.workspace_market(locked) != (market_geo, market_lang):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "MARKET_CHANGED",
+                    "message": (
+                        "Yenileme sürerken çalışmanın hedef konumu/dili değişti; "
+                        "yenilemeyi tekrar başlatın."
+                    ),
+                },
+            )
         db.query(WorkspaceKeyword).filter(
             WorkspaceKeyword.brand_profile_id == workspace_id
         ).delete(synchronize_session=False)
@@ -2172,8 +2951,8 @@ def refresh_workspace_keywords(
                 data_source=row["data_source"],
                 sector=row["sector"],
                 target_market=row["target_market"],
-                geo_target_id=row["geo_target_id"] or workspace.default_geo_target_id,
-                language_id=row["language_id"] or workspace.default_language_id,
+                geo_target_id=row["geo_target_id"] or market_geo,
+                language_id=row["language_id"] or market_lang,
                 notes=row["notes"],
             ))
 
@@ -2199,99 +2978,20 @@ def refresh_workspace_keywords(
 
 # ==================== Background task function ====================
 
-def _run_profile_analysis(
-    profile_id: int,
-    company_url: str,
-    competitor_urls: list = None,
-):
-    """Background task: crawl site, extract profile, validate with competitors."""
-    from app.database.connection import SessionLocal
-    from app.generators.ai_service import get_ai_service
-    from app.core.site_analyzer.profile_extractor import ProfileExtractor
-
-    db = SessionLocal()
-    ai = None  # finally'de kapatılır (Codex v9-3)
-    try:
-        profile = db.query(BrandProfile).filter(BrandProfile.id == profile_id).first()
-        if not profile:
-            return
-
-        profile.status = "running"
-        db.commit()
-
-        ai = get_ai_service(api_key=settings.GEMINI_API_KEY)
-        # Profil AI çağrıları da telemetri kapsamında (Codex v8-3);
-        # BackgroundTasks'ta finalize güvencesi yok → her event anında yazılır
-        ai.collector = UsageCollector(brand_profile_id=profile_id, flush_every=1)
-        extractor = ProfileExtractor(ai)
-
-        # Extract profile
-        result = extractor.extract_profile(company_url)
-
-        if result["error"] and not result["profile"]:
-            profile.status = "failed"
-            profile.error_message = result["error"]
-            db.commit()
-            return
-
-        # Finish external/AI work before locking the workspace row. The usage
-        # collector flushes with a separate DB session; calling it after a
-        # locked profile write can make both sessions wait on each other.
-        validation = None
-        if competitor_urls and result["profile"]:
-            validation = extractor.validate_with_competitors(
-                result["profile"], competitor_urls
-            )
-
-        # Kısa süreli kilit + gate (plan v13): background yazım da aynı
-        # sürümleme sözleşmesine uyar (uzun AI çağrısı kilitsiz koştu)
-        profile = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == profile_id)
-            .with_for_update()
-            .first()
-        )
-        apply_profile_data_update(db, profile, result["profile"])
-        profile.source_pages = result["source_pages"]
-
-        if validation is not None:
-            profile.validation_data = validation
-
-        profile.status = "draft"
-        profile.error_message = None
-        db.commit()
-
-        logger.info(f"Profile analysis completed for profile_id={profile_id}")
-
-    except Exception as e:
-        logger.error(f"Profile analysis failed for profile_id={profile_id}: {e}")
-        try:
-            db.rollback()
-            profile = db.query(BrandProfile).filter(
-                BrandProfile.id == profile_id
-            ).first()
-            if profile:
-                profile.status = "failed"
-                profile.error_message = safe_500_detail(
-                    e,
-                    "Profil analizi başarısız oldu"
-                )
-                db.commit()
-        except Exception:
-            pass
-    finally:
-        _close_ai_quietly(ai)
-        db.close()
-
-
 def _run_keyword_suggestion(
     workspace_id: int,
     company_url: str,
     competitor_urls: list = None,
     must_have_info: str = None,
     excluded_info: str = None,
+    attempt_id: Optional[str] = None,
 ):
-    """Background task: crawl workspace site and generate reviewable seed keywords."""
+    """Background task: crawl workspace site and generate reviewable seed keywords.
+
+    `attempt_id` (plan_yapilacaklar.md 2.2): dispatch'in yazdığı token. Task'ın
+    BÜTÜN yazımları (running geçişi, başarı, her failed) bu token'a koşulludur;
+    eşleşmezse hiçbir şey yazılmaz (bkz. core/site_analyzer/analysis_attempt.py).
+    """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
     from app.core.site_analyzer.profile_extractor import ProfileExtractor
@@ -2299,10 +2999,12 @@ def _run_keyword_suggestion(
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
+        crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
+        output_ctx = output_context(workspace)  # keyword dili + hedef konum (kilitli pazar)
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2313,25 +3015,31 @@ def _run_keyword_suggestion(
         ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
         extractor = ProfileExtractor(ai)
 
-        crawl = extractor.crawl_for_profile_content(company_url)
+        crawl = extractor.crawl_for_profile_content(company_url, crawl_scope=crawl_scope)
         if crawl["error"] and not crawl["site_content"]:
-            workspace.status = "failed"
-            workspace.error_message = f"Anahtar kelime onerisi basarisiz: {crawl['error']}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Anahtar kelime önerisi başarısız: {crawl['error']}",
+            )
             return
-
-        workspace.source_pages = crawl["source_pages"]
-        workspace.crawl_content_cache = crawl["site_content"]
 
         suggestions = extractor.suggest_keywords(
             crawl["site_content"],
             must_have_info=must_have_info,
             excluded_info=excluded_info,
+            output_ctx=output_ctx,
         )
+
+        # Kısa süreli kilit + token kontrolü: tüm başarı yazımları tek transaction
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
+        workspace.source_pages = crawl["source_pages"]
+        workspace.crawl_content_cache = crawl["site_content"]
         workspace.suggested_keywords = _normalize_seed_keywords(suggestions)[:10] or None
         if not workspace.suggested_keywords:
             workspace.status = "failed"
-            workspace.error_message = "Anahtar kelime onerisi basarisiz: AI keyword dondurmedi"
+            workspace.error_message = "Anahtar kelime önerisi başarısız: yapay zekâ kelime önerisi döndürmedi"
         else:
             workspace.status = "keywords_review"
             workspace.error_message = None
@@ -2343,11 +3051,10 @@ def _run_keyword_suggestion(
         logger.error(f"Workspace keyword suggestion failed for workspace_id={workspace_id}: {e}")
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu")
-                db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Anahtar kelime önerisi başarısız oldu"),
+            )
         except Exception:
             pass
     finally:
@@ -2359,24 +3066,32 @@ def _run_profile_analysis_first(
     workspace_id: int,
     company_url: str,
     competitor_urls: list = None,
+    attempt_id: Optional[str] = None,
 ):
     """Background task (profil-önce akış, adım 1): crawl + AI profil çıkarma.
 
     suggested_keywords bu aşamada ÜRETİLMEZ — 10 KW, profil onayından sonra
     `_run_keyword_suggestion_from_profile` ile ayrıca istenir.
+
+    `attempt_id`: bkz. `_run_keyword_suggestion` — tüm yazımlar token'a koşulludur.
     """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
-    from app.core.site_analyzer.profile_extractor import ProfileExtractor
+    from app.core.site_analyzer.profile_extractor import (
+        ProfileExtractor,
+        build_brand_context,
+    )
     from app.core.site_analyzer.anchor_builder import build_anchor_texts
 
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
+        crawl_scope = workspace.crawl_scope  # kilitli satırdan; tek doğruluk kaynağı
+        parent_id = workspace.parent_brand_profile_id
         workspace.status = "running"
         workspace.error_message = None
         db.commit()
@@ -2387,14 +3102,24 @@ def _run_profile_analysis_first(
         ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
         extractor = ProfileExtractor(ai)
 
-        crawl = extractor.crawl_for_profile_content(company_url)
+        crawl = extractor.crawl_for_profile_content(company_url, crawl_scope=crawl_scope)
         if crawl["error"] and not crawl["site_content"]:
-            workspace.status = "failed"
-            workspace.error_message = f"Profil analizi basarisiz: {crawl['error']}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Profil analizi başarısız: {crawl['error']}",
+            )
             return
 
-        profile = extractor.extract_profile_from_site_content(crawl["site_content"])
+        extract_kwargs: Dict[str, Any] = {"crawl_scope": crawl_scope}
+        if parent_id is not None:
+            # Odak: ebeveynin yalniz kimligi prompt'a girer (site_content'e DEGIL)
+            parent = db.get(BrandProfile, parent_id)
+            brand_context = build_brand_context(parent.profile_data if parent else None)
+            if brand_context:
+                extract_kwargs["brand_context"] = brand_context
+        profile = extractor.extract_profile_from_site_content(
+            crawl["site_content"], **extract_kwargs
+        )
         profile.pop("suggested_keywords", None)
 
         # Keep validation outside the final write transaction. Its telemetry
@@ -2404,15 +3129,15 @@ def _run_profile_analysis_first(
         if competitor_urls and profile:
             validation = extractor.validate_with_competitors(profile, competitor_urls)
 
-        # Kısa süreli kilit + gate (plan v13)
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
+        # Kısa süreli kilit + gate (plan v13) + attempt token kontrolü (2.2):
+        # token eşleşmezse (yeni koşu başladı / janitor failed yaptı) HİÇBİR
+        # şey yazılmaz — profile_data dahil.
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
         workspace.source_pages = crawl["source_pages"]
         workspace.crawl_content_cache = crawl["site_content"]
+        _carry_location_fields(workspace, profile)
         apply_profile_data_update(db, workspace, profile)
         workspace.suggested_keywords = None
 
@@ -2429,11 +3154,13 @@ def _run_profile_analysis_first(
         logger.error(f"Profile-first analysis failed for workspace_id={workspace_id}: {e}")
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Profil analizi başarısız oldu")
-                db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                # kaynak-yetersiz hatasi guvenli Turkce mesaj tasir; kullanici acik nedeni gormeli
+                f"Profil analizi başarısız: {e}"
+                if isinstance(e, CrawlContentUnusable)
+                else safe_500_detail(e, "Profil analizi başarısız oldu"),
+            )
         except Exception:
             pass
     finally:
@@ -2441,8 +3168,13 @@ def _run_profile_analysis_first(
         db.close()
 
 
-def _run_keyword_suggestion_from_profile(workspace_id: int):
+def _run_keyword_suggestion_from_profile(
+    workspace_id: int,
+    attempt_id: Optional[str] = None,
+):
     """Background task (profil-önce akış, adım 3→4): onaylı profilden 10 KW önerisi.
+
+    `attempt_id` (2.2): bkz. `_run_keyword_suggestion` — tüm yazımlar token'a koşulludur.
 
     preliminary_info (mutlaka-olsun) doluysa profil AI ile revize edilir
     (fail-open) ve keyword önerisi revize profile dayanır — böylece kullanıcının
@@ -2475,8 +3207,8 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
         workspace.status = "running"
@@ -2490,18 +3222,21 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
         extractor = ProfileExtractor(ai)
 
         company_url = workspace.company_url
+        crawl_scope = workspace.crawl_scope
         preliminary_info = workspace.preliminary_info
         excluded_info = workspace.excluded_info
         profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
         competitor_terms = approved_competitor_terms(workspace)
+        output_ctx = output_context(workspace)  # keyword dili + hedef konum (kilitli pazar)
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
-            extractor, company_url, workspace.crawl_content_cache
+            extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope
         )
         if content_error:
-            workspace.status = "failed"
-            workspace.error_message = f"Anahtar kelime onerisi basarisiz: {content_error}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Anahtar kelime önerisi başarısız: {content_error}",
+            )
             return
 
         # SALT-BELLEK revizyon: yalniz asagidaki keyword onerisi prompt'unu
@@ -2525,6 +3260,7 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
             must_have_info=preliminary_info,
             excluded_info=excluded_info,
             competitor_terms=competitor_terms,
+            output_ctx=output_ctx,
         )
         # Prompt yonlendirmedir; deterministic policy son savunmadir.
         suggestions = [
@@ -2533,12 +3269,10 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
         ]
 
         # Crawl and AI work is complete; keep the row lock only for writes.
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
+        # Attempt token kontrolü aynı kilit altında (2.2): eski koşu yazamaz.
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
         if crawled_source_pages is not None:
             workspace.source_pages = crawled_source_pages
             workspace.crawl_content_cache = site_content
@@ -2549,7 +3283,7 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
         workspace.suggested_keywords = _normalize_seed_keywords(suggestions)[:10] or None
         if not workspace.suggested_keywords:
             workspace.status = "failed"
-            workspace.error_message = "Anahtar kelime onerisi basarisiz: AI keyword dondurmedi"
+            workspace.error_message = "Anahtar kelime önerisi başarısız: yapay zekâ kelime önerisi döndürmedi"
         else:
             workspace.status = "keywords_review"
             workspace.error_message = None
@@ -2565,11 +3299,10 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
         )
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Anahtar kelime onerisi basarisiz oldu")
-                db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Anahtar kelime önerisi başarısız oldu"),
+            )
         except Exception:
             pass
     finally:
@@ -2580,8 +3313,12 @@ def _run_keyword_suggestion_from_profile(workspace_id: int):
 def _run_profile_from_keywords(
     workspace_id: int,
     keywords: List[str],
+    attempt_id: Optional[str] = None,
 ):
-    """Background task: generate the full profile from approved seed keywords."""
+    """Background task: generate the full profile from approved seed keywords.
+
+    `attempt_id` (2.2): bkz. `_run_keyword_suggestion` — tüm yazımlar token'a koşulludur.
+    """
     from app.database.connection import SessionLocal
     from app.generators.ai_service import get_ai_service
     from app.core.site_analyzer.profile_extractor import (
@@ -2593,8 +3330,8 @@ def _run_profile_from_keywords(
     db = SessionLocal()
     ai = None  # finally'de kapatılır (Codex v9-3)
     try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="running")
+        if workspace is None:
             return
 
         workspace.status = "running"
@@ -2608,24 +3345,31 @@ def _run_profile_from_keywords(
         extractor = ProfileExtractor(ai)
 
         company_url = workspace.company_url
+        crawl_scope = workspace.crawl_scope
         preliminary_info = workspace.preliminary_info
         excluded_info = workspace.excluded_info
-        competitor_urls = list(workspace.competitor_urls or [])
+        # Odak miras rakip URL'lerini yalnız politika için taşır; rakip doğrulaması koşmaz
+        competitor_urls = (
+            [] if workspace.parent_brand_profile_id is not None
+            else list(workspace.competitor_urls or [])
+        )
         # Cache okuma kapisi: dolu-ama-bozuk cache AI'a GIDEMEZ (bkz. resolve_site_content).
         site_content, crawled_source_pages, content_error = resolve_site_content(
-            extractor, company_url, workspace.crawl_content_cache
+            extractor, company_url, workspace.crawl_content_cache, crawl_scope=crawl_scope
         )
         if content_error:
-            workspace.status = "failed"
-            workspace.error_message = f"Profil uretimi basarisiz: {content_error}"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                f"Profil üretimi başarısız: {content_error}",
+            )
             return
 
         approved_keywords = _normalize_seed_keywords(keywords)
         if not approved_keywords:
-            workspace.status = "failed"
-            workspace.error_message = "Profil uretimi basarisiz: En az 1 keyword gerekli"
-            db.commit()
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                "Profil üretimi başarısız: en az 1 anahtar kelime gerekli",
+            )
             return
 
         profile = extractor.extract_profile_from_keywords(
@@ -2646,16 +3390,16 @@ def _run_profile_from_keywords(
                 competitor_urls,
             )
 
-        # Kısa süreli kilit + gate (plan v13)
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
+        # Kısa süreli kilit + gate (plan v13) + attempt token kontrolü (2.2):
+        # token eşleşmezse (yeni koşu başladı / janitor failed yaptı) HİÇBİR
+        # şey yazılmaz — profile_data dahil.
+        workspace = lock_if_current(db, workspace_id, attempt_id, action="success")
+        if workspace is None:
+            return
         if crawled_source_pages is not None:
             workspace.source_pages = crawled_source_pages
             workspace.crawl_content_cache = site_content
+        _carry_location_fields(workspace, profile)
         apply_profile_data_update(db, workspace, profile)
         workspace.suggested_keywords = approved_keywords
 
@@ -2672,97 +3416,10 @@ def _run_profile_from_keywords(
         logger.error(f"Workspace profile generation failed for workspace_id={workspace_id}: {e}")
         try:
             db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Profil uretimi basarisiz oldu")
-                db.commit()
-        except Exception:
-            pass
-    finally:
-        _close_ai_quietly(ai)
-        db.close()
-
-
-def _run_workspace_profile_analysis(
-    workspace_id: int,
-    company_url: str,
-    competitor_urls: list = None,
-    preliminary_info: str = None,
-):
-    """Background task: workspace için site crawl + AI profil çıkarma."""
-    from app.database.connection import SessionLocal
-    from app.generators.ai_service import get_ai_service
-    from app.core.site_analyzer.profile_extractor import ProfileExtractor
-    from app.core.keyword_normalize import normalize_keyword
-
-    db = SessionLocal()
-    ai = None  # finally'de kapatılır (Codex v9-3)
-    try:
-        workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-        if not workspace:
-            return
-
-        workspace.status = "running"
-        db.commit()
-
-        ai = get_ai_service(api_key=settings.GEMINI_API_KEY)
-        # Telemetri kapsamı (Codex v8-3): BackgroundTasks'ta finalize
-        # güvencesi yok → her event anında yazılır (flush_every=1)
-        ai.collector = UsageCollector(brand_profile_id=workspace_id, flush_every=1)
-        extractor = ProfileExtractor(ai)
-
-        result = extractor.extract_profile(company_url, preliminary_info=preliminary_info)
-
-        if result["error"] and not result["profile"]:
-            workspace.status = "failed"
-            workspace.error_message = result["error"]
-            db.commit()
-            return
-
-        validation = None
-        if competitor_urls and result["profile"]:
-            validation = extractor.validate_with_competitors(
-                result["profile"], competitor_urls
+            mark_failed_if_current(
+                db, workspace_id, attempt_id,
+                safe_500_detail(e, "Profil üretimi başarısız oldu"),
             )
-
-        # Kısa süreli kilit + gate (plan v13)
-        workspace = (
-            db.query(BrandProfile)
-            .filter(BrandProfile.id == workspace_id)
-            .with_for_update()
-            .first()
-        )
-        apply_profile_data_update(db, workspace, result["profile"])
-        workspace.source_pages = result["source_pages"]
-
-        # AI'ın önerdiği keyword'leri hafif normalize et
-        suggested_raw = (result.get("profile") or {}).get("suggested_keywords", [])
-        if suggested_raw:
-            normalized_suggestions = list(dict.fromkeys(
-                kw.strip().lower() for kw in suggested_raw
-                if kw and kw.strip()
-            ))
-            workspace.suggested_keywords = normalized_suggestions or None
-
-        if validation is not None:
-            workspace.validation_data = validation
-
-        workspace.status = "draft"
-        workspace.error_message = None
-        db.commit()
-
-        logger.info(f"Workspace profile analysis completed for workspace_id={workspace_id}")
-
-    except Exception as e:
-        logger.error(f"Workspace profile analysis failed for workspace_id={workspace_id}: {e}")
-        try:
-            db.rollback()
-            workspace = db.query(BrandProfile).filter(BrandProfile.id == workspace_id).first()
-            if workspace:
-                workspace.status = "failed"
-                workspace.error_message = safe_500_detail(e, "Profil analizi başarısız oldu")
-                db.commit()
         except Exception:
             pass
     finally:

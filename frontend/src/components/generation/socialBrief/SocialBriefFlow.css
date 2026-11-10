@@ -1079,3 +1079,22 @@
     justify-content: center;
   }
 }
+
+.sb-repair-list {
+  margin-top: 10px;
+  font-size: 12.5px;
+}
+
+.sb-repair-list > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sb-repair-list ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.sb-repair-list li {
+  margin-bottom: 6px;
+}

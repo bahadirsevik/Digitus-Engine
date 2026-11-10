@@ -11,11 +11,17 @@ from sqlalchemy.orm import Session
 from app.core.keyword_dedup import (
     FUZZY_THRESHOLD,
     are_metrics_equal,
+    dedup_mode,
     has_meaningful_metrics,
     strip_turkish_suffixes,
 )
+from app.core.keyword_junk import junk_reason
 from app.core.keyword_normalize import normalize_keyword
-from app.database.crud import _keyword_insert_data, _legacy_keyword_data_source
+from app.database.crud import (
+    _keyword_insert_data,
+    _legacy_keyword_data_source,
+    workspace_dedup_language,
+)
 from app.database.models import Keyword, WorkspaceKeyword
 
 try:
@@ -118,7 +124,12 @@ def build_import_plan(
     # hesaplanir: onceki desen her satir icin TUM adaylari yeniden stem'liyordu
     # (O(n*m) stem; 2000x2000'de ~35 sn). Ayni dongu sirasi ve ilk-eslesme
     # semantigi korunur — yalnizca tekrar hesaplama kaldirilir.
-    fuzzy_candidates = list(workspace_unique_rep.values())
+    # Türkçe dışı çalışma dilinde fuzzy YOK (dedup_mode): aday listesi boş -> _find_fuzzy_match None.
+    fuzzy_candidates = (
+        list(workspace_unique_rep.values())
+        if dedup_mode(workspace_dedup_language(db, brand_profile_id)) == "fuzzy_tr"
+        else []
+    )
     for _cand in fuzzy_candidates:
         _cand["stemmed_keyword"] = strip_turkish_suffixes(
             (_cand.get("keyword") or "").lower().strip()
@@ -146,6 +157,18 @@ def build_import_plan(
 
     for row in keyword_rows:
         keyword = (row.get("keyword") or "").strip()
+        # Savunma katmani: parser disindaki cagiranlardan gelen cop satirlar da
+        # ayni kaynaktan (junk_reason) elenir ve junk_rows'ta raporlanir.
+        _junk = junk_reason(keyword)
+        if _junk is not None:
+            plan.junk_rows.append({
+                "keyword": keyword,
+                "source_file": row.get("_source_file") or source_file_name,
+                "source_row": row.get("_source_row"),
+                "reason": "junk_row",
+                "matched": _junk,
+            })
+            continue
         normalized = normalize_keyword(keyword)
         detail = _detail(row, reason="accepted")
         detail["normalized_keyword"] = normalized

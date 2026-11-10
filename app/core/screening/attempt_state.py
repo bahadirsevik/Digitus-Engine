@@ -26,6 +26,8 @@ from typing import Optional
 
 from sqlalchemy import update
 
+from app.core.constants import SCREENING_NOT_USED_MESSAGE, TASK_STALE_ERROR_MESSAGE
+
 from app.database.models import (
     ChannelAssignmentAttempt,
     CorpusScreeningJob,
@@ -371,8 +373,7 @@ def _side_states(db, attempt: ChannelAssignmentAttempt, *,
     parent_ok = parent is not None and parent.status == "completed"
     if not parent_done and finalize_dead and _parent_is_dead(parent, now):
         parent.status = "failed"
-        parent.error_message = (
-            "worker hard-kill sonrası stale — reconciler kapattı")
+        parent.error_message = TASK_STALE_ERROR_MESSAGE
         parent_done, parent_ok = True, False
     if attempt.screening_job_id is None:
         return parent_done, parent_ok, True, True
@@ -393,8 +394,7 @@ def _side_states(db, attempt: ChannelAssignmentAttempt, *,
             if child is not None and child.status in ("pending", "running"):
                 child.status = "completed"
                 child.progress = 100
-                child.error_message = (
-                    "execution lease doldu — reconciler kapattı")
+                child.error_message = SCREENING_NOT_USED_MESSAGE
                 child.result_data = {
                     **(child.result_data or {}),
                     "status": "fallback",

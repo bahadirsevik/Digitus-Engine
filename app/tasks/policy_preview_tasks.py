@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 
+from loguru import logger
+
 from app.tasks.celery_app import celery_app
 
 PREVIEW_CACHE_TTL_SECONDS = 24 * 3600
@@ -100,7 +102,11 @@ def run_competitor_preview_task(self, workspace_id: int, urls: list):
         )
         return {"status": "completed", "competitors": results}
     except Exception as exc:
-        update_task_status(task_id, status="failed", error_message=str(exc))
+        logger.exception("Politika önizleme görevi başarısız")
+        update_task_status(
+            task_id, status="failed",
+            error_message="Politika önizlemesi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin.",
+        )
         return {"status": "failed", "error": str(exc)}
     finally:
         if ai is not None:

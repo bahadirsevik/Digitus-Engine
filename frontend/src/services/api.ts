@@ -26,6 +26,10 @@ const api = axios.create({
  */
 export const UNAUTHENTICATED_EVENT = 'digitus:unauthenticated'
 
+// Görev/deneme/export DURUM yoklamaları için sonlu zaman aşımı (genel timeout YOK:
+// yükleme ve uzun istekler bozulmasın). Askıda kalan yoklama bir hata sayılır.
+export const STATUS_POLL_TIMEOUT_MS = 15000
+
 export interface ApiError {
   status: number
   message: string
@@ -122,20 +126,105 @@ export function apiErrorStatus(err: unknown): number {
   return 0
 }
 
-// FastAPI 422 detayını (Pydantic hata listesi) okunur mesaja çevirir.
+// FastAPI 422 detayını (Pydantic hata listesi) okunur Türkçe mesaja çevirir.
 // Hem `{detail: [...]}`ten gelen array'i hem doğrudan array/string formunu kapsar.
+// İç alan adı yerine formdaki Türkçe adı gösterilir (eşleme yoksa genel ifade);
+// sınır değerleri (en az/en fazla) korunur. Backend'in Türkçe doğrulama metni
+// ("Value error, ...") olduğu gibi geçer.
+const VALIDATION_FIELD_LABEL: Record<string, string> = {
+  keyword: 'Anahtar kelime',
+  keywords: 'Anahtar kelime listesi',
+  seeds: 'Başlangıç kelimeleri',
+  selected_keyword_ids: 'Seçilen kelimeler',
+  keyword_ids: 'Seçilen kelimeler',
+  url: 'URL',
+  urls: 'URL listesi',
+  competitor_urls: "Rakip URL'leri",
+  company_url: 'Web sitesi URL',
+  website_url: 'Web sitesi URL',
+  min_volume: 'En az aylık arama',
+  max_results: 'En fazla sonuç',
+  monthly_volume: 'Aylık arama',
+  competition_score: 'Rekabet',
+  sector: 'Sektör',
+  target_market: 'Hedef pazar',
+  markets: 'Pazarlar',
+  run_name: 'Analiz adı',
+  ads_capacity: 'ADS kelime sayısı',
+  seo_capacity: 'SEO kelime sayısı',
+  social_capacity: 'Sosyal medya kelime sayısı',
+  limit: 'Limit',
+  keyword_limit: 'Kelime sayısı',
+  max_categories: 'Kategori sayısı',
+  ideas_per_category: 'Kategori başına fikir sayısı',
+  max_contents: 'İçerik sayısı',
+  target_word_count: 'Hedef kelime sayısı',
+  brand_name: 'Marka adı',
+  name: 'Ad',
+  usps: "USP'ler",
+  term: 'Terim',
+  title: 'Başlık',
+}
+
+function validationItemText(row: {
+  type?: string
+  msg?: string
+  loc?: unknown[]
+  ctx?: Record<string, unknown>
+}): string {
+  const msg = row.msg ?? ''
+  if (msg.startsWith('Value error, ')) return msg.slice('Value error, '.length)
+  const field = Array.isArray(row.loc)
+    ? [...row.loc].reverse().find((p): p is string => typeof p === 'string' && p !== 'body')
+    : undefined
+  const label = field ? VALIDATION_FIELD_LABEL[field] : undefined
+  const c = row.ctx ?? {}
+  const value = label ?? 'Bir değer'
+  const text = label ?? 'Bir metin'
+  switch (row.type) {
+    case 'missing':
+      return label ? `${label} alanı zorunlu.` : 'Zorunlu bir alan boş bırakılmış.'
+    case 'greater_than_equal':
+      return `${value} en az ${c.ge} olmalı.`
+    case 'greater_than':
+      return `${value} ${c.gt} değerinden büyük olmalı.`
+    case 'less_than_equal':
+      return `${value} en fazla ${c.le} olmalı.`
+    case 'less_than':
+      return `${value} ${c.lt} değerinden küçük olmalı.`
+    case 'string_too_short':
+      return `${text} en az ${c.min_length} karakter olmalı.`
+    case 'string_too_long':
+      return `${text} en fazla ${c.max_length} karakter olabilir.`
+    case 'too_short':
+      return label
+        ? `${label}: en az ${c.min_length} seçim yapılmalı.`
+        : `En az ${c.min_length} seçim yapılmalı.`
+    case 'too_long':
+      return label
+        ? `${label}: en fazla ${c.max_length} seçim yapılabilir.`
+        : `En fazla ${c.max_length} seçim yapılabilir.`
+  }
+  // Türkçe yazılmış özel mesaj ise koru; İngilizce ham mesajı gösterme
+  if (/[çğıöşüÇĞİÖŞÜ]/.test(msg)) return msg
+  return label ? `${label} alanındaki değer geçersiz.` : 'Girilen değerlerden biri geçersiz.'
+}
+
 export function formatValidationDetail(raw: unknown): string | null {
   if (typeof raw === 'string') return raw
   if (!Array.isArray(raw)) return null
   const msgs = raw
     .map((item) => {
-      const row = item as { loc?: unknown[]; msg?: string }
-      if (!row?.msg) return ''
-      const field = Array.isArray(row.loc) ? String(row.loc[row.loc.length - 1] ?? '') : ''
-      return field && field !== 'body' ? `${field}: ${row.msg}` : row.msg
+      const row = item as {
+        type?: string
+        msg?: string
+        loc?: unknown[]
+        ctx?: Record<string, unknown>
+      }
+      return row?.msg ? validationItemText(row) : ''
     })
     .filter(Boolean)
-  return msgs.length ? msgs.join(' · ') : null
+  return msgs.length ? Array.from(new Set(msgs)).join(' · ') : null
 }
 
 // Blob response'u tarayıcı indirmesine çevirir (plan v4: Export.tsx'ten ortak util'e).
@@ -212,12 +301,17 @@ api.interceptors.response.use(
       message =
         formatValidationDetail(raw) || detailMessage || 'Gönderilen değerler doğrulamadan geçemedi.'
     } else if (status === 401) {
-      message = 'Kimlik doğrulama gerekli. Lütfen oturum açın.'
       // Oturum düşmüş: arayüzü giriş ekranına al. Auth uçlarının kendi
       // 401'leri hariç — giriş denemesinin başarısız olması oturum
       // düşmesi değildir ve ekranı sıfırlamamalı.
       const url = err.config?.url ?? ''
-      if (!url.startsWith('/auth') && !url.includes('/auth/')) {
+      const isAuthCall = url.startsWith('/auth') || url.includes('/auth/')
+      message = isAuthCall
+        ? typeof raw === 'string'
+          ? raw
+          : detailMessage || 'Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.'
+        : 'Oturumunuz sona erdi. Lütfen yeniden giriş yapın.'
+      if (!isAuthCall) {
         try {
           window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
         } catch {
@@ -229,11 +323,20 @@ api.interceptors.response.use(
     } else if (status === 404) {
       message = typeof raw === 'string' ? raw : 'İstenen kaynak bulunamadı.'
     } else if (status === 400) {
-      message = typeof raw === 'string' ? raw : 'Geçersiz istek parametreleri.'
+      message = typeof raw === 'string' ? raw : detailMessage || 'Geçersiz istek parametreleri.'
     } else if (status === 503 && typeof raw === 'string') {
       message = raw
     } else if (status >= 500) {
-      message = 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+      // Backend 5xx detayı güvenli Türkçe metindir (ham istisna yalnız logda); boşsa jenerik
+      // Nesne detay ({code, message}, ör. 502 BROKER_ERROR) mesajını da taşır
+      message =
+        typeof raw === 'string' && raw.trim()
+          ? raw
+          : detailMessage.trim() || 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+    } else if (status === 0 && err.code === 'ECONNABORTED') {
+      message = 'İstek zaman aşımına uğradı; biraz sonra tekrar deneyin.'
+    } else if (status === 0 && err.code !== 'ERR_CANCELED') {
+      message = 'Sunucuya ulaşılamadı; bağlantınızı kontrol edip tekrar deneyin.'
     } else {
       message = typeof raw === 'string' ? raw : detailMessage || err.message
     }
@@ -353,9 +456,47 @@ export const workspaceApi = {
       params: { include_archived: includeArchived },
     }),
 
-  get: (id: number) => api.get(`/brand-profile/workspaces/${id}`),
+  // Analiz durumu yoklamaları da buradan geçer: askıda kalan istek sonlu sürede hata olur
+  get: (id: number) =>
+    api.get(`/brand-profile/workspaces/${id}`, { timeout: STATUS_POLL_TIMEOUT_MS }),
+
+  // Pazar seçimi (ülke/dil listesi + konum arama) — plan_pazar_dil_secimi.md Faz 1
+  marketOptions: () => api.get<MarketOptions>('/brand-profile/market-options'),
+
+  searchLocations: (q: string, country?: string) =>
+    api.get<LocationSearchResponse>('/brand-profile/market-options/locations', {
+      params: { q, ...(country ? { country } : {}) },
+    }),
 
   create: (data: WorkspaceCreateRequest) => api.post('/brand-profile/workspaces', data),
+
+  // Marka altında alt sayfa odağı (Faz 3): 201 + yeni odak (pending, analiz başlar)
+  createFocus: (workspaceId: number, url: string) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${workspaceId}/focuses`, { url }),
+
+  // Pazar kopyaları (tek/toplu): 201 {created, skipped}; hepsi mevcutsa 409 MARKET_COPY_ALL_EXIST
+  addMarkets: (workspaceId: number, markets: MarketCopyItem[]) =>
+    api.post<MarketCopyResponse>(`/brand-profile/workspaces/${workspaceId}/markets`, { markets }),
+
+  // Bekleyen alt sayfa (marka onayından sonra otomatik oluşur): tekrar dene / vazgeç
+  retryPendingFocus: (id: number) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${id}/pending-focus/retry`),
+
+  cancelPendingFocus: (id: number) =>
+    api.delete<WorkspaceResponse>(`/brand-profile/workspaces/${id}/pending-focus`),
+
+  // Başarısız (profilsiz) profil-önce analizini aynı kayıtta yeniden başlatır
+  retryAnalysis: (id: number) =>
+    api.post<WorkspaceResponse>(`/brand-profile/workspaces/${id}/analysis/retry`),
+
+  // Marka ayarlarını alt sayfalara toplu uygulama: önizleme (yazmaz) + uygula
+  previewFocusSettings: (id: number) =>
+    api.post<FocusSettingsPreviewResponse>(
+      `/brand-profile/workspaces/${id}/focuses/settings/preview`
+    ),
+
+  applyFocusSettings: (id: number) =>
+    api.post<FocusSettingsApplyResponse>(`/brand-profile/workspaces/${id}/focuses/settings/apply`),
 
   approveKeywords: (id: number, data: WorkspaceKeywordApproveRequest) =>
     api.put<WorkspaceResponse>(`/brand-profile/workspaces/${id}/keywords/approve`, data),
@@ -445,16 +586,6 @@ export const brandProfileApi = {
       { decisions }
     ),
 
-  analyzeProfile: (runId: number, data: ProfileAnalyzeRequest, brand_profile_id?: number) =>
-    api.post(`/brand-profile/runs/${runId}/profile/analyze`, data, {
-      params: { brand_profile_id },
-    }),
-
-  confirmProfile: (runId: number, data?: ProfileConfirmRequest, brand_profile_id?: number) =>
-    api.put(`/brand-profile/runs/${runId}/profile/confirm`, data || {}, {
-      params: { brand_profile_id },
-    }),
-
   computeRelevance: (runId: number, brand_profile_id?: number) =>
     api.post(`/brand-profile/runs/${runId}/relevance/compute`, undefined, {
       params: { brand_profile_id },
@@ -501,24 +632,6 @@ export interface AssignmentPreflight {
   capacities?: Record<string, number>
 }
 
-export interface ScreeningRunStatus {
-  exists: boolean
-  screening_job_id?: number
-  status?: string
-  error_code?: string | null
-  screening_mode?: ScreeningMode | null
-  cost_usd?: number | null
-  provider_calls?: number | null
-  planned_requests?: number | null
-  ceiling_charges?: number | null
-  coverage_resolved?: number | null
-  universe_size?: number
-  unresolved?: number | null
-  contract_violations?: number | null
-  applied_to_live_pool?: boolean
-  counterfactual?: Record<string, unknown> | null
-}
-
 export interface ScreeningApproval {
   screening_mode: ScreeningMode
   preflight_sha256: string
@@ -541,12 +654,6 @@ export const channelsApi = {
       },
       { params: { brand_profile_id } }
     ),
-
-  // Son tarama işinin durumu/sonucu (salt okunur)
-  getScreeningStatus: (runId: number, brand_profile_id: number) =>
-    api.get<ScreeningRunStatus>(`/channels/runs/${runId}/screening`, {
-      params: { brand_profile_id },
-    }),
 
   // Hiçbir şey başlatmaz; ücretli çağrı YAPMAZ
   getAssignmentPreflight: (
@@ -589,7 +696,10 @@ export const exportApi = {
     api.post('/export/', data, { params: { brand_profile_id } }),
 
   status: (exportId: string, brand_profile_id?: number) =>
-    api.get(`/export/${exportId}/status`, { params: { brand_profile_id } }),
+    api.get(`/export/${exportId}/status`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
 
   download: (exportId: string, brand_profile_id?: number) =>
     api.get(`/export/${exportId}/download`, {
@@ -602,6 +712,18 @@ export const exportApi = {
 }
 
 // Generation API
+export interface ClaimReevaluateChannel {
+  cleared: number
+  still_flagged: number
+}
+
+export interface ClaimReevaluateResult {
+  rsa: ClaimReevaluateChannel
+  seo: ClaimReevaluateChannel
+  social: ClaimReevaluateChannel
+  note?: string
+}
+
 export const generationApi = {
   generateSeoGeo: (keywordIds: number[], contentType?: string, wordCount?: number) =>
     api.post('/generation/seo-geo', {
@@ -631,6 +753,12 @@ export const generationApi = {
   activateAdsSet: (setId: number, brand_profile_id?: number) =>
     api.post(`/generation/ads/sets/${setId}/activate`, undefined, {
       params: { brand_profile_id },
+    }),
+
+  // İddia incelemesini güncel profille yeniden değerlendirir (ücretsiz; metin değişmez)
+  reevaluateClaims: (scoringRunId: number, brandProfileId: number) =>
+    api.post<ClaimReevaluateResult>('/generation/claims/re-evaluate', undefined, {
+      params: { scoring_run_id: scoringRunId, brand_profile_id: brandProfileId },
     }),
 
   regenerateAdGroup: (groupId: number, brand_profile_id?: number) =>
@@ -680,8 +808,6 @@ export const googleAdsApi = {
 
   enrich: (data: EnrichRequest) => api.post<EnrichResponse>('/google-ads/enrich', data),
 
-  import: (data: ImportRequest) => api.post<ImportResponse>('/google-ads/import', data),
-
   listCampaigns: (customerId: string, refresh = false) =>
     api.get<CampaignInfo[]>('/google-ads/campaigns', {
       params: { customer_id: customerId, refresh },
@@ -698,15 +824,27 @@ export const googleAdsApi = {
     api.get<CampaignKeywordsResponse>('/google-ads/campaigns/keywords', {
       params,
     }),
-
-  importCampaignKeywords: (data: CampaignKeywordsImportRequest) =>
-    api.post<ImportResponse>('/google-ads/campaigns/keywords/import', data),
 }
 
 // Tasks API
+/** `GET /tasks/{id}` ve `GET /tasks/run/{run_id}` görev durumu. */
+export interface TaskStatusInfo {
+  task_id: string
+  task_type?: string | null
+  /** Görevin bağlı olduğu scoring run (eski kayıtlarda null olabilir) */
+  scoring_run_id?: number | null
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  result_data?: Record<string, unknown>
+  error_message?: string
+}
+
 export const tasksApi = {
   getStatus: (taskId: string, brand_profile_id?: number) =>
-    api.get(`/tasks/${taskId}`, { params: { brand_profile_id } }),
+    api.get<TaskStatusInfo>(`/tasks/${taskId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
 
   listByRun: (runId: number, brand_profile_id?: number) =>
     api.get(`/tasks/run/${runId}`, { params: { brand_profile_id } }),
@@ -716,6 +854,16 @@ export const tasksApi = {
 
   cancel: (taskId: string, brand_profile_id?: number) =>
     api.post(`/tasks/${taskId}/cancel`, undefined, { params: { brand_profile_id } }),
+}
+
+/**
+ * `GET /tasks/run/{id}` ve `GET /tasks/` yanıtı `{ tasks, total }` NESNESİDİR
+ * (TaskListResponse). Dizi bekleyen eski okuma görevi hiç bulamıyordu; tek okuma noktası.
+ */
+export function tasksFromListResponse<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[]
+  const tasks = (data as { tasks?: unknown } | null | undefined)?.tasks
+  return Array.isArray(tasks) ? (tasks as T[]) : []
 }
 
 // Types
@@ -742,6 +890,7 @@ export interface SkippedKeywordDetail {
     | 'batch_duplicate'
     | 'skipped_theme'
     | 'limit_exceeded'
+    | 'skipped_junk'
     | string
   matched?: string | null
   monthly_volume?: number | null
@@ -764,6 +913,7 @@ export interface KeywordImportResponse {
   fuzzy_merged_in_batch?: number
   skipped_theme?: number
   skipped_limit?: number
+  skipped_junk?: number
   pool_limit?: number
   pool_total?: number
   skipped_details?: SkippedKeywordDetail[]
@@ -791,6 +941,7 @@ export interface KeywordImportDetail {
 }
 
 export interface KeywordUploadCsvResponse extends KeywordImportResponse {
+  market_notice?: string
   parsed: number
   accepted: number
   skipped_exact: number
@@ -842,6 +993,69 @@ export interface ScoringRunCreate {
   location_preview_is_saved_policy?: boolean
 }
 
+export interface MarketCountry {
+  geo_target_id: string
+  code: string
+  name_tr: string
+  label: string
+}
+
+export interface MarketLanguage {
+  language_id: string
+  code: string
+  name_tr: string
+  name_native: string
+}
+
+export interface MarketOptions {
+  countries: MarketCountry[]
+  languages: MarketLanguage[]
+  default: { geo_target_id: string; language_id: string }
+}
+
+export interface MarketCopyItem {
+  geo_target_id: string
+  language_id: string
+}
+
+export interface MarketCopySkipped extends MarketCopyItem {
+  market_label: string
+  reason: string
+}
+
+export interface MarketCopyResponse {
+  created: WorkspaceResponse[]
+  skipped: MarketCopySkipped[]
+  source_id: number
+}
+
+// 409 MARKET_COPY_ALL_EXIST: hata değil, "hepsi zaten var" bilgisi (atlananlar gövdede)
+export function marketCopyAllExistFromError(err: unknown): MarketCopySkipped[] | null {
+  const detail = detailFromError(err)
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    (detail as { code?: unknown }).code === 'MARKET_COPY_ALL_EXIST'
+  ) {
+    const skipped = (detail as { skipped?: unknown }).skipped
+    return Array.isArray(skipped) ? (skipped as MarketCopySkipped[]) : []
+  }
+  return null
+}
+
+export interface LocationItem {
+  geo_target_id: string
+  label: string
+  kind: 'country' | 'city' | 'region'
+  country_code: string
+  name: string
+}
+
+export interface LocationSearchResponse {
+  items: LocationItem[]
+  total: number
+}
+
 export interface WorkspaceCreateRequest {
   name?: string
   company_url: string
@@ -852,12 +1066,20 @@ export interface WorkspaceCreateRequest {
   default_geo_target_id?: string
   default_language_id?: string
   flow_version?: 'legacy' | 'profile_first'
+  crawl_scope?: 'site' | 'page'
+  pending_focus_url?: string
 }
 
 export interface WorkspaceResponse {
   id: number
   name: string
   company_url: string
+  crawl_scope?: string
+  parent_brand_profile_id?: number | null
+  archived_with_parent?: boolean
+  pending_focus_url?: string | null
+  pending_focus_error?: string | null
+  focus_handoff_id?: number | null
   competitor_urls?: string[] | null
   competitor_url_decisions?: Record<string, CompetitorUrlDecision> | null
   status: string
@@ -870,6 +1092,9 @@ export interface WorkspaceResponse {
   excluded_info?: string | null
   default_geo_target_id?: string | null
   default_language_id?: string | null
+  market_label?: string | null
+  market_location_label?: string | null
+  market_locked?: boolean
   deleted_at: string | null
   created_at: string
   updated_at?: string
@@ -986,7 +1211,7 @@ export function poolFreshnessLabel(
   return (
     [
       f.policy_stale && 'Politika değişti',
-      f.relevance_stale && 'Profil değişti (relevance bayat)',
+      f.relevance_stale && 'Marka profili değişti',
       f.strategy_stale && 'Kanal stratejisi değişti',
     ]
       .filter(Boolean)
@@ -1021,6 +1246,20 @@ export interface WorkspaceKeywordRefreshRequest {
   include_new_ideas?: boolean
 }
 
+export interface FocusSettingsPreviewResponse {
+  focuses: {
+    id: number
+    name: string
+    busy: boolean
+    changes: { field: string; label: string }[]
+  }[]
+}
+
+export interface FocusSettingsApplyResponse {
+  applied: { id: number; name: string; changed: boolean }[]
+  skipped: { id: number; name: string; reason: string }[]
+}
+
 export interface WorkspaceKeywordRefreshResponse {
   workspace_id: number
   refreshed: number
@@ -1032,8 +1271,6 @@ export interface WorkspaceKeywordRefreshResponse {
 
 export interface UrlSeedRequest {
   url: string
-  language_id?: string
-  geo_target_id?: string
   max_results?: number
   min_volume?: number
   include_keyword_seed?: boolean
@@ -1050,6 +1287,10 @@ export interface UrlSeedResponse {
   quota_remaining: number | null
   warnings?: string[]
   source_status?: UrlSeedSourceStatus | null
+  // Google'a gerçekte gönderilen pazar (sunucu çalışma pazarını kullanır)
+  geo_target_id?: string
+  language_id?: string
+  market_label?: string
 }
 
 export interface UrlSeedIdea {
@@ -1083,8 +1324,7 @@ export interface EnrichRequest {
   seeds: string[]
   max_results: number
   min_volume: number
-  language_id?: string
-  geo_target_id?: string
+  brand_profile_id: number
 }
 
 export interface EnrichedKeywordOut {
@@ -1104,24 +1344,9 @@ export interface EnrichResponse {
   truncated_at: number | null
   truncated_reason: string | null
   keywords: EnrichedKeywordOut[]
-}
-
-export interface ImportRequest {
-  customer_id: string
-  seeds: string[]
-  max_results: number
-  min_volume: number
-  sector?: string
-  target_market?: string
-}
-
-export interface ImportResponse {
-  created: number
-  already_existing: number
-  skipped_fuzzy: number
-  truncated: boolean
-  truncated_reason: string | null
-  message: string
+  geo_target_id?: string
+  language_id?: string
+  market_label?: string
 }
 
 export interface CampaignInfo {
@@ -1146,21 +1371,6 @@ export interface CampaignKeywordOut {
 export interface CampaignKeywordsResponse {
   count: number
   keywords: CampaignKeywordOut[]
-}
-
-export interface CampaignKeywordsImportRequest {
-  customer_id: string
-  campaign_id?: string
-  min_impressions?: number
-  date_range?: string
-  limit?: number
-  sector?: string
-  target_market?: string
-}
-
-export interface ProfileAnalyzeRequest {
-  company_url: string
-  competitor_urls?: string[]
 }
 
 export interface ProfileConfirmRequest {
@@ -1323,6 +1533,9 @@ export interface ChannelProgress {
   expected_count: number
   generated_count: number
   status: ChannelStatus
+  // ADS (additive): taslak RSA seti iddia incelemesi bekliyor, aktif set yok
+  review_pending?: boolean
+  review_set_id?: number | null
 }
 
 export interface ChannelGroup {
@@ -1336,7 +1549,7 @@ export interface PipelineStep {
   label: string
   state: 'pending' | 'in_progress' | 'complete' | 'blocked' | 'skipped'
   detail: string | null
-  path: string
+  path: string | null
 }
 
 export interface ExportSummary {
@@ -1760,6 +1973,13 @@ export const socialBriefApi = {
       { params: { brand_profile_id } }
     ),
 
+  // Tek brief'in içerik dosyası (stale brief de iner, raporda "güncel değil" etiketiyle)
+  exportBrief: (brief_id: number, brand_profile_id: number, format: 'excel' | 'docx' | 'pdf') =>
+    api.get(`/generation/social/briefs/${brief_id}/export`, {
+      params: { brand_profile_id, format },
+      responseType: 'blob',
+    }),
+
   // Brief ekranını sunucudan yeniden kurar (kategoriler + attempt kimlikleri)
   getBriefState: (brief_id: number, brand_profile_id: number) =>
     api.get<SocialBriefStateResponse>(`/generation/social/briefs/${brief_id}/state`, {
@@ -1780,7 +2000,7 @@ export const socialBriefApi = {
   getIdeasAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialIdeasGenerateResponse>(
       `/generation/social/briefs/${brief_id}/ideas/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   retryIdeas: (brief_id: number, data: SocialBriefIdeasRetryRequest, brand_profile_id: number) =>
@@ -1793,7 +2013,7 @@ export const socialBriefApi = {
   getIdeasRetryAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialIdeasGenerateResponse>(
       `/generation/social/briefs/${brief_id}/ideas/retry/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   generateContents: (
@@ -1810,7 +2030,7 @@ export const socialBriefApi = {
   getContentsAttempt: (brief_id: number, attempt_id: number, brand_profile_id: number) =>
     api.get<SocialBriefContentsAttemptResponse>(
       `/generation/social/briefs/${brief_id}/contents/attempts/${attempt_id}`,
-      { params: { brand_profile_id } }
+      { params: { brand_profile_id }, timeout: STATUS_POLL_TIMEOUT_MS }
     ),
 
   // Workspace geneli sosyal içerik geçmişi (K13); brief_id verilirse yalnız o brief
@@ -1824,7 +2044,6 @@ export const socialBriefApi = {
 }
 
 export default api
-
 
 // ── Auth ──
 // Bu uçlar /api/v1/auth altındadır ve api_router'a bağlı DEĞİLDİR; bu yüzden

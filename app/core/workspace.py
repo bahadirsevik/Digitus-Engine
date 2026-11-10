@@ -11,29 +11,123 @@ Endpoint kodu sadece tek satır `obj = verify_X(...)` çağırarak işini bitiri
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.database.models import BrandProfile, ExportJob, ScoringRun, TaskResult
+from app.core import markets
+from app.database.models import (
+    BrandProfile,
+    ExportJob,
+    ScoringRun,
+    TaskResult,
+    WorkspaceKeyword,
+)
 
 
-def verify_workspace(db: Session, brand_profile_id: int) -> BrandProfile:
+def verify_workspace(
+    db: Session, brand_profile_id: int, lock: bool = False
+) -> BrandProfile:
     """Workspace var mı + arşivlenmiş değil mi?
+
+    lock=True: satır FOR SHARE tutulur (caller transaction'ı bitene dek);
+    pazar değişimi (FOR UPDATE) ile ilk yazma yolları serileşir. GET yolları lock=False.
 
     Raises HTTPException 404 if not found or soft-deleted.
     """
-    workspace = db.query(BrandProfile).filter(
+    query = db.query(BrandProfile).filter(
         BrandProfile.id == brand_profile_id,
         BrandProfile.deleted_at.is_(None),
-    ).first()
+    )
+    if lock:
+        query = query.with_for_update(read=True)
+    workspace = query.first()
 
     if not workspace:
         raise HTTPException(
             status_code=404,
-            detail=f"Marka çalışması (id={brand_profile_id}) bulunamadı veya arşivlenmiş",
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
         )
 
     return workspace
+
+
+def market_change_blocker(db: Session, ws: BrandProfile) -> Optional[str]:
+    """Pazar (hedef konum/dil) değişimini engelleyen neden; None → değişebilir."""
+    from app.core.policy.guards import find_active_workspace_work
+
+    if db.query(WorkspaceKeyword.id).filter(WorkspaceKeyword.brand_profile_id == ws.id).first():
+        return "çalışmada kelime var"
+    if db.query(ScoringRun.id).filter(ScoringRun.brand_profile_id == ws.id).first():
+        return "çalışmada analiz var"
+    if db.query(ExportJob.id).filter(ExportJob.brand_profile_id == ws.id).first():
+        return "çalışmada dışa aktarım var"
+    return find_active_workspace_work(db, ws.id)
+
+
+def set_workspace_market(
+    db: Session, ws: BrandProfile, geo_target_id: Optional[str], language_id: Optional[str]
+) -> bool:
+    """Pazarı değiştir; değiştiyse True. Commit ETMEZ.
+
+    Girdiler kanonik (markets.validate_market_input çıktısı). Çağıran satırı
+    FOR UPDATE tutmalı (kontrol ile yazma aynı transaction'da kalsın).
+    """
+    geo = markets._clean_geo(geo_target_id)
+    lang = markets._clean_language(language_id)
+    if (geo, lang) == (
+        markets._clean_geo(ws.default_geo_target_id),
+        markets._clean_language(ws.default_language_id),
+    ):
+        return False
+    reason = market_change_blocker(db, ws)
+    if reason:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MARKET_LOCKED",
+                "message": "Bu çalışmada veri var; hedef konum/dil değiştirilemez. Yeni pazar çalışması açın.",
+                "reason": reason,
+            },
+        )
+    ws.default_geo_target_id = geo or None
+    ws.default_language_id = lang or None
+    return True
+
+
+def stamp_rows_market(rows: list, ws: BrandProfile) -> list:
+    """Kelime satırlarına çalışma pazarını damgala (yerinde); DB yazımından ÖNCE çağrılır.
+
+    Açık geo/dil farklıysa isteğin TAMAMI 409 (hiçbir satır yazılmaz); boşsa çalışma değeri.
+    """
+    geo, lang = markets.workspace_market(ws)
+    bad = 0
+    first_bad = None
+    for row in rows:
+        row_geo = markets._clean_geo(row.get("geo_target_id")) or geo
+        row_lang = markets._clean_language(row.get("language_id")) or lang
+        if (row_geo, row_lang) != (geo, lang):
+            bad += 1
+            first_bad = first_bad or (row_geo, row_lang)
+    if bad:
+        a_geo, a_lang = first_bad
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MARKET_MISMATCH",
+                "message": (
+                    f"Bu liste {markets.location_label(a_geo)} · {markets.language_name(a_lang) or a_lang} "
+                    f"ile ölçüldü; çalışma pazarı {markets.location_label(geo)} · "
+                    f"{markets.language_name(lang) or lang}. Listeyi yeniden çekin."
+                ),
+                "rows": bad,
+            },
+        )
+    for row in rows:
+        row["geo_target_id"] = geo
+        row["language_id"] = lang
+    return rows
 
 
 def verify_scoring_run(
@@ -53,7 +147,7 @@ def verify_scoring_run(
     if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     verify_workspace(db, brand_profile_id)
@@ -62,13 +156,13 @@ def verify_scoring_run(
     if not run:
         raise HTTPException(
             status_code=404,
-            detail="scoring run not found",
+            detail="Analiz bulunamadı.",
         )
 
     if run.brand_profile_id != brand_profile_id:
         raise HTTPException(
             status_code=404,
-            detail="scoring run not found in workspace",
+            detail="Analiz bu marka çalışmasında bulunamadı.",
         )
 
     return run
@@ -101,7 +195,7 @@ def require_fresh_channel_pool(db: Session, run: ScoringRun):
         if freshness.policy_stale:
             reasons.append("politika değişti")
         if freshness.relevance_stale:
-            reasons.append("profil değişti (relevance bayat)")
+            reasons.append("marka profili değişti")
         if freshness.strategy_stale:
             reasons.append("kanal stratejisi değişti")
         if freshness.assignment_in_progress:
@@ -137,7 +231,7 @@ def verify_task_in_workspace(
     if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     verify_workspace(db, brand_profile_id)
@@ -150,7 +244,7 @@ def verify_task_in_workspace(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="task not found in workspace")
+        raise HTTPException(status_code=404, detail="İşlem bu marka çalışmasında bulunamadı.")
     return row[0]
 
 
@@ -170,7 +264,7 @@ def verify_export_in_workspace(
     if brand_profile_id is None:
         raise HTTPException(
             status_code=400,
-            detail="brand_profile_id is required",
+            detail="Önce bir marka çalışması seçin.",
         )
 
     verify_workspace(db, brand_profile_id)
@@ -184,5 +278,5 @@ def verify_export_in_workspace(
         .first()
     )
     if not job:
-        raise HTTPException(status_code=404, detail="export not found in workspace")
+        raise HTTPException(status_code=404, detail="Dışa aktarım bu marka çalışmasında bulunamadı.")
     return job

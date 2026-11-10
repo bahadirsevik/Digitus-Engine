@@ -3,20 +3,12 @@ Pydantic schemas for Brand Profile & Keyword Relevance.
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
+
+from app.core import markets
 
 
 # ==================== REQUEST SCHEMAS ====================
-
-class ProfileAnalyzeRequest(BaseModel):
-    """Request to trigger site profile analysis."""
-    company_url: str = Field(..., description="Firma web sitesi URL'si")
-    competitor_urls: Optional[List[str]] = Field(
-        None,
-        max_length=3,
-        description="Rakip site URL'leri (max 3)"
-    )
-
 
 class ProfileConfirmRequest(BaseModel):
     """Request to confirm/edit a draft profile."""
@@ -108,6 +100,77 @@ class WorkspaceCreateRequest(BaseModel):
         "legacy",
         description="Onboarding akışı: legacy (keyword-önce) | profile_first (profil-önce sihirbaz)",
     )
+    crawl_scope: Optional[Literal["site", "page"]] = Field(
+        None,
+        description="Crawl kapsamı; boşsa URL'den türetilir (kök → site, alt sayfa → page)",
+    )
+    pending_focus_url: Optional[str] = Field(
+        None,
+        max_length=2048,
+        description="Marka onayından sonra kendiliğinden açılacak alt sayfa (yalnız site + profile_first)",
+    )
+
+
+class FocusCreateRequest(BaseModel):
+    """Marka altına alt sayfa odağı ekleme isteği."""
+    url: str = Field(..., min_length=1, max_length=500, description="Odak sayfa URL'i (marka ile aynı site)")
+
+
+class MarketCopyItem(BaseModel):
+    """Pazar kopyası hedefi: hedef konum (ülke/şehir) + çıktı dili."""
+    geo_target_id: str = Field(..., min_length=1, max_length=40)
+    language_id: str = Field(..., min_length=1, max_length=40)
+
+    @field_validator("geo_target_id", "language_id", mode="before")
+    @classmethod
+    def _id_to_str(cls, value: Any) -> Any:
+        return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+
+
+class MarketCopyRequest(BaseModel):
+    markets: List[MarketCopyItem] = Field(..., min_length=1, max_length=30)
+
+
+class MarketCopySkipped(BaseModel):
+    geo_target_id: str
+    language_id: str
+    market_label: str
+    reason: str
+
+
+class FocusSettingsChange(BaseModel):
+    field: str
+    label: str
+
+
+class FocusSettingsPreviewItem(BaseModel):
+    id: int
+    name: Optional[str] = None
+    busy: bool
+    market_locked: bool = False
+    changes: List[FocusSettingsChange]
+
+
+class FocusSettingsPreviewResponse(BaseModel):
+    focuses: List[FocusSettingsPreviewItem]
+
+
+class FocusSettingsApplied(BaseModel):
+    id: int
+    name: Optional[str] = None
+    changed: bool
+    warning: Optional[str] = None  # örn. "pazar değişmez (odakta veri var)"
+
+
+class FocusSettingsSkipped(BaseModel):
+    id: int
+    name: Optional[str] = None
+    reason: str
+
+
+class FocusSettingsApplyResponse(BaseModel):
+    applied: List[FocusSettingsApplied]
+    skipped: List[FocusSettingsSkipped]
 
 
 class CompetitorDecision(BaseModel):
@@ -234,6 +297,13 @@ class WorkspaceResponse(BaseModel):
     id: int
     name: Optional[str] = None
     company_url: str
+    crawl_scope: str = "site"
+    parent_brand_profile_id: Optional[int] = None
+    archived_with_parent: bool = False
+    pending_focus_url: Optional[str] = None
+    pending_focus_error: Optional[str] = None
+    # Yalnız keywords/approve ve pending-focus/retry cevaplarında dolu (istek-başına, kalıcı değil)
+    focus_handoff_id: Optional[int] = None
     competitor_urls: Optional[List[str]] = None
     # Plan v13: kalıcı URL kararları — Rakipler kartı yeniden açılışta
     # varsayılanı BUNDAN türetir ("Rakip değil" block'a geri dönmez)
@@ -249,6 +319,8 @@ class WorkspaceResponse(BaseModel):
     deleted_at: Optional[datetime] = None
     default_geo_target_id: Optional[str] = None
     default_language_id: Optional[str] = None
+    # Yalnız tek-çalışma GET / oluşturma / profil onayı cevaplarında hesaplanır (aksi halde null)
+    market_locked: Optional[bool] = None
     is_system_default: bool = False
     scoring_run_id: Optional[int] = None
     created_at: datetime
@@ -256,8 +328,26 @@ class WorkspaceResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_label(self) -> str:
+        return markets.market_label(self)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_location_label(self) -> str:
+        """Yalnız konum kısmı ("Berlin, Almanya — Şehir"); frontend birleşik etiketi bölmesin."""
+        geo = self.default_geo_target_id
+        return markets.location_label(geo) if geo else "Seçilmedi"
 
 
+
+
+
+class MarketCopyResponse(BaseModel):
+    created: List[WorkspaceResponse]
+    skipped: List[MarketCopySkipped]
+    source_id: int
 
 
 class WorkspaceListResponse(BaseModel):
@@ -265,6 +355,11 @@ class WorkspaceListResponse(BaseModel):
     id: int
     name: Optional[str] = None
     company_url: str
+    crawl_scope: str = "site"
+    parent_brand_profile_id: Optional[int] = None
+    archived_with_parent: bool = False
+    pending_focus_url: Optional[str] = None
+    pending_focus_error: Optional[str] = None
     status: str
     onboarding_flow: str = "legacy"
     profile_approved_at: Optional[datetime] = None
@@ -284,6 +379,18 @@ class WorkspaceListResponse(BaseModel):
     run_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_label(self) -> str:
+        return markets.market_label(self)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def market_location_label(self) -> str:
+        """Yalnız konum kısmı ("Berlin, Almanya — Şehir"); frontend birleşik etiketi bölmesin."""
+        geo = self.default_geo_target_id
+        return markets.location_label(geo) if geo else "Seçilmedi"
 
 
 class LocationFilterPreviewRequest(BaseModel):
@@ -385,3 +492,43 @@ class RelevanceComputeResponse(BaseModel):
     computed: int
     failed: int
     average_relevance: float
+
+
+# ==================== PAZAR (HEDEF KONUM + DIL) ====================
+
+class MarketCountry(BaseModel):
+    geo_target_id: str
+    code: str
+    name_tr: str
+    label: str
+
+
+class MarketLanguage(BaseModel):
+    language_id: str
+    code: str
+    name_tr: str
+    name_native: str
+
+
+class MarketDefault(BaseModel):
+    geo_target_id: str
+    language_id: str
+
+
+class MarketOptionsResponse(BaseModel):
+    countries: List[MarketCountry]
+    languages: List[MarketLanguage]
+    default: MarketDefault
+
+
+class MarketLocationItem(BaseModel):
+    geo_target_id: str
+    label: str
+    kind: Literal["country", "city", "region"]
+    country_code: str
+    name: str
+
+
+class MarketLocationSearchResponse(BaseModel):
+    items: List[MarketLocationItem]
+    total: int = Field(..., description="Toplam eşleşme (items en fazla 20)")

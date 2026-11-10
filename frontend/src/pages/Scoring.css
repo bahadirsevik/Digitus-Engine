@@ -208,8 +208,8 @@
   font-weight: 700;
 }
 
-.v3-channel-result .v3-meta {
-  text-transform: uppercase;
+.v3-channel-result .v3-skipped {
+  color: var(--text-secondary);
 }
 
 .top-rank {

@@ -128,6 +128,26 @@ class ImportResult:
     skipped_fuzzy: int
     truncated: bool
     truncated_reason: Optional[str]
+    skipped_junk: int = 0
+
+
+# Kampanya keyword_view gosterimleri secilen doneme (ALL_TIME dahil) aittir;
+# aylik arama hacmi DEGILDIR ve monthly_volume olarak yazilamaz.
+# Workspace'li tek import yolu: fikirler enrich / keyword-ideas-by-url ile alinir,
+# POST /keywords/import (brand_profile_id zorunlu) ile workspace'e yazilir.
+_WORKSPACE_IMPORT_HINT = (
+    "Fikirleri POST /api/v1/google-ads/enrich veya "
+    "POST /api/v1/google-ads/keyword-ideas-by-url ile alip "
+    "POST /api/v1/keywords/import (brand_profile_id zorunlu) ile workspace'e aktarin."
+)
+CAMPAIGN_IMPORT_DISABLED_DETAIL = (
+    "Kampanya keyword importu kaldirildi: kampanya gosterimleri (impressions) "
+    "aylik arama hacmi degildir ve hacim olarak ice aktarilamaz. " + _WORKSPACE_IMPORT_HINT
+)
+KEYWORD_IMPORT_DISABLED_DETAIL = (
+    "Google Ads keyword importu kaldirildi: bu uc workspace'siz legacy keywords "
+    "tablosuna yaziyordu. " + _WORKSPACE_IMPORT_HINT
+)
 
 
 class GoogleAdsService:
@@ -172,11 +192,20 @@ class GoogleAdsService:
                 "accessible_customers_count": len(list(resp.resource_names)),
             }
         except Exception as exc:
+            logger.warning(f"Google Ads health check failed: {exc}")
+            # Ham metin kullanıcıya gitmez; yenilenebilir tek durum ayrı bildirilir
+            if "invalid_grant" in str(exc):
+                message = (
+                    "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                    "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
+                )
+            else:
+                message = "Google Ads bağlantısı kurulamadı. Lütfen biraz sonra tekrar deneyin."
             return {
                 "status": "error",
                 "auth_ok": False,
                 "permission_ok": False,
-                "error": str(exc),
+                "error": message,
             }
 
     def list_customer_ids(self) -> List[str]:
@@ -236,6 +265,7 @@ class GoogleAdsService:
         GenerateKeywordIdeas cagrisi. DB'ye yazmaz.
         Returns: (keywords, truncated, truncated_reason)
         """
+        # settings yedegi yalniz bos deger icin (baska cagiranlar); API uclari calisma pazarini HER ZAMAN verir
         lang_id = language_id or getattr(self.settings, "GOOGLE_ADS_LANGUAGE_ID", None)
         geo_id = geo_target_id or getattr(self.settings, "GOOGLE_ADS_GEO_TARGET_ID", None)
 
@@ -311,6 +341,7 @@ class GoogleAdsService:
         language_id: Optional[str] = None,
         geo_target_id: Optional[str] = None,
     ) -> Any:
+        # settings yedegi yalniz bos deger icin (baska cagiranlar); API uclari calisma pazarini HER ZAMAN verir
         lang_id = language_id or getattr(self.settings, "GOOGLE_ADS_LANGUAGE_ID", None)
         geo_id = geo_target_id or getattr(self.settings, "GOOGLE_ADS_GEO_TARGET_ID", None)
 
@@ -408,82 +439,9 @@ class GoogleAdsService:
             ideas = [idea for idea in ideas if idea.monthly_volume >= min_volume]
         return ideas, truncated, truncated_reason
 
-    def import_keywords(
-        self,
-        db,
-        customer_id: str,
-        seeds: List[str],
-        max_results: int = 300,
-        min_volume: int = 0,
-        sector: Optional[str] = None,
-        target_market: Optional[str] = None,
-    ) -> ImportResult:
-        """
-        API'den keyword cekip DB'ye yazar.
-
-        IS KURALI:
-        Mevcut DB'de ayni text ile kayit varsa (herhangi bir data_source'dan)
-        keyword skip edilir, data_source guncellenmez.
-        keyword_source_filter="google_ads_api" scoring run'i sadece
-        BU CAGRI ile olusturulan yeni kayitlari kapsar.
-        """
-        enriched, truncated, truncated_reason = self.enrich_keywords(
-            customer_id=customer_id,
-            seeds=seeds,
-            max_results=max_results,
-        )
-
-        # min_volume filtresi
-        if min_volume > 0:
-            enriched = [e for e in enriched if e.avg_monthly_searches >= min_volume]
-
-        # crud formatina donustur
-        keyword_dicts = [
-            {
-                "keyword": e.keyword,
-                "monthly_volume": e.avg_monthly_searches,
-                "competition_score": e.competition_score,
-                "trend_3m": e.trend_3m,
-                "trend_12m": e.trend_12m,
-                "data_source": "google_ads_api",
-                "sector": sector,
-                "target_market": target_market,
-                "is_active": True,
-            }
-            for e in enriched
-        ]
-
-        from app.database.crud import create_keywords_bulk
-        from app.database.models import Keyword as KWModel
-
-        # already_existing sayisi icin: sadece import batch'teki textleri DB'de sorgula.
-        # Tum aktif keywordleri belleğe almak yerine dar sorgu — buyuk veri setlerinde performansi korur.
-        incoming_texts_lower = [kd["keyword"].lower().strip() for kd in keyword_dicts]
-        existing_matches = (
-            db.query(KWModel.keyword)
-            .filter(KWModel.is_active == True)
-            .filter(KWModel.keyword.in_([kd["keyword"] for kd in keyword_dicts]))
-            .all()
-        )
-        existing_texts = {row.keyword.lower().strip() for row in existing_matches}
-        # NOT: Bu sayac yaklasiktir. Fuzzy eslesmeler create_keywords_bulk icinde
-        # hesaplanir; skipped_fuzzy = len(batch) - already_existing - actual_created
-        # formuluyle turetidiginden concurrent import'larda hafif sapabilir.
-        already_existing = sum(
-            1 for t in incoming_texts_lower
-            if t in existing_texts
-        )
-
-        created_count = int(create_keywords_bulk(db, keyword_dicts) or 0)
-        skipped_fuzzy = len(keyword_dicts) - already_existing - created_count
-
-        return ImportResult(
-            created=created_count,
-            already_existing=already_existing,
-            skipped_fuzzy=max(0, skipped_fuzzy),
-            truncated=truncated,
-            truncated_reason=truncated_reason,
-        )
+    def import_keywords(self, db, customer_id: str, **_: Any) -> ImportResult:
+        """Kaldirildi: hic Google Ads cagrisi veya DB yazimi yapmadan reddeder."""
+        raise ValueError(KEYWORD_IMPORT_DISABLED_DETAIL)
 
     def list_campaigns(self, customer_id: str) -> List[CampaignInfo]:
         """List campaigns for customer. Used by UI dropdown."""
@@ -598,64 +556,6 @@ class GoogleAdsService:
 
         return _call_with_retry(_fetch)
 
-    def import_campaign_keywords(
-        self,
-        db,
-        customer_id: str,
-        campaign_id: Optional[str] = None,
-        min_impressions: int = 0,
-        date_range: str = "ALL_TIME",
-        limit: int = 2000,
-        sector: Optional[str] = None,
-        target_market: Optional[str] = None,
-    ) -> ImportResult:
-        """
-        Import campaign keywords into DB.
-        monthly_volume is mapped from impressions proxy for selected period.
-        """
-        keywords = self.get_campaign_keywords(
-            customer_id=customer_id,
-            campaign_id=campaign_id,
-            min_impressions=min_impressions,
-            date_range=date_range,
-            limit=limit,
-        )
-
-        keyword_dicts = [
-            {
-                "keyword": kw.keyword,
-                "monthly_volume": kw.impressions,
-                "competition_score": 0.50,
-                "trend_3m": 0.0,
-                "trend_12m": 0.0,
-                "data_source": "google_ads_api",
-                "sector": sector,
-                "target_market": target_market,
-                "is_active": True,
-            }
-            for kw in keywords
-        ]
-
-        from app.database.crud import create_keywords_bulk
-        from app.database.models import Keyword as KWModel
-
-        incoming_texts_lower = [kd["keyword"].lower().strip() for kd in keyword_dicts]
-        existing_matches = (
-            db.query(KWModel.keyword)
-            .filter(KWModel.is_active == True)
-            .filter(KWModel.keyword.in_([kd["keyword"] for kd in keyword_dicts]))
-            .all()
-        )
-        existing_texts = {row.keyword.lower().strip() for row in existing_matches}
-        already_existing = sum(1 for t in incoming_texts_lower if t in existing_texts)
-
-        created_count = int(create_keywords_bulk(db, keyword_dicts) or 0)
-        skipped_fuzzy = len(keyword_dicts) - already_existing - created_count
-
-        return ImportResult(
-            created=created_count,
-            already_existing=already_existing,
-            skipped_fuzzy=max(0, skipped_fuzzy),
-            truncated=False,
-            truncated_reason=None,
-        )
+    def import_campaign_keywords(self, db, customer_id: str, **_: Any) -> ImportResult:
+        """Kaldirildi: hic Google Ads cagrisi veya DB yazimi yapmadan reddeder."""
+        raise ValueError(CAMPAIGN_IMPORT_DISABLED_DETAIL)

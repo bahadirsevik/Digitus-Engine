@@ -27,10 +27,12 @@ from app.core.csv_import.import_plan import (
 )
 from app.core.constants import WORKSPACE_KEYWORD_LIMIT
 from app.core.policy.import_gate import resolve_import_theme_policy
-from app.core.workspace import verify_workspace
+from app.core import markets
+from app.core.workspace import stamp_rows_market, verify_workspace
 from app.database import crud
 from app.database.models import Keyword, WorkspaceKeyword
 from app.dependencies import get_db
+from app.core.http_headers import content_disposition, download_filename
 from app.schemas.keyword import (
     KeywordCreate,
     KeywordImportRequest,
@@ -119,7 +121,7 @@ def _verify_keyword_in_workspace(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="keyword not found in workspace")
+        raise HTTPException(status_code=404, detail="Anahtar kelime bu marka çalışmasında bulunamadı.")
     keyword, wk = row
     return keyword, wk
 
@@ -193,7 +195,7 @@ def export_keyword_pool_xlsx(
 
     from app.exporters.safe_text import safe_excel_text
 
-    verify_workspace(db, brand_profile_id)
+    workspace = verify_workspace(db, brand_profile_id)
 
     rows = (
         db.query(Keyword, WorkspaceKeyword)
@@ -205,7 +207,7 @@ def export_keyword_pool_xlsx(
     )
 
     if not rows:
-        raise HTTPException(status_code=400, detail="Kelime havuzu boş — önce keyword ekleyin")
+        raise HTTPException(status_code=400, detail="Kelime havuzu boş — önce anahtar kelime ekleyin.")
 
     wb = Workbook()
     ws = wb.active
@@ -235,11 +237,11 @@ def export_keyword_pool_xlsx(
     wb.save(output)
     output.seek(0)
 
-    filename = f"digitus_kelime_havuzu_{brand_profile_id}.xlsx"
+    filename = download_filename(workspace, "Kelime_Havuzu", ".xlsx")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -252,8 +254,9 @@ async def upload_csv_keywords(
 ):
     """Analyze a Google Ads CSV file and return a dry-run import plan."""
     if not dry_run:
-        raise HTTPException(status_code=400, detail="CSV import önce dry-run olarak analiz edilmelidir")
+        raise HTTPException(status_code=400, detail="CSV dosyasını kaydetmeden önce önizlemesini alın.")
     workspace = verify_workspace(db, brand_profile_id)
+    markets.workspace_market(workspace)  # pazar yoksa onizleme de 409 MARKET_NOT_SET
 
     content = await file.read()
     if len(content) > CSV_IMPORT_MAX_BYTES:
@@ -282,6 +285,10 @@ async def upload_csv_keywords(
     )
     response_payload = import_plan_to_payload(plan)
     response_payload["dry_run_token"] = _store_import_plan(compact_plan_payload(plan))
+    response_payload["market_notice"] = (
+        f"Bu dosyadaki ölçümler {markets.market_label(workspace)} olarak kaydedilecek "
+        "(dosyada konum/dil bilgisi yok; başka konum için alındıysa yeni pazar çalışması açın)."
+    )
     return KeywordUploadCsvResponse.model_validate(response_payload)
 
 
@@ -291,10 +298,15 @@ def commit_csv_keywords(
     db: Session = Depends(get_db),
 ):
     """Commit a previously created CSV dry-run token."""
-    verify_workspace(db, payload.brand_profile_id)
+    workspace = verify_workspace(db, payload.brand_profile_id, lock=True)
     plan_payload = _load_import_plan(payload.dry_run_token)
     if int(plan_payload.get("brand_profile_id")) != payload.brand_profile_id:
-        raise HTTPException(status_code=403, detail="Bu import token'ı bu workspace için geçerli değil")
+        raise HTTPException(status_code=403, detail="Bu önizleme başka bir marka çalışmasına ait; dosyayı bu marka çalışmasında yeniden yükleyin.")
+    for item in plan_payload.get("accepted_plan") or []:
+        item["keyword_data"] = item.get("keyword_data") or {}
+    stamp_rows_market(
+        [item["keyword_data"] for item in plan_payload.get("accepted_plan") or []], workspace
+    )
 
     result = apply_import_plan(db, plan_payload, pool_limit=WORKSPACE_KEYWORD_LIMIT)
     result.update(
@@ -340,12 +352,15 @@ def create_keyword(
     `brand_profile_id` zorunludur (request body içinden gelir).
     """
     if keyword_data.brand_profile_id is None:
-        raise HTTPException(status_code=400, detail="brand_profile_id is required")
-    workspace = verify_workspace(db, keyword_data.brand_profile_id)
+        raise HTTPException(status_code=400, detail="Önce bir marka çalışması seçin.")
+    workspace = verify_workspace(db, keyword_data.brand_profile_id, lock=True)
+    rows = stamp_rows_market(
+        [keyword_data.model_dump(exclude={"brand_profile_id"})], workspace
+    )
 
     result = crud.create_keywords_bulk(
         db,
-        [keyword_data.model_dump(exclude={"brand_profile_id"})],
+        rows,
         brand_profile_id=keyword_data.brand_profile_id,
         return_details=True,
         theme_policy=resolve_import_theme_policy(workspace),
@@ -355,6 +370,14 @@ def create_keyword(
         keyword = crud.get_keyword_by_text(db, keyword_data.keyword)
         if keyword:
             return KeywordResponse.model_validate(keyword)
+    if isinstance(result, dict) and result.get("skipped_junk"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Geçersiz kelime: boş, yalnızca sayı veya yalnızca sembol içeren "
+                "ifadeler eklenemez."
+            ),
+        )
     if isinstance(result, dict) and result.get("skipped_theme"):
         matched = next(
             (d.get("matched") for d in result.get("skipped_details", [])
@@ -363,14 +386,14 @@ def create_keyword(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Keyword yasaklı temayla eşleşti: {matched}. force_include ile ekleyebilirsiniz.",
+            detail=f"Anahtar kelime yasaklı bir temayla eşleştiği için eklenmedi ({matched}).",
         )
     if isinstance(result, dict) and result.get("skipped_limit"):
         raise HTTPException(
             status_code=400,
-            detail=f"Havuz limiti dolu ({WORKSPACE_KEYWORD_LIMIT}). Önce keyword silin.",
+            detail=f"Kelime havuzu dolu ({WORKSPACE_KEYWORD_LIMIT}). Yeni kelime eklemek için önce mevcutlardan silin.",
         )
-    raise HTTPException(status_code=400, detail="Keyword could not be created")
+    raise HTTPException(status_code=400, detail="Anahtar kelime eklenemedi.")
 
 
 @router.put("/{keyword_id}", response_model=KeywordResponse)
@@ -397,7 +420,7 @@ def update_keyword(
     if link_count > 1:
         raise HTTPException(
             status_code=409,
-            detail="keyword is linked to multiple workspaces; update would affect other workspaces",
+            detail="Bu anahtar kelime başka marka çalışmalarında da kullanılıyor; değişiklik onları da etkileyeceği için güncellenemez.",
         )
 
     keyword = crud.update_keyword(
@@ -406,7 +429,7 @@ def update_keyword(
         keyword_data.model_dump(exclude_unset=True),
     )
     if not keyword:
-        raise HTTPException(status_code=404, detail="keyword not found")
+        raise HTTPException(status_code=404, detail="Anahtar kelime bulunamadı.")
     return KeywordResponse.model_validate(keyword)
 
 
@@ -447,7 +470,7 @@ def delete_keyword(
 
     success = crud.remove_workspace_keyword_by_id(db, wk_id, brand_profile_id)
     if not success:
-        raise HTTPException(status_code=404, detail="keyword not found in workspace")
+        raise HTTPException(status_code=404, detail="Anahtar kelime bu marka çalışmasında bulunamadı.")
     return None
 
 
@@ -458,8 +481,13 @@ def import_keywords(
 ):
     """Bulk import keywords into a workspace. `brand_profile_id` zorunlu."""
     if import_data.brand_profile_id is None:
-        raise HTTPException(status_code=400, detail="brand_profile_id is required")
-    workspace = verify_workspace(db, import_data.brand_profile_id)
+        raise HTTPException(status_code=400, detail="Önce bir marka çalışması seçin.")
+    workspace = verify_workspace(db, import_data.brand_profile_id, lock=True)
+    # Tüm liste DB yazımından ÖNCE doğrulanır (crud 200'lük chunk'larla commit eder)
+    rows = stamp_rows_market(
+        [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
+        workspace,
+    )
 
     total_before = (
         db.query(WorkspaceKeyword)
@@ -468,7 +496,7 @@ def import_keywords(
     )
     result = crud.create_keywords_bulk(
         db,
-        [kw.model_dump(exclude={"brand_profile_id"}) for kw in import_data.keywords],
+        rows,
         brand_profile_id=import_data.brand_profile_id,
         return_details=True,
         theme_policy=resolve_import_theme_policy(workspace),
@@ -485,10 +513,12 @@ def import_keywords(
             + result.get("fuzzy_merged_in_batch", 0)
             + result.get("skipped_theme", 0)
             + result.get("skipped_limit", 0)
+            + result.get("skipped_junk", 0)
         )
         fuzzy_merged_in_batch = result.get("fuzzy_merged_in_batch", 0)
         skipped_theme = result.get("skipped_theme", 0)
         skipped_limit = result.get("skipped_limit", 0)
+        skipped_junk = result.get("skipped_junk", 0)
         skipped_details = result.get("skipped_details", [])
         theme_warnings = result.get("theme_warnings", [])
     else:
@@ -499,6 +529,7 @@ def import_keywords(
         fuzzy_merged_in_batch = 0
         skipped_theme = 0
         skipped_limit = 0
+        skipped_junk = 0
         skipped_details = []
         theme_warnings = []
 
@@ -519,6 +550,7 @@ def import_keywords(
         fuzzy_merged_in_batch=fuzzy_merged_in_batch,
         skipped_theme=skipped_theme,
         skipped_limit=skipped_limit,
+        skipped_junk=skipped_junk,
         pool_limit=WORKSPACE_KEYWORD_LIMIT,
         pool_total=total_after,
         skipped_details=skipped_details,
@@ -552,7 +584,7 @@ def cleanup_duplicate_keywords(
 
     from app.core.keyword_dedup import deduplicate_keywords
 
-    verify_workspace(db, brand_profile_id)
+    workspace = verify_workspace(db, brand_profile_id)
 
     # Workspace'e bağlı, aktif keyword'leri çek.
     rows = (
@@ -588,8 +620,10 @@ def cleanup_duplicate_keywords(
         for kw, wk in rows
     ]
 
+    # Dil kuralı import/önizleme ile AYNI kaynaktan (workspace dili; boş = Türkçe)
     deduped, merge_details = deduplicate_keywords(
-        keyword_dicts, return_merge_details=True)
+        keyword_dicts, return_merge_details=True,
+        language_id=workspace.default_language_id)
     survived_ids = {d["_db_id"] for d in deduped}
 
     # Workspace-scoped dedup: global Keyword.is_active'e DOKUNMA. Keyword satirlari

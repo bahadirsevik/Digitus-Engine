@@ -50,6 +50,26 @@ export interface NegativeKeyword {
   reason?: string | null
 }
 
+// 15 KW teslim standardı raporu (backend okuma anında türetir; eski yanıtlarda yok/null olabilir)
+export interface AdGroupStandardReport {
+  keyword_count: number
+  headline_count: number
+  kw_description_count: number
+  missing_headlines: number
+  missing_kw_descriptions: number
+  cta_count: number
+  missing_cta: number
+  below_standard: boolean
+  pool_below_target: boolean
+  keywords_in_headlines: string[]
+  keywords_description_only: string[]
+  keywords_unused: string[]
+  short_keyword_count?: number
+  short_keywords_in_headlines?: number
+  unused_keyword_reasons?: Record<string, string>
+  fill_keywords: string[]
+}
+
 export interface AdGroup {
   id?: number
   name?: string
@@ -58,6 +78,8 @@ export interface AdGroup {
   group_theme?: string | null
   target_keyword_ids?: number[]
   target_keywords?: string[]
+  fill_keyword_ids?: number[]
+  standard_report?: AdGroupStandardReport | null
   keywords?: string[]
   headlines: AdHeadline[]
   descriptions: AdDescription[]
@@ -73,6 +95,26 @@ export interface AdsValidationSummary {
 }
 
 // ADS üretim seti özeti (versiyonlama — Faz E)
+// İddia incelemesi bulgusu (rev.4): kind = risk | unverified
+export interface ClaimFinding {
+  kind: 'risk' | 'unverified'
+  category?: string
+  span: string
+  reason?: string
+  asset_type?: 'headline' | 'description'
+  asset_text?: string
+  group_id?: number | null
+  group_name?: string | null
+  // yalnız applied (otomatik düzeltilen) kayıtlarda
+  original?: string
+  suggestion?: string
+}
+
+export interface ClaimReview {
+  findings: ClaimFinding[]
+  applied: ClaimFinding[]
+}
+
 export interface AdGenerationSetSummary {
   id: number
   scoring_run_id: number
@@ -84,6 +126,11 @@ export interface AdGenerationSetSummary {
   task_id?: string | null
   created_at?: string | null
   completed_at?: string | null
+  // İddia incelemesi (rev.4, additive): işaretli set otomatik aktif olmaz
+  review_required?: boolean
+  claim_risk_count?: number
+  claim_unverified_count?: number
+  claim_review?: ClaimReview | null
 }
 
 export interface AdsSetListResult {

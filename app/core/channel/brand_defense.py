@@ -217,6 +217,43 @@ def load_product_definition(
     return "\n".join(parts) if parts else None
 
 
+def load_grounding_facts(
+    db: Session,
+    scoring_run: Optional[ScoringRun],
+    trusted_brand_usp: str = "",
+) -> str:
+    """İddia denetimi dayanak metni: confirmed profilin TAM ürün/hizmet/kullanım alanı
+    listeleri (10 sınırı yok) + güvenilir USP. Firma/sektör/hedef kitle/problem yok.
+
+    Etiketli satırlar `GroundingSource.from_text` ile ayrıştırılır; USP etiketsiz satırdır.
+    """
+    parts = []
+    profile = None
+    if scoring_run is not None and scoring_run.brand_profile_id:
+        profile = (
+            db.query(BrandProfile)
+            .filter(
+                BrandProfile.id == scoring_run.brand_profile_id,
+                BrandProfile.status == "confirmed",
+                BrandProfile.deleted_at.is_(None),
+            )
+            .first()
+        )
+    data = profile.profile_data if profile and isinstance(profile.profile_data, dict) else {}
+    for label, key in (
+        ("Ürünler", "products"), ("Hizmetler", "services"), ("Kullanım Alanları", "use_cases"),
+    ):
+        values = data.get(key)
+        if isinstance(values, list):
+            items = [str(v).strip() for v in values if isinstance(v, str) and v.strip()]
+            if items:
+                parts.append(f"{label}: {', '.join(items)}")
+    usp = (trusted_brand_usp or "").strip()
+    if usp:
+        parts.append(usp)
+    return "\n".join(parts)
+
+
 def _has_negative_signal(norm_text: str, token_set: set, signals: Tuple[str, ...]) -> bool:
     """Negatif sinyal kontrolu: tek kelimeler token bazli, cok kelimeliler
     kelime sinirli phrase bazli aranir."""

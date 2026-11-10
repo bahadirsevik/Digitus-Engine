@@ -340,10 +340,8 @@ def _not_authorized(workspace) -> Dict[str, Any]:
     return {
         "code": NOT_AUTHORIZED,
         "message": (
-            "Bu bir DENEME workspace'i ve ücretli koşu yetkisi yok "
-            "(verilmedi veya geri alındı). Profil/anchor kontrolü ve "
-            "maliyet onayından sonra scripts/authorize_trial_runs.py ile "
-            "yetki verilmelidir."),
+            "Bu deneme marka çalışmasında ücretli analiz yetkisi yok "
+            "(verilmedi veya geri alındı). Analiz başlatmak için sistem yöneticinizden yetki isteyin."),
         "workspace_id": workspace.id,
         "review_required": bool(setup.get("review_required", True)),
         "revoked_at": record.get("revoked_at"),
@@ -368,10 +366,9 @@ def _legacy_authorization_refused(workspace) -> Dict[str, Any]:
     return {
         "code": LEGACY_TRIAL_AUTHORIZATION,
         "message": (
-            "Bu deneme workspace'inin yetkilendirmesi eski (v2/v2.1) sözleşmesine aittir. "
-            "V3 motoru için otomatik yetki genişletmesi yapılmaz (fail-closed); "
-            "scripts/authorize_trial_runs.py ile V3 kombinasyonları verilerek "
-            "yeniden yetkilendirilmelidir."
+            "Bu deneme marka çalışmasının analiz yetkisi eski analiz motoruna ait; "
+            "yeni motorla analiz için yetkinin yenilenmesi gerekiyor. "
+            "Analiz başlatmak için sistem yöneticinizden yetki isteyin."
         ),
         "workspace_id": workspace.id,
     }
@@ -394,11 +391,9 @@ def check_incompatible_authorization(workspace) -> Optional[Dict[str, Any]]:
         return {
             "code": INCOMPATIBLE_TRIAL_AUTHORIZATION,
             "message": (
-                f"Bu deneme workspace'inin yetkilendirme sözleşmesi uyumsuzdur "
-                f"({contract_ver!r} != {AUTHORIZATION_CONTRACT_VERSION!r}). "
-                "V3 motoru için otomatik yetki genişletmesi yapılmaz (fail-closed); "
-                "scripts/authorize_trial_runs.py ile V3 kombinasyonları verilerek "
-                "yeniden yetkilendirilmelidir."
+                "Bu deneme marka çalışmasının analiz yetkisi güncel değil; "
+                "yetkinin yenilenmesi gerekiyor. "
+                "Analiz başlatmak için sistem yöneticinizden yetki isteyin."
             ),
             "workspace_id": workspace.id,
             "contract_version": contract_ver,
@@ -408,9 +403,8 @@ def check_incompatible_authorization(workspace) -> Optional[Dict[str, Any]]:
         return {
             "code": INCOMPATIBLE_TRIAL_AUTHORIZATION,
             "message": (
-                "Yetki kaydında izinli kombinasyonlar eksik, boş veya geçersizdir. "
-                "Otomatik varsayılan V3 yetkisi verilmez (fail-closed); "
-                "scripts/authorize_trial_runs.py ile yeniden yetkilendirilmelidir."
+                "Bu deneme marka çalışmasının analiz yetkisinde izin verilen "
+                "kanallar tanımlı değil. Analiz başlatmak için sistem yöneticinizden yetki isteyin."
             ),
             "workspace_id": workspace.id,
         }
@@ -419,8 +413,8 @@ def check_incompatible_authorization(workspace) -> Optional[Dict[str, Any]]:
         return {
             "code": INCOMPATIBLE_TRIAL_AUTHORIZATION,
             "message": (
-                "Yetki kaydında hatalı biçimlendirilmiş kombinasyon tanımı bulundu. "
-                "scripts/authorize_trial_runs.py ile yeniden yetkilendirilmelidir."
+                "Bu deneme marka çalışmasının analiz yetkisi hatalı kaydedilmiş. "
+                "Analiz başlatmak için sistem yöneticinizden yetki isteyin."
             ),
             "workspace_id": workspace.id,
         }
@@ -432,14 +426,18 @@ def check_incompatible_authorization(workspace) -> Optional[Dict[str, Any]]:
     return None
 
 
+# Kullanıcı mesajları için kanal seçimi adları (kayıtlı "label" teknik kalır).
+_COMBINATION_TEXT = {"v3_ads_seo": "ADS/SEO", "v3_social": "Sosyal medya"}
+
+
 def _combination_refused(workspace, source) -> Dict[str, Any]:
     wanted = combination_of(source)
     return {
         "code": COMBINATION_NOT_ALLOWED,
         "message": (
-            "Bu kanal/algoritma birleşimi deneme kapsamında değil. İzinli "
-            "birleşimler: v3 + ADS/SEO (SOCIAL kapalı) ve v3 + yalnız "
-            "SOCIAL. Kapasiteleri istediğiniz gibi seçebilirsiniz."),
+            "Bu kanal seçimi deneme kapsamında değil. İzinli seçimler: "
+            "ADS ve/veya SEO (Sosyal medya kapalı) ya da yalnız Sosyal medya. "
+            "Kelime sayılarını istediğiniz gibi seçebilirsiniz."),
         "workspace_id": workspace.id,
         "requested": wanted,
         "allowed_combinations": [
@@ -455,9 +453,9 @@ def _quota_refused(workspace, usage: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "code": QUOTA_EXHAUSTED,
         "message": (
-            f"Deneme kapsamındaki {limit} başarılı koşu tamamlandı "
-            f"({usage['count']}/{limit}). Yeni koşu için yetki yeniden "
-            f"verilmelidir. (Başarısız koşular hak tüketmez.)"),
+            f"Deneme kapsamındaki {limit} başarılı analiz hakkı kullanıldı "
+            f"({usage['count']}/{limit}). Yeni analiz için sistem yöneticinizden "
+            f"ek yetki isteyin. (Başarısız analizler hak tüketmez.)"),
         "workspace_id": workspace.id,
         "max_successful_runs": limit,
         "successful_run_ids": usage["run_ids"],
@@ -480,8 +478,11 @@ def check_cost_cap(db, workspace, *, stage: str) -> Optional[Dict[str, Any]]:
     return {
         "code": COST_CAP_EXCEEDED,
         "message": (
-            f"Workspace maliyet sınırı aşıldı: ${cost['exposure_usd']} >= "
-            f"${cap}. Sağlayıcı çağrısı yapılmadan durduruldu."),
+            f"Bu marka çalışmasının harcama sınırına ulaşıldı: harcanan "
+            f"${cost['spent_usd']} ve devam eden işlemler için ayrılan "
+            f"${cost['reserved_usd']}, toplam ${cost['exposure_usd']} "
+            f"(sınır ${cap}); işlem başlatılmadı. "
+            f"Sınırın artırılması için sistem yöneticinize başvurun."),
         "workspace_id": workspace.id,
         "stage": stage,
         "assignment_cost_cap_usd": cap,
@@ -516,9 +517,9 @@ def check_create_allowed(db, workspace, payload) -> Optional[Dict[str, Any]]:
         return {
             "code": ACTIVE_LIMIT,
             "message": (
-                f"Bu deneme workspace'inde aynı anda en fazla {limit} aktif "
-                f"koşu olabilir (şu an {len(runs['active'])}). Açık koşular "
-                f"bitmeden yenisi başlatılamaz."),
+                f"Bu deneme marka çalışmasında aynı anda en fazla {limit} "
+                f"analiz çalışabilir (şu an {len(runs['active'])}). Süren "
+                f"analizler bitmeden yenisi başlatılamaz."),
             "workspace_id": workspace.id,
             "max_active_runs": limit,
             "active_run_ids": runs["active"],
@@ -528,9 +529,10 @@ def check_create_allowed(db, workspace, payload) -> Optional[Dict[str, Any]]:
         return {
             "code": COMBINATION_ACTIVE,
             "message": (
-                f"'{combination.get('label')}' kombinasyonunda zaten aktif "
-                f"bir koşu var (run #{active_same[0]}). Aynı kombinasyonda "
-                f"ikinci koşu aynı anda çalıştırılamaz."),
+                f"{_COMBINATION_TEXT.get(combination.get('id'), combination.get('label'))} "
+                f"kanal seçimiyle zaten süren "
+                f"bir analiz var. Aynı kanal seçimiyle ikinci analiz, ilki "
+                f"bitmeden başlatılamaz."),
             "workspace_id": workspace.id,
             "combination_id": combination.get("id"),
             "active_run_ids": active_same,
@@ -564,10 +566,8 @@ def check_run_allowed(db, workspace, run, *, stage: str
         return {
             "code": AUTHORIZATION_MISMATCH,
             "message": (
-                f"Koşu #{run.id} bu yetki dönemine ait değil "
-                f"(koşu: {str(run_id_value)[:16] or 'YOK'}, geçerli: "
-                f"{str(current_id)[:16]}). Sağlayıcı çağrısı yapılmadan "
-                f"durduruldu; koşu yeniden açılmalıdır."),
+                "Bu analiz, analiz yetkisi yenilenmeden önce oluşturulmuş; "
+                "bu yüzden başlatılmadı. Yeni bir analiz başlatın."),
             "workspace_id": workspace.id,
             "run_id": run.id,
             "stage": stage,

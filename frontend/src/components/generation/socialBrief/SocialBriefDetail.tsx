@@ -6,12 +6,15 @@ import {
   Check,
   CheckCircle2,
   ChevronLeft,
+  Download,
   Lock,
   Plus,
   RefreshCw,
   Tag,
 } from 'lucide-react'
 import {
+  apiErrorMessage,
+  downloadBlobResponse,
   socialBriefApi,
   type SocialBriefResponse,
   type SocialBriefStateResponse,
@@ -19,6 +22,7 @@ import {
   type SocialCategoriesGenerateResponse,
   type SocialGeneratedIdeaResponse,
 } from '../../../services/api'
+import { FORMAT_LABEL } from '../../exportLabels'
 import type { BriefSectionContext } from './briefContext'
 import BriefCategoriesSection from './BriefCategoriesSection'
 import BriefIdeasSection from './BriefIdeasSection'
@@ -65,6 +69,27 @@ export default function SocialBriefDetail({
   const [viewContentIdeaId, setViewContentIdeaId] = useState<number | null>(null)
   const [ideas, setIdeas] = useState<SocialGeneratedIdeaResponse[]>([])
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  // content_idea_ids yalnız GÜNCEL içerikleri sayar; eskimiş brief'te boş gelir.
+  // Tamamlanmış içerik denemesi de içerik var demektir (backend yoksa 422 döner).
+  const hasContent =
+    (state?.content_idea_ids.length ?? 0) > 0 ||
+    (state?.content_attempts ?? []).some((a) => a.status === 'completed' || a.status === 'partial')
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
+  const handleDownload = async (format: 'excel' | 'docx' | 'pdf') => {
+    setDownloading(true)
+    setDownloadError(null)
+    try {
+      const res = await socialBriefApi.exportBrief(brief.id, workspaceId, format)
+      const ext = format === 'excel' ? 'xlsx' : format
+      downloadBlobResponse(res, `sosyal_brief_${brief.id}.${ext}`)
+    } catch (err) {
+      if (alive.current) setDownloadError(apiErrorMessage(err, 'Brief indirilemedi.'))
+    } finally {
+      if (alive.current) setDownloading(false)
+    }
+  }
 
   const refreshState = useCallback(async () => {
     try {
@@ -85,7 +110,10 @@ export default function SocialBriefDetail({
       setStateError(null)
       if (res.data.is_stale && !brief.is_stale) onBriefChanged()
     } catch (err) {
-      if (alive.current) setStateError(socialErrorText(err, 'Brief durumu okunamadı.'))
+      if (alive.current)
+        setStateError(
+          socialErrorText(err, 'Brief durumu yüklenemedi. Sayfayı yenileyip tekrar deneyin.')
+        )
     } finally {
       if (alive.current) setLoading(false)
     }
@@ -183,7 +211,7 @@ export default function SocialBriefDetail({
   const canOpenIdeas = (state?.categories.length ?? 0) > 0
   const canOpenContents = ideas.length > 0 || (state?.content_attempts.length ?? 0) > 0
   const stages = [
-    { number: 1, title: 'Kategoriler', subtitle: 'Temaları seçin' },
+    { number: 1, title: 'Kategoriler', subtitle: 'Kategorileri seçin' },
     { number: 2, title: 'Fikirler', subtitle: 'Fikirleri seçin' },
     { number: 3, title: 'İçerikler', subtitle: 'Sonuçları görün' },
   ] as const
@@ -225,11 +253,38 @@ export default function SocialBriefDetail({
               </p>
             </div>
           </div>
-          <button type="button" className="sb-btn sb-btn-secondary" onClick={onNewBrief}>
-            <Plus size={14} />
-            Yeni Brief
-          </button>
+          <div className="sb-title-row">
+            {hasContent && (
+              <div className="sb-download-group" role="group" aria-label="Bu brief'i indir">
+                <span className="sb-download-label">
+                  <Download size={14} />
+                  {downloading ? 'Hazırlanıyor…' : "Brief'i indir"}
+                </span>
+                {(['excel', 'docx', 'pdf'] as const).map((format) => (
+                  <button
+                    key={format}
+                    type="button"
+                    className="sb-download-btn"
+                    onClick={() => void handleDownload(format)}
+                    disabled={downloading}
+                  >
+                    {FORMAT_LABEL[format]}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button type="button" className="sb-btn sb-btn-secondary" onClick={onNewBrief}>
+              <Plus size={14} />
+              Yeni Brief
+            </button>
+          </div>
         </div>
+
+        {downloadError && (
+          <div className="channels-alert channels-alert-error sb-stage-alert" role="alert">
+            {downloadError}
+          </div>
+        )}
 
         {effectiveBrief.is_stale && (
           <div className="channels-alert channels-alert-error sb-stage-alert" role="alert">

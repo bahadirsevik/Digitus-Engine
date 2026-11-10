@@ -20,6 +20,67 @@ export function splitNewlineItems(raw: string): string[] {
     .filter(Boolean)
 }
 
+// ── İki dışlama kutusunun ortak metinleri + B kaynaklı terim yardımcıları ──
+// Kutu A (profile_data.exclude_themes) YUMUŞAK: eleme yapmaz, AI'yı yönlendirir.
+// Kutu B (excluded_info) SERT: terimi içeren kelimeler elenir; sunucu B
+// terimlerini exclude_themes'e de birleştirir (kayıtta kullanıcı A listesiyle
+// birlikte korur).
+
+export const SOFT_EXCLUDE_LABEL = 'Kaçınılacak temalar'
+export const SOFT_EXCLUDE_HELP = 'Eleme yapmaz, yapay zekâyı yönlendirir.'
+export const HARD_EXCLUDE_LABEL = 'Kesin dışlama'
+export const HARD_EXCLUDE_HELP = 'Bu konuları içeren kelimeler elenir.'
+export const HARD_EXCLUDE_CHIP_NOTE = 'kesin dışlamadan gelir'
+
+// Sunucudaki normalize_turkish ile aynı niyet: büyük/küçük harf, Türkçe
+// karakterler, noktalama ve boşluk farkları aynı terim sayılır.
+const TURKISH_FOLD: Record<string, string> = {
+  ç: 'c',
+  ğ: 'g',
+  ı: 'i',
+  ö: 'o',
+  ş: 's',
+  ü: 'u',
+}
+
+export function normalizeTermKey(text: string): string {
+  return text
+    .replace(/İ/g, 'i')
+    .toLowerCase()
+    .replace(/[çğıöşü]/g, (ch) => TURKISH_FOLD[ch] ?? ch)
+    .replace(/[^\p{L}\p{N}_\s-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** excluded_info metnini (virgül/yeni satır) tekilleştirilmiş terim listesine böler. */
+export function parseExcludedInfo(value: string | null | undefined): string[] {
+  if (!value) return []
+  const seen = new Set<string>()
+  const terms: string[] = []
+  value.split(/[,\n]+/).forEach((raw) => {
+    const text = raw.trim()
+    const key = normalizeTermKey(text)
+    if (!text || !key || seen.has(key)) return
+    seen.add(key)
+    terms.push(text)
+  })
+  return terms
+}
+
+/** A kutusunda düzenlenebilir terimler: kayıtlı exclude_themes − B (kesin dışlama) terimleri. */
+export function editableExcludeThemes(
+  themes: unknown,
+  excludedInfo: string | null | undefined
+): string[] {
+  if (!Array.isArray(themes)) return []
+  const hardKeys = new Set(parseExcludedInfo(excludedInfo).map(normalizeTermKey))
+  return themes
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item && !hardKeys.has(normalizeTermKey(item)))
+}
+
 export function extractErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail
@@ -43,21 +104,15 @@ export function extractErrorMessage(error: unknown): string {
   return apiErrorMessage(error, 'Beklenmeyen hata')
 }
 
-export const GEO_OPTIONS = [
-  { value: '2792', label: 'Türkiye (2792)' },
-  { value: '2276', label: 'Almanya (2276)' },
-] as const
-
-export const LANGUAGE_OPTIONS = [
-  { value: '1037', label: 'Türkçe (1037)' },
-  { value: '1001', label: 'Almanca (1001)' },
-  { value: '1000', label: 'İngilizce (1000)' },
-] as const
-
 export interface WorkspaceListRow {
   id: number
   name: string
   company_url: string
+  crawl_scope?: string
+  parent_brand_profile_id?: number | null
+  archived_with_parent?: boolean
+  pending_focus_url?: string | null
+  pending_focus_error?: string | null
   status: string
   onboarding_flow?: 'legacy' | 'profile_first'
   profile_approved_at?: string | null
@@ -70,6 +125,9 @@ export interface WorkspaceListRow {
   excluded_info?: string | null
   default_geo_target_id?: string | null
   default_language_id?: string | null
+  market_label?: string | null
+  market_location_label?: string | null
+  market_locked?: boolean
   deleted_at: string | null
   created_at: string
   updated_at?: string
@@ -94,11 +152,66 @@ export type WorkspacePhase =
 
 interface PhaseInput {
   status: string
+  parent_brand_profile_id?: number | null
   onboarding_flow?: 'legacy' | 'profile_first'
   profile_approved_at?: string | null
   profile_data?: Record<string, unknown> | null
   suggested_keywords?: string[] | null
   deleted_at?: string | null
+}
+
+// ── Marka altı alt sayfa odakları (Faz 3) ──
+
+type FocusFields = { parent_brand_profile_id?: number | null; crawl_scope?: string }
+
+export const isFocusWorkspace = (ws: FocusFields) => ws.parent_brand_profile_id != null
+
+/** Alt sayfa ekleyebilen çalışma: marka (ebeveyni yok, site kapsamı; eksik kapsam = site) + onaylı. */
+export const canHaveFocuses = (ws: FocusFields & { status: string }) =>
+  !isFocusWorkspace(ws) && (ws.crawl_scope ?? 'site') === 'site' && ws.status === 'confirmed'
+
+/** Her odak ebeveyninin hemen ardından; ebeveyni listede olmayan odak üst seviyede kalır. */
+export function orderWithFocuses<T extends { id: number; parent_brand_profile_id?: number | null }>(
+  rows: T[]
+): T[] {
+  const ids = new Set(rows.map((r) => r.id))
+  const children = new Map<number, T[]>()
+  const top: T[] = []
+  rows.forEach((r) => {
+    const parent = r.parent_brand_profile_id
+    if (parent != null && ids.has(parent))
+      children.set(parent, [...(children.get(parent) ?? []), r])
+    else top.push(r)
+  })
+  return top.flatMap((r) => [r, ...(children.get(r.id) ?? [])])
+}
+
+const LOCATION_PROFILE_KEYS = ['location_filter_mode', 'focus_cities', 'location_exempt_terms']
+
+/** Backend `_has_analyzed_profile` ile aynı: analizden önce odak yalnız konum alanı taşır. */
+export function hasAnalyzedProfile(profileData: Record<string, unknown> | null | undefined) {
+  return !!profileData && Object.keys(profileData).some((k) => !LOCATION_PROFILE_KEYS.includes(k))
+}
+
+/**
+ * Menü/şerit için kısa alt sayfa adı: " — " sonrası; boşluksuz ise (yol/slug) son parça
+ * insanlaştırılır: "toprak-analizi-hizmeti" -> "Toprak analizi hizmeti". Uzun URL taşınmaz.
+ */
+export function focusShortName(name: string): string {
+  const sep = name.indexOf(' — ')
+  const rest = (sep >= 0 ? name.slice(sep + 3) : name).trim()
+  if (!rest || /\s/.test(rest)) return rest || name
+  let last = rest.split(/[?#]/)[0].split('/').filter(Boolean).pop() ?? rest
+  try {
+    last = decodeURIComponent(last)
+  } catch {
+    /* kodlanmamış parça olduğu gibi kalır */
+  }
+  const text = last
+    .replace(/\.[a-z0-9]{2,5}$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim()
+  return text ? text.charAt(0).toLocaleUpperCase('tr') + text.slice(1) : rest
 }
 
 // Tek faz kaynağı: hem workspace kartları hem sihirbaz panelleri bunu kullanır.
@@ -112,7 +225,11 @@ export function getWorkspacePhase(workspace: PhaseInput): WorkspacePhase {
 
   if (workspace.onboarding_flow === 'profile_first') {
     if (workspace.status === 'profile_review') return 'profile_cards_review'
-    if (workspace.status === 'competitor_review') return 'competitor_review'
+    // Alt sayfa odağında rakip adımı YOK (parent_brand_profile_id'den türer: yenilemede
+    // tutarlı). Beklenmedik competitor_review durumu bile rakip keşfi sunmaz.
+    if (workspace.status === 'competitor_review') {
+      return isFocusWorkspace(workspace) ? 'profile_cards_review' : 'competitor_review'
+    }
     if (workspace.status === 'keywords_review') return 'keyword_anchor_review'
     if (workspace.status === 'pending' || workspace.status === 'running') {
       return workspace.profile_approved_at ? 'generating_keywords' : 'analyzing_site'
@@ -144,11 +261,11 @@ export function statusLabel(workspaceOrStatus: string | PhaseInput): string {
     case 'generating_profile':
       return 'Analiz Ediliyor'
     case 'generating_keywords':
-      return 'Keyword Önerileri Hazırlanıyor'
+      return 'Anahtar Kelime Önerileri Hazırlanıyor'
     case 'keywords_review':
-      return 'KW Onayi'
+      return 'Anahtar Kelime Onayı'
     case 'keyword_anchor_review':
-      return 'Keyword & Odak Onayı'
+      return 'Anahtar Kelime ve Odak Onayı'
     case 'profile_cards_review':
       return 'Profil Onayı Bekliyor'
     case 'competitor_review':
@@ -177,6 +294,9 @@ export function toActiveWorkspace(workspace: {
   competitor_urls?: string[] | null
   default_geo_target_id?: string | null
   default_language_id?: string | null
+  market_label?: string | null
+  market_location_label?: string | null
+  market_locked?: boolean
 }): ActiveWorkspace {
   return {
     id: workspace.id,
@@ -188,6 +308,9 @@ export function toActiveWorkspace(workspace: {
     competitor_urls: workspace.competitor_urls || null,
     default_geo_target_id: workspace.default_geo_target_id || null,
     default_language_id: workspace.default_language_id || null,
+    market_label: workspace.market_label || null,
+    market_location_label: workspace.market_location_label || null,
+    market_locked: workspace.market_locked ?? false,
   }
 }
 

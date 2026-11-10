@@ -46,7 +46,7 @@ class CurrentUser:
 # gorunce login ekranina yonlendirir.
 _UNAUTHENTICATED = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
-    detail={"code": "NOT_AUTHENTICATED", "message": "Giris yapilmasi gerekiyor."},
+    detail={"code": "NOT_AUTHENTICATED", "message": "Giriş yapmanız gerekiyor."},
 )
 
 # 403, 401 DEGIL: kimlik dogrulanmistir, eksik olan yetkidir. 401 donmek
@@ -55,7 +55,7 @@ _PASSWORD_CHANGE_REQUIRED = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail={
         "code": "PASSWORD_CHANGE_REQUIRED",
-        "message": "Devam etmek icin parolanizi degistirmeniz gerekiyor.",
+        "message": "Devam etmek için parolanızı değiştirmeniz gerekiyor.",
     },
 )
 
@@ -86,7 +86,7 @@ def resolve_current_user(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "SESSION_BACKEND_UNAVAILABLE",
-                "message": "Oturum dogrulanamiyor, lutfen tekrar deneyin.",
+                "message": "Oturum doğrulanamıyor, lütfen tekrar deneyin.",
             },
         )
 

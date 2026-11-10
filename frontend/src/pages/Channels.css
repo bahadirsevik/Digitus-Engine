@@ -225,11 +225,36 @@
 
 .chx-header-left {
   flex: 1;
-  min-width: 0;
+  /* min-width:auto: başlık bloğu daralmaz; yer yetmezse marka pili alt satıra iner */
+  min-width: auto;
   display: flex;
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+}
+
+.chx-header-right {
+  /* Marka pili + İndir + Yenile tek grup: grup bütün olarak alt satıra iner,
+     içeride yalnız marka pili daralır (uzun ad "…" ile kısalır) */
+  flex: 1 1 520px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.chx-header-right > :not(.chx-brand-pill) {
+  flex-shrink: 0;
+}
+
+.chx-title {
+  flex-shrink: 0;
+}
+
+.chx-title h1,
+.chx-title p {
+  white-space: nowrap;
 }
 
 .chx-header h1 {
@@ -316,6 +341,17 @@
   border-radius: 999px;
   padding: 7px 14px;
   white-space: nowrap;
+  /* Uzun marka/pazar adı satırı taşırmaz: pil daralır, metin "…" ile kısalır */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chx-brand-pill b,
+.chx-brand-pill .market-badge {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chx-brand-pill .muted {
@@ -353,9 +389,8 @@
   overflow: hidden;
 }
 
-.chx-assign-progress {
-  padding: 16px 18px;
-  margin-bottom: 16px;
+.kwx-banner.is-channel {
+  margin: 0 0 16px;
 }
 
 .chx-card-head {

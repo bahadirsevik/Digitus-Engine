@@ -12,38 +12,25 @@ from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import httpx
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
 from app.config import settings
+from app.core import markets
+from app.core.error_responses import safe_500_detail
 from app.core.keyword_normalize import normalize_keyword
-from app.integrations.google_ads.service import GoogleAdsService
+from app.integrations.google_ads.service import (
+    CAMPAIGN_IMPORT_DISABLED_DETAIL,
+    KEYWORD_IMPORT_DISABLED_DETAIL,
+    GoogleAdsService,
+)
 
 router = APIRouter()
 
 URL_SEED_CACHE_TTL_SECONDS = 24 * 60 * 60
 GOOGLE_ADS_CAMPAIGN_CACHE_TTL_SECONDS = 10 * 60
-GOOGLE_ADS_LANGUAGE_ALIASES = {
-    "1055": "1037",  # Windows/Turkish locale -> Google Ads Turkish criterion ID
-}
-
-
-def _normalize_language_id(language_id: Optional[str]) -> Optional[str]:
-    if language_id is None:
-        return None
-    value = str(language_id).strip()
-    return GOOGLE_ADS_LANGUAGE_ALIASES.get(value, value)
-
-
-def _normalize_geo_target_id(geo_target_id: Optional[str]) -> Optional[str]:
-    """Strip any resource-path prefix from geo target IDs (e.g. 'geoTargetConstants/2792' → '2792')."""
-    if geo_target_id is None:
-        return None
-    value = str(geo_target_id).strip()
-    if "/" in value:
-        value = value.rsplit("/", 1)[-1]
-    return value or None
 
 
 def _translate_invalid_argument(raw: str) -> str:
@@ -55,18 +42,26 @@ def _translate_invalid_argument(raw: str) -> str:
     if m:
         return (
             f"Geçersiz dil kimliği: {m.group(1)}. "
-            "Türkçe için 1037 kullanın (Settings → varsayılan_dil)."
+            "Çalışmanın hedef dil seçimini kontrol edin."
         )
 
     m = re.search(r"geotargetconstants?/(\d+)", lower)
     if m:
         return (
             f"Geçersiz coğrafi hedef kimliği: {m.group(1)}. "
-            "Türkiye için 2792 kullanın (Settings → varsayılan_geo_hedef)."
+            "Çalışmanın hedef konum seçimini kontrol edin."
+        )
+
+    # Konum katalogda "Active" olsa da Google hedeflemeyi kapatmis olabilir (or. Rusya,
+    # 2022'den beri): API resource path degil alan adi doner.
+    if "geo_target_constants" in lower and "invalid_value" in lower:
+        return (
+            "Google Ads bu hesapta hedef konum için isteği reddetti (konum hedeflemeye kapalı "
+            "olabilir, ör. Rusya). Kelimeleri CSV ile içe aktarın veya başka bir konum seçin."
         )
 
     if "customer" in lower and ("not found" in lower or "invalid" in lower):
-        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. customer_id değerini kontrol edin."
+        return "Müşteri hesabı bulunamadı veya erişim yetkiniz yok. Seçili Google Ads hesabını kontrol edin."
 
     return f"Google Ads geçersiz parametre: {raw}"
 
@@ -76,7 +71,7 @@ def _get_service() -> GoogleAdsService:
     if not svc.is_configured():
         raise HTTPException(
             status_code=503,
-            detail="Google Ads credentials not configured. Check .env file."
+            detail="Google Ads bağlantısı bu sunucuda kurulmamış. Bağlantının kurulması için sistem yöneticinize başvurun."
         )
     return svc
 
@@ -88,18 +83,23 @@ def _raise_google_ads_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Google Ads yetkilendirmesi gecersiz veya suresi dolmus. "
-                "GOOGLE_ADS_REFRESH_TOKEN yenilenmeli."
+                "Google Ads bağlantısının yetkisi geçersiz veya süresi dolmuş. "
+                "Bağlantının yenilenmesi için sistem yöneticinize başvurun."
             ),
         )
     if exc_name == "ResourceExhausted":
         raise HTTPException(
             status_code=429,
-            detail="Google Ads kotasi doldu, daha sonra tekrar deneyin",
+            detail="Google Ads istek kotası doldu; biraz sonra tekrar deneyin.",
         )
     if exc_name in {"InvalidArgument", "GoogleAdsException"}:
         raise HTTPException(status_code=400, detail=_translate_invalid_argument(detail))
-    raise HTTPException(status_code=502, detail=f"Google Ads isteği başarısız oldu: {detail}")
+    raise HTTPException(
+        status_code=502,
+        detail=safe_500_detail(
+            exc, "Google Ads isteği başarısız oldu. Lütfen biraz sonra tekrar deneyin."
+        ),
+    )
 
 
 # --- Request/Response Modelleri ---
@@ -109,8 +109,9 @@ class EnrichRequest(BaseModel):
     seeds: List[str] = Field(..., min_length=1, max_length=20)  # API limiti: max 20 seed
     max_results: int = Field(300, ge=1, le=5000)
     min_volume: int = Field(0, ge=0)
-    language_id: Optional[str] = None
-    geo_target_id: Optional[str] = None
+    # Pazar (geo/dil) istekten ALINMAZ: calismanin pazari kullanilir. Eski istemcinin
+    # gonderdigi language_id/geo_target_id alanlari yok sayilir (pydantic varsayilani extra=ignore).
+    brand_profile_id: int
 
 
 class EnrichedKeywordOut(BaseModel):
@@ -130,24 +131,10 @@ class EnrichResponse(BaseModel):
     truncated_at: Optional[int]
     truncated_reason: Optional[str]
     keywords: List[EnrichedKeywordOut]
-
-
-class ImportRequest(BaseModel):
-    customer_id: str
-    seeds: List[str] = Field(..., min_length=1, max_length=20)
-    max_results: int = Field(300, ge=1, le=5000)
-    min_volume: int = Field(0, ge=0)
-    sector: Optional[str] = None
-    target_market: Optional[str] = None
-
-
-class ImportResponse(BaseModel):
-    created: int
-    already_existing: int
-    skipped_fuzzy: int
-    truncated: bool
-    truncated_reason: Optional[str]
-    message: str
+    # Google'a GONDERILEN pazar (calisma pazari)
+    geo_target_id: str
+    language_id: str
+    market_label: str
 
 
 class CustomerIdItem(BaseModel):
@@ -185,23 +172,8 @@ class CampaignKeywordsResponse(BaseModel):
     keywords: List[CampaignKeywordOut]
 
 
-class CampaignKeywordsImportRequest(BaseModel):
-    customer_id: str
-    campaign_id: Optional[str] = None
-    min_impressions: int = Field(0, ge=0)
-    date_range: str = Field(
-        "ALL_TIME",
-        pattern="^(ALL_TIME|LAST_7_DAYS|LAST_14_DAYS|LAST_30_DAYS)$",
-    )
-    limit: int = Field(2000, ge=1, le=2000)
-    sector: Optional[str] = None
-    target_market: Optional[str] = None
-
-
 class UrlSeedRequest(BaseModel):
     url: str = Field(..., min_length=1)
-    language_id: Optional[str] = None
-    geo_target_id: Optional[str] = None
     max_results: int = Field(300, ge=1, le=5000)
     min_volume: int = Field(0, ge=0)
     include_keyword_seed: bool = False
@@ -233,6 +205,10 @@ class UrlSeedResponse(BaseModel):
     quota_remaining: Optional[int] = None
     warnings: List[str] = Field(default_factory=list)
     source_status: Optional[UrlSeedSourceStatus] = None
+    # Google'a GONDERILEN pazar (calisma pazari)
+    geo_target_id: str
+    language_id: str
+    market_label: str
 
 
 def _url_seed_cache_key(
@@ -369,7 +345,11 @@ def _assert_url_reachable(url: str) -> None:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"URL erişilemedi: {exc}")
+        logger.warning(f"URL erişim kontrolü başarısız ({url}): {exc}")
+        raise HTTPException(
+            status_code=422,
+            detail="URL'ye ulaşılamadı; adresi kontrol edip tekrar deneyin.",
+        )
 
 
 def _inspect_url_for_seed(url: str) -> tuple[UrlSeedSourceStatus, list[str]]:
@@ -386,7 +366,10 @@ def _inspect_url_for_seed(url: str) -> tuple[UrlSeedSourceStatus, list[str]]:
             try:
                 resp = client.get(current)
             except Exception as exc:
-                warning = f"URL sunucu kontrolünde erişilemedi: {exc}"
+                logger.warning(f"URL seed erişim kontrolü başarısız ({current}): {exc}")
+                warning = (
+                    "URL'ye sunucumuzdan ulaşılamadı; adresin doğru olduğunu kontrol edin."
+                )
                 warnings.append(warning)
                 return (
                     UrlSeedSourceStatus(
@@ -481,23 +464,28 @@ def get_customer_detail(customer_id: str):
 
 
 @router.post("/enrich", response_model=EnrichResponse)
-def enrich_keywords(payload: EnrichRequest):
+def enrich_keywords(payload: EnrichRequest, db: Session = Depends(get_db)):
     """
     Keyword onerileri al — DB'ye yazmaz, onizleme icin.
 
     Notlar:
+    - pazar (geo/dil) calismadan gelir (brand_profile_id); secilmemisse 409 MARKET_NOT_SET
     - seeds max 20 (Google Ads API limiti)
     - max_results gercek donus sayisini garanti etmez; API kendi limitini uygular
     - truncated=True ise max_results'a ulasilmistir
     """
+    from app.core.workspace import verify_workspace
+
+    workspace = verify_workspace(db, payload.brand_profile_id)
+    geo_target_id, language_id = markets.workspace_market(workspace)
     svc = _get_service()
     try:
         enriched, truncated, truncated_reason = svc.enrich_keywords(
             customer_id=payload.customer_id,
             seeds=payload.seeds,
             max_results=payload.max_results,
-            language_id=_normalize_language_id(payload.language_id),
-            geo_target_id=payload.geo_target_id,
+            language_id=language_id,
+            geo_target_id=geo_target_id,
         )
     except Exception as exc:
         _raise_google_ads_error(exc)
@@ -511,6 +499,9 @@ def enrich_keywords(payload: EnrichRequest):
         truncated=truncated,
         truncated_at=len(enriched) if truncated else None,
         truncated_reason=truncated_reason,
+        geo_target_id=geo_target_id,
+        language_id=language_id,
+        market_label=markets.market_label(workspace),
         keywords=[
             EnrichedKeywordOut(
                 keyword=e.keyword,
@@ -540,20 +531,16 @@ def keyword_ideas_by_url(
     from app.core.workspace import verify_workspace
 
     workspace = verify_workspace(db, payload.brand_profile_id)
+    geo_target_id, language_id = markets.workspace_market(workspace)
+    market_label = markets.market_label(workspace)
     customer_id = (
         payload.customer_id
         or settings.GOOGLE_ADS_CUSTOMER_ID
         or settings.GOOGLE_ADS_LOGIN_CUSTOMER_ID
     )
     if not customer_id:
-        raise HTTPException(status_code=400, detail="customer_id gerekli")
+        raise HTTPException(status_code=400, detail="Önce bir Google Ads hesabı seçin.")
 
-    language_id = _normalize_language_id(
-        payload.language_id or workspace.default_language_id or settings.GOOGLE_ADS_LANGUAGE_ID
-    )
-    geo_target_id = _normalize_geo_target_id(
-        payload.geo_target_id or workspace.default_geo_target_id or settings.GOOGLE_ADS_GEO_TARGET_ID
-    )
     keyword_seeds = workspace.suggested_keywords or []
     seeds_hash = _keyword_seed_hash(keyword_seeds) if payload.include_keyword_seed else "none"
     workspace_token = f"ws{workspace.id}:{workspace.created_at.isoformat() if workspace.created_at else 'na'}"
@@ -578,6 +565,9 @@ def keyword_ideas_by_url(
                 total=int(cached.get("total", 0)),
                 cached=True,
                 cache_key=cache_key,
+                geo_target_id=geo_target_id,
+                language_id=language_id,
+                market_label=market_label,
                 warnings=list(cached.get("warnings") or []),
                 source_status=(
                     UrlSeedSourceStatus(**cached["source_status"])
@@ -617,6 +607,12 @@ def keyword_ideas_by_url(
         for idea in ideas
     ]
 
+    if language_id != "1037" and len(out_ideas) < 10:
+        warnings.append(
+            "Site metni hedef dilden farklıysa URL tabanlı öneriler az kalır; "
+            "AI önerileri, seed kelimeler ve CSV içe aktarmayı deneyin."
+        )
+
     payload_to_cache = {
         "ideas": [idea.model_dump() for idea in out_ideas],
         "total": len(out_ideas),
@@ -632,53 +628,18 @@ def keyword_ideas_by_url(
         cached=False,
         cache_key=cache_key,
         quota_remaining=None,
+        geo_target_id=geo_target_id,
+        language_id=language_id,
+        market_label=market_label,
         warnings=warnings,
         source_status=source_status,
     )
 
 
-@router.post("/import", response_model=ImportResponse)
-def import_keywords(payload: ImportRequest, db: Session = Depends(get_db)):
-    """
-    Google Ads keyword onerilerini DB'ye aktar.
-
-    IS KURALI — ONEMLI:
-    Mevcut DB'de ayni metin ile kayit varsa (CSV'den veya baska herhangi bir
-    kaynaktan) o keyword skip edilir ve data_source'u guncellenmez.
-
-    Sonuc olarak: POST /scoring/runs icinde keyword_source_filter="google_ads_api"
-    kullanildiginda sadece BU endpoint ile yeni olusturulan keywordler
-    skorlanir. Ortusme gosteren mevcut keywordler o run'a dahil edilmez.
-
-    Ortusenleri de dahil etmek istiyorsaniz keyword_source_filter=None
-    ile run olusturun (tum aktif keywordler).
-    """
-    svc = _get_service()
-    try:
-        result = svc.import_keywords(
-            db=db,
-            customer_id=payload.customer_id,
-            seeds=payload.seeds,
-            max_results=payload.max_results,
-            min_volume=payload.min_volume,
-            sector=payload.sector,
-            target_market=payload.target_market,
-        )
-    except Exception as exc:
-        _raise_google_ads_error(exc)
-
-    return ImportResponse(
-        created=result.created,
-        already_existing=result.already_existing,
-        skipped_fuzzy=result.skipped_fuzzy,
-        truncated=result.truncated,
-        truncated_reason=result.truncated_reason,
-        message=(
-            f"{result.created} keyword olusturuldu (data_source=google_ads_api). "
-            f"{result.already_existing} zaten mevcuttu (data_source degistirilmedi). "
-            f"{result.skipped_fuzzy} fuzzy eslesme ile atildi."
-        ),
-    )
+@router.post("/import")
+def import_keywords():
+    """410 Gone: workspace'siz legacy import; fikirleri /keywords/import ile workspace'e aktarin."""
+    raise HTTPException(status_code=410, detail=KEYWORD_IMPORT_DISABLED_DETAIL)
 
 
 @router.get("/campaigns", response_model=List[CampaignInfo])
@@ -765,38 +726,7 @@ def list_campaign_keywords(
     )
 
 
-@router.post("/campaigns/keywords/import", response_model=ImportResponse)
-def import_campaign_keywords(
-    payload: CampaignKeywordsImportRequest,
-    db: Session = Depends(get_db),
-):
-    """Import campaign keyword_view rows into keywords table."""
-    svc = _get_service()
-    try:
-        result = svc.import_campaign_keywords(
-            db=db,
-            customer_id=payload.customer_id,
-            campaign_id=payload.campaign_id,
-            min_impressions=payload.min_impressions,
-            date_range=payload.date_range,
-            limit=payload.limit,
-            sector=payload.sector,
-            target_market=payload.target_market,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        _raise_google_ads_error(exc)
-
-    return ImportResponse(
-        created=result.created,
-        already_existing=result.already_existing,
-        skipped_fuzzy=result.skipped_fuzzy,
-        truncated=result.truncated,
-        truncated_reason=result.truncated_reason,
-        message=(
-            f"{result.created} keyword olusturuldu. "
-            f"{result.already_existing} zaten mevcuttu. "
-            f"{result.skipped_fuzzy} benzer atlandi."
-        ),
-    )
+@router.post("/campaigns/keywords/import")
+def import_campaign_keywords():
+    """410 Gone: kampanya gosterimleri hacim degildir; fikirleri /keywords/import ile workspace'e aktarin."""
+    raise HTTPException(status_code=410, detail=CAMPAIGN_IMPORT_DISABLED_DETAIL)

@@ -23,6 +23,7 @@ import {
   useBriefKeywordSelection,
   type BriefKeywordSelection,
 } from './socialBrief/useBriefKeywordSelection'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import './SocialBriefWorkspace.css'
 
 export interface SocialBriefWorkspaceProps {
@@ -46,6 +47,8 @@ export interface SocialBriefWorkspaceProps {
 }
 
 const LAST_BRIEF_KEY = (ws: number, run: number) => `last_social_brief_${ws}_${run}`
+// Backend ile aynı sınır (app/schemas/social_brief.py brand_context max_length)
+const BRAND_CONTEXT_MAX = 10000
 
 export default function SocialBriefWorkspace({
   runId,
@@ -109,6 +112,8 @@ export default function SocialBriefWorkspace({
   const [targetDurationPresetId, setTargetDurationPresetId] = useState<string>('')
   const [brandName, setBrandName] = useState<string>(activeWorkspace?.name || '')
   const [brandContext, setBrandContext] = useState<string>('')
+  const brandContextLength = brandContext.trim().length
+  const brandContextTooLong = brandContextLength > BRAND_CONTEXT_MAX
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -502,13 +507,13 @@ export default function SocialBriefWorkspace({
               <div className="sb-form-heading">
                 <span>1. Hedef Anahtar Kelimeler</span>
                 <span className="sb-form-counter">
-                  Seçilen: <b>{selectedKeywordIds.length}</b> / {maxKeywords} (Min 1, Max{' '}
+                  Seçilen: <b>{selectedKeywordIds.length}</b> / {maxKeywords} (en az 1, en fazla{' '}
                   {maxKeywords})
                 </span>
               </div>
               <p className="sb-form-desc">
-                Sosyal havuzundan brief'e dahil etmek istediğiniz 1–{maxKeywords} kelimeyi seçin.
-                Yukarıdaki Social Havuzu kartlarına tıklayarak da seçebilirsiniz.
+                Sosyal medya havuzundan brief'e eklemek istediğiniz 1–{maxKeywords} kelimeyi seçin.
+                Yukarıdaki Sosyal Medya Havuzu kartlarına tıklayarak da seçebilirsiniz.
               </p>
 
               {/* Seçilen Kelimeler Çipleri */}
@@ -606,7 +611,7 @@ export default function SocialBriefWorkspace({
               <label htmlFor="target-platform-select">
                 <span>2. Hedef Platform ve Formatlar</span>
                 <span className="sb-form-counter">
-                  Seçilen: <b>{selectedTargets.length}</b> / 6 (Min 1, Max 6)
+                  Seçilen: <b>{selectedTargets.length}</b> / 6 (en az 1, en fazla 6)
                 </span>
               </label>
               <p className="sb-form-desc">
@@ -633,7 +638,7 @@ export default function SocialBriefWorkspace({
                           type="button"
                           className="sb-chip-remove"
                           onClick={() => handleRemoveTarget(idx)}
-                          aria-label={`Kaldır hedef: ${pLabel} ${fLabel}`}
+                          aria-label={`Hedefi kaldır: ${pLabel} ${fLabel}`}
                         >
                           <X size={12} />
                         </button>
@@ -692,7 +697,7 @@ export default function SocialBriefWorkspace({
                       >
                         {currentFormatObj.duration_presets.map((d: DurationPresetResponse) => (
                           <option key={d.id} value={d.id}>
-                            {d.label} ({d.min_sec}-{d.max_sec}s)
+                            {d.label} ({d.min_sec}–{d.max_sec} sn)
                           </option>
                         ))}
                       </select>
@@ -740,7 +745,13 @@ export default function SocialBriefWorkspace({
             </div>
 
             <div className="sb-form-group">
-              <label htmlFor="brief-brand-context">Marka Bağlamı / Özel Notlar (Opsiyonel)</label>
+              <label htmlFor="brief-brand-context">
+                <span>Marka Bağlamı / Özel Notlar (Opsiyonel)</span>
+                <span className="sb-form-counter">
+                  <b>{brandContextLength.toLocaleString('tr-TR')}</b> /{' '}
+                  {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter
+                </span>
+              </label>
               <textarea
                 id="brief-brand-context"
                 className="sb-textarea"
@@ -748,7 +759,15 @@ export default function SocialBriefWorkspace({
                 placeholder="Kampanya amacı, hedef kitle veya tonlama notları..."
                 value={brandContext}
                 onChange={(e) => setBrandContext(e.target.value)}
+                aria-invalid={brandContextTooLong}
               />
+              {brandContextTooLong && (
+                <div className="channels-alert channels-alert-error" role="alert">
+                  Notlar en fazla {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter olabilir (
+                  {(brandContextLength - BRAND_CONTEXT_MAX).toLocaleString('tr-TR')} karakter
+                  fazla). Metni kısaltın; marka profili zaten içerik üretiminde kullanılıyor.
+                </div>
+              )}
             </div>
 
             {/* Kaydet ve İptal Butonları */}
@@ -758,6 +777,7 @@ export default function SocialBriefWorkspace({
                 className="sb-btn sb-btn-primary"
                 disabled={
                   isSubmitting ||
+                  brandContextTooLong ||
                   selectedKeywordIds.length < 1 ||
                   selectedKeywordIds.length > maxKeywords ||
                   selectedTargets.length < 1 ||
@@ -842,6 +862,12 @@ export default function SocialBriefWorkspace({
                 Geçmiş Sosyal İçerikler
               </button>
             )}
+            <ClaimReevaluateButton
+              runId={runId}
+              workspaceId={currentWorkspaceId}
+              disabled={disabled}
+              onDone={() => void fetchBriefs()}
+            />
           </div>
         </div>
 
@@ -899,7 +925,7 @@ export default function SocialBriefWorkspace({
                     <div className="sb-brief-item-title">
                       <span>Brief #{brief.id}</span>
                       {brief.is_stale ? (
-                        <span className="sb-badge sb-badge-stale">Stale</span>
+                        <span className="sb-badge sb-badge-stale">Güncel değil</span>
                       ) : brief.locked_at ? (
                         <span className="sb-badge sb-badge-locked">Kilitli</span>
                       ) : (

@@ -20,7 +20,7 @@ from app.core.engine_version_gate import (
 from app.core.workspace import require_fresh_channel_pool, verify_scoring_run
 from app.compliance.publish_review import (
     geo_evaluation_source,
-    legacy_seo_checks,
+    seo_checks_from_row,
     publish_review_from_rows,
 )
 from app.core.site_analyzer.brand_defaults import BrandDefaultsResolver, BrandResolveError
@@ -43,6 +43,7 @@ from app.schemas.ads import (
 )
 from app.generators.seo_geo import SEOGEOGenerator
 from app.generators.ads import AdsGenerator
+from app.generators.output_language import output_context_for_run
 from app.tasks.generation_tasks import (
     generate_ads_task,
     social_brief_contents_task,
@@ -176,6 +177,21 @@ def _guard_generation_dispatch(db: Session, run_id: int) -> None:
     require_fresh_channel_pool(db, run)
 
 
+def _recheck_dispatch_guard(db: Session, run_id: int) -> None:
+    """Kayit oncesi guncellik kapisi (senkron uretim). ORM onbellegi bosaltilip
+    ayni guard taze satirlarla kosar; FOR UPDATE kilidi cagiranin commit'ine
+    kadar kalir (kontrol + kayit tek transaction)."""
+    db.expire_all()
+    try:
+        _guard_generation_dispatch(db, run_id)
+    except BaseException:
+        # 409/hata: brand_profiles FOR UPDATE kilidi BIRAKILMALI. Aksi halde istek sonunda
+        # get_ai (collector.finalize -> ayri oturumdan ai_usage_events, FK -> brand_profiles)
+        # get_db'den ONCE kapanir, tuttugumuz kilide takilir ve istek sonsuza dek asili kalir.
+        db.rollback()
+        raise
+
+
 def _scope_usage(ai, *, scoring_run_id=None, brand_profile_id=None) -> None:
     """İstek collector'ına run/workspace kimliği bağlar (Codex v8-3).
 
@@ -205,19 +221,38 @@ def generate_seo_geo_content(
     if request.scoring_run_id is None:
         raise HTTPException(
             status_code=400,
-            detail="scoring_run_id zorunludur (workspace doğrulaması bu run üzerinden yapılır)",
+            detail="Önce bir analiz seçin.",
         )
     verify_scoring_run(db, request.scoring_run_id, brand_profile_id)
     _guard_generation_dispatch(db, request.scoring_run_id)
+    # Kilidi (brand_profiles FOR UPDATE) uretim boyunca TUTMA: senkron uretim
+    # dakikalar surer ve UsageCollector ayri oturumdan flush ederken (FK ->
+    # brand_profiles, 8. cagri) kendi kilidimize takilip kilitleniyordu
+    # (iddia onarim turu cagri sayisini 6'dan 8'e cikarinca gorunur oldu).
+    # Async uclar gibi: stale kontrolu kilit altinda yapildi, sonra birakilir.
+    db.commit()
     _scope_usage(ai, scoring_run_id=request.scoring_run_id,
                  brand_profile_id=brand_profile_id)
     try:
         generator = SEOGEOGenerator(db, ai)
-        result = generator.generate_content(request, scoring_run_id=request.scoring_run_id)
+        result = generator.generate_content(
+            request,
+            scoring_run_id=request.scoring_run_id,
+            # Kayittan hemen once ayni kapi, kisa kilit altinda: AI beklerken
+            # politika/profil degistiyse tipli 409 (POLICY_STALE), kayit YOK.
+            # expire_all: identity map'teki run/workspace nesneleri bu transaction
+            # icinde yuklendi; TAZE satir okunmazsa degisiklik gorulmez.
+            before_save=lambda: _recheck_dispatch_guard(db, request.scoring_run_id),
+        )
         return result
+    except HTTPException:
+        db.rollback()  # before_save kilidi (FOR UPDATE) hata yolunda tutulmasin
+        raise
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "İçerik üretimi başarısız oldu")
@@ -246,7 +281,7 @@ def generate_seo_geo_bulk(
     # Validate scoring run exists
     scoring_run = db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
     if not scoring_run:
-        raise HTTPException(status_code=404, detail=f"Scoring run {scoring_run_id} bulunamadı")
+        raise HTTPException(status_code=404, detail="Analiz bulunamadı.")
 
     # Get SEO pool keyword IDs
     pools = db.query(ChannelPool).filter(
@@ -255,7 +290,7 @@ def generate_seo_geo_bulk(
     ).all()
 
     if not pools:
-        raise HTTPException(status_code=404, detail="SEO havuzunda keyword bulunamadı. Önce kanal ataması yapın.")
+        raise HTTPException(status_code=404, detail="SEO havuzunda anahtar kelime yok. Önce kanal ataması yapın.")
 
     keyword_ids = [p.keyword_id for p in pools]
     if limit:
@@ -279,12 +314,12 @@ def get_seo_geo_content(
     content = db.query(SEOGeoContent).filter(SEOGeoContent.id == content_id).first()
 
     if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+        raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
 
     co = db.query(ContentOutput).filter(ContentOutput.id == content.content_output_id).first() if content.content_output_id else None
     run_id = co.scoring_run_id if co else None
     if not run_id:
-        raise HTTPException(status_code=404, detail="Content not found")
+        raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
     verify_scoring_run(db, run_id, brand_profile_id)
 
     keyword = db.query(Keyword).filter(Keyword.id == content.keyword_id).first()
@@ -332,12 +367,12 @@ def get_compliance_report(
     content = db.query(SEOGeoContent).filter(SEOGeoContent.id == content_id).first()
 
     if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
+        raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
 
     co = db.query(ContentOutput).filter(ContentOutput.id == content.content_output_id).first() if content.content_output_id else None
     run_id = co.scoring_run_id if co else None
     if not run_id:
-        raise HTTPException(status_code=404, detail="Content not found")
+        raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
     verify_scoring_run(db, run_id, brand_profile_id)
 
     keyword = db.query(Keyword).filter(Keyword.id == content.keyword_id).first()
@@ -349,7 +384,7 @@ def get_compliance_report(
         # 'checks': yeni checklist kriterleri dahil kalici liste (checks_json).
         # Eski satirlarda null -> kolon-bazli AYNI formatta kurulur (codex),
         # frontend tek format gorur.
-        checks = seo_compliance.checks_json or legacy_seo_checks(seo_compliance)
+        checks = seo_checks_from_row(seo_compliance)
         seo_result = {
             'title_has_keyword': seo_compliance.title_has_keyword,
             'title_length_ok': seo_compliance.title_length_ok,
@@ -606,11 +641,8 @@ def generate_ads_rsa(
         # trusted: YALNIZ kullanıcının istekte açıkça verdiği değer —
         # grounding whitelist'i yalnız trusted'ı kullanır (Faz F).
         trusted_brand_usp = resolver.safe_str(request.brand_usp) or ""
-        effective_brand_usp = (
-            trusted_brand_usp
-            or defaults.get("brand_usp", "")
-            or "Kaliteli ürün ve hizmet"
-        )
+        # USP yoksa boş kalır: jenerik metin reklam metnine sızıyordu
+        effective_brand_usp = trusted_brand_usp or defaults.get("brand_usp", "")
 
         return _dispatch_ads(
             db,
@@ -651,6 +683,7 @@ def list_ads_generation_sets(
     """Run'a ait ADS set geçmişi (status, is_stale, version, sayılar)."""
     from app.database.models import AdGenerationSet
     from app.generators.ads.generation_sets import get_active_set
+    from app.generators.claim_review import review_summary
     from app.schemas.ads import AdGenerationSetListResponse, AdGenerationSetSummary
 
     try:
@@ -664,7 +697,10 @@ def list_ads_generation_sets(
         active = get_active_set(db, scoring_run_id)
         return AdGenerationSetListResponse(
             scoring_run_id=scoring_run_id,
-            sets=[AdGenerationSetSummary.model_validate(s) for s in sets],
+            sets=[
+                AdGenerationSetSummary.model_validate(s).model_copy(update=review_summary(s.warnings))
+                for s in sets
+            ],
             active_set_id=active.id if active else None,
         )
     except HTTPException:
@@ -689,6 +725,7 @@ def activate_ads_generation_set(
     from app.database.models import AdGenerationSet
     from app.schemas.ads import AdGenerationSetSummary
     from app.generators.ads.generation_sets import activate_set
+    from app.generators.claim_review import review_summary
 
     try:
         gen_set = (
@@ -697,7 +734,7 @@ def activate_ads_generation_set(
             .first()
         )
         if gen_set is None:
-            raise HTTPException(status_code=404, detail="Set bulunamadı")
+            raise HTTPException(status_code=404, detail="Reklam seti bulunamadı.")
         verify_scoring_run(db, gen_set.scoring_run_id, brand_profile_id)
 
         try:
@@ -705,13 +742,50 @@ def activate_ads_generation_set(
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
-        return AdGenerationSetSummary.model_validate(activated)
+        return AdGenerationSetSummary.model_validate(activated).model_copy(
+            update=review_summary(activated.warnings)
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Set aktive edilemedi"),
+        )
+
+
+@router.post("/claims/re-evaluate")
+def re_evaluate_claims(
+    scoring_run_id: int = Query(..., description="Scoring run"),
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """İddia incelemesini GÜNCEL profille yeniden değerlendirir (ücretsiz, AI yok).
+
+    RSA (active+draft, non-stale), SEO ve brief sosyal içerikleri için bulgu kayıtlarını
+    yeniler; önceki kayıt `history`'ye iner. İçerik metni değişmez, set aktifleştirilmez.
+    Profile eklenen ifade mevcut eşleştirmenin tanımadığı bir eş anlamsa uyarı KORUNUR.
+    """
+    from app.core.claim_reevaluate import reevaluate_claims
+
+    try:
+        run = verify_scoring_run(db, scoring_run_id, brand_profile_id)
+        result = reevaluate_claims(db, run)
+        db.commit()
+        return {
+            **result,
+            "note": (
+                "Yeniden değerlendirildi: temizlenen ve hâlâ kontrol gerektiren sayılar "
+                "kanal bazında verilmiştir."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=safe_500_detail(e, "İddia yeniden değerlendirmesi başarısız oldu"),
         )
 
 
@@ -764,14 +838,14 @@ def get_ads_group_detail(
         try:
             run_id = resolver.run_id_from_ad_group(group_id)
         except BrandResolveError:
-            raise HTTPException(status_code=404, detail="Ad group not found")
+            raise HTTPException(status_code=404, detail="Reklam grubu bulunamadı.")
         verify_scoring_run(db, run_id, brand_profile_id)
 
         generator = AdsGenerator(db, ai)
         result = generator.get_ad_group_detail(group_id)
         
         if not result:
-            raise HTTPException(status_code=404, detail="Ad group not found")
+            raise HTTPException(status_code=404, detail="Reklam grubu bulunamadı.")
         
         return result
     except HTTPException:
@@ -814,25 +888,25 @@ def regenerate_ads_group(
 
         group = db.query(AdGroupModel).filter(AdGroupModel.id == group_id).first()
         if group is None:
-            raise HTTPException(status_code=404, detail="Ad group not found")
+            raise HTTPException(status_code=404, detail="Reklam grubu bulunamadı.")
         source_set = group.generation_set
         if source_set is None:
             raise HTTPException(
                 status_code=409,
-                detail="Grubun üretim seti yok — tam ADS üretimi gerekli",
+                detail="Bu reklam grubu bir reklam setine bağlı değil; önce tüm reklamları yeniden üretin.",
             )
         if source_set.is_stale:
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "Kaynak set stale (kanal ataması yenilendi) — bu setten "
-                    "grup yenilenemez; tam ADS üretimi çalıştırın."
+                    "Bu reklam seti güncel değil (kanal ataması yenilendi); "
+                    "içindeki grup yeniden üretilemez. Önce tüm reklamları yeniden üretin."
                 ),
             )
         if source_set.status not in SUCCESSFUL_STATUSES:
             raise HTTPException(
                 status_code=409,
-                detail=f"Set durumu '{source_set.status}' — regenerate edilemez",
+                detail="Bu reklam seti tamamlanmamış veya başarısız olduğu için içindeki grup yeniden üretilemez.",
             )
 
         defaults = resolver.resolve(run_id)
@@ -844,11 +918,7 @@ def regenerate_ads_group(
         trusted_brand_usp = resolver.safe_str(
             request.brand_usp if request else None
         ) or ""
-        effective_brand_usp = (
-            trusted_brand_usp
-            or defaults.get("brand_usp", "")
-            or "Kaliteli ürün ve hizmet"
-        )
+        effective_brand_usp = trusted_brand_usp or defaults.get("brand_usp", "")
 
         return _dispatch_ads(
             db,
@@ -924,8 +994,10 @@ def generate_social_categories(
         generator = SocialGenerator(db, ai)
         return generator.generate_categories(effective_request)
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal kategoriler üretilemedi")
@@ -963,8 +1035,10 @@ def generate_social_ideas(
             # BRIEF_SCOPED: brief'e ait kategori legacy uctan islenemez (K11/§7-8)
             raise HTTPException(status_code=409, detail=str(policy_error))
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal fikirler üretilemedi")
@@ -1005,8 +1079,10 @@ def generate_social_contents(
             # BRIEF_SCOPED: brief'e ait fikir legacy uctan islenemez (§7-8)
             raise HTTPException(status_code=409, detail=str(policy_error))
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal içerikler üretilemedi")
@@ -1072,11 +1148,11 @@ def generate_social_contents_async(
             update_task_status(
                 task_id,
                 status="failed",
-                error_message="Gorev kuyruga alinamadi; Celery/Redis erisimini kontrol edin.",
+                error_message="Görev başlatılamadı. Lütfen tekrar deneyin.",
             )
             raise HTTPException(
                 status_code=503,
-                detail="Icerik uretimi kuyruga alinamadi. Lutfen tekrar deneyin.",
+                detail="İçerik üretimi başlatılamadı. Lütfen tekrar deneyin.",
             ) from enqueue_error
 
         return TaskDispatchResponse(task_id=task_id, scoring_run_id=run_id)
@@ -1105,8 +1181,8 @@ def generate_social_bulk(
         raise HTTPException(
             status_code=410,
             detail=(
-                "Bu uc kaldirildi. Yeni sosyal icerik akisi icin "
-                "/generation/social/briefs kullanin."
+                "Bu toplu sosyal medya üretimi kaldırıldı. Sosyal medya içeriklerini "
+                "Sosyal Medya sayfasındaki brief akışıyla oluşturun."
             ),
         )
     try:
@@ -1127,8 +1203,10 @@ def generate_social_bulk(
         generator = SocialGenerator(db, ai)
         return generator.generate_full_pipeline(effective_request)
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal medya içeriği üretilemedi")
@@ -1160,7 +1238,7 @@ def create_social_brief_endpoint(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -1209,7 +1287,7 @@ def create_social_brief_endpoint(
             status_code=409,
             detail={
                 "code": "BRIEF_PERSISTENCE_CONFLICT",
-                "message": "Brief could not be created because the underlying data changed.",
+                "message": "Brief oluşturulurken veriler değişti. Sayfayı yenileyip brief'i yeniden oluşturun.",
             },
         )
     except HTTPException:
@@ -1237,7 +1315,7 @@ def list_social_briefs_endpoint(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -1282,7 +1360,7 @@ def get_social_brief_endpoint(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -1310,6 +1388,82 @@ def get_social_brief_endpoint(
             status_code=500,
             detail=safe_500_detail(e, "Sosyal medya brief'i okunamadı"),
         )
+
+
+_BRIEF_EXPORT_MEDIA = {
+    "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+}
+
+
+@router.get("/social/briefs/{brief_id}/export")
+def export_social_brief_endpoint(
+    brief_id: int,
+    brand_profile_id: int = Query(..., gt=0, description="Workspace scope"),
+    format: str = Query("docx", pattern="^(excel|docx|pdf)$"),
+    db: Session = Depends(get_db),
+):
+    """Tek brief'in sosyal içeriklerini senkron indirir.
+
+    Tam rapor stale brief'leri dışlar; kanal havuzu sonradan değişince eski
+    brief'in emeği rapordan düşüyordu. Bu uç stale brief'i de verir — grup
+    başlığı "GÜNCEL DEĞİL" der. Tek brief küçük: ExportJob/Celery gerekmez.
+    """
+    import os
+    import tempfile
+
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    from app.core.http_headers import content_disposition, download_filename
+    from app.core.workspace import verify_workspace
+    from app.database.models import SocialContent
+    from app.schemas.export import ExportFormatEnum, ExportSectionEnum
+    from app.tasks.export_tasks import _file_extension, _get_exporter
+
+    if not getattr(settings, "ENABLE_SOCIAL_BRIEF_FLOW", False):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "FEATURE_DISABLED", "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun."},
+        )
+    try:
+        brief = get_social_brief(db, brief_id=brief_id, brand_profile_id=brand_profile_id)
+    except SocialBriefNotFoundError as e:
+        raise HTTPException(status_code=404, detail={"code": e.error_code, "message": e.message})
+
+    if not db.query(SocialContent.id).filter(SocialContent.brief_id == brief.id).first():
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "NO_CONTENT", "message": "Bu brief için üretilmiş içerik yok."},
+        )
+
+    format_enum = ExportFormatEnum(format)
+    exporter = _get_exporter(format_enum, db)
+    exporter.data_collector.brief_id = brief.id
+    ext = _file_extension(format_enum)
+    fd, filepath = tempfile.mkstemp(suffix=ext)
+    os.close(fd)
+    try:
+        exporter.export(
+            scoring_run_id=brief.scoring_run_id,
+            sections=[ExportSectionEnum.SOCIAL],
+            filepath=filepath,
+        )
+    except Exception as e:
+        os.remove(filepath)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=safe_500_detail(e, "Brief indirilemedi"))
+
+    filename = download_filename(
+        verify_workspace(db, brand_profile_id), f"Sosyal_Brief_{brief.id}", ext
+    )
+    return FileResponse(
+        filepath,
+        media_type=_BRIEF_EXPORT_MEDIA[format],
+        headers={"Content-Disposition": content_disposition(filename)},
+        background=BackgroundTask(os.remove, filepath),
+    )
 
 
 def _attempt_summary_to_response(s: SocialAttemptSummary) -> SocialAttemptSummaryResponse:
@@ -1344,7 +1498,7 @@ def get_social_brief_state_endpoint(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
     try:
@@ -1354,7 +1508,7 @@ def get_social_brief_state_endpoint(
     except SocialBriefStateNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+            detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
         )
     except SocialCategoryPersistenceError:
         logger.exception("Brief durum okuması: kayıtlı kategori verisi tutarsız")
@@ -1433,7 +1587,7 @@ def get_social_content_history_endpoint(
     except SocialContentHistoryNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail=f"Marka çalışması (id={brand_profile_id}) bulunamadı veya arşivlenmiş",
+            detail="Marka çalışması bulunamadı veya arşivlenmiş",
         )
     except SocialContentHistoryInputError:
         raise HTTPException(
@@ -1553,7 +1707,7 @@ def _finalize_failed_attempt(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "CATEGORY_FAILURE_FINALIZATION_FAILED",
-                "message": "Attempt başarısızlık durumu kaydedilemedi.",
+                "message": "Kategori üretimi başarısız oldu ancak sonuç kaydedilemedi. Sayfayı yenileyip durumu kontrol edin.",
             },
         ) from exc
 
@@ -1582,7 +1736,7 @@ def generate_social_categories_for_brief(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -1602,21 +1756,21 @@ def generate_social_categories_for_brief(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+            detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
         )
     except SocialCategoryFlowError as e:
         db.rollback()
         if e.error_code == "BRIEF_NOT_FOUND":
             raise HTTPException(
                 status_code=404,
-                detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+                detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
             )
         if e.error_code == "CATEGORIES_ALREADY_GENERATED":
             raise HTTPException(
                 status_code=409,
                 detail={
                     "code": "CATEGORIES_ALREADY_GENERATED",
-                    "message": "Categories have already been generated for this brief.",
+                    "message": "Bu brief için kategoriler zaten üretilmiş.",
                 },
             )
         raise HTTPException(
@@ -1629,7 +1783,7 @@ def generate_social_categories_for_brief(
             status_code=409,
             detail={
                 "code": e.error_code,
-                "message": "Another category generation attempt is currently active for this brief.",
+                "message": "Bu brief için kategori üretimi zaten sürüyor. Bitmesini bekleyin.",
             },
         )
     except AttemptNotWritableError as e:
@@ -1647,7 +1801,7 @@ def generate_social_categories_for_brief(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+            detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
         )
     except InvalidStageError as e:
         db.rollback()
@@ -1691,7 +1845,7 @@ def generate_social_categories_for_brief(
                         status_code=500,
                         detail={
                             "code": "CATEGORY_PERSISTENCE_INCONSISTENT",
-                            "message": "Completed attempt coverage bilgisi eksik veya geçersiz.",
+                            "message": "Kategori üretiminin kayıtlı sonucu eksik veya tutarsız. Sayfayı yenileyip durumu kontrol edin.",
                         },
                     )
 
@@ -1705,7 +1859,7 @@ def generate_social_categories_for_brief(
             except SocialBriefNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+                    detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
                 )
             except SocialCategoryPersistenceError as e:
                 raise HTTPException(
@@ -1743,7 +1897,7 @@ def generate_social_categories_for_brief(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": "CATEGORY_ATTEMPT_TERMINAL",
-                    "message": "Previous category generation attempt failed. Please retry with a new idempotency_key.",
+                    "message": "Önceki kategori üretimi başarısız oldu. Kategori üretimini yeniden başlatın.",
                     "attempt_id": start.attempt_id,
                     "retryable": True,
                     "retry_with_new_idempotency_key": True,
@@ -1755,7 +1909,7 @@ def generate_social_categories_for_brief(
             status_code=500,
             detail={
                 "code": "CATEGORY_PERSISTENCE_INCONSISTENT",
-                "message": f"Bilinmeyen attempt durumu: {start.attempt_status}",
+                "message": "Kategori üretiminin durumu okunamadı. Sayfayı yenileyip durumu kontrol edin.",
             },
         )
 
@@ -1767,13 +1921,13 @@ def generate_social_categories_for_brief(
             db,
             attempt_id=start.attempt_id,
             reason_code="transaction_boundary_violation",
-            error_message="Aşama 2 öncesinde beklenmeyen açık transaction tespit edildi.",
+            error_message="İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "CATEGORY_TRANSACTION_BOUNDARY_VIOLATION",
-                "message": "Aşama 2 öncesinde beklenmeyen açık transaction tespit edildi.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
 
@@ -1783,7 +1937,14 @@ def generate_social_categories_for_brief(
         brand_profile_id=start.brand_profile_id,
     )
 
-    generator = SocialBriefCategoryGenerator(ai)
+    # Çalışma pazarı (çıktı dili + hedef konum): istek oturumunda transaction
+    # açmamak için kısa ömürlü ayrı oturumla okunur (AI çağrısı transaction dışında).
+    from app.database.connection import SessionLocal
+
+    with SessionLocal() as _ctx_db:
+        output_ctx = output_context_for_run(_ctx_db, start.scoring_run_id)
+
+    generator = SocialBriefCategoryGenerator(ai, output_ctx=output_ctx)
     try:
         ai_result = generator.generate(start)
     except SocialCategoryGenerationError as e:
@@ -1864,7 +2025,7 @@ def generate_social_categories_for_brief(
                 status_code=409,
                 detail={
                     "code": e.error_code,
-                    "message": "Kategori kaydedilemedi; veri durumu değişmiş.",
+                    "message": "Kategoriler kaydedilemedi; brief bu sırada değişmiş. Sayfayı yenileyin.",
                     "attempt_id": start.attempt_id,
                     "retryable": True,
                     "retry_with_new_idempotency_key": True,
@@ -1874,7 +2035,7 @@ def generate_social_categories_for_brief(
             status_code=500,
             detail={
                 "code": e.error_code,
-                "message": "Kategori verisi kalıcılaştırılamadı.",
+                "message": "Kategoriler kaydedilemedi. Sayfayı yenileyip durumu kontrol edin.",
             },
         )
     except AttemptNotWritableError as e:
@@ -1907,7 +2068,7 @@ def generate_social_categories_for_brief(
             status_code=409,
             detail={
                 "code": "CATEGORY_PERSISTENCE_CONFLICT",
-                "message": "Kategori çakışması oluştu.",
+                "message": "Kategoriler aynı anda başka bir işlemle kaydedildi. Sayfayı yenileyin.",
                 "attempt_id": start.attempt_id,
                 "retryable": True,
                 "retry_with_new_idempotency_key": True,
@@ -2016,7 +2177,7 @@ def generate_social_ideas_for_brief(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -2036,12 +2197,12 @@ def generate_social_ideas_for_brief(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+            detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
         )
     except SocialIdeaFlowError as e:
         db.rollback()
         status_code_map = {
-            "BRIEF_NOT_FOUND": (404, "Social brief not found."),
+            "BRIEF_NOT_FOUND": (404, "Brief bulunamadı."),
             "MIXED_BRIEF": (400, "Brief contains mixed brief items."),
             "CATEGORY_NOT_ELIGIBLE": (400, "Category is not eligible for idea generation."),
             "IDEA_PLAN_INVALID": (400, "Idea generation plan is invalid."),
@@ -2068,7 +2229,7 @@ def generate_social_ideas_for_brief(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "ATTEMPT_CONFLICT",
-                "message": "Aynı brief için aktif bir attempt mevcut.",
+                "message": "Bu brief için şu anda başka bir üretim çalışıyor. Bitmesini bekleyin.",
             },
         )
     except AttemptNotWritableError:
@@ -2077,7 +2238,7 @@ def generate_social_ideas_for_brief(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "ATTEMPT_NOT_WRITABLE",
-                "message": "Attempt şu anda yazılamaz durumda.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
     except IntegrityError:
@@ -2086,7 +2247,7 @@ def generate_social_ideas_for_brief(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "IDEA_ATTEMPT_CONFLICT",
-                "message": "Veritabanı çakışması tespit edildi.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
     except Exception as e:
@@ -2111,12 +2272,12 @@ def generate_social_ideas_for_brief(
             except SocialIdeaReadNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief or attempt not found."},
+                    detail={"code": "BRIEF_NOT_FOUND", "message": "Brief veya üretim kaydı bulunamadı."},
                 )
             except SocialIdeaReadError:
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir okuma verisi tutarsız."},
+                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir sonuçları okunamadı. Sayfayı yenileyin."},
                 )
             response.status_code = status.HTTP_200_OK
             return social_idea_read_to_response(read_result)
@@ -2134,12 +2295,12 @@ def generate_social_ideas_for_brief(
             except SocialIdeaReadNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief or attempt not found."},
+                    detail={"code": "BRIEF_NOT_FOUND", "message": "Brief veya üretim kaydı bulunamadı."},
                 )
             except SocialIdeaReadError:
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir okuma verisi tutarsız."},
+                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir sonuçları okunamadı. Sayfayı yenileyin."},
                 )
             response.status_code = status.HTTP_202_ACCEPTED
             return social_idea_read_to_response(read_result)
@@ -2150,7 +2311,7 @@ def generate_social_ideas_for_brief(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": "IDEA_ATTEMPT_TERMINAL",
-                    "message": "Previous idea generation attempt is terminal. Retry with a new idempotency_key.",
+                    "message": "Önceki fikir üretimi sonuçlandı. Fikir üretimini yeniden başlatın.",
                     "attempt_id": start.attempt_id,
                     "attempt_status": start.attempt_status,
                     "retryable": True,
@@ -2163,7 +2324,7 @@ def generate_social_ideas_for_brief(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "IDEA_READ_INCONSISTENT",
-                "message": f"Bilinmeyen attempt durumu: {start.attempt_status}",
+                "message": "Fikir üretiminin durumu okunamadı. Sayfayı yenileyip durumu kontrol edin.",
             },
         )
 
@@ -2191,7 +2352,7 @@ def generate_social_ideas_for_brief(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
                     "code": "IDEA_DISPATCH_FINALIZATION_FAILED",
-                    "message": "Görev kuyruğa alınamadı ve attempt durumu güvenli biçimde kapatılamadı.",
+                    "message": "Üretim başlatılamadı ve durumu kaydedilemedi. Birkaç dakika sonra sayfayı yenileyip durumu kontrol edin.",
                 },
             )
         raise HTTPException(
@@ -2242,7 +2403,7 @@ def get_social_ideas_attempt(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -2275,13 +2436,13 @@ def get_social_ideas_attempt(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Idea generation attempt not found."},
+            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Fikir üretimi bulunamadı."},
         )
     except AttemptNotWritableError:
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Idea generation result is inconsistent."},
+            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir üretiminin sonucu okunamadı. Sayfayı yenileyin."},
         )
     except HTTPException:
         raise
@@ -2305,12 +2466,12 @@ def get_social_ideas_attempt(
     except SocialIdeaReadNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Idea generation attempt not found."},
+            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Fikir üretimi bulunamadı."},
         )
     except SocialIdeaReadError:
         raise HTTPException(
             status_code=500,
-            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Idea generation result is inconsistent."},
+            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir üretiminin sonucu okunamadı. Sayfayı yenileyin."},
         )
     except HTTPException:
         raise
@@ -2348,7 +2509,7 @@ def retry_social_ideas_for_brief(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -2368,12 +2529,12 @@ def retry_social_ideas_for_brief(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+            detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
         )
     except SocialIdeaRetryFlowError as e:
         db.rollback()
         status_code_map = {
-            "BRIEF_NOT_FOUND": (404, "Social brief not found."),
+            "BRIEF_NOT_FOUND": (404, "Brief bulunamadı."),
             "SOURCE_ATTEMPT_NOT_FOUND": (404, "Kaynak fikir attempt bulunamadı."),
             "IDEA_RETRY_SOURCE_NOT_FOUND": (404, "Kaynak fikir attempt bulunamadı."),
             "SOURCE_ATTEMPT_RUNNING": (409, "Kaynak attempt henüz tamamlanmadı."),
@@ -2401,7 +2562,7 @@ def retry_social_ideas_for_brief(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "ATTEMPT_CONFLICT",
-                "message": "Aynı brief için aktif bir attempt mevcut.",
+                "message": "Bu brief için şu anda başka bir üretim çalışıyor. Bitmesini bekleyin.",
             },
         )
     except AttemptNotWritableError:
@@ -2410,7 +2571,7 @@ def retry_social_ideas_for_brief(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "ATTEMPT_NOT_WRITABLE",
-                "message": "Attempt şu anda yazılamaz durumda.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
     except IntegrityError:
@@ -2419,7 +2580,7 @@ def retry_social_ideas_for_brief(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "IDEA_ATTEMPT_CONFLICT",
-                "message": "Veritabanı çakışması tespit edildi.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
     except Exception as e:
@@ -2444,12 +2605,12 @@ def retry_social_ideas_for_brief(
             except SocialIdeaReadNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief or attempt not found."},
+                    detail={"code": "BRIEF_NOT_FOUND", "message": "Brief veya üretim kaydı bulunamadı."},
                 )
             except SocialIdeaReadError:
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir okuma verisi tutarsız."},
+                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir sonuçları okunamadı. Sayfayı yenileyin."},
                 )
             response.status_code = status.HTTP_200_OK
             return social_idea_read_to_response(read_result)
@@ -2467,12 +2628,12 @@ def retry_social_ideas_for_brief(
             except SocialIdeaReadNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief or attempt not found."},
+                    detail={"code": "BRIEF_NOT_FOUND", "message": "Brief veya üretim kaydı bulunamadı."},
                 )
             except SocialIdeaReadError:
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir okuma verisi tutarsız."},
+                    detail={"code": "IDEA_READ_INCONSISTENT", "message": "Fikir sonuçları okunamadı. Sayfayı yenileyin."},
                 )
             response.status_code = status.HTTP_202_ACCEPTED
             return social_idea_read_to_response(read_result)
@@ -2483,7 +2644,7 @@ def retry_social_ideas_for_brief(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": "IDEA_RETRY_ATTEMPT_TERMINAL",
-                    "message": "Previous idea retry attempt is terminal. Retry with a new idempotency_key.",
+                    "message": "Önceki tekrar deneme sonuçlandı. Kalan eksik hedefler için yeniden deneyin.",
                     "attempt_id": start.attempt_id,
                     "attempt_status": start.attempt_status,
                     "retryable": True,
@@ -2495,7 +2656,7 @@ def retry_social_ideas_for_brief(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "IDEA_READ_INCONSISTENT",
-                "message": f"Bilinmeyen attempt durumu: {start.attempt_status}",
+                "message": "Fikir üretiminin durumu okunamadı. Sayfayı yenileyip durumu kontrol edin.",
             },
         )
 
@@ -2523,7 +2684,7 @@ def retry_social_ideas_for_brief(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
                     "code": "IDEA_RETRY_DISPATCH_FINALIZATION_FAILED",
-                    "message": "Görev kuyruğa alınamadı ve attempt durumu güvenli biçimde kapatılamadı.",
+                    "message": "Üretim başlatılamadı ve durumu kaydedilemedi. Birkaç dakika sonra sayfayı yenileyip durumu kontrol edin.",
                 },
             )
         raise HTTPException(
@@ -2572,7 +2733,7 @@ def get_social_ideas_retry_attempt(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -2605,13 +2766,13 @@ def get_social_ideas_retry_attempt(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Idea retry attempt not found."},
+            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Eksik fikir üretimi bulunamadı."},
         )
     except AttemptNotWritableError:
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Idea retry result is inconsistent."},
+            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Eksik fikir üretiminin sonucu okunamadı. Sayfayı yenileyin."},
         )
     except HTTPException:
         raise
@@ -2635,12 +2796,12 @@ def get_social_ideas_retry_attempt(
     except SocialIdeaReadNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Idea retry attempt not found."},
+            detail={"code": "IDEA_ATTEMPT_NOT_FOUND", "message": "Eksik fikir üretimi bulunamadı."},
         )
     except SocialIdeaReadError:
         raise HTTPException(
             status_code=500,
-            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Idea retry result is inconsistent."},
+            detail={"code": "IDEA_READ_INCONSISTENT", "message": "Eksik fikir üretiminin sonucu okunamadı. Sayfayı yenileyin."},
         )
     except HTTPException:
         raise
@@ -2791,7 +2952,7 @@ def generate_social_brief_contents_async(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -2827,13 +2988,13 @@ def generate_social_brief_contents_async(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "BRIEF_NOT_FOUND", "message": "Social brief not found."},
+            detail={"code": "BRIEF_NOT_FOUND", "message": "Brief bulunamadı."},
         )
     except SocialContentFlowError as e:
         db.rollback()
         status_code_map = {
             "CONTENT_INVALID_INPUT": (400, "Geçersiz içerik üretim isteği."),
-            "CONTENT_BRIEF_NOT_FOUND": (404, "Social brief not found."),
+            "CONTENT_BRIEF_NOT_FOUND": (404, "Brief bulunamadı."),
             "CONTENT_BRIEF_NOT_LOCKED": (409, "Social brief is not locked."),
             "CONTENT_BRIEF_STALE": (409, "Social brief is stale."),
             "CONTENT_ASSIGNMENT_CHANGED": (409, "Channel assignment version has changed."),
@@ -2856,7 +3017,7 @@ def generate_social_brief_contents_async(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "ATTEMPT_CONFLICT",
-                "message": "Aynı brief için aktif bir attempt mevcut.",
+                "message": "Bu brief için şu anda başka bir üretim çalışıyor. Bitmesini bekleyin.",
             },
         )
     except AttemptNotWritableError:
@@ -2865,7 +3026,7 @@ def generate_social_brief_contents_async(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "ATTEMPT_NOT_WRITABLE",
-                "message": "Attempt şu anda yazılamaz durumda.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
     except IntegrityError:
@@ -2875,7 +3036,7 @@ def generate_social_brief_contents_async(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "CONTENT_ATTEMPT_CONFLICT",
-                "message": "Veritabanı çakışması tespit edildi.",
+                "message": "İşlem şu an kaydedilemedi; birkaç saniye sonra yeniden deneyin.",
             },
         )
     except Exception:
@@ -2885,7 +3046,7 @@ def generate_social_brief_contents_async(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "CONTENT_PREFLIGHT_FAILED",
-                "message": "İçerik preflight işlemi sırasında beklenmeyen hata oluştu.",
+                "message": "İçerik üretimi hazırlanırken beklenmeyen bir hata oluştu; birkaç saniye sonra yeniden deneyin.",
             },
         )
 
@@ -2908,19 +3069,19 @@ def generate_social_brief_contents_async(
             except SocialContentReadNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "Content attempt not found."},
+                    detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "İçerik üretimi bulunamadı."},
                 )
             except (SocialContentReadError, SocialContentSerializationError):
                 logger.exception("Replay edilen tamamlanmış içerik okuma/serileştirme verisi tutarsız")
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik okuma verisi tutarsız."},
+                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik sonuçları okunamadı. Sayfayı yenileyin."},
                 )
             except Exception:
                 logger.exception("Replay edilen tamamlanmış içerik okuma sırasında beklenmeyen hata")
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik okuma verisi tutarsız."},
+                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik sonuçları okunamadı. Sayfayı yenileyin."},
                 )
 
         # b. Pending / running same-key replay -> 202
@@ -2940,19 +3101,19 @@ def generate_social_brief_contents_async(
             except SocialContentReadNotFoundError:
                 raise HTTPException(
                     status_code=404,
-                    detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "Content attempt not found."},
+                    detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "İçerik üretimi bulunamadı."},
                 )
             except (SocialContentReadError, SocialContentSerializationError):
                 logger.exception("Replay edilen aktif içerik okuma/serileştirme verisi tutarsız")
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik okuma verisi tutarsız."},
+                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik sonuçları okunamadı. Sayfayı yenileyin."},
                 )
             except Exception:
                 logger.exception("Replay edilen aktif içerik okuma sırasında beklenmeyen hata")
                 raise HTTPException(
                     status_code=500,
-                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik okuma verisi tutarsız."},
+                    detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik sonuçları okunamadı. Sayfayı yenileyin."},
                 )
 
         # c. Failed / partial same-key replay -> 409
@@ -2961,7 +3122,7 @@ def generate_social_brief_contents_async(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": "CONTENT_ATTEMPT_TERMINAL",
-                    "message": "Previous content generation attempt is terminal. Retry with a new idempotency_key.",
+                    "message": "Önceki içerik üretimi sonuçlandı. Kalan fikirler için içerik üretimini yeniden başlatın.",
                     "attempt_id": start.attempt_id,
                     "attempt_status": start.attempt_status,
                     "retryable": True,
@@ -2975,7 +3136,7 @@ def generate_social_brief_contents_async(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "CONTENT_READ_INCONSISTENT",
-                "message": "İçerik deneme durumu tutarsız veya tanınmıyor.",
+                "message": "İçerik üretiminin durumu okunamadı. Sayfayı yenileyip durumu kontrol edin.",
             },
         )
 
@@ -3004,7 +3165,7 @@ def generate_social_brief_contents_async(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
                     "code": "CONTENT_DISPATCH_FINALIZATION_FAILED",
-                    "message": "Görev kuyruğa alınamadı ve attempt durumu güvenli biçimde kapatılamadı.",
+                    "message": "Üretim başlatılamadı ve durumu kaydedilemedi. Birkaç dakika sonra sayfayı yenileyip durumu kontrol edin.",
                 },
             )
         raise HTTPException(
@@ -3036,7 +3197,7 @@ def generate_social_brief_contents_async(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "CONTENT_POST_DISPATCH_READ_FAILED",
-                "message": "Görev kuyruğa alındı ancak başlangıç yanıtı okunamadı.",
+                "message": "İçerik üretimi başlatıldı ancak durumu okunamadı. Sayfayı yenileyip durumu kontrol edin.",
             },
         )
 
@@ -3061,7 +3222,7 @@ def get_social_brief_contents_attempt(
             status_code=404,
             detail={
                 "code": "FEATURE_DISABLED",
-                "message": "Social brief flow is not enabled.",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
             },
         )
 
@@ -3097,14 +3258,14 @@ def get_social_brief_contents_attempt(
         db.rollback()
         raise HTTPException(
             status_code=404,
-            detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "Content generation attempt not found."},
+            detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "İçerik üretimi bulunamadı."},
         )
     except AttemptNotWritableError:
         db.rollback()
         logger.exception("Reconciliation sırasında attempt yazılamaz durumda")
         raise HTTPException(
             status_code=500,
-            detail={"code": "CONTENT_READ_INCONSISTENT", "message": "Content generation result is inconsistent."},
+            detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik sonuçları okunamadı. Sayfayı yenileyin."},
         )
     except Exception:
         db.rollback()
@@ -3113,7 +3274,7 @@ def get_social_brief_contents_attempt(
             status_code=500,
             detail={
                 "code": "CONTENT_RECONCILIATION_FAILED",
-                "message": "Attempt durumu senkronize edilirken beklenmeyen hata oluştu.",
+                "message": "İçerik üretiminin durumu güncellenirken beklenmeyen bir hata oluştu. Sayfayı yenileyin.",
             },
         )
 
@@ -3132,13 +3293,13 @@ def get_social_brief_contents_attempt(
     except SocialContentReadNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "Content generation attempt not found."},
+            detail={"code": "CONTENT_ATTEMPT_NOT_FOUND", "message": "İçerik üretimi bulunamadı."},
         )
     except (SocialContentReadError, SocialContentSerializationError):
         logger.exception("İçerik okuma/serileştirme verisi tutarsız")
         raise HTTPException(
             status_code=500,
-            detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik okuma verisi tutarsız."},
+            detail={"code": "CONTENT_READ_INCONSISTENT", "message": "İçerik sonuçları okunamadı. Sayfayı yenileyin."},
         )
     except Exception:
         logger.exception("İçerik okuma sırasında beklenmeyen hata")
@@ -3146,7 +3307,7 @@ def get_social_brief_contents_attempt(
             status_code=500,
             detail={
                 "code": "CONTENT_READ_INCONSISTENT",
-                "message": "İçerik okuma sırasında beklenmeyen hata oluştu.",
+                "message": "İçerik sonuçları okunurken beklenmeyen bir hata oluştu. Sayfayı yenileyin.",
             },
         )
 
@@ -3199,7 +3360,7 @@ def select_social_idea(
         except ValueError as policy_error:
             raise HTTPException(status_code=409, detail=str(policy_error))
         if not success:
-            raise HTTPException(status_code=404, detail="Idea not found")
+            raise HTTPException(status_code=404, detail="Fikir bulunamadı.")
         return {"idea_id": idea_id, "is_selected": selected}
     except HTTPException:
         raise
@@ -3251,11 +3412,13 @@ def regenerate_social_idea(
             raise HTTPException(status_code=409, detail=str(policy_error))
 
         if not result:
-            raise HTTPException(status_code=404, detail="Idea not found")
+            raise HTTPException(status_code=404, detail="Fikir bulunamadı.")
         return result
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "Fikir yeniden üretilemedi")
@@ -3302,11 +3465,13 @@ def regenerate_social_content(
             raise HTTPException(status_code=409, detail=str(policy_error))
 
         if not result:
-            raise HTTPException(status_code=404, detail="Content not found")
+            raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
         return result
     except HTTPException:
+        db.rollback()  # guard FOR UPDATE kilidi hata yolunda tutulmasin
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=safe_500_detail(e, "İçerik yeniden üretilemedi")
@@ -3316,10 +3481,10 @@ def regenerate_social_content(
 @router.post("/ads")
 def generate_ads_content(request: AdGroupRequest, db: Session = Depends(get_db), ai: AIService = Depends(get_ai)):
     """Removed. Use POST /ads/rsa?brand_profile_id=<id>."""
-    raise HTTPException(status_code=410, detail="Removed. Use POST /generation/ads/rsa?brand_profile_id=<id>.")
+    raise HTTPException(status_code=410, detail="Bu işlem kaldırıldı. Reklam metinlerini ADS sayfasından oluşturun.")
 
 
 @router.post("/social")
 def generate_social_content(request: SocialPostRequest, db: Session = Depends(get_db), ai: AIService = Depends(get_ai)):
     """Removed. Use POST /social/categories?brand_profile_id=<id>."""
-    raise HTTPException(status_code=410, detail="Removed. Use POST /generation/social/categories?brand_profile_id=<id>.")
+    raise HTTPException(status_code=410, detail="Bu işlem kaldırıldı. Sosyal medya içeriklerini Sosyal Medya sayfasındaki brief akışıyla oluşturun.")

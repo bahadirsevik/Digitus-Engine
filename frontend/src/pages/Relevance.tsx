@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, Calculator, ArrowRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { useBrandStore } from '../stores/brandStore'
+import MarketBadge from '../components/MarketBadge'
 import {
   brandProfileApi,
   scoringApi,
@@ -186,6 +187,7 @@ export default function Relevance() {
         <div className="workspace-pill">
           <span className="pill-label">Aktif Marka:</span>
           <span className="pill-value">{activeWorkspace.name}</span>
+          <MarketBadge label={activeWorkspace.market_label} />
         </div>
       )}
 

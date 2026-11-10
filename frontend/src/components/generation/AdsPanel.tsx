@@ -4,10 +4,18 @@
  * Kök eleman display:contents — form kartı ChannelWorkspaceView'daki iki
  * kolonlu gridin sağ hücresine, banner/sonuçlar tam genişliğe oturur.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle, RefreshCw, Sparkles, X } from 'lucide-react'
-import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from '../../hooks/useTaskPolling'
+import {
+  useTaskPolling,
+  useScopedTaskId,
+  getWorkspaceTaskKey,
+  setStoredTaskId,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+} from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import { useBrandStore } from '../../stores/brandStore'
 import {
   apiErrorMessage,
@@ -19,8 +27,11 @@ import {
 import type {
   AdGenerationSetSummary,
   AdGroup,
+  AdGroupStandardReport,
   AdsResult,
   AdsSetListResult,
+  ClaimFinding,
+  ClaimReview,
   ScoringRun,
 } from '../../types/models'
 import '../../pages/Generation.css'
@@ -34,11 +45,92 @@ const SET_STATUS_LABELS: Record<AdGenerationSetSummary['status'], string> = {
   failed: 'Hatalı',
 }
 
+const CLAIM_KIND_LABEL: Record<ClaimFinding['kind'], string> = {
+  risk: 'Risk — yayın öncesi düzelt',
+  unverified: 'Profilde doğrulanamadı — kontrol gerekli',
+}
+const ASSET_TYPE_LABEL = { headline: 'Başlık', description: 'Açıklama' } as const
+
 const canActivateSet = (s: AdGenerationSetSummary) =>
   !s.is_stale && (s.status === 'draft' || s.status === 'archived') && (s.groups_count ?? 0) > 0
 
 const canRegenerateFromSet = (s: AdGenerationSetSummary | null | undefined) =>
   !!s && !s.is_stale && (s.status === 'active' || s.status === 'draft' || s.status === 'archived')
+
+// İnceleme gerekçeleri: set bazlı bulgu tablosu + otomatik düzeltilen (Orijinal → Öneri) liste
+function ClaimReviewDetails({ review }: { review?: ClaimReview | null }) {
+  const findings = review?.findings ?? []
+  const applied = review?.applied ?? []
+  if (findings.length === 0 && applied.length === 0) return null
+  const assetCell = (f: ClaimFinding) => [
+    f.group_name || (f.group_id != null ? `Grup #${f.group_id}` : '—'),
+    f.asset_type ? ASSET_TYPE_LABEL[f.asset_type] : '—',
+  ]
+  return (
+    <details className="adsx-review" open>
+      <summary>İnceleme gerekçeleri ({findings.length + applied.length})</summary>
+      {findings.length > 0 && (
+        <table className="adsx-review-table">
+          <thead>
+            <tr>
+              <th>Grup</th>
+              <th>Tür</th>
+              <th>Metin</th>
+              <th>Sınıf</th>
+              <th>İfade</th>
+              <th>Gerekçe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {findings.map((f, i) => {
+              const [group, type] = assetCell(f)
+              return (
+                <tr key={i}>
+                  <td>{group}</td>
+                  <td>{type}</td>
+                  <td>{f.asset_text}</td>
+                  <td>{CLAIM_KIND_LABEL[f.kind] ?? f.kind}</td>
+                  <td>{f.span}</td>
+                  <td>{f.reason}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+      {applied.length > 0 && (
+        <>
+          <div className="adsx-review-sub">Otomatik düzeltilenler (Orijinal → Öneri)</div>
+          <table className="adsx-review-table">
+            <thead>
+              <tr>
+                <th>Grup</th>
+                <th>Tür</th>
+                <th>İfade</th>
+                <th>Orijinal</th>
+                <th>Öneri</th>
+              </tr>
+            </thead>
+            <tbody>
+              {applied.map((f, i) => {
+                const [group, type] = assetCell(f)
+                return (
+                  <tr key={i}>
+                    <td>{group}</td>
+                    <td>{type}</td>
+                    <td>{f.span}</td>
+                    <td>{f.original}</td>
+                    <td>{f.suggestion}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
+    </details>
+  )
+}
 
 const adGroupName = (group: AdGroup) => group.group_name || group.name || 'Reklam Grubu'
 const adGroupTheme = (group: AdGroup) => group.group_theme || group.theme || ''
@@ -158,6 +250,70 @@ function GenToast({ progress, onDismiss }: { progress: number; onDismiss: () => 
   )
 }
 
+// 15 KW teslim standardı özeti — yalnız olgu ve liste (puan/yüzde yok). Rapor yoksa hiçbir şey çizilmez.
+const STANDARD_KW_LISTS: Array<{
+  key: 'keywords_in_headlines' | 'keywords_description_only' | 'keywords_unused' | 'fill_keywords'
+  label: string
+}> = [
+  { key: 'keywords_in_headlines', label: 'Başlıklarda kullanılan kelimeler' },
+  { key: 'keywords_description_only', label: 'Yalnız açıklamada geçen kelimeler' },
+  { key: 'keywords_unused', label: 'Hiç kullanılmayan kelimeler' },
+  { key: 'fill_keywords', label: "15'e tamamlamak için eklenen kelimeler" },
+]
+
+function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
+  if (!report) return null
+  const missing = [
+    report.missing_headlines > 0 ? `${report.missing_headlines} başlık` : '',
+    report.missing_kw_descriptions > 0 ? `${report.missing_kw_descriptions} kelimeli açıklama` : '',
+    report.missing_cta > 0 ? `${report.missing_cta} CTA` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  return (
+    <div className="adsx-std">
+      <div className="adsx-std-summary">
+        {report.keyword_count} kelime · {report.headline_count} başlık ·{' '}
+        {report.kw_description_count} kelimeli açıklama ·{' '}
+        <span title="Kural tabanlı sayım: başlık bilinen bir eylem kalıbıyla bitiyorsa CTA sayılır">
+          {report.cta_count} CTA
+        </span>
+      </div>
+      <div className="adsx-std-note">
+        Başlıkta birebir: {report.keywords_in_headlines.length}/{report.keyword_count} · 30 karakter
+        altı: {report.short_keywords_in_headlines ?? 0}/{report.short_keyword_count ?? 0}
+      </div>
+      {report.below_standard && (
+        <div className="adsx-std-note">
+          <span className="adsx-set-badge is-draft">15 kelime teslim standardının altında</span>
+          {missing && <span>Eksik: {missing}</span>}
+        </div>
+      )}
+      {report.pool_below_target && (
+        <div className="adsx-std-note">
+          Bu grupta {report.keyword_count} kelime var (standart 15)
+        </div>
+      )}
+      {STANDARD_KW_LISTS.map(({ key, label }) =>
+        report[key].length > 0 ? (
+          <details key={key} className="adsx-std-details">
+            <summary>
+              {label} ({report[key].length})
+            </summary>
+            <div className="adsx-chip-row">
+              {report[key].map((kw) => (
+                <span key={kw} className="adsx-chip">
+                  {kw}
+                </span>
+              ))}
+            </div>
+          </details>
+        ) : null
+      )}
+    </div>
+  )
+}
+
 // Tasarım: reklam grubu kartı — intent kutusu, keyword chip'leri, önizleme,
 // Başlıklar/Açıklama/Negatif sekmeleri
 function AdGroupCard({
@@ -165,12 +321,20 @@ function AdGroupCard({
   previewUrl,
   onRegenerate,
   regenerateDisabled,
+  findings = [],
 }: {
   group: AdGroup
   previewUrl: string
   onRegenerate?: (groupId: number) => void
   regenerateDisabled?: boolean
+  findings?: ClaimFinding[]
 }) {
+  // Rozet tooltip'i: metni eşleşen bulguların gerekçesi
+  const reasonFor = (text: string) =>
+    findings
+      .filter((f) => f.asset_text === text)
+      .map((f) => `${f.span}: ${f.reason ?? ''}`)
+      .join(' | ') || undefined
   const [tab, setTab] = useState<'heads' | 'descs' | 'neg'>('heads')
   const headlines = group.headlines || []
   const descriptions = group.descriptions || []
@@ -196,6 +360,7 @@ function AdGroupCard({
           </button>
         )}
       </div>
+      <StandardReport report={group.standard_report} />
       {adGroupTheme(group) && <div className="adsx-group-intent">{adGroupTheme(group)}</div>}
       {adGroupKeywords(group).length > 0 && (
         <div className="adsx-chip-row">
@@ -253,13 +418,20 @@ function AdGroupCard({
           headlines.map((headline, hIdx) => (
             <div key={headline.id ?? hIdx} className="adsx-line">
               {headline.text}
-              {headline.validation_action && <small>{headline.validation_action}</small>}
+              {headline.validation_action && HEADLINE_ACTION_LABEL[headline.validation_action] && (
+                <small title={reasonFor(headline.text)}>
+                  {HEADLINE_ACTION_LABEL[headline.validation_action]}
+                </small>
+              )}
             </div>
           ))}
         {tab === 'descs' &&
           descriptions.map((description, dIdx) => (
             <div key={description.id ?? dIdx} className="adsx-line is-desc">
               {description.text}
+              {description.validation_action === 'claim_review' && (
+                <small title={reasonFor(description.text)}>İnceleme gerekli</small>
+              )}
             </div>
           ))}
         {tab === 'neg' && (
@@ -277,17 +449,42 @@ function AdGroupCard({
   )
 }
 
+// Başlık doğrulama sonucu; tanınmayan/eski iç kodlar ekrana basılmaz
+const HEADLINE_ACTION_LABEL: Record<string, string> = {
+  claim_review: 'İnceleme gerekli',
+  shortened: 'Kısaltıldı',
+  regenerated: 'Yeniden üretildi',
+}
+
 export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringRun | null }) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const taskStorageKey = getWorkspaceTaskKey('ads_task', activeWorkspace?.id)
+  const taskStorageKey = getWorkspaceTaskKey('ads_task', activeWorkspace?.id, runId)
+  // Run/workspace kapsamı: await sonrası dönen yanıt, kapsam değiştiyse state'e yazılmaz
+  const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
+  const scopeRef = useRef(scopeKey)
+  scopeRef.current = scopeKey
+  const resultsSeqRef = useRef(0)
+  // Unmount sonrası dönen başlatma yanıtı UI state'ine/yan etkiye dokunmaz
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const [brandName, setBrandName] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [usps, setUsps] = useState('')
-  const [taskId, setTaskId] = useState<string | null>(getStoredTaskId(taskStorageKey))
+  const [taskId, setTaskId] = useScopedTaskId(taskStorageKey)
   const [results, setResults] = useState<AdsResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Sonuç ve set listesi YÜKLEME hataları AYRI tutulur (biri diğerinin başarısıyla silinmez);
+  // üretim hatasından ayrıdır, yalnız yeniden yükleme sunar
+  const [resultsError, setResultsError] = useState<string | null>(null)
+  const [setsError, setSetsError] = useState<string | null>(null)
+  const loadError = resultsError ?? setsError
   const [toastOpen, setToastOpen] = useState(true)
   // Set versiyonlama (Faz E): geçmiş + onay akışı
   const [sets, setSets] = useState<AdGenerationSetSummary[]>([])
@@ -298,12 +495,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const [pendingSetId, setPendingSetId] = useState<number | null>(null)
   const [activating, setActivating] = useState(false)
 
-  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id)
+  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_ads === false
-
-  useEffect(() => {
-    setTaskId(getStoredTaskId(taskStorageKey))
-  }, [taskStorageKey])
 
   // Run/workspace değişince eski marka bağlamı TAŞINMAZ ve autofill state
   // okumadan KOŞULSUZ doldurur — reset+autofill ayrı effect'lerdeyken autofill
@@ -312,12 +505,20 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   useEffect(() => {
     setResults(null)
     setError(null)
+    setResultsError(null)
+    setSetsError(null)
+    setLoading(false)
+    setActivating(false)
     setBrandName('')
     setWebsiteUrl('')
     setUsps('')
     setSets([])
     setActiveSetId(null)
-    setSelectedSetId(null)
+    // Görevler sayfası bağlantısı: ?run_id=X&set_id=Y → o set açılır (aktif set değil)
+    const urlParams = new URLSearchParams(window.location.search)
+    setSelectedSetId(
+      urlParams.get('run_id') === String(runId) ? Number(urlParams.get('set_id')) || null : null
+    )
     setPendingSetId(null)
     if (!runId || !activeWorkspace?.id) return
 
@@ -371,34 +572,55 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
 
   const fetchResults = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
+    const requestScope = scopeRef.current
+    // Set değişince geç dönen eski set yanıtı yenisinin üzerine yazmaz
+    const requestSeq = ++resultsSeqRef.current
+    const isStale = () => scopeRef.current !== requestScope || resultsSeqRef.current !== requestSeq
     try {
       const res = await generationApi.getAdsRsa(
         runId,
         activeWorkspace.id,
         selectedSetId ?? undefined
       )
+      if (isStale()) return
       const data = res.data as AdsResult
       setResults(data.total_groups > 0 ? data : null)
+      setResultsError(null)
     } catch (e) {
-      console.error('Failed to fetch Ads results:', e)
+      if (isStale()) return
+      setResultsError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId, selectedSetId])
 
   const fetchSets = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
+    const requestScope = scopeRef.current
     try {
       const res = await generationApi.getAdsSets(runId, activeWorkspace.id)
+      if (scopeRef.current !== requestScope) return
       const data = res.data as AdsSetListResult
       setSets(data.sets || [])
       setActiveSetId(data.active_set_id ?? null)
+      // Bağlantıdaki set bu analize ait değilse varsayılan görünüme dön
+      setSelectedSetId((cur) =>
+        cur != null && !(data.sets || []).some((s) => s.id === cur) ? null : cur
+      )
+      setSetsError(null)
     } catch (e) {
-      console.error('Failed to fetch Ads sets:', e)
+      if (scopeRef.current !== requestScope) return
+      setSetsError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId])
 
   useEffect(() => {
     void fetchResults()
   }, [fetchResults])
+
+  // Yalnız okuma: üretimi TETİKLEMEZ
+  const reloadResults = () => {
+    void fetchSets()
+    void fetchResults()
+  }
 
   useEffect(() => {
     void fetchSets()
@@ -420,29 +642,38 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
 
   const activateSet = async (setId: number) => {
     if (!activeWorkspace?.id) return
+    const requestScope = scopeRef.current
     setActivating(true)
     setError(null)
     try {
       await generationApi.activateAdsSet(setId, activeWorkspace.id)
+      if (scopeRef.current !== requestScope) return
       setSelectedSetId(null) // varsayılan görünüm = yeni aktif set
       await fetchSets()
     } catch (err: unknown) {
-      setError(apiErrorMessage(err, 'Set aktive edilemedi'))
+      if (scopeRef.current !== requestScope) return
+      setError(apiErrorMessage(err, 'Reklam seti aktif yapılamadı'))
     } finally {
-      setActivating(false)
+      if (scopeRef.current === requestScope) setActivating(false)
     }
   }
 
   const regenerateGroup = async (groupId: number) => {
     if (!activeWorkspace?.id) return
+    const requestScope = scopeRef.current
     setError(null)
     setToastOpen(true)
     try {
       const res = await generationApi.regenerateAdGroup(groupId, activeWorkspace.id)
       const data = res.data as { task_id: string; generation_set_id?: number }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, data.task_id)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       const stale = policyStaleFromError(err)
       setError(stale ? stale.message : apiErrorMessage(err, 'Grup yeniden üretilemedi'))
     }
@@ -453,6 +684,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       setError('Marka çalışması seçin')
       return
     }
+    const requestScope = scopeRef.current
     setLoading(true)
     setError(null)
     setResults(null)
@@ -473,10 +705,15 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
         activeWorkspace.id
       )
       const data = res.data as { task_id: string; generation_set_id?: number }
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, data.task_id)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
       void fetchSets()
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       // Plan v13: bayat havuz 409'u "devam eden üretim" DEĞİLDİR — kendi
       // mesajıyla gösterilir (kanal atamasını yenileme çağrısı içerir)
       const stale = policyStaleFromError(err)
@@ -490,11 +727,12 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
         )
       }
     } finally {
-      setLoading(false)
+      if (scopeRef.current === requestScope) setLoading(false)
     }
   }
 
-  const generating = loading || polling.isActive
+  // Durum bilinmiyorken (yoklama hatası) yeni üretim başlatılmaz; önce durum yeniden kontrol edilir
+  const generating = loading || polling.isActive || polling.pollFailed
   const previewUrl = displayUrlFrom(websiteUrl || activeWorkspace?.company_url || '')
 
   // Gösterilen set: sonuç payload'ındaki generation_set öncelikli
@@ -503,8 +741,12 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
     (selectedSetId != null
       ? (sets.find((s) => s.id === selectedSetId) ?? null)
       : (sets.find((s) => s.id === activeSetId) ?? null))
+  // claim_review yalnız set listesi yanıtında gelir; gösterilen setin kaydı oradan alınır
+  const reviewSet = (shownSet && sets.find((s) => s.id === shownSet.id)) || shownSet
   const hasActiveNonStale = sets.some((s) => s.status === 'active' && !s.is_stale)
   const activatableDraft = sets.find(canActivateSet)
+  // Kısmi başarı: üretilemeyen gruplar sette YOK (sebep: AI çıktısı işlenemedi / RSA kuralları sağlanamadı)
+  const failedGroups = shownSet?.failed_groups ?? 0
 
   return (
     <div className="adsx-root">
@@ -586,6 +828,30 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
           <GenBanner progress={polling.progress} />
         </div>
       )}
+      {polling.pollFailed && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={POLL_FAILED_MESSAGE}
+            onRetry={polling.recheck}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
+        </div>
+      )}
+      {loadError && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={`${
+              resultsError
+                ? polling.isCompleted
+                  ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
+                  : 'Reklam sonuçları yüklenemedi.'
+                : 'Reklam seti listesi yüklenemedi:'
+            } ${loadError}`}
+            onRetry={reloadResults}
+            retryLabel="Sonuçları yeniden yükle"
+          />
+        </div>
+      )}
       {polling.isFailed && (
         <div className="adsx-span">
           <ErrorBanner
@@ -610,14 +876,17 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                   className={`adsx-set-chip${isShown ? ' is-shown' : ''}`}
                   onClick={() => setSelectedSetId(s.id === activeSetId ? null : s.id)}
                   title={`v${s.version_number} — ${SET_STATUS_LABELS[s.status]}${
-                    s.is_stale ? ' (bayat)' : ''
+                    s.is_stale ? ' (güncel değil)' : ''
                   }`}
                 >
                   v{s.version_number}
                   <span className={`adsx-set-badge is-${s.status}`}>
                     {SET_STATUS_LABELS[s.status]}
                   </span>
-                  {s.is_stale && <span className="adsx-set-badge is-stale">Bayat</span>}
+                  {s.is_stale && <span className="adsx-set-badge is-stale">Güncel değil</span>}
+                  {s.review_required && (
+                    <span className="adsx-set-badge is-draft">İnceleme gerekli</span>
+                  )}
                   {typeof s.groups_count === 'number' && (
                     <span className="adsx-set-count">{s.groups_count} grup</span>
                   )}
@@ -625,6 +894,15 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
               )
             })}
           </div>
+          <ClaimReevaluateButton
+            runId={runId}
+            workspaceId={activeWorkspace?.id}
+            disabled={generating || activating}
+            onDone={() => {
+              void fetchSets()
+              void fetchResults()
+            }}
+          />
           {!hasActiveNonStale && !polling.isActive && (
             <div className="adsx-sets-empty">
               Güncel aktif reklam seti yok
@@ -645,7 +923,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                 ? `RSA Seti v${shownSet.version_number} (${SET_STATUS_LABELS[shownSet.status]})`
                 : 'RSA Üretimi Tamamlandı'}
             </h2>
-            {shownSet?.is_stale && <span className="adsx-set-badge is-stale">Bayat</span>}
+            {shownSet?.is_stale && <span className="adsx-set-badge is-stale">Güncel değil</span>}
             {shownSet && canActivateSet(shownSet) && (
               <button
                 type="button"
@@ -660,6 +938,16 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
               <span className="adsx-set-badge is-active">Aktif Set</span>
             )}
           </div>
+
+          {failedGroups > 0 && results && (
+            <div className="adsx-sets-empty" role="status">
+              {results.total_groups + failedGroups} reklam grubundan {failedGroups} tanesi
+              üretilemedi (yapay zekâ çıktısı işlenemedi veya reklam kurallarını karşılamadı); bu
+              grupların kelimeleri sette yer almıyor. Yeniden üretim deneyebilirsiniz.
+            </div>
+          )}
+
+          <ClaimReviewDetails review={reviewSet?.claim_review} />
 
           <div className="adsx-stats">
             <div className="adsx-stat">
@@ -724,6 +1012,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                 previewUrl={previewUrl}
                 onRegenerate={canRegenerateFromSet(shownSet) ? regenerateGroup : undefined}
                 regenerateDisabled={generating || activating}
+                findings={reviewSet?.claim_review?.findings}
               />
             ))}
           </div>

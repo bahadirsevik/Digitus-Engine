@@ -4,7 +4,7 @@
  * Kök eleman display:contents — form kartı ChannelWorkspaceView'daki iki
  * kolonlu gridin sağ hücresine, banner/sonuçlar tam genişliğe oturur.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlignLeft,
   Calendar,
@@ -19,8 +19,16 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { useTaskPolling, getStoredTaskId, getWorkspaceTaskKey } from '../../hooks/useTaskPolling'
+import {
+  useTaskPolling,
+  useScopedTaskId,
+  getWorkspaceTaskKey,
+  setStoredTaskId,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+} from '../../hooks/useTaskPolling'
 import ErrorBanner from '../ErrorBanner'
+import ClaimReevaluateButton from './ClaimReevaluateButton'
 import { useBrandStore } from '../../stores/brandStore'
 import { apiErrorMessage, generationApi, policyStaleFromError } from '../../services/api'
 import type { ScoringRun, SEOGeoItem } from '../../types/models'
@@ -35,6 +43,21 @@ const SEO_STEPS = [
   'İç/dış link önerileri çıkarılıyor',
   'SEO & GEO skorları hesaplanıyor',
 ]
+
+// Başarısız kelime listesi uzunsa ilk N satır görünür, kalanı açılır bölümde
+const FAILED_KEYWORDS_SHOWN = 5
+
+const numberOrNull = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+
+function failedKeywordsFrom(raw: unknown): Array<{ keyword: string; reason: string }> {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    const row = item as { keyword?: unknown; reason?: unknown }
+    return typeof row?.keyword === 'string' && row.keyword
+      ? [{ keyword: row.keyword, reason: typeof row.reason === 'string' ? row.reason : '' }]
+      : []
+  })
+}
 
 const TONES = [
   { value: 'informative', label: 'Bilgilendirici' },
@@ -161,10 +184,18 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
   const subs = item.subheadings || []
   const date = shortDate(item.created_at)
   const review = item.publish_review
+  const reviewReasons = (review?.critical_failures || []).map((f, i) => (
+    <li key={`f${i}`}>
+      <span className="seox-review-src">
+        {f.source === 'geo_ai' ? 'Yapay zekâ değerlendirmesi' : 'Otomatik kontrol'}
+      </span>{' '}
+      {f.detail || f.criterion}
+    </li>
+  ))
   const stats = [
     item.word_count ? `${item.word_count} kelime` : null,
     subs.length ? `${subs.length} alt başlık` : null,
-    item.keyword_density != null ? `%${item.keyword_density} yoğunluk` : null,
+    item.keyword_density != null ? `anahtar kelime yoğunluğu %${item.keyword_density}` : null,
   ].filter(Boolean)
 
   const links = [
@@ -184,7 +215,14 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
         </span>
         <span className="seox-meta-right">
           {item.is_stale && <span className="seox-stale">Güncel değil</span>}
-          {review?.required && <span className="seox-review">{review.label}</span>}
+          {review?.required && (
+            <span
+              className="seox-review"
+              title={review.critical_failures[0]?.detail || review.critical_failures[0]?.criterion}
+            >
+              {review.label}
+            </span>
+          )}
           {date && (
             <span className="seox-date chx-mono">
               <Calendar size={12} /> {date}
@@ -192,6 +230,10 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
           )}
         </span>
       </div>
+
+      {review?.required && reviewReasons.length > 0 && (
+        <ul className="seox-review-list seox-review-top">{reviewReasons}</ul>
+      )}
 
       <h3 className="seox-title">{item.title || item.keyword}</h3>
       {slug && <div className="seox-url chx-mono">{slug}</div>}
@@ -297,22 +339,11 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
       )}
 
       {review && (
-        <details className="seox-review-box">
+        <details className="seox-review-box" open={review.required}>
           <summary className="seox-section-label">
             YAYIN ÖNCESİ KONTROL{review.required ? ' · İNCELEME GEREKLİ' : ''}
           </summary>
-          {review.critical_failures.length > 0 && (
-            <ul className="seox-review-list">
-              {review.critical_failures.map((f, i) => (
-                <li key={`f${i}`}>
-                  <span className="seox-review-src">
-                    {f.source === 'geo_ai' ? 'AI değerlendirmesi' : 'Otomatik kontrol'}
-                  </span>{' '}
-                  {f.detail || f.criterion}
-                </li>
-              ))}
-            </ul>
-          )}
+          {reviewReasons.length > 0 && <ul className="seox-review-list">{reviewReasons}</ul>}
           <ul className="seox-review-list is-manual">
             {review.manual_checks.map((m, i) => (
               <li key={`m${i}`}>{m}</li>
@@ -337,30 +368,57 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
 
 export default function SeoGeoPanel({ runId, run }: { runId: number; run?: ScoringRun | null }) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const taskStorageKey = getWorkspaceTaskKey('seo_task', activeWorkspace?.id)
+  const taskStorageKey = getWorkspaceTaskKey('seo_task', activeWorkspace?.id, runId)
+  // Run/workspace kapsamı: await sonrası dönen yanıt, kapsam değiştiyse state'e yazılmaz
+  const scopeKey = `${activeWorkspace?.id ?? 'none'}:${runId}`
+  const scopeRef = useRef(scopeKey)
+  scopeRef.current = scopeKey
+  // Unmount sonrası dönen başlatma yanıtı UI state'ine dokunmaz
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const [limit, setLimit] = useState(10)
   const [tone, setTone] = useState('informative')
-  const [taskId, setTaskId] = useState<string | null>(getStoredTaskId(taskStorageKey))
+  const [taskId, setTaskId] = useScopedTaskId(taskStorageKey)
   const [results, setResults] = useState<SEOGeoItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Sonuç listesi YÜKLEME hatası (üretim hatasından ayrı): yalnız yeniden yükleme sunar
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(true)
 
-  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id)
+  const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_seo === false
 
+  // Kısmi başarı (backend result_data sözleşmesi; alan yoksa uyarı yok)
+  const failedKeywords = failedKeywordsFrom(polling.resultData?.failed_keywords)
+  const requestedCount = numberOrNull(polling.resultData?.requested_count)
+  const producedCount = numberOrNull(polling.resultData?.total)
+
+  // Run/workspace değişince önceki run'ın sonuçları ve devam eden istek durumu taşınmaz
   useEffect(() => {
-    setTaskId(getStoredTaskId(taskStorageKey))
-  }, [taskStorageKey])
+    setResults([])
+    setError(null)
+    setLoadError(null)
+    setLoading(false)
+  }, [scopeKey])
 
   const fetchResults = useCallback(async () => {
     if (!activeWorkspace?.id || !runId) return
+    const requestScope = scopeRef.current
     try {
       const res = await generationApi.listSeoGeo(runId, 100, activeWorkspace.id)
+      if (scopeRef.current !== requestScope) return
       setResults((res.data as { items?: SEOGeoItem[] }).items || [])
+      setLoadError(null)
     } catch (e) {
-      console.error('Failed to fetch SEO results:', e)
+      if (scopeRef.current !== requestScope) return
+      setLoadError(apiErrorMessage(e, 'Sunucudan yanıt alınamadı.'))
     }
   }, [activeWorkspace?.id, runId])
 
@@ -379,22 +437,30 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       setError('Marka çalışması seçin')
       return
     }
+    const requestScope = scopeRef.current
     setLoading(true)
     setError(null)
     setToastOpen(true)
     try {
       const res = await generationApi.bulkSeoGeo(runId, limit, activeWorkspace.id, tone)
-      setTaskId((res.data as { task_id: string }).task_id)
+      const startedTaskId = (res.data as { task_id: string }).task_id
+      // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
+      setStoredTaskId(taskStorageKey, startedTaskId)
+      if (!mountedRef.current || scopeRef.current !== requestScope) return
+      setTaskId(startedTaskId)
     } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
       // Plan v13: bayat havuz 409'u kendi mesajıyla (yeniden atama çağrısı)
       const stale = policyStaleFromError(err)
       setError(stale ? stale.message : apiErrorMessage(err))
     } finally {
-      setLoading(false)
+      if (scopeRef.current === requestScope) setLoading(false)
     }
   }
 
-  const generating = loading || polling.isActive
+  // Durum bilinmiyorken yeni üretim başlatılmaz; önce durum yeniden kontrol edilir
+  const generating = loading || polling.isActive || polling.pollFailed
   const host = hostFrom(activeWorkspace?.company_url)
   const brandName = (activeWorkspace?.profile_data?.company_name as string) || activeWorkspace?.name
 
@@ -491,12 +557,74 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
           <GenBanner progress={polling.progress} />
         </div>
       )}
+      {polling.pollFailed && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={POLL_FAILED_MESSAGE}
+            onRetry={polling.recheck}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
+        </div>
+      )}
+      {loadError && (
+        <div className="adsx-span">
+          <ErrorBanner
+            error={`${
+              polling.isCompleted
+                ? 'Üretim tamamlandı ancak sonuçlar yüklenemedi.'
+                : 'SEO içerik sonuçları yüklenemedi.'
+            } ${loadError}`}
+            onRetry={() => void fetchResults()}
+            retryLabel="Sonuçları yeniden yükle"
+          />
+        </div>
+      )}
       {polling.isFailed && (
         <div className="adsx-span">
           <ErrorBanner
             error={polling.errorMessage || 'SEO içerik üretimi başarısız oldu.'}
             onDismiss={() => setTaskId(null)}
             onRetry={() => setTaskId(null)}
+          />
+        </div>
+      )}
+
+      {failedKeywords.length > 0 && (polling.isCompleted || polling.isFailed) && (
+        <div className="adsx-span adsx-sets-empty" role="status">
+          {requestedCount != null && producedCount != null
+            ? `${requestedCount} kelimeden ${producedCount} tanesi için içerik üretildi; ${requestedCount - producedCount} kelime için içerik üretilemedi:`
+            : `${failedKeywords.length} kelime için içerik üretilemedi:`}
+          <ul>
+            {failedKeywords.slice(0, FAILED_KEYWORDS_SHOWN).map((f) => (
+              <li key={f.keyword}>
+                {f.keyword}
+                {f.reason ? ` — ${f.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+          {failedKeywords.length > FAILED_KEYWORDS_SHOWN && (
+            <details>
+              <summary>Tümünü göster ({failedKeywords.length})</summary>
+              <ul>
+                {failedKeywords.slice(FAILED_KEYWORDS_SHOWN).map((f) => (
+                  <li key={f.keyword}>
+                    {f.keyword}
+                    {f.reason ? ` — ${f.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <div className="adsx-span">
+          <ClaimReevaluateButton
+            runId={runId}
+            workspaceId={activeWorkspace?.id}
+            disabled={generating}
+            onDone={() => void fetchResults()}
           />
         </div>
       )}

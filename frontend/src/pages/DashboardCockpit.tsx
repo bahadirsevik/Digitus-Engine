@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Activity,
@@ -28,7 +28,7 @@ import {
   workspaceApi,
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
-import { toActiveWorkspace, WorkspaceListRow } from './brandProfileState'
+import { orderWithFocuses, toActiveWorkspace, WorkspaceListRow } from './brandProfileState'
 import { jobTypeLabel } from '../components/exportLabels'
 
 interface Props {
@@ -145,6 +145,7 @@ function ChannelRow({
         </strong>
         <span>{channel.pool_count} havuz</span>
         {missing > 0 && channel.pool_count > 0 && <small>{missing} eksik</small>}
+        {channel.review_pending && <small>Taslak inceleme bekliyor</small>}
       </div>
       <Link to={path} className="btn btn-secondary btn-sm">
         Aç
@@ -157,16 +158,43 @@ function WorkspaceSwitcher({ currentId }: { currentId?: number }) {
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
   const [workspaces, setWorkspaces] = useState<WorkspaceListRow[]>([])
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const aliveRef = useRef(true)
+
+  const loadWorkspaces = useCallback(() => {
+    setLoadError(null)
     workspaceApi
       .list()
-      .then((res) => setWorkspaces((res.data as WorkspaceListRow[]) || []))
-      .catch(() => {})
+      .then((res) => {
+        if (aliveRef.current) setWorkspaces((res.data as WorkspaceListRow[]) || [])
+      })
+      .catch((err: unknown) => {
+        if (aliveRef.current)
+          setLoadError(`Çalışma listesi yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
+      })
   }, [])
+
+  useEffect(() => {
+    aliveRef.current = true
+    loadWorkspaces()
+    return () => {
+      aliveRef.current = false
+    }
+  }, [loadWorkspaces])
 
   // Değiştirilecek başka çalışma yoksa seçici gereksiz.
   const hasAlternative =
     workspaces.length > 1 || (workspaces.length === 1 && workspaces[0].id !== currentId)
+  if (loadError) {
+    return (
+      <div className="cockpit-workspace-switch" role="alert">
+        <span>{loadError}</span>{' '}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={loadWorkspaces}>
+          Yeniden yükle
+        </button>
+      </div>
+    )
+  }
   if (!hasAlternative) return null
 
   return (
@@ -186,8 +214,9 @@ function WorkspaceSwitcher({ currentId }: { currentId?: number }) {
         aria-label="Aktif çalışmayı değiştir"
       >
         {currentId === undefined && <option value="">Çalışma seç…</option>}
-        {workspaces.map((ws) => (
+        {orderWithFocuses(workspaces).map((ws) => (
           <option key={ws.id} value={ws.id}>
+            {ws.parent_brand_profile_id != null ? '↳ ' : ''}
             {ws.name}
             {ws.status !== 'confirmed' ? ` (${STATUS_LABEL[ws.status] || ws.status})` : ''}
           </option>
@@ -297,16 +326,28 @@ export default function DashboardCockpit({ summary, loading, onChangeRun, onRefr
       </section>
 
       <section className="cockpit-timeline" aria-label="Akış durumu">
-        {summary.pipeline.map((step, idx) => (
-          <Link key={step.key} to={step.path} className={`timeline-step state-${step.state}`}>
-            <div className="step-icon">{PIPELINE_STATE_ICON[step.state]}</div>
-            <div className="step-body">
-              <small>{idx + 1}. adım</small>
-              <strong>{step.label}</strong>
-              <span>{humanize(step.detail)}</span>
+        {summary.pipeline.map((step, idx) => {
+          const body = (
+            <>
+              <div className="step-icon">{PIPELINE_STATE_ICON[step.state]}</div>
+              <div className="step-body">
+                <small>{idx + 1}. adım</small>
+                <strong>{step.label}</strong>
+                <span>{humanize(step.detail)}</span>
+              </div>
+            </>
+          )
+          const cls = `timeline-step state-${step.state}`
+          return step.path ? (
+            <Link key={step.key} to={step.path} className={cls}>
+              {body}
+            </Link>
+          ) : (
+            <div key={step.key} className={cls}>
+              {body}
             </div>
-          </Link>
-        ))}
+          )
+        })}
       </section>
 
       <section className="cockpit-shell">

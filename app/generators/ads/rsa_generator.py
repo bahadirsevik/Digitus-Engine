@@ -12,23 +12,94 @@ from typing import List, Dict, Optional, Tuple, Any
 from loguru import logger
 
 from app.core.channel.ai_json import AIJsonParseError, parse_ai_json_object
+from app.core.constants import (
+    ADS_DESCRIPTIONS_PER_GROUP,
+    ADS_HEADLINES_PER_GROUP,
+    ADS_MIN_CTA_HEADLINES,
+)
 from app.generators.ai_service import AIService, scoped
+from app.generators.output_language import (
+    DEFAULT_CONTEXT, DEFAULT_LANGUAGE, OutputContext, with_output_block,
+)
 from app.generators.ads.prompt_templates import (
-    ADS_RSA_GENERATION_PROMPT,
+    ADS_RSA_CANDIDATES_PROMPT,
     CLAIM_REWRITE_PROMPT,
 )
 from app.generators.ads.validators import (
     HeadlineValidator,
     DescriptionValidator,
     DKIValidator,
-    find_ungrounded_claims,
+    classify_claims,
+    is_cta,
+    keyword_coverage,
+    keyword_in_text,
+    kw_tokens,
+    negative_conflict,
+    partition_negatives,
+    _negative_tokens,
 )
+from app.generators.claim_review import finding_dict
 from app.schemas.ads import (
     KeywordGroupSchema,
     HeadlineSchema,
     DescriptionSchema,
     NegativeKeywordSchema,
     AdGroupFullSchema,
+)
+
+
+# Varsayılan negatif top-up tablosu: (kelime, kategori) — dil başına. Türkçe liste eski sabitle aynı;
+# yabancı pazarda Türkçe kelime EKLENMEZ. Hedef-kelime çakışma koruması tabloya bakmadan çalışır.
+_NEGATIVE_REASONS = {
+    "bilgi_amacli": "Bilgi amaçlı arama",
+    "ucretsiz": "Ödeme niyeti yok",
+    "dusuk_kalite": "Düşük kalite algısı",
+    "ikinci_el": "Yeni ürün satışı",
+    "sikayet": "Negatif arama",
+    "diy": "Hizmet değil bilgi arıyor",
+}
+_DEFAULT_NEGATIVES: Dict[str, List[Tuple[str, str]]] = {
+    "Türkçe": [
+        ("nedir", "bilgi_amacli"), ("nasıl", "bilgi_amacli"), ("ne demek", "bilgi_amacli"),
+        ("ücretsiz", "ucretsiz"), ("bedava", "ucretsiz"), ("free", "ucretsiz"),
+        ("ucuz", "dusuk_kalite"), ("ikinci el", "ikinci_el"),
+        ("şikayet", "sikayet"), ("tamir", "diy"),
+    ],
+    "İngilizce": [
+        ("what is", "bilgi_amacli"), ("how to", "bilgi_amacli"), ("meaning", "bilgi_amacli"),
+        ("free", "ucretsiz"), ("cheap", "dusuk_kalite"),
+        ("used", "ikinci_el"), ("second hand", "ikinci_el"),
+        ("complaint", "sikayet"), ("complaints", "sikayet"), ("repair", "diy"),
+    ],
+    "Almanca": [
+        ("was ist", "bilgi_amacli"), ("wie", "bilgi_amacli"), ("bedeutung", "bilgi_amacli"),
+        ("kostenlos", "ucretsiz"), ("gratis", "ucretsiz"), ("billig", "dusuk_kalite"),
+        ("gebraucht", "ikinci_el"), ("beschwerde", "sikayet"), ("beschwerden", "sikayet"),
+        ("reparatur", "diy"),
+    ],
+    "Rusça": [
+        ("что такое", "bilgi_amacli"), ("как", "bilgi_amacli"), ("что значит", "bilgi_amacli"),
+        ("бесплатно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/у", "ikinci_el"),
+        ("жалоба", "sikayet"), ("жалобы", "sikayet"), ("ремонт", "diy"),
+    ],
+    "Ukraynaca": [
+        ("що таке", "bilgi_amacli"), ("як", "bilgi_amacli"), ("що означає", "bilgi_amacli"),
+        ("безкоштовно", "ucretsiz"), ("дешево", "dusuk_kalite"), ("б/в", "ikinci_el"),
+        ("скарга", "sikayet"), ("скарги", "sikayet"), ("ремонт", "diy"),
+    ],
+}
+
+
+# Çekimli/yabancı çıktı dilleri için aday prompt'una eklenen satırlar (Türkçe prompt DEĞİŞMEZ).
+_NON_TR_PROMPT_RULES = (
+    "# HEDEF DİLE ÖZEL KURALLAR",
+    "- Çekimli dillerde anahtar kelime hâl eki alabilir; arama sorgusunun kelime sırasını ve "
+    "biçimini yapıştırma, başlığı/açıklamayı hedef dilde doğal ve dilbilgisi doğru yaz "
+    "(yukarıdaki 'ek almadan' kısıtı bu dilde uygulanmaz).",
+    "- Dinamik (dynamic) başlık YALNIZCA çıplak {KeyWord:Varsayılan} makrosu olabilir; "
+    "makronun etrafına kelime ekleme.",
+    "- Negatif anahtar kelimelerde 'phrase' ifadeleri hedef dilde doğal kelime sırasıyla yaz; "
+    "'keyword' hedef dilde, 'reason' Türkçe olsun.",
 )
 
 
@@ -43,10 +114,20 @@ class RSAGenerator:
     """
     
     MIN_HEADLINES = 3
-    MAX_HEADLINES = 15
+    MAX_HEADLINES = ADS_HEADLINES_PER_GROUP
     MIN_DESCRIPTIONS = 2
-    MAX_DESCRIPTIONS = 4
+    MAX_DESCRIPTIONS = ADS_DESCRIPTIONS_PER_GROUP
     MIN_NEGATIVE_KEYWORDS = 10
+    MIN_CTA = ADS_MIN_CTA_HEADLINES
+    # Tamamlama çağrısında eksik sayının üstüne istenen yedek aday
+    HEADLINE_SPARE = 3
+    CTA_SPARE = 2
+    CTA_PRIMARY_INSTRUCTION = (
+        "\n- Aday başlıkların EN AZ 5'i hizmete uygun CTA (eylem çağrısı) olsun; emir kipiyle bitsin "
+        "ve mümkünse grubun bir anahtar kelimesini doğal biçimde içersin (ör. \"SEO Ajansı İçin "
+        "Teklif Alın\"); markanın sunmadığı hizmeti uydurma"
+    )
+    DESCRIPTION_SPARE = 2
     HEADLINE_FILL_MAX_ITERATIONS = 12
     DESCRIPTION_FILL_MAX_ITERATIONS = 8
     RSA_MAX_TOKENS = 8000
@@ -90,9 +171,22 @@ class RSAGenerator:
                     },
                     "required": ["keyword", "match_type", "category", "reason"]
                 }
+            },
+            # KW başına değerlendirme: headline = headlines içindeki birebir başlık ("" = üretilmedi)
+            "keyword_headlines": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "keyword_id": {"type": "integer"},
+                        "headline": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["keyword_id", "headline", "reason"]
+                }
             }
         },
-        "required": ["headlines", "descriptions", "negative_keywords"]
+        "required": ["headlines", "descriptions", "negative_keywords", "keyword_headlines"]
     }
     
     def __init__(
@@ -113,6 +207,12 @@ class RSAGenerator:
         # Grounding bağlamı (Faz F) — generate_rsa çağrısında set edilir
         self._product_facts = "—"
         self._grounding_facts = ""
+        # Çalışma pazarı (çıktı dili + hedef konum) — generate_rsa'da set edilir
+        self._output_ctx = DEFAULT_CONTEXT
+        # Bu üretimin KW kararları (yalnız bilgi; sonraki üretimleri etkilemez)
+        self._kw_decisions: Dict[str, Dict[str, str]] = {}
+        # (asset_type, metin) -> {findings, applied}: iddia incelemesi (rev.4)
+        self._asset_review: Dict[Tuple[str, str], Dict[str, list]] = {}
     
     def generate_rsa(
         self,
@@ -121,6 +221,7 @@ class RSAGenerator:
         brand_usp: str = "",
         product_facts: str = "",
         grounding_facts: str = "",
+        output_ctx: Optional[OutputContext] = None,
     ) -> AdGroupFullSchema:
         """
         Generate complete RSA set for an ad group.
@@ -133,6 +234,7 @@ class RSAGenerator:
             grounding_facts: Claim whitelist kaynağı (confirmed product_facts +
                 kullanıcının İSTEKTE verdiği USP; generic fallback USP GİRMEZ).
                 Boşsa da grounding uygulanır — hiçbir sayısal iddia geçemez.
+            output_ctx: Çıktı dili + hedef konum (çalışma pazarı); None → Türkçe/Seçilmedi
 
         Returns:
             AdGroupFullSchema with validated headlines, descriptions, negatives
@@ -140,43 +242,66 @@ class RSAGenerator:
         logger.info(f"Generating RSA for group: '{group.name}' ({len(group.keywords)} keywords)")
         self._product_facts = (product_facts or "").strip() or "—"
         self._grounding_facts = (grounding_facts or "").strip()
+        self._output_ctx = output_ctx or DEFAULT_CONTEXT
+        self._kw_decisions: Dict[str, Dict[str, str]] = {}
+        self._asset_review = {}
         
         # Get primary keyword for validation context
         primary_keyword = group.keywords[0] if group.keywords else ""
         
-        # Primary attempt
-        headlines, descriptions, negatives, headline_stats = self._generate_and_validate_components(
+        # Primary attempt: aday havuzu (doğrulama + iddia kontrolü SONRASI, kesme yok)
+        h_pool, d_pool, negatives, headline_stats = self._generate_and_validate_components(
             group=group,
             brand_name=brand_name,
             brand_usp=brand_usp,
             primary_keyword=primary_keyword,
             stage="primary",
-            strict_prompt=False
         )
+        h_pool, d_pool = self._dedup(h_pool), self._dedup(d_pool)
 
-        # Retry once with strict prompt
-        if self._below_minimum(headlines, descriptions) and self.enable_ai_regeneration:
+        # Tek tamamlama çağrısı (eski tam strict retry'ın yerine). Yalnız KW
+        # kapsam eksikliği tetiklemez (K4); temiz adaylar korunur.
+        if self.enable_ai_regeneration and self._needs_completion(h_pool, d_pool, group.keywords):
             logger.warning(
-                f"Minimum assets not met for group '{group.name}' "
-                f"(headlines={len(headlines)}, descriptions={len(descriptions)}), retrying once"
+                f"Standard not met for group '{group.name}' "
+                f"(headlines={len(h_pool)}, descriptions={len(d_pool)}), one completion call"
             )
-            headlines, descriptions, negatives, headline_stats = self._generate_and_validate_components(
-                group=group,
-                brand_name=brand_name,
-                brand_usp=brand_usp,
-                primary_keyword=primary_keyword,
-                stage="retry",
-                strict_prompt=True
-            )
+            try:
+                c_h, c_d, c_negatives, c_stats = self._generate_and_validate_components(
+                    group=group,
+                    brand_name=brand_name,
+                    brand_usp=brand_usp,
+                    primary_keyword=primary_keyword,
+                    stage="completion",
+                    kept=(h_pool, d_pool),
+                )
+            except Exception as e:
+                # Sert minimum zaten sağlanıyorsa temiz adaylar KAYBOLMAZ; değilse
+                # eski retry gibi hata yukarı çıkar.
+                if self._below_minimum(h_pool, d_pool):
+                    raise
+                logger.warning(f"Completion call failed for group '{group.name}', keeping clean candidates: {e}")
+            else:
+                # Yeni başlık havuzu yalnız seçimi (CTA şartı > KW kapsamı > başlık sayısı)
+                # gerçekten iyileştiriyorsa alınır; aksi halde önceki havuz korunur.
+                merged_h = self._dedup(h_pool + c_h)
+                if self._selection_key(merged_h, group.keywords) > self._selection_key(h_pool, group.keywords):
+                    h_pool = merged_h
+                d_pool = self._dedup(d_pool + c_d)
+                negatives = negatives or c_negatives
+                for k, v in c_stats.items():
+                    headline_stats[k] = headline_stats.get(k, 0) + v
 
-        # Deterministic fallback
+        headlines, descriptions = self._select_assets(h_pool, d_pool, group.keywords)
+
+        # Deterministic fallback (yalnız sert minimum 3/2 altı; 15'e ASLA doldurmaz)
         if self._below_minimum(headlines, descriptions):
             if self.enable_fallback:
                 logger.warning(
                     f"Using deterministic fallback for group '{group.name}' "
                     f"(headlines={len(headlines)}, descriptions={len(descriptions)})"
                 )
-                headlines, descriptions, negatives, headline_stats = self._build_deterministic_fallback(
+                fb_h, fb_d, fb_negatives, fb_stats = self._build_deterministic_fallback(
                     group=group,
                     brand_name=brand_name,
                     brand_usp=brand_usp,
@@ -184,9 +309,14 @@ class RSAGenerator:
                 )
                 # Fallback asset'leri de grounding'den geçer (Faz F, adım 6) —
                 # display USP fact değildir, sayısal iddia taşıyabilir
-                headlines, descriptions = self._enforce_grounding(
-                    headlines, descriptions, group, headline_stats
-                )
+                fb_h, fb_d = self._enforce_grounding(fb_h, fb_d, group, fb_stats)
+                # Seçilen TEMİZ asset'ler korunur; fallback yalnız eksik tipi,
+                # temizlerin ARKASINA ve sert minimuma kadar tamamlar.
+                headlines = self._top_up(headlines, fb_h, self.MIN_HEADLINES)
+                descriptions = self._top_up(descriptions, fb_d, self.MIN_DESCRIPTIONS)
+                negatives = negatives or fb_negatives
+                for k, v in fb_stats.items():
+                    headline_stats[k] = headline_stats.get(k, 0) + v
             else:
                 raise ValueError(
                     f"Group '{group.name}': only {len(headlines)} valid headlines and "
@@ -200,15 +330,59 @@ class RSAGenerator:
                 f"(headlines={len(headlines)}, descriptions={len(descriptions)})."
             )
 
+        # Negatif ↔ hedef çakışması (plan 2.1): grubun KENDİ hedef kelimelerini
+        # engelleyen negatifler atılır (birincil/retry/fallback hepsi buradan
+        # geçer). Eksik kalan sayı için yalnız güvenli varsayılanlar eklenir;
+        # güvenli aday yoksa DAHA AZ negatif döner (sayı doldurulmaz).
+        negatives, dropped_negatives = partition_negatives(
+            negatives, group.keywords, group.name
+        )
         if len(negatives) < self.MIN_NEGATIVE_KEYWORDS:
             logger.warning(f"Only {len(negatives)} negative keywords, adding defaults")
-            negatives = self._add_default_negatives(negatives)
-        
+            negatives = self._add_default_negatives(
+                negatives, targets=group.keywords,
+                excluded=[d["negative"] for d in dropped_negatives],
+            )
+        # Son emniyet: top-up dahil çıkan listede çakışan kalmasın
+        negatives, late_drops = partition_negatives(
+            negatives, group.keywords, group.name
+        )
+        dropped_negatives.extend(late_drops)
+        for d in dropped_negatives:
+            logger.warning(
+                f"Negative dropped (blocks group target) | group={d['group']} "
+                f"negative='{d['negative']}' match_type={d['match_type']} "
+                f"target='{d['target']}' rule={d['rule']}"
+            )
+
+        # 15 başlık / 4 KW'li açıklama hedefi; eksik jenerik dolgu ile kapatılmaz.
+        # KW kapsam eksikliği tek başına eksik sayılmaz (K4).
+        missing_headlines = max(0, self.MAX_HEADLINES - len(headlines))
+        missing_kw_descriptions = max(0, self.MAX_DESCRIPTIONS - sum(
+            self._contains_keyword(d.text, group.keywords) for d in descriptions
+        ))
+        missing_cta = max(0, self.MIN_CTA - sum(self._is_cta(h.text) for h in headlines))
+        if missing_headlines or missing_kw_descriptions or missing_cta:
+            logger.warning(
+                f"Standard shortfall | group={group.name} "
+                f"missing_headlines={missing_headlines} "
+                f"missing_kw_descriptions={missing_kw_descriptions} "
+                f"missing_cta={missing_cta}"
+            )
+
+        # AI konum önerisi tutulmaz (bir grupta 15 başlığın hepsi position_1 gelmişti):
+        # primary/tamamlama/claim rewrite/fallback hepsi buradan geçer -> tek normalizasyon.
+        for asset in (*headlines, *descriptions):
+            asset.position_preference = "any"
+
+        claim_findings, claim_applied = self._collect_claim_review(headlines, descriptions)
+
         return AdGroupFullSchema(
             name=group.name,
             theme=group.theme,
             keyword_ids=group.keyword_ids,
             keywords=group.keywords,
+            fill_keyword_ids=group.fill_keyword_ids,
             headlines=headlines,
             descriptions=descriptions,
             negative_keywords=negatives,
@@ -217,6 +391,16 @@ class RSAGenerator:
             headlines_shortened=headline_stats["shortened"],
             headlines_regenerated=headline_stats["regenerated"],
             dki_converted_count=headline_stats["dki_converted"],
+            dropped_negatives=dropped_negatives,
+            missing_headlines=missing_headlines,
+            missing_kw_descriptions=missing_kw_descriptions,
+            missing_cta=missing_cta,
+            keyword_decisions=[
+                {"keyword": k, **self._kw_decisions[k]}
+                for k in group.keywords if k in self._kw_decisions
+            ],
+            claim_findings=claim_findings,
+            claim_applied=claim_applied,
         )
 
     def _below_minimum(
@@ -226,6 +410,88 @@ class RSAGenerator:
     ) -> bool:
         return len(headlines) < self.MIN_HEADLINES or len(descriptions) < self.MIN_DESCRIPTIONS
 
+    @staticmethod
+    def _contains_keyword(text: str, keywords: List[str]) -> bool:
+        return any(keyword_in_text(kw, text) for kw in keywords)
+
+    def _is_cta(self, text: str) -> bool:
+        return is_cta(text, self._output_ctx.language)
+
+    def _needs_completion(self, h_pool, d_pool, keywords: List[str]) -> bool:
+        """15 başlık, 4 KW'li açıklama veya 3 CTA dolmadı mı? (sert minimum bunun içinde).
+        Seçim havuzdaki CTA'lardan en çok 3'ünü alır: havuzda <3 CTA = seçimde <3 CTA."""
+        kw_descriptions = sum(self._contains_keyword(d.text, keywords) for d in d_pool)
+        return (len(h_pool) < self.MAX_HEADLINES or kw_descriptions < self.MAX_DESCRIPTIONS
+                or sum(self._is_cta(h.text) for h in h_pool) < self.MIN_CTA)
+
+    def _top_up(self, clean: list, fallback: list, minimum: int) -> list:
+        """`minimum`un altındaki tipi fallback asset'leriyle, temizlerin ARKASINA ve
+        yalnız minimuma kadar tamamlar (son metinde tekrar yok). Yeterliyse dokunmaz."""
+        if len(clean) >= minimum:
+            return clean
+        return self._dedup(clean + fallback)[:minimum]
+
+    @staticmethod
+    def _dedup(items: list) -> list:
+        """SON metinlerde (iddia düzeltmesi sonrası) tekrar temizliği; ilk gelen kalır.
+        Anahtar DKI açılmış, Türkçe katlanmış, noktalamasız: `{KeyWord:X}` == "X"."""
+        seen, out = set(), []
+        for item in items:
+            key = tuple(kw_tokens(item.text))
+            if key not in seen:
+                seen.add(key)
+                out.append(item)
+        return out
+
+    @staticmethod
+    def _greedy_pick(texts: List[str], keywords: List[str], limit: int) -> List[int]:
+        """Her adımda henüz kapsanmamış en çok KW'yi kapsayan metni al (eşitlikte
+        öndeki; kapsam artışı bitince aday sırasıyla dolar). `limit`e kadar indeks."""
+        uncovered, left, chosen = list(keywords), list(range(len(texts))), []
+        while left and len(chosen) < limit:
+            best = max(left, key=lambda i: sum(keyword_in_text(k, texts[i]) for k in uncovered))
+            chosen.append(best)
+            left.remove(best)
+            uncovered = [k for k in uncovered if not keyword_in_text(k, texts[best])]
+        return chosen
+
+    def _select_headline_indices(self, h_pool: List[HeadlineSchema], keywords: List[str]) -> List[int]:
+        """Öncelik: en az 3 CTA -> bu koşulda azami birebir KW kapsamı. Önce kapsama göre
+        en çok 3 CTA, kalan yerler tüm havuzdan aynı açgözlü kapsamla (CTA'yı 3'ün üstüne
+        çıkarmak için kapsam feda edilmez). Sıralı indeks döner."""
+        texts = [h.text for h in h_pool]
+        cta_idx = [i for i, t in enumerate(texts) if self._is_cta(t)]
+        chosen = [cta_idx[j] for j in self._greedy_pick(
+            [texts[i] for i in cta_idx], keywords, self.MIN_CTA)]
+        uncovered = [k for k in keywords if not any(keyword_in_text(k, texts[i]) for i in chosen)]
+        rest = [i for i in range(len(texts)) if i not in chosen]
+        chosen += [rest[j] for j in self._greedy_pick(
+            [texts[i] for i in rest], uncovered, self.MAX_HEADLINES - len(chosen))]
+        return sorted(chosen)
+
+    def _selection_key(self, h_pool: List[HeadlineSchema], keywords: List[str]) -> tuple:
+        """Seçimin sıralama anahtarı: (CTA şartı sağlandı mı, birebir KW kapsamı, başlık sayısı)."""
+        picked = [h_pool[i].text for i in self._select_headline_indices(h_pool, keywords)]
+        return (sum(self._is_cta(t) for t in picked) >= self.MIN_CTA,
+                sum(any(keyword_in_text(k, t) for t in picked) for k in keywords),
+                len(picked))
+
+    def _select_assets(
+        self, h_pool: List[HeadlineSchema], d_pool: List[DescriptionSchema], keywords: List[str]
+    ) -> Tuple[List[HeadlineSchema], List[DescriptionSchema]]:
+        """Havuzdan 15 başlık / 4 açıklama seç (deterministik; çıktı aday sırasında).
+
+        Açıklama: önce KW içerenler (başlıklarda karşılanmamış KW'yi taşıyan öncelikli);
+        KW'li aday 4'ten azsa KW'siz temiz açıklamalar dolgu olur (standarda sayılmaz).
+        """
+        headlines = [h_pool[i] for i in self._select_headline_indices(h_pool, keywords)]
+        uncovered = [k for k in keywords if not any(keyword_in_text(k, h.text) for h in headlines)]
+        kw_idx = [i for i, d in enumerate(d_pool) if self._contains_keyword(d.text, keywords)]
+        picked = [kw_idx[j] for j in self._greedy_pick(
+            [d_pool[i].text for i in kw_idx], uncovered, self.MAX_DESCRIPTIONS)]
+        picked += [i for i in range(len(d_pool)) if i not in kw_idx][:self.MAX_DESCRIPTIONS - len(picked)]
+        return headlines, [d_pool[i] for i in sorted(picked)]
+
     def _generate_and_validate_components(
         self,
         group: KeywordGroupSchema,
@@ -233,13 +499,13 @@ class RSAGenerator:
         brand_usp: str,
         primary_keyword: str,
         stage: str,
-        strict_prompt: bool
+        kept: Optional[Tuple[List[HeadlineSchema], List[DescriptionSchema]]] = None,
     ) -> Tuple[List[HeadlineSchema], List[DescriptionSchema], List[NegativeKeywordSchema], Dict[str, int]]:
         raw_response = self._generate_raw_rsa(
             group=group,
             brand_name=brand_name,
             brand_usp=brand_usp,
-            strict_prompt=strict_prompt
+            kept=kept,
         )
         headlines_raw, descriptions_raw, negatives_raw = self._parse_rsa_response(
             response=raw_response,
@@ -247,6 +513,9 @@ class RSAGenerator:
             stage=stage
         )
         headlines, headline_stats = self._validate_headlines(headlines_raw, primary_keyword)
+        headlines, stage_claimed = self._apply_keyword_headlines(
+            raw_response, group, headlines, primary_keyword, headline_stats
+        )
         descriptions, _ = self._validate_descriptions(
             descriptions_raw=descriptions_raw,
             ai_service=self.ai_service if self.enable_ai_regeneration else None,
@@ -257,7 +526,71 @@ class RSAGenerator:
         headlines, descriptions = self._enforce_grounding(
             headlines, descriptions, group, headline_stats
         )
+        # Grounding sonrası da başlıkta kalmayan "headline" iddiası geçersizdir
+        for kw in stage_claimed:
+            if not any(keyword_in_text(kw, h.text) for h in headlines):
+                self._kw_decisions[kw] = {"status": "invalid", "reason": "doğrulama/iddia kontrolünde elendi"}
         return headlines, descriptions, negatives, headline_stats
+
+    def _apply_keyword_headlines(
+        self,
+        response: str,
+        group: KeywordGroupSchema,
+        headlines: List[HeadlineSchema],
+        primary_keyword: str,
+        headline_stats: Dict[str, int],
+    ) -> Tuple[List[HeadlineSchema], List[str]]:
+        """`keyword_headlines` girdilerini işler (eksik/bozuksa sessizce boş). Başlık verilenler
+        aynı doğrulamadan geçip havuza (tekrar değilse) eklenir ve KW'yi BİREBİR içermiyorsa
+        atılır; reddedilenler yalnız bu üretimin kaydıdır. Döner: (havuz, "headline" denenen KW'ler)."""
+        try:
+            data = parse_ai_json_object(response, ("headlines", "keyword_headlines"))
+            entries = data.get("keyword_headlines")
+        except Exception:
+            entries = None
+        if not isinstance(entries, list):
+            return headlines, []
+        id_to_kw = dict(zip(group.keyword_ids, group.keywords))
+        keys = {tuple(kw_tokens(h.text)) for h in headlines}
+        claimed: List[str] = []
+        for e in entries:
+            kw = id_to_kw.get(e.get("keyword_id")) if isinstance(e, dict) else None
+            if kw is None:
+                logger.warning(f"keyword_headlines: unknown keyword_id ignored | group={group.name} entry={e!r}")
+                continue
+            text = e.get("headline")
+            text = text.strip() if isinstance(text, str) else ""
+            if not text:
+                if self._kw_decisions.get(kw, {}).get("status") != "headline":
+                    self._kw_decisions[kw] = {"status": "declined", "reason": str(e.get("reason") or "")}
+                continue
+            valid, st = self._validate_headlines([{"text": text, "type": "keyword", "position": "any"}], primary_keyword)
+            for k, v in st.items():
+                headline_stats[k] = headline_stats.get(k, 0) + v
+            if valid and not keyword_in_text(kw, valid[0].text) and self._output_ctx.language != DEFAULT_LANGUAGE:
+                # Çekimli dil: doğal çekimli başlık ELENMEZ, `benefit` olarak havuza girer;
+                # kapsam (keyword_in_text) birebir kalır — bu başlık kapsama SAYILMAZ.
+                inflected = HeadlineSchema(
+                    text=valid[0].text, type="benefit",
+                    position_preference=valid[0].position_preference, is_dki=valid[0].is_dki,
+                )
+                if tuple(kw_tokens(inflected.text)) not in keys:
+                    keys.add(tuple(kw_tokens(inflected.text)))
+                    headlines = headlines + [inflected]
+                if self._kw_decisions.get(kw, {}).get("status") != "headline":
+                    self._kw_decisions[kw] = {"status": "invalid", "reason": "başlık anahtar kelimeyi birebir içermiyor"}
+                continue
+            if not valid or not keyword_in_text(kw, valid[0].text):
+                logger.warning(f"keyword_headlines dropped | group={group.name} keyword='{kw}' headline='{text}'")
+                if self._kw_decisions.get(kw, {}).get("status") != "headline":
+                    self._kw_decisions[kw] = {"status": "invalid", "reason": "başlık anahtar kelimeyi birebir içermiyor"}
+                continue
+            if tuple(kw_tokens(valid[0].text)) not in keys:
+                keys.add(tuple(kw_tokens(valid[0].text)))
+                headlines = headlines + [valid[0]]
+            self._kw_decisions[kw] = {"status": "headline", "reason": ""}
+            claimed.append(kw)
+        return headlines, claimed
 
     def _enforce_grounding(
         self,
@@ -266,67 +599,66 @@ class RSAGenerator:
         group: KeywordGroupSchema,
         headline_stats: Dict[str, int],
     ) -> Tuple[List[HeadlineSchema], List[DescriptionSchema]]:
-        """Claim grounding zinciri (Faz F3, kesin sıra 2-4).
+        """Iddia denetimi (plan_iddia_denetimi rev.4): asset ASLA elenmez.
 
-        TÜM headline+description'lar taranır; ihlalli asset için en fazla
-        1 kez CLAIM_REWRITE denenir; çözülmeyen asset ELENİR. Deterministik
-        fallback asset'leri de bu yoldan geçer (çağıran uygular).
+        TÜM headline+description'lar taranır. Risk (garanti/mutlak sonuç) → en fazla 1
+        CLAIM_REWRITE; temizse yeniden yazılan benimsenir (orijinal kayıtta), çözülmezse
+        orijinal KALIR. Profilde doğrulanamayan (unverified) iddia → AI çağrısı YOK,
+        asset aynen kalır. Kalan bulgu `validation_action='claim_review'` + set kaydı.
+        Deterministik fallback asset'leri de bu yoldan geçer (çağıran uygular).
         """
         exempt = group.keywords or []
         primary_keyword = exempt[0] if exempt else group.name
-
-        kept_headlines: List[HeadlineSchema] = []
-        for h in headlines:
-            claims = find_ungrounded_claims(h.text, self._grounding_facts, exempt)
-            if not claims:
-                kept_headlines.append(h)
-                continue
-            rewritten = self._rewrite_claim_asset(
-                h.text, claims, "headline", primary_keyword,
-                self.headline_validator.MAX_LENGTH, exempt,
-            )
-            if rewritten:
-                logger.info(
-                    f"Headline claim-rewritten: '{h.text}' -> '{rewritten}' "
-                    f"(claims={claims})"
-                )
-                kept_headlines.append(HeadlineSchema(
-                    text=rewritten, type=h.type,
-                    position_preference=h.position_preference, is_dki=False,
-                ))
-            else:
-                logger.warning(
-                    f"Headline eliminated (ungrounded claim): '{h.text}' "
-                    f"claims={claims}"
-                )
-                headline_stats["eliminated"] = headline_stats.get("eliminated", 0) + 1
-
-        kept_descriptions: List[DescriptionSchema] = []
-        for d in descriptions:
-            claims = find_ungrounded_claims(d.text, self._grounding_facts, exempt)
-            if not claims:
-                kept_descriptions.append(d)
-                continue
-            rewritten = self._rewrite_claim_asset(
-                d.text, claims, "description", primary_keyword,
-                self.description_validator.MAX_LENGTH, exempt,
-            )
-            if rewritten:
-                logger.info(
-                    f"Description claim-rewritten: '{d.text}' -> '{rewritten}' "
-                    f"(claims={claims})"
-                )
-                kept_descriptions.append(DescriptionSchema(
-                    text=rewritten, type=d.type,
-                    position_preference=d.position_preference,
-                ))
-            else:
-                logger.warning(
-                    f"Description eliminated (ungrounded claim): '{d.text}' "
-                    f"claims={claims}"
-                )
-
+        kept_headlines = [
+            self._review_asset(h, "headline", self.headline_validator.MAX_LENGTH, exempt, primary_keyword)
+            for h in headlines
+        ]
+        kept_descriptions = [
+            self._review_asset(d, "description", self.description_validator.MAX_LENGTH, exempt, primary_keyword)
+            for d in descriptions
+        ]
         return kept_headlines, kept_descriptions
+
+    def _review_asset(self, asset, asset_type: str, max_length: int, exempt: List[str], primary_keyword: str):
+        findings = classify_claims(asset.text, self._grounding_facts, exempt)
+        if not findings:
+            return asset
+        original, applied = asset.text, []
+        risks = [f for f in findings if f.kind == "risk"]
+        if risks:
+            rewritten = self._rewrite_claim_asset(
+                original, [f.raw for f in risks], asset_type, primary_keyword, max_length, exempt,
+            )
+            if rewritten:
+                logger.info(f"{asset_type} claim-rewritten: '{original}' -> '{rewritten}'")
+                applied = [
+                    finding_dict(f, asset_type=asset_type, original=original, suggestion=rewritten)
+                    for f in risks
+                ]
+                update = {"text": rewritten}
+                if asset_type == "headline":
+                    update["is_dki"] = False
+                asset = asset.model_copy(update=update)
+                findings = classify_claims(rewritten, self._grounding_facts, exempt)
+        if findings:
+            logger.warning(f"{asset_type} kept for claim review: '{asset.text}' ({[f.raw for f in findings]})")
+            asset = asset.model_copy(update={"validation_action": "claim_review"})
+        self._asset_review[(asset_type, asset.text)] = {
+            "findings": [finding_dict(f, asset_type=asset_type, asset_text=asset.text) for f in findings],
+            "applied": applied,
+        }
+        return asset
+
+    def _collect_claim_review(self, headlines, descriptions) -> Tuple[List[dict], List[dict]]:
+        """Seçilen (nihai) asset'lerin inceleme kayıtları; havuzda kalıp seçilmeyenler girmez."""
+        findings, applied = [], []
+        for asset_type, assets in (("headline", headlines), ("description", descriptions)):
+            for a in assets:
+                rec = self._asset_review.get((asset_type, a.text))
+                if rec:
+                    findings += [dict(f) for f in rec["findings"]]
+                    applied += [dict(f) for f in rec["applied"]]
+        return findings, applied
 
     def _rewrite_claim_asset(
         self,
@@ -337,27 +669,27 @@ class RSAGenerator:
         max_length: int,
         exempt_keywords: Optional[List[str]] = None,
     ) -> Optional[str]:
-        """İhlalli asset'i 1 kez yeniden yazdırır; sonuç yine ihlalliyse None."""
+        """Riskli asset'i 1 kez yeniden yazdırır; sonuç yine risk taşıyorsa None
+        (orijinal korunur). Yeni metindeki yalnız-unverified bulgu reddetmez, işaretlenir."""
         if not self.enable_ai_regeneration:
             return None
         try:
-            prompt = CLAIM_REWRITE_PROMPT.format(
+            prompt = with_output_block(CLAIM_REWRITE_PROMPT.format(
                 asset_type=asset_type,
                 original=original,
                 claims="\n".join(f"- {c}" for c in claims),
                 grounding_facts=self._grounding_facts or "— (marka bilgisi yok: hiçbir iddia kullanma)",
                 keyword=keyword,
                 max_length=max_length,
-            )
+            ), self._output_ctx)
             result = (scoped(self.ai_service, "claim_rewrite").complete(prompt, max_tokens=800) or "").strip().strip('"\'')
         except Exception as e:
             logger.warning(f"Claim rewrite error: {e}")
             return None
         if not result or len(result) > max_length:
             return None
-        # Rewrite sonrası ikinci kontrol — keyword muafiyeti KORUNUR (codex):
-        # keyword'deki doğal sayı ("2026") rewrite'ta yanlış eleme üretmesin
-        if find_ungrounded_claims(result, self._grounding_facts, exempt_keywords):
+        # Rewrite sonrası ikinci kontrol — keyword muafiyeti KORUNUR (codex)
+        if any(f.kind == "risk" for f in classify_claims(result, self._grounding_facts, exempt_keywords)):
             return None
         return result
     
@@ -366,24 +698,14 @@ class RSAGenerator:
         group: KeywordGroupSchema,
         brand_name: str,
         brand_usp: str,
-        strict_prompt: bool = False
+        kept: Optional[Tuple[List[HeadlineSchema], List[DescriptionSchema]]] = None,
     ) -> str:
-        """Generate raw RSA content via AI."""
+        """Generate raw RSA candidates via AI (kept=None: primary; else completion)."""
         brand_name = (brand_name or "Marka").strip() or "Marka"
-        brand_usp = (brand_usp or "Kaliteli ürün ve hizmet").strip() or "Kaliteli ürün ve hizmet"
+        # USP yoksa "—": jenerik metin modele USP diye verilince reklam metnine sızıyordu
+        brand_usp = (brand_usp or "").strip() or "—"
 
-        if strict_prompt:
-            prompt = self._build_strict_retry_prompt(group, brand_name, brand_usp)
-        else:
-            prompt = ADS_RSA_GENERATION_PROMPT.format(
-                group_name=group.name,
-                group_theme=group.theme,
-                keywords=", ".join(group.keywords),
-                brand_name=brand_name,
-                brand_usp=brand_usp,
-                product_facts=self._product_facts,
-            )
-        
+        prompt = self._build_candidates_prompt(group, brand_name, brand_usp, kept)
         response = self.ai_service.complete_json(
             prompt,
             max_tokens=self.RSA_MAX_TOKENS,
@@ -391,36 +713,87 @@ class RSAGenerator:
         )
         return response
 
-    def _build_strict_retry_prompt(
+    def _build_candidates_prompt(
         self,
         group: KeywordGroupSchema,
         brand_name: str,
-        brand_usp: str
+        brand_usp: str,
+        kept: Optional[Tuple[List[HeadlineSchema], List[DescriptionSchema]]] = None,
     ) -> str:
-        keywords = ", ".join(group.keywords)
-        return (
-            "Google Ads RSA için SADECE geçerli JSON üret.\n"
-            "Markdown, açıklama, kod fence veya tablo yazma.\n"
-            f"Grup: {group.name}\n"
-            f"Tema: {group.theme}\n"
-            f"Anahtar Kelimeler: {keywords}\n"
-            f"Marka: {brand_name}\n"
-            f"USP: {brand_usp}\n"
-            f"Ürün Bilgisi: {self._product_facts}\n\n"
-            "İDDİA KURALI: Yukarıdaki marka bilgilerinde OLMAYAN sayısal iddia\n"
-            "(müşteri sayısı, yıl, puan, yüzde), liderlik iddiası ('en iyi',\n"
-            "'lider', '1 numara') ve kazanç garantisi KESİNLİKLE YASAK.\n\n"
-            "Zorunlu platform limitleri:\n"
-            "- Headlines: 3-15 adet, her biri <=30 karakter\n"
-            "- Descriptions: 2-4 adet, her biri <=90 karakter\n"
-            "- Negative keywords: en az 10 adet\n\n"
-            "JSON ŞEMASI:\n"
-            "{\n"
-            '  "headlines": [{"text":"", "type":"keyword|cta|benefit|trust|dynamic", "position":"any|position_1|position_2|position_3"}],\n'
-            '  "descriptions": [{"text":"", "type":"value_prop|features|cta|trust", "position":"any|position_1|position_2|position_3"}],\n'
-            '  "negative_keywords": [{"keyword":"", "match_type":"phrase|exact|broad", "category":"", "reason":""}]\n'
-            "}"
-        )
+        """Primary: 18-20 başlık / 5-6 açıklama adayı. Completion (kept verilir): yalnız
+        EKSİK sayı + yedek; mevcut temiz metinler "tekrar etme" olarak listelenir."""
+        keywords = group.keywords
+        if kept is None:
+            h_instr = "18-20 aday başlık üret (sistem içlerinden en iyi 15'ini seçer)"
+            d_instr = "5-6 aday açıklama üret (sistem içlerinden en iyi 4'ünü seçer)"
+            block = ""
+        else:
+            kept_h, kept_d = kept
+            need_h = max(0, self.MAX_HEADLINES - len(kept_h))
+            need_d = max(0, self.MAX_DESCRIPTIONS - sum(
+                self._contains_keyword(d.text, keywords) for d in kept_d))
+            need_cta = max(0, self.MIN_CTA - sum(self._is_cta(h.text) for h in kept_h))
+            n_h = need_h + self.HEADLINE_SPARE if need_h else 0
+            if need_cta:
+                n_cta = need_cta + self.CTA_SPARE
+                h_instr = (f"{max(n_h, n_cta)} aday başlık üret; bunların EN AZ {n_cta} tanesi CTA "
+                           "(eylem çağrısı) olsun: markanın/hizmetin gerçek teklifine uyan, emir kipiyle "
+                           "biten (ör. 'Teklif Alın', 'Hemen Arayın'), mümkünse grubun bir anahtar "
+                           "kelimesini doğal biçimde içeren, en fazla 30 karakterlik başlıklar. Markanın "
+                           "sunmadığı bir hizmeti uydurma (ör. randevu yoksa 'Randevu Alın' yazma)")
+            else:
+                h_instr = (f"{n_h} aday başlık üret" if need_h
+                           else "başlık ÜRETME ('headlines' dizisini boş bırak)")
+            d_instr = (f"{need_d + self.DESCRIPTION_SPARE} aday açıklama üret "
+                       "(her birinde, cümleye doğal yerleşen en az bir anahtar kelime BÜTÜN geçmeli; "
+                       "diğerlerini zorla doldurma)" if need_d
+                       else "açıklama ÜRETME ('descriptions' dizisini boş bırak)")
+            lines = []
+            if kept_h or kept_d:
+                lines += [
+                    "# TAMAMLAMA TURU",
+                    "Bu grup için daha önce üretilen temiz metinler aşağıdadır. Bunları ve anlamca "
+                    "tekrarlarını ÜRETME; marka adı (en fazla 3 başlık) ve çeşitlilik kuralları "
+                    "bu mevcut başlıklarla BİRLİKTE geçerlidir.",
+                ]
+                if kept_h:
+                    lines += ["Mevcut başlıklar:"] + [f"- {h.text}" for h in kept_h]
+                if kept_d:
+                    lines += ["Mevcut açıklamalar:"] + [f"- {d.text}" for d in kept_d]
+                if need_h:
+                    coverage = keyword_coverage(keywords, [h.text for h in kept_h], [])
+                    missing = [k for k in keywords if k.strip() and coverage[k] != "headline"
+                               and len(k) <= self.headline_validator.MAX_LENGTH]
+                    if missing:
+                        lines.append(
+                            "Henüz hiçbir başlıkta geçmeyen ve 30 karaktere sığan anahtar kelimeler "
+                            "(yalnızca başlık akıcı, doğal Türkçe olursa BÜTÜN kullan; olmuyorsa "
+                            "YAZMA, bu kabul edilir; bozuk başlık yazma): " + ", ".join(missing)
+                        )
+            block = "\n".join([""] + lines) if lines else ""
+
+        if self._output_ctx.language != DEFAULT_LANGUAGE:
+            block = "\n".join([block, *_NON_TR_PROMPT_RULES])
+
+        long_keywords = [k for k in keywords if len(k) > self.headline_validator.MAX_LENGTH]
+        asked = list(zip(group.keyword_ids, keywords))
+        if kept is not None:  # tamamlama: yalnız henüz başlıkta geçmeyenler istenir
+            asked = [(i, k) for i, k in asked
+                     if not any(keyword_in_text(k, h.text) for h in kept[0])]
+        return with_output_block(ADS_RSA_CANDIDATES_PROMPT.format(
+            keyword_ids_block="\n".join(f"- {i}: {k}" for i, k in asked) or "—",
+            group_name=group.name,
+            group_theme=group.theme,
+            keywords=", ".join(keywords),
+            brand_name=brand_name,
+            brand_usp=brand_usp,
+            product_facts=self._product_facts,
+            headline_instruction=h_instr,
+            description_instruction=d_instr,
+            long_keywords=", ".join(long_keywords) or "—",
+            cta_instruction=self.CTA_PRIMARY_INSTRUCTION if kept is None else "",
+            completion_block=block,
+        ), self._output_ctx)
     
     def _parse_rsa_response(
         self,
@@ -431,7 +804,7 @@ class RSAGenerator:
         """Parse AI response into raw components."""
         try:
             # Kurtarma zinciri (fence/trailing virgul/dengesiz parantez);
-            # strict-retry akisi degismez, yalniz parse dayanikliligi artar
+            # parse hatasi bos tuple doner -> tamamlama cagrisi tam uretim gibi calisir
             data = parse_ai_json_object(
                 response, ("headlines", "descriptions", "negative_keywords")
             )
@@ -500,13 +873,21 @@ class RSAGenerator:
                 if dki_reason:
                     stats["dki_converted"] += 1
                     h_type = "keyword"  # Downgrade type if DKI was invalid
+                elif (is_dki and self._output_ctx.language != DEFAULT_LANGUAGE
+                      and not re.fullmatch(DKIValidator.VALID_PATTERN, text.strip())):
+                    # Yabancı dilde DKI yalnız çıplak makro olabilir: etrafında kelime varsa
+                    # varsayılan metne açılır; uzunluk + iddia kontrolü aşağıda/sonrasında yeniden yapılır
+                    text, is_dki = self.dki_validator._convert_to_plain(text), False
+                    stats["dki_converted"] += 1
+                    h_type = "keyword"
             
             # Step 2: Character limit validation
             validated_text, action, reason = self.headline_validator.validate(
                 headline=text,
                 keyword=primary_keyword,
                 ai_service=self.ai_service if self.enable_ai_regeneration else None,
-                enable_regeneration=self.enable_ai_regeneration
+                enable_regeneration=self.enable_ai_regeneration,
+                output_ctx=self._output_ctx,
             )
             
             # Track stats
@@ -520,9 +901,7 @@ class RSAGenerator:
                     is_dki=is_dki
                 ))
         
-        if len(validated) > self.MAX_HEADLINES:
-            validated = validated[:self.MAX_HEADLINES]
-
+        # Kesme YOK: iddia kontrolü ve tekrar temizliği sonrası seçim yapılır (_select_assets)
         logger.info(f"Headlines: {stats['total']} total, {len(validated)} valid, "
                    f"{stats['eliminated']} eliminated, {stats['dki_converted']} DKI fixed")
         
@@ -554,6 +933,10 @@ class RSAGenerator:
             
             if not text:
                 continue
+            if "{" in text and self._output_ctx.language != DEFAULT_LANGUAGE:
+                text = self.dki_validator._convert_to_plain(text)  # açıklamada makro kalmaz
+                if not text:
+                    continue
             
             allow_ai_this_item = bool(
                 ai_service and enable_ai_shortening and ai_attempts_remaining > 0
@@ -561,7 +944,8 @@ class RSAGenerator:
             validated_text, action, reason = self.description_validator.validate(
                 text,
                 ai_service=ai_service if allow_ai_this_item else None,
-                enable_ai_shortening=allow_ai_this_item
+                enable_ai_shortening=allow_ai_this_item,
+                output_ctx=self._output_ctx,
             )
             ai_attempted = (
                 action == "ai_shortened" or
@@ -581,9 +965,7 @@ class RSAGenerator:
                 position_preference=position
             ))
         
-        if len(validated) > self.MAX_DESCRIPTIONS:
-            validated = validated[:self.MAX_DESCRIPTIONS]
-
+        # Kesme YOK: seçim _select_assets'te
         logger.info(
             f"Descriptions: {stats['total']} total, {len(validated)} valid, "
             f"{stats['ai_shortened']} ai_shortened, {stats['truncated']} truncated"
@@ -620,41 +1002,53 @@ class RSAGenerator:
         primary_keyword: str
     ) -> Tuple[List[HeadlineSchema], List[DescriptionSchema], List[NegativeKeywordSchema], Dict[str, int]]:
         brand_name = (brand_name or "Marka").strip() or "Marka"
-        brand_usp = (brand_usp or "Kaliteli ürün ve hizmet").strip() or "Kaliteli ürün ve hizmet"
+        brand_usp = (brand_usp or "").strip()
         keywords = [k.strip() for k in group.keywords if k and k.strip()]
         first_keyword = keywords[0] if keywords else primary_keyword or group.name
         second_keyword = keywords[1] if len(keywords) > 1 else first_keyword
 
+        # Sabit metin Türkçedir: Türkçe dışı pazarda yalnız dil-bağımsız (marka +
+        # anahtar kelime) metin üretilir, hedef dile Türkçe sızmaz.
+        turkish = self._output_ctx.language == DEFAULT_LANGUAGE
         headline_candidates = [
             {"text": first_keyword, "type": "keyword", "position": "position_1"},
             {"text": f"{brand_name} {second_keyword}", "type": "keyword", "position": "any"},
-            {"text": "Hemen İncele", "type": "cta", "position": "position_3"},
-            {"text": f"{brand_name} Güvencesi", "type": "trust", "position": "any"},
-            {"text": "Kaliteli Ürün Seçenekleri", "type": "benefit", "position": "any"},
         ]
-        description_candidates = [
-            {
-                "text": f"{brand_name} ile {first_keyword} seçeneklerini keşfedin. Hemen inceleyin.",
-                "type": "value_prop",
-                "position": "any"
-            },
-            {
-                "text": f"{brand_usp}. Güvenli alışveriş ve hızlı teslimat fırsatını kaçırmayın.",
-                "type": "cta",
-                "position": "any"
-            }
-        ]
+        if turkish:
+            headline_candidates += [
+                {"text": "Hemen İncele", "type": "cta", "position": "position_3"},
+                {"text": f"{brand_name} Güvencesi", "type": "trust", "position": "any"},
+                {"text": "Kaliteli Ürün Seçenekleri", "type": "benefit", "position": "any"},
+            ]
+            description_candidates = [
+                {
+                    "text": f"{brand_name} ile {first_keyword} seçeneklerini keşfedin. Hemen inceleyin.",
+                    "type": "value_prop",
+                    "position": "any"
+                },
+                {
+                    "text": f"{brand_usp + '. ' if brand_usp else ''}Güvenli alışveriş ve hızlı teslimat fırsatını kaçırmayın.",
+                    "type": "cta",
+                    "position": "any"
+                }
+            ]
+        else:
+            headline_candidates.append({"text": brand_name, "type": "keyword", "position": "any"})
+            description_candidates = [
+                {"text": f"{brand_name} — {first_keyword}", "type": "value_prop", "position": "any"},
+                {"text": f"{first_keyword} — {second_keyword} — {brand_name}", "type": "value_prop", "position": "any"},
+            ]
 
         headlines, headline_stats = self._validate_headlines(headline_candidates, first_keyword)
         descriptions, _ = self._validate_descriptions(description_candidates)
-        negatives = self._add_default_negatives([])
+        negatives = self._add_default_negatives([], targets=keywords)
 
         # Hard guarantees for minimum outputs.
         headline_fill_iterations = 0
         while len(headlines) < self.MIN_HEADLINES and headline_fill_iterations < self.HEADLINE_FILL_MAX_ITERATIONS:
             headline_fill_iterations += 1
             idx = len(headlines) + 1
-            fallback_text = f"{brand_name} Ürünleri {idx}"
+            fallback_text = f"{brand_name} Ürünleri {idx}" if turkish else f"{brand_name} {idx}"
             validated_text, _, _ = self.headline_validator.validate(
                 fallback_text,
                 first_keyword,
@@ -685,6 +1079,9 @@ class RSAGenerator:
             f"{brand_usp}. Hemen keşfedin ve hızlı teslimat fırsatından yararlanın.",
             f"{first_keyword} seçeneklerini karşılaştırın, sizin için doğru ürünü şimdi seçin.",
             f"{brand_name} kalitesiyle güvenli alışveriş deneyimini hemen başlatın."
+        ] if turkish else [
+            f"{brand_name} — {first_keyword}",
+            f"{first_keyword} — {second_keyword} — {brand_name}",
         ]
         description_fill_iterations = 0
         while len(descriptions) < self.MIN_DESCRIPTIONS and description_fill_iterations < self.DESCRIPTION_FILL_MAX_ITERATIONS:
@@ -711,32 +1108,38 @@ class RSAGenerator:
     
     def _add_default_negatives(
         self, 
-        existing: List[NegativeKeywordSchema]
+        existing: List[NegativeKeywordSchema],
+        targets: Optional[List[str]] = None,
+        excluded: Optional[List[str]] = None,
     ) -> List[NegativeKeywordSchema]:
-        """Add default negative keywords if below minimum."""
+        """Add default negative keywords if below minimum.
+
+        Yalnız grubun hedef kelimeleriyle çakışmayan varsayılanlar eklenir
+        (güvenli aday yoksa hiçbiri eklenmez). Tekilleştirme normalize
+        biçim üzerinden; `excluded` (daha önce atılan negatifler) geri
+        eklenmez.
+        """
         defaults = [
-            ("nedir", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
-            ("nasıl", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
-            ("ne demek", "phrase", "bilgi_amacli", "Bilgi amaçlı arama"),
-            ("ücretsiz", "phrase", "ucretsiz", "Ödeme niyeti yok"),
-            ("bedava", "phrase", "ucretsiz", "Ödeme niyeti yok"),
-            ("free", "phrase", "ucretsiz", "Ödeme niyeti yok"),
-            ("ucuz", "phrase", "dusuk_kalite", "Düşük kalite algısı"),
-            ("ikinci el", "phrase", "ikinci_el", "Yeni ürün satışı"),
-            ("şikayet", "phrase", "sikayet", "Negatif arama"),
-            ("tamir", "phrase", "diy", "Hizmet değil bilgi arıyor"),
+            (kw, "phrase", cat, _NEGATIVE_REASONS[cat])
+            for kw, cat in _DEFAULT_NEGATIVES.get(self._output_ctx.language, _DEFAULT_NEGATIVES[DEFAULT_LANGUAGE])
         ]
-        
-        existing_keywords = {n.keyword.lower() for n in existing}
-        
+
+        seen = {tuple(_negative_tokens(n.keyword)) for n in existing}
+        seen.update(tuple(_negative_tokens(x)) for x in (excluded or []))
+
         result = list(existing)
         for keyword, match_type, category, reason in defaults:
-            if keyword.lower() not in existing_keywords:
-                result.append(NegativeKeywordSchema(
-                    keyword=keyword,
-                    match_type=match_type,
-                    category=category,
-                    reason=reason
-                ))
-        
+            key = tuple(_negative_tokens(keyword))
+            if key in seen:
+                continue
+            if negative_conflict(keyword, match_type, targets):
+                continue
+            seen.add(key)
+            result.append(NegativeKeywordSchema(
+                keyword=keyword,
+                match_type=match_type,
+                category=category,
+                reason=reason
+            ))
+
         return result

@@ -13,6 +13,8 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import logoFull from '../assets/optimice-logo.png'
 import logoIcon from '../assets/optimice-icon.png'
+import GlobalAnalysisToast from './GlobalAnalysisToast'
+import ErrorBoundary from './ErrorBoundary'
 import './Layout.css'
 
 interface LayoutProps {
@@ -25,7 +27,7 @@ const navItems = [
   { path: '/keywords', icon: Key, label: 'Anahtar Kelimeler' },
   { path: '/ads', icon: BadgeDollarSign, label: 'ADS' },
   { path: '/seo-geo', icon: Search, label: 'SEO+GEO' },
-  { path: '/social', icon: Share2, label: 'Social' },
+  { path: '/social', icon: Share2, label: 'Sosyal Medya' },
   { path: '/tasks', icon: ListTodo, label: 'Görevler' },
 ]
 
@@ -57,11 +59,6 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="api-status">
-            <div className="status-dot"></div>
-            <span>API Bagli</span>
-          </div>
-
           {/* Giris kapali ise (LOGIN_ENABLED=false) kullanici satiri hic
               gosterilmez — o modda oturum kavrami yok. */}
           {loginRequired && user && (
@@ -73,8 +70,8 @@ export default function Layout({ children }: LayoutProps) {
                 type="button"
                 className="sidebar-logout"
                 onClick={() => void logout()}
-                title="Cikis yap"
-                aria-label="Cikis yap"
+                title="Çıkış yap"
+                aria-label="Çıkış yap"
               >
                 <LogOut size={16} />
               </button>
@@ -83,7 +80,10 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </aside>
 
-      <main className="main-content">{children}</main>
+      <main className="main-content">
+        <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
+      </main>
+      <GlobalAnalysisToast />
     </div>
   )
 }

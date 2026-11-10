@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Award, ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react'
-import { scoringApi, ScoringSortBy } from '../services/api'
+import { apiErrorMessage, scoringApi, ScoringSortBy } from '../services/api'
+import ErrorBanner from './ErrorBanner'
+import TablePager from './TablePager'
+import { poolClassLabel, selectionReasonLabel } from './statusLabels'
 import { DEFAULT_SCORE_SORT, nextScoreSortState, ScoreSortState } from '../pages/scoringSort'
+import type { AnalysisChannels } from './AnalysisProgress'
 import '../pages/Scoring.css'
 
 interface KeywordScore {
@@ -27,82 +31,96 @@ interface KeywordScore {
   social_priority?: string | null
 }
 
-const SCORE_PAGE_SIZE = 100
+const SCORE_PAGE_SIZE = 25
 
 export default function ScoreResults({
   runId,
   workspaceId,
+  channels,
 }: {
   runId: number | null
   workspaceId?: number | null
+  /** Run'da kapalı kanalların sütunları gizlenir (undefined = göster). */
+  channels?: AnalysisChannels
 }) {
+  const show = {
+    ads: channels?.ads !== false,
+    seo: channels?.seo !== false,
+    social: channels?.social !== false,
+  }
+  const shown = Object.values(show).filter(Boolean).length
+  // Varsayılan sıralama ilk açık kanalın skoru (ADS kapalı run'da boş ADS'e göre sıralanmasın)
+  const defaultSort: ScoreSortState = show.ads
+    ? DEFAULT_SCORE_SORT
+    : { sort_by: show.seo ? 'seo_score' : 'social_score', sort_dir: 'desc' }
   const [scores, setScores] = useState<KeywordScore[]>([])
   const [totalScored, setTotalScored] = useState(0)
   const [algorithmVersion, setAlgorithmVersion] = useState<string | null>(null)
-  const [scoreSort, setScoreSort] = useState<ScoreSortState>(DEFAULT_SCORE_SORT)
+  const [scoreSort, setScoreSort] = useState<ScoreSortState>(defaultSort)
+  const [page, setPage] = useState(0)
   const [isLoadingScores, setIsLoadingScores] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // Run/workspace değişince uçuştaki eski yanıt state'e yazılmaz
+  const scopeRef = useRef(`${workspaceId}:${runId}`)
+  scopeRef.current = `${workspaceId}:${runId}`
+  // Aynı run içinde art arda sıralama/sayfa isteğinde son istek kazanır
+  const requestSeqRef = useRef(0)
 
+  // Sıralama sunucuda tüm sonuçlar üzerinde yapılır; ekranda yalnız bir sayfa durur.
   const fetchScores = async ({
-    offset = 0,
+    pageIndex = 0,
     sort = scoreSort,
-    append = false,
   }: {
-    offset?: number
+    pageIndex?: number
     sort?: ScoreSortState
-    append?: boolean
   }) => {
     if (!workspaceId || !runId) return
-    if (append) setIsLoadingMore(true)
-    else setIsLoadingScores(true)
+    const requestScope = scopeRef.current
+    const requestSeq = ++requestSeqRef.current
+    const isCurrent = () =>
+      scopeRef.current === requestScope && requestSeqRef.current === requestSeq
+    setIsLoadingScores(true)
     setErrorMsg(null)
     try {
       const res = await scoringApi.getScores({
         runId,
         brand_profile_id: workspaceId,
         limit: SCORE_PAGE_SIZE,
-        offset,
+        offset: pageIndex * SCORE_PAGE_SIZE,
         sort_by: sort.sort_by,
         sort_dir: sort.sort_dir,
       })
-      const nextScores = res.data.scores || []
-      setScores((prev) => (append ? [...prev, ...nextScores] : nextScores))
+      if (!isCurrent()) return
+      setScores(res.data.scores || [])
+      setPage(pageIndex)
       setTotalScored(Number(res.data.total_scored || 0))
       setAlgorithmVersion(res.data.algorithm_version || null)
-    } catch {
-      setErrorMsg(append ? 'Daha fazla skor yüklenemedi.' : 'Skorlar yüklenemedi.')
+    } catch (err) {
+      if (!isCurrent()) return
+      setErrorMsg(`Skorlar yüklenemedi. ${apiErrorMessage(err, '')}`.trim())
     } finally {
-      if (append) setIsLoadingMore(false)
-      else setIsLoadingScores(false)
+      if (isCurrent()) setIsLoadingScores(false)
     }
   }
 
   useEffect(() => {
+    setErrorMsg(null)
     setScores([])
     setTotalScored(0)
     setAlgorithmVersion(null)
-    setScoreSort(DEFAULT_SCORE_SORT)
+    setPage(0)
+    setScoreSort(defaultSort)
     if (runId && workspaceId) {
-      void fetchScores({ offset: 0, sort: DEFAULT_SCORE_SORT, append: false })
+      void fetchScores({ pageIndex: 0, sort: defaultSort })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, workspaceId])
+  }, [runId, workspaceId, defaultSort.sort_by])
 
   const sortScores = async (column: ScoringSortBy) => {
     if (!runId) return
     const nextSort = nextScoreSortState(scoreSort, column)
     setScoreSort(nextSort)
-    await fetchScores({ offset: 0, sort: nextSort, append: false })
-  }
-
-  const loadMoreScores = async () => {
-    if (!runId || isLoadingMore || scores.length >= totalScored) return
-    await fetchScores({
-      offset: scores.length,
-      sort: scoreSort,
-      append: true,
-    })
+    await fetchScores({ pageIndex: 0, sort: nextSort })
   }
 
   const formatScore = (value: number | string | null | undefined) => {
@@ -149,31 +167,39 @@ export default function ScoreResults({
         poolClass: score.social_pool_class,
       },
     }[channel]
+    if (!values.rank && !values.finalRank && !values.reason) {
+      return (
+        <div className="v3-channel-result">
+          <strong>{formatScore(values.score)}</strong>
+          <span>Aday değil</span>
+        </div>
+      )
+    }
+    const reason = values.finalRank || !values.reason ? null : selectionReasonLabel(values.reason)
+    const poolLabel = poolClassLabel(
+      channel,
+      values.poolClass ?? (channel === 'social' ? score.social_priority : null)
+    )
+    const meta = [values.rank ? `Aday sırası ${values.rank}` : null, poolLabel]
+      .filter(Boolean)
+      .join(' · ')
     return (
       <div className="v3-channel-result">
         <strong>{formatScore(values.score)}</strong>
-        <span>{values.rank ? `Algoritma #${values.rank}` : 'Aday değil'}</span>
         {values.finalRank ? (
-          <span className="v3-delivered">Teslim #{values.finalRank}</span>
-        ) : values.reason ? (
-          <span className="v3-excluded">Elendi: {values.reason}</span>
+          <span className="v3-delivered">Havuzda · {values.finalRank}. sıra</span>
+        ) : reason ? (
+          <span className={reason.neutral ? 'v3-skipped' : 'v3-excluded'}>{reason.label}</span>
         ) : null}
-        {(values.poolClass || (channel === 'social' && score.social_priority)) && (
-          <span className="v3-meta">
-            {[values.poolClass, channel === 'social' ? score.social_priority : null]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        )}
+        {meta && <span className="v3-meta">{meta}</span>}
       </div>
     )
   }
 
   if (!runId) {
-    return <div className="empty-text">Skorlama çalışması seçin.</div>
+    return <div className="empty-text">Bir analiz seçin.</div>
   }
 
-  const hasMoreScores = scores.length < totalScored
   const isV3Run = algorithmVersion === 'v3'
 
   return (
@@ -183,12 +209,20 @@ export default function ScoreResults({
           <h2>Skorlar - Çalışma #{runId}</h2>
           <p>
             {totalScored > 0
-              ? `${scores.length}/${totalScored} skor gösteriliyor`
-              : 'Skor kaydı bulunamadı'}
+              ? `${totalScored} anahtar kelime skorlandı`
+              : errorMsg
+                ? 'Skorlar yüklenemedi'
+                : 'Skor kaydı bulunamadı'}
           </p>
         </div>
       </div>
-      {errorMsg && <div className="error-banner">{errorMsg}</div>}
+      {errorMsg && (
+        <ErrorBanner
+          error={errorMsg}
+          onRetry={() => void fetchScores({ pageIndex: page, sort: scoreSort })}
+          retryLabel="Skorları yeniden yükle"
+        />
+      )}
       <div
         className={`table-container ${isLoadingScores && scores.length > 0 ? 'table-sorting' : ''}`}
       >
@@ -199,18 +233,22 @@ export default function ScoreResults({
               {isV3Run ? (
                 <>
                   <th>Aile</th>
-                  <th>{renderSortableHeader('ads_score', 'ADS')}</th>
-                  <th>{renderSortableHeader('seo_score', 'SEO')}</th>
-                  <th>{renderSortableHeader('social_score', 'SOCIAL')}</th>
+                  {show.ads && <th>{renderSortableHeader('ads_score', 'ADS')}</th>}
+                  {show.seo && <th>{renderSortableHeader('seo_score', 'SEO')}</th>}
+                  {show.social && <th>{renderSortableHeader('social_score', 'Sosyal Medya')}</th>}
                 </>
               ) : (
                 <>
-                  <th>{renderSortableHeader('ads_score', 'ADS Skor')}</th>
-                  <th>{renderSortableHeader('seo_score', 'SEO Skor')}</th>
-                  <th>{renderSortableHeader('social_score', 'SOCIAL Skor')}</th>
-                  <th>{renderSortableHeader('ads_rank', 'ADS Sıra')}</th>
-                  <th>{renderSortableHeader('seo_rank', 'SEO Sıra')}</th>
-                  <th>{renderSortableHeader('social_rank', 'SOCIAL Sıra')}</th>
+                  {show.ads && <th>{renderSortableHeader('ads_score', 'ADS Skor')}</th>}
+                  {show.seo && <th>{renderSortableHeader('seo_score', 'SEO Skor')}</th>}
+                  {show.social && (
+                    <th>{renderSortableHeader('social_score', 'Sosyal Medya Skor')}</th>
+                  )}
+                  {show.ads && <th>{renderSortableHeader('ads_rank', 'ADS Sıra')}</th>}
+                  {show.seo && <th>{renderSortableHeader('seo_rank', 'SEO Sıra')}</th>}
+                  {show.social && (
+                    <th>{renderSortableHeader('social_rank', 'Sosyal Medya Sıra')}</th>
+                  )}
                 </>
               )}
             </tr>
@@ -218,14 +256,14 @@ export default function ScoreResults({
           <tbody>
             {isLoadingScores && scores.length === 0 ? (
               <tr>
-                <td colSpan={isV3Run ? 5 : 7} className="scores-empty-cell">
+                <td colSpan={isV3Run ? 2 + shown : 1 + 2 * shown} className="scores-empty-cell">
                   Skorlar yükleniyor...
                 </td>
               </tr>
             ) : scores.length === 0 ? (
               <tr>
-                <td colSpan={isV3Run ? 5 : 7} className="scores-empty-cell">
-                  Skor kaydı bulunamadı.
+                <td colSpan={isV3Run ? 2 + shown : 1 + 2 * shown} className="scores-empty-cell">
+                  {errorMsg ? 'Skorlar yüklenemedi.' : 'Skor kaydı bulunamadı.'}
                 </td>
               </tr>
             ) : (
@@ -239,39 +277,44 @@ export default function ScoreResults({
                       <td>
                         <div className="v3-family">
                           <strong>{score.family_name || score.family_id || '—'}</strong>
-                          {score.family_name && score.family_id && <span>{score.family_id}</span>}
                         </div>
                       </td>
-                      <td>{renderV3Channel(score, 'ads')}</td>
-                      <td>{renderV3Channel(score, 'seo')}</td>
-                      <td>{renderV3Channel(score, 'social')}</td>
+                      {show.ads && <td>{renderV3Channel(score, 'ads')}</td>}
+                      {show.seo && <td>{renderV3Channel(score, 'seo')}</td>}
+                      {show.social && <td>{renderV3Channel(score, 'social')}</td>}
                     </>
                   ) : (
                     <>
-                      <td>{formatScore(score.ads_score)}</td>
-                      <td>{formatScore(score.seo_score)}</td>
-                      <td>{formatScore(score.social_score)}</td>
-                      <td>
-                        {score.ads_rank && (
-                          <span className={score.ads_rank <= 3 ? 'top-rank' : ''}>
-                            {score.ads_rank <= 3 && <Award size={14} />}#{score.ads_rank}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {score.seo_rank && (
-                          <span className={score.seo_rank <= 3 ? 'top-rank' : ''}>
-                            {score.seo_rank <= 3 && <Award size={14} />}#{score.seo_rank}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {score.social_rank && (
-                          <span className={score.social_rank <= 3 ? 'top-rank' : ''}>
-                            {score.social_rank <= 3 && <Award size={14} />}#{score.social_rank}
-                          </span>
-                        )}
-                      </td>
+                      {show.ads && <td>{formatScore(score.ads_score)}</td>}
+                      {show.seo && <td>{formatScore(score.seo_score)}</td>}
+                      {show.social && <td>{formatScore(score.social_score)}</td>}
+                      {show.ads && (
+                        <td>
+                          {score.ads_rank && (
+                            <span className={score.ads_rank <= 3 ? 'top-rank' : ''}>
+                              {score.ads_rank <= 3 && <Award size={14} />}#{score.ads_rank}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {show.seo && (
+                        <td>
+                          {score.seo_rank && (
+                            <span className={score.seo_rank <= 3 ? 'top-rank' : ''}>
+                              {score.seo_rank <= 3 && <Award size={14} />}#{score.seo_rank}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {show.social && (
+                        <td>
+                          {score.social_rank && (
+                            <span className={score.social_rank <= 3 ? 'top-rank' : ''}>
+                              {score.social_rank <= 3 && <Award size={14} />}#{score.social_rank}
+                            </span>
+                          )}
+                        </td>
+                      )}
                     </>
                   )}
                 </tr>
@@ -280,18 +323,14 @@ export default function ScoreResults({
           </tbody>
         </table>
       </div>
-      {hasMoreScores && (
-        <div className="scores-load-more">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={loadMoreScores}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore ? 'Yükleniyor...' : 'Daha fazla göster'}
-          </button>
-        </div>
-      )}
+      <TablePager
+        page={page}
+        pageSize={SCORE_PAGE_SIZE}
+        total={totalScored}
+        unit="kelime"
+        disabled={isLoadingScores}
+        onPage={(next) => void fetchScores({ pageIndex: next, sort: scoreSort })}
+      />
     </div>
   )
 }

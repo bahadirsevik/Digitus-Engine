@@ -17,42 +17,107 @@ export function isActiveStatus(status: string | null | undefined): boolean {
   return status === 'pending' || status === 'running'
 }
 
-// Deneme / uyarı gerekçe kodları → kullanıcı metni. Bilinmeyen kod ham gösterilir.
+// Deneme / uyarı gerekçe kodları → kullanıcı metni. Bilinmeyen kod ekrana basılmaz.
 const REASON_TEXT: Record<string, string> = {
   target_unfilled: 'Bu hedef için geçerli fikir üretilemedi.',
   category_unfilled: 'Bu kategori için geçerli fikir üretilemedi.',
   ai_failed: 'Yapay zekâ bu hedef için yanıt üretemedi.',
-  idea_input_invalid: 'Fikir üretim girdisi geçersizdi.',
-  idea_provider_error: 'Yapay zekâ servisi hata verdi.',
+  idea_input_invalid: 'Bu brief ile fikir üretilemedi. Yeni bir brief oluşturup tekrar deneyin.',
+  idea_provider_error: 'Yapay zekâ servisi hata verdi. Yeniden deneyebilirsiniz.',
   idea_output_invalid: 'Yapay zekâ çıktısı brief kurallarına uymadı.',
-  idea_heartbeat_failed: 'Arka plan görevi durum bildiremedi.',
+  idea_heartbeat_failed:
+    'Fikir üretimi yarıda kesildi; sunucu yanıt vermeyi bıraktı. Yeniden deneyebilirsiniz.',
   idea_persistence_failed: 'Fikirler kaydedilemedi.',
   content_rejected:
     'İçerik, doğrulanmamış iddia (sayı, üstünlük, garanti) içerdiği için kaydedilmedi.',
-  content_input_invalid: 'İçerik üretim girdisi geçersizdi.',
-  content_provider_error: 'Yapay zekâ servisi hata verdi.',
+  content_input_invalid:
+    'Brief verisi içerik üretimine uygun değil (ör. marka notları çok uzun). Notları kısaltıp yeni bir brief oluşturun.',
+  content_provider_error: 'Yapay zekâ servisi hata verdi. Yeniden deneyebilirsiniz.',
   content_output_invalid: 'Yapay zekâ çıktısı format kurallarına uymadı.',
   content_quality_invalid: 'İçerik kalite kontrolünden geçemedi.',
-  content_repair_input_invalid: 'Düzeltme denemesi başlatılamadı.',
+  content_repair_input_invalid: 'İçerik otomatik olarak düzeltilemedi.',
   content_repair_provider_error: 'Düzeltme sırasında yapay zekâ servisi hata verdi.',
   content_repair_output_invalid: 'Düzeltme çıktısı format kurallarına uymadı.',
-  content_execution_inconsistent: 'Üretim sonucu tutarsızdı; kayıt yapılmadı.',
-  content_heartbeat_failed: 'Arka plan görevi durum bildiremedi.',
+  content_execution_inconsistent: 'Üretim tamamlanamadı; sonuç kaydedilmedi.',
+  content_heartbeat_failed:
+    'İçerik üretimi yarıda kesildi; sunucu yanıt vermeyi bıraktı. Yeniden deneyebilirsiniz.',
   content_persistence_failed: 'İçerik kaydedilemedi.',
   content_generation_failed: 'İçerik üretilemedi.',
   content_partial: 'Bazı fikirler için içerik üretilemedi.',
-  worker_lost: 'Arka plan görevi yanıt vermeyi bıraktı.',
+  worker_lost:
+    'Üretim yarıda kesildi; sunucu yanıt vermeyi bıraktı. Yeniden deneyin; sürerse sistem yöneticinize bildirin.',
   brief_stale: 'Kanal ataması değiştiği için sonuç kaydedilmedi.',
   assignment_changed: 'Kanal ataması değiştiği için sonuç kaydedilmedi.',
-  worker_bootstrap_failed: 'Arka plan görevi başlatılamadı.',
-  dispatch_failed: 'Görev kuyruğa alınamadı.',
+  worker_bootstrap_failed: 'Üretim başlatılamadı. Yeniden deneyebilirsiniz.',
+  dispatch_failed: 'Üretim başlatılamadı. Yeniden deneyebilirsiniz.',
   voiceover_duration_mismatch:
     'Seslendirme metninin uzunluğu seçilen süreyle kabaca uyuşmuyor (uyarı, içerik kaydedildi).',
 }
 
 export function reasonText(code: string | null | undefined): string {
   if (!code) return ''
-  return REASON_TEXT[code] ?? `Gerekçe kodu: ${code}`
+  if (code.startsWith('claim_risk:'))
+    return `Risk — yayın öncesi düzelt: ${code.slice('claim_risk:'.length)}`
+  if (code.startsWith('claim_unverified:'))
+    return `Profilde doğrulanamadı — kontrol gerekli: ${code.slice('claim_unverified:'.length)}`
+  return REASON_TEXT[code] ?? 'Bu adım tamamlanamadı.'
+}
+
+// Onarım öncesi/sonrası metin: claim_review:<json> kaydındaki `current.changed` (yoksa `applied`)
+export interface ClaimRepairItem {
+  field: string
+  original: string
+  suggestion: string
+}
+
+const CLAIM_FIELD_LABEL: Record<string, string> = {
+  caption: 'Açıklama',
+  cta_text: 'CTA',
+  visual_suggestion: 'Görsel',
+  scenario: 'Senaryo',
+  video_concept: 'Video konsepti',
+  platform_notes: 'Platform notları',
+  industry_posting_suggestion: 'Paylaşım önerisi',
+}
+const CLAIM_INDEXED_LABEL: Record<string, string> = {
+  hook: 'Kanca',
+  hashtag: 'Etiket',
+  payload: 'Format metni',
+}
+
+export function claimFieldLabel(field: string): string {
+  const m = /^(\w+)\[(\d+)\]$/.exec(field)
+  if (m && CLAIM_INDEXED_LABEL[m[1]]) {
+    const n = Number(m[2]) + 1
+    return `${CLAIM_INDEXED_LABEL[m[1]]} ${n}`
+  }
+  return CLAIM_FIELD_LABEL[field] ?? field
+}
+
+export function parseClaimRepairs(warnings: string[]): ClaimRepairItem[] {
+  const raw = warnings.find((w) => w.startsWith('claim_review:'))
+  if (!raw) return []
+  try {
+    const current = (JSON.parse(raw.slice('claim_review:'.length)) as { current?: unknown })
+      .current as
+      | {
+          changed?: Partial<ClaimRepairItem>[]
+          applied?: (Partial<ClaimRepairItem> & { span?: string })[]
+        }
+      | undefined
+    const rows = current?.changed?.length
+      ? current.changed
+      : (current?.applied ?? []).map((a) => ({ ...a, field: a.span ?? '' }))
+    return rows
+      .filter((r) => r.original || r.suggestion)
+      .map((r) => ({
+        field: r.field ?? '',
+        original: r.original ?? '',
+        suggestion: r.suggestion ?? '',
+      }))
+  } catch {
+    return []
+  }
 }
 
 // Tipli hata kodları → açıklayıcı Türkçe metin
@@ -74,7 +139,7 @@ const ERROR_TEXT: Record<string, string> = {
   IDEA_ATTEMPT_TERMINAL:
     'Önceki fikir üretimi sonuçlandı. Yeniden başlatarak tekrar deneyebilirsiniz.',
   IDEA_ATTEMPT_REQUEST_MISMATCH:
-    'Aynı işlem farklı seçimlerle tekrarlandı. Seçimi değiştirip yeniden başlatın.',
+    'Bu istek daha önce farklı seçimlerle gönderilmiş. Sayfayı yenileyip seçiminizi kontrol ederek yeniden başlatın.',
   IDEA_RETRY_NOT_NEEDED:
     'Tüm hedefler ve kategoriler en az bir fikir aldı; tekrar denemeye gerek yok.',
   IDEA_RETRY_SOURCE_NOT_TERMINAL: 'Fikir üretimi bitmeden eksik hedefler tekrar denenemez.',
@@ -85,12 +150,12 @@ const ERROR_TEXT: Record<string, string> = {
   CONTENT_ATTEMPT_TERMINAL:
     'Önceki içerik üretimi sonuçlandı. Kalan fikirler için yeniden başlatabilirsiniz.',
   CONTENT_ATTEMPT_REQUEST_MISMATCH:
-    'Aynı işlem farklı seçimlerle tekrarlandı. Seçimi değiştirip yeniden başlatın.',
+    'Bu istek daha önce farklı seçimlerle gönderilmiş. Sayfayı yenileyip seçiminizi kontrol ederek yeniden başlatın.',
   CONTENT_IDEA_NOT_ELIGIBLE: 'Seçilen fikirlerden biri artık içerik üretimine uygun değil.',
-  CONTENT_IDEAS_INVALID: 'Fikir seçimi geçersiz (1–30 benzersiz fikir seçin).',
-  CONTENT_DISPATCH_FAILED: 'İçerik üretim görevi kuyruğa alınamadı. Tekrar deneyin.',
-  IDEA_DISPATCH_FAILED: 'Fikir üretim görevi kuyruğa alınamadı. Tekrar deneyin.',
-  IDEA_RETRY_DISPATCH_FAILED: 'Tekrar deneme görevi kuyruğa alınamadı. Tekrar deneyin.',
+  CONTENT_IDEAS_INVALID: 'Fikir seçimi geçersiz. 1 ile 30 arasında fikir seçin.',
+  CONTENT_DISPATCH_FAILED: 'İçerik üretimi başlatılamadı. Tekrar deneyin.',
+  IDEA_DISPATCH_FAILED: 'Fikir üretimi başlatılamadı. Tekrar deneyin.',
+  IDEA_RETRY_DISPATCH_FAILED: 'Eksik fikirlerin üretimi başlatılamadı. Tekrar deneyin.',
   CATEGORY_PROVIDER_ERROR: 'Yapay zekâ servisi hata verdi. Yeniden deneyebilirsiniz.',
   CATEGORY_OUTPUT_INVALID:
     'Yapay zekâ çıktısı kategori kurallarına uymadı. Yeniden deneyebilirsiniz.',
@@ -105,6 +170,9 @@ export function socialErrorText(err: unknown, fallback: string): string {
     return 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip aynı işlemi güvenle tekrar deneyebilirsiniz.'
   }
   if (status >= 500) {
+    // Backend'in güvenli Türkçe metni varsa onu göster; yoksa genel metin
+    const detail = (err as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
     return 'Sunucu hatası oluştu. Aynı işlemi güvenle tekrar deneyebilirsiniz.'
   }
   return apiErrorMessage(err, fallback)

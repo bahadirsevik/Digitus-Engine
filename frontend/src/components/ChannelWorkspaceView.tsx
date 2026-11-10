@@ -1,16 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, ChevronDown, RefreshCw, X } from 'lucide-react'
-import { channelsApi, scoringApi, tasksApi } from '../services/api'
+import {
+  apiErrorMessage,
+  channelsApi,
+  scoringApi,
+  tasksApi,
+  tasksFromListResponse,
+} from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
+import MarketBadge from './MarketBadge'
 import type { ScoringRun } from '../types/models'
-import TaskProgress from './TaskProgress'
+import { AnalysisBanner } from './AnalysisProgress'
 import ExportMenu from './ExportMenu'
 import SeoGeoPanel from './generation/SeoGeoPanel'
 import AdsPanel from './generation/AdsPanel'
 import SocialPanel from './generation/SocialPanel'
 import { useBriefKeywordSelection } from './generation/socialBrief/useBriefKeywordSelection'
-import { getStoredTaskId, getWorkspaceTaskKey, useTaskPolling } from '../hooks/useTaskPolling'
+import {
+  getWorkspaceTaskKey,
+  POLL_FAILED_MESSAGE,
+  POLL_RECHECK_LABEL,
+  useScopedTaskId,
+  useTaskPolling,
+} from '../hooks/useTaskPolling'
+import ErrorBanner from './ErrorBanner'
+import { runStatusLabel } from './statusLabels'
 import '../pages/Channels.css'
 
 type ChannelName = 'ADS' | 'SEO' | 'SOCIAL'
@@ -31,19 +46,28 @@ export interface PoolKeyword {
 interface RunTask {
   task_id: string
   task_type?: string | null
+  scoring_run_id?: number | null
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress?: number
   error_message?: string | null
 }
 
+// Kanal sayfası alt başlığı: sayfada ne yapıldığını kanal özelinde söyler
+const CHANNEL_SUBTITLES: Record<ChannelName, string> = {
+  ADS: 'Analizin reklam havuzu ve Google Ads RSA reklam metinleri',
+  SEO: 'Analizin SEO havuzu ve blog içerikleri',
+  SOCIAL: 'Analizin sosyal medya havuzu, brief’ler ve paylaşım içerikleri',
+}
+
 const CHANNEL_LABELS: Record<ChannelName, string> = {
   ADS: 'ADS',
   SEO: 'SEO+GEO',
-  SOCIAL: 'Social',
+  SOCIAL: 'Sosyal Medya',
 }
 
 // Tasarım: havuz tablosu kapalıyken gösterilen satır sayısı
 const COLLAPSED_COUNT = 8
+const ASSIGN_DONE_HIDE_MS = 3000
 
 function isActiveTask(task?: RunTask | null) {
   return task?.status === 'pending' || task?.status === 'running'
@@ -57,19 +81,26 @@ function formatNumber(value?: number | null) {
 export default function ChannelWorkspaceView({ channel }: { channel: ChannelName }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
-  const assignTaskStorageKey = getWorkspaceTaskKey('channel_assign', activeWorkspace?.id)
 
   const [runs, setRuns] = useState<ScoringRun[]>([])
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
+  const assignTaskStorageKey = getWorkspaceTaskKey(
+    'channel_assign',
+    activeWorkspace?.id,
+    selectedRunId
+  )
   const [pool, setPool] = useState<PoolKeyword[]>([])
   const [loading, setLoading] = useState(false)
   const [poolError, setPoolError] = useState<string | null>(null)
   const poolRequestRef = useRef(0)
   const [error, setError] = useState('')
+  // Analiz listesi / atama görevi keşfi YÜKLEME hataları (boş durumdan ayrı, yeniden yükleme sunar)
+  const [runsError, setRunsError] = useState<string | null>(null)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
+  const workspaceIdRef = useRef(activeWorkspace?.id)
+  workspaceIdRef.current = activeWorkspace?.id
   const [info, setInfo] = useState('')
-  const [assignTaskId, setAssignTaskId] = useState<string | null>(
-    getStoredTaskId(assignTaskStorageKey)
-  )
+  const [assignTaskId, setAssignTaskId] = useScopedTaskId(assignTaskStorageKey)
   const [staleNotice, setStaleNotice] = useState(false)
   const [poolExpanded, setPoolExpanded] = useState(false)
 
@@ -77,7 +108,8 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
     assignTaskId,
     assignTaskStorageKey,
     3000,
-    activeWorkspace?.id
+    activeWorkspace?.id,
+    selectedRunId
   )
 
   const selectedRun = useMemo(
@@ -99,8 +131,11 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       return
     }
 
+    const requestWorkspaceId = activeWorkspace.id
     try {
-      const res = await scoringApi.listRuns({ brand_profile_id: activeWorkspace.id })
+      const res = await scoringApi.listRuns({ brand_profile_id: requestWorkspaceId })
+      if (workspaceIdRef.current !== requestWorkspaceId) return
+      setRunsError(null)
       const allRuns = (Array.isArray(res.data) ? res.data : []) as ScoringRun[]
       const visibleRuns = allRuns.filter((run) =>
         ['channel_assigning', 'channel_assigned', 'completed'].includes(run.status)
@@ -119,8 +154,9 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       if (requested && !requestedRun) {
         setInfo('Bu analiz aktif marka çalışmasına ait değil veya kanal havuzu hazır değil.')
       }
-    } catch {
-      setError('Analizler yüklenemedi.')
+    } catch (err) {
+      if (workspaceIdRef.current !== requestWorkspaceId) return
+      setRunsError(`Analizler yüklenemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }, [activeWorkspace?.id, searchParams])
 
@@ -137,10 +173,10 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
         if (poolRequestRef.current !== requestId) return
         setPool((res.data.channels?.[channel] || []) as PoolKeyword[])
         setError('')
-      } catch {
+      } catch (err) {
         if (poolRequestRef.current !== requestId) return
         setPool([])
-        setPoolError('Kanal havuzu alınamadı.')
+        setPoolError(`Kanal havuzu alınamadı: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
       } finally {
         if (poolRequestRef.current === requestId) setLoading(false)
       }
@@ -149,40 +185,62 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
   )
 
   const discoverAssignmentTask = useCallback(
-    async (runId: number) => {
+    async (runId: number, isCancelled: () => boolean) => {
       if (!activeWorkspace?.id) return
       const res = await tasksApi.listByRun(runId, activeWorkspace.id)
-      const tasks = (Array.isArray(res.data) ? res.data : []) as RunTask[]
+      // Run değiştiyse A'nın görevi B'nin paneline yazılmaz
+      if (isCancelled()) return
+      const tasks = tasksFromListResponse<RunTask>(res.data)
       const task = tasks.find(
-        (item) => item.task_type === 'channel_assignment' && isActiveTask(item)
+        (item) =>
+          item.task_type === 'channel_assignment' &&
+          isActiveTask(item) &&
+          (item.scoring_run_id == null || item.scoring_run_id === runId)
       )
       if (task) setAssignTaskId(task.task_id)
     },
-    [activeWorkspace?.id]
+    [activeWorkspace?.id, setAssignTaskId]
   )
 
   useEffect(() => {
     void fetchRuns()
   }, [fetchRuns])
 
-  useEffect(() => {
-    setAssignTaskId(getStoredTaskId(assignTaskStorageKey))
-  }, [assignTaskStorageKey])
-
   // Workspace değişince önceki workspace'in havuzu ekranda kalmaz
   useEffect(() => {
     poolRequestRef.current += 1
     setPool([])
     setPoolError(null)
+    setRunsError(null)
+    setDiscoverError(null)
     setLoading(false)
   }, [activeWorkspace?.id])
 
   useEffect(() => {
-    if (!selectedRunId) return
-    setSearchParams({ run_id: String(selectedRunId) })
+    if (!selectedRunId) {
+      poolRequestRef.current += 1 // run kalmadı: uçuştaki havuz yanıtı yok sayılır
+      return
+    }
+    let cancelled = false
+    // Görevler sayfasından gelen set_id yalnız aynı analiz için korunur
+    setSearchParams((prev) => {
+      const next = new URLSearchParams({ run_id: String(selectedRunId) })
+      const setId = prev.get('set_id')
+      if (setId && prev.get('run_id') === String(selectedRunId)) next.set('set_id', setId)
+      return next
+    })
     setPoolExpanded(false)
     void fetchPool(selectedRunId)
-    void discoverAssignmentTask(selectedRunId)
+    setDiscoverError(null)
+    discoverAssignmentTask(selectedRunId, () => cancelled).catch((err: unknown) => {
+      if (!cancelled)
+        setDiscoverError(
+          `Kanal atama görevi kontrol edilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+        )
+    })
+    return () => {
+      cancelled = true
+    }
   }, [selectedRunId, fetchPool, discoverAssignmentTask, setSearchParams])
 
   useEffect(() => {
@@ -191,6 +249,19 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       void fetchPool(selectedRunId)
     }
   }, [assignPolling.isCompleted, selectedRunId, fetchRuns, fetchPool])
+
+  // "Tamamlandı" kartı kısa süre görünür, sonra kendiliğinden kapanır (hata kartı kalır)
+  useEffect(() => {
+    if (!assignPolling.isCompleted) return
+    const timer = window.setTimeout(() => setAssignTaskId(null), ASSIGN_DONE_HIDE_MS)
+    return () => window.clearTimeout(timer)
+  }, [assignPolling.isCompleted, setAssignTaskId])
+
+  const assigning = assignPolling.isActive || selectedRun?.status === 'channel_assigning'
+  const assignMessage =
+    typeof assignPolling.resultData?.current_message === 'string'
+      ? assignPolling.resultData.current_message
+      : 'Kanal ataması yapılıyor...'
 
   const handleRemove = async (item: PoolKeyword) => {
     if (!activeWorkspace?.id || !selectedRunId) return
@@ -246,7 +317,12 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
           </button>
         </div>
       ) : pool.length === 0 ? (
-        <p className="empty-text chx-empty">Bu kanal için havuz henüz hazır değil.</p>
+        <p className="empty-text chx-empty">
+          {assigning
+            ? // Motor havuzları post-policy kapısından sonra TEK seferde yazar (orchestrator adım 7)
+              `Kanal ataması sürüyor. ${CHANNEL_LABELS[channel]} havuzu, tüm kanallar bitince burada kendiliğinden açılır.`
+            : 'Bu kanal için havuz henüz hazır değil.'}
+        </p>
       ) : channel === 'SOCIAL' ? (
         // Tasarım (Social.html): tablo yerine kompakt satır-kart gridi
         <>
@@ -346,7 +422,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
               <thead>
                 <tr>
                   <th className="left rank">#</th>
-                  <th className="left">KEYWORD</th>
+                  <th className="left">ANAHTAR KELİME</th>
                   <th>HACİM</th>
                   <th>SKOR</th>
                   <th className="action" aria-label="İşlem"></th>
@@ -441,9 +517,9 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
       {/* Tasarım: başlık + inline analiz seçici + aktif marka pili + yenile */}
       <header className="chx-header">
         <div className="chx-header-left">
-          <div>
+          <div className="chx-title">
             <h1>{CHANNEL_LABELS[channel]}</h1>
-            <p>Kanal havuzu ve içerik üretimi</p>
+            <p>{CHANNEL_SUBTITLES[channel]}</p>
           </div>
           {runs.length > 0 && (
             <div className="chx-run-pill">
@@ -456,7 +532,7 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
                 >
                   {runs.map((run) => (
                     <option key={run.id} value={run.id}>
-                      #{run.id} {run.run_name || 'Analiz'} — {run.status}
+                      #{run.id} {run.run_name || 'Analiz'} — {runStatusLabel(run.status)}
                     </option>
                   ))}
                 </select>
@@ -468,23 +544,31 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
                     selectedRun.status === 'channel_assigning' ? ' is-busy' : ''
                   }`}
                 >
-                  {selectedRun.status}
+                  {runStatusLabel(selectedRun.status)}
                 </span>
               )}
             </div>
           )}
         </div>
-        {activeWorkspace && (
-          <span className="chx-brand-pill">
-            <span className="muted">Aktif Marka</span>
-            <b>{activeWorkspace.name}</b>
-          </span>
-        )}
-        <ExportMenu channel={channel} runId={selectedRunId} disabled={!canEditPool} />
-        <button type="button" className="chx-btn" onClick={() => void fetchRuns()}>
-          <RefreshCw size={14} />
-          Yenile
-        </button>
+        <div className="chx-header-right">
+          {activeWorkspace && (
+            <span
+              className="chx-brand-pill"
+              title={[activeWorkspace.name, activeWorkspace.market_label]
+                .filter(Boolean)
+                .join(' · ')}
+            >
+              <span className="muted">Aktif Marka</span>
+              <b>{activeWorkspace.name}</b>
+              <MarketBadge label={activeWorkspace.market_label} />
+            </span>
+          )}
+          <ExportMenu channel={channel} runId={selectedRunId} disabled={!canEditPool} />
+          <button type="button" className="chx-btn" onClick={() => void fetchRuns()}>
+            <RefreshCw size={14} />
+            Yenile
+          </button>
+        </div>
       </header>
 
       {!activeWorkspace && (
@@ -502,20 +586,62 @@ export default function ChannelWorkspaceView({ channel }: { channel: ChannelName
         </div>
       )}
 
-      {activeWorkspace && runs.length === 0 && (
+      {runsError && (
+        <ErrorBanner
+          error={runsError}
+          onRetry={() => void fetchRuns()}
+          retryLabel="Analizleri yeniden yükle"
+        />
+      )}
+      {discoverError && selectedRunId && (
+        <ErrorBanner
+          error={discoverError}
+          onRetry={() => {
+            const runId = selectedRunId
+            setDiscoverError(null)
+            discoverAssignmentTask(runId, () => workspaceIdRef.current == null).catch(
+              (err: unknown) =>
+                setDiscoverError(
+                  `Kanal atama görevi kontrol edilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`
+                )
+            )
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
+
+      {activeWorkspace && runs.length === 0 && !runsError && (
         <p className="empty-text">Kanal ataması tamamlanmış analiz bulunamadı.</p>
       )}
 
+      {assignTaskId && assignPolling.pollFailed && (
+        <ErrorBanner
+          error={POLL_FAILED_MESSAGE}
+          onRetry={assignPolling.recheck}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
+
       {assignTaskId && assignPolling.status && (
-        <div className="chx-card chx-assign-progress">
-          <TaskProgress
-            taskId={assignTaskId}
-            status={assignPolling.status.status}
-            progress={assignPolling.progress}
-            message="Kanal ataması yapılıyor..."
-            errorMessage={assignPolling.errorMessage}
-          />
-        </div>
+        <AnalysisBanner
+          onChannelPage
+          stage={
+            assignPolling.isCompleted ? 'done' : assignPolling.isActive ? 'assigning' : 'failed'
+          }
+          taskProgress={assignPolling.progress}
+          channels={{
+            ads: selectedRun?.enable_ads,
+            seo: selectedRun?.enable_seo,
+            social: selectedRun?.enable_social,
+          }}
+          message={assignMessage}
+          errorMessage={
+            assignPolling.status.status === 'cancelled'
+              ? 'Kanal ataması iptal edildi'
+              : assignPolling.errorMessage
+          }
+          onDismiss={() => setAssignTaskId(null)}
+        />
       )}
 
       {sideBySide ? (

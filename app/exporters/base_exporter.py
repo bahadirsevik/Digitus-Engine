@@ -10,6 +10,16 @@ from sqlalchemy.orm import Session
 from app.schemas.export import FullReport, ExportSectionEnum
 
 
+def market_header_line(summary) -> str:
+    """DOCX/PDF/XLSX rapor başlığı; summary yoksa boş."""
+    if summary is None:
+        return ""
+    return (
+        f"Hedef konum: {summary.target_location} · Çıktı dili: {summary.output_language}"
+        f" · Hacim kaynağı: {summary.volume_source}"
+    )
+
+
 class BaseExporter(ABC):
     """
     Abstract base class for all exporters.

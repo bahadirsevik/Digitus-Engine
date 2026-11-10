@@ -85,7 +85,7 @@ def validate_social_brief_request(
     ):
         raise SocialBriefValidationError(
             error_code="INVALID_TARGET_VALUE",
-            message="scoring_run_id pozitif bir tam sayı olmalıdır.",
+            message="Önce bir analiz seçin.",
             field="scoring_run_id",
         )
 
@@ -94,7 +94,7 @@ def validate_social_brief_request(
     if keyword_count < MIN_KEYWORDS or keyword_count > MAX_KEYWORDS:
         raise SocialBriefValidationError(
             error_code="INVALID_KEYWORD_COUNT",
-            message=f"Keyword sayısı {MIN_KEYWORDS} ile {MAX_KEYWORDS} arasında olmalıdır (verilen: {keyword_count}).",
+            message=f"{MIN_KEYWORDS} ile {MAX_KEYWORDS} arasında anahtar kelime seçin (seçilen: {keyword_count}).",
             field="keyword_ids",
         )
 
@@ -103,13 +103,13 @@ def validate_social_brief_request(
         if isinstance(kid, bool) or not isinstance(kid, int) or kid <= 0:
             raise SocialBriefValidationError(
                 error_code="INVALID_KEYWORD_ID",
-                message=f"Geçersiz keyword ID: {kid}. Pozitif bir tam sayı olmalıdır.",
+                message="Seçilen anahtar kelimelerden biri geçersiz. Sayfayı yenileyip seçiminizi kontrol edin.",
                 field="keyword_ids",
             )
         if kid in seen_keywords:
             raise SocialBriefValidationError(
                 error_code="DUPLICATE_KEYWORD",
-                message=f"Tekrarlanan keyword ID: {kid}",
+                message="Aynı anahtar kelime birden fazla kez seçilmiş.",
                 field="keyword_ids",
             )
         seen_keywords.add(kid)
@@ -119,7 +119,7 @@ def validate_social_brief_request(
     if target_count < MIN_TARGETS or target_count > MAX_TARGETS:
         raise SocialBriefValidationError(
             error_code="INVALID_TARGET_COUNT",
-            message=f"Hedef (target) sayısı {MIN_TARGETS} ile {MAX_TARGETS} arasında olmalıdır (verilen: {target_count}).",
+            message=f"{MIN_TARGETS} ile {MAX_TARGETS} arasında platform/format hedefi seçin (seçilen: {target_count}).",
             field="targets",
         )
 
@@ -134,7 +134,7 @@ def validate_social_brief_request(
         ):
             raise SocialBriefValidationError(
                 error_code="INVALID_TARGET_VALUE",
-                message="Hedef platform ve format geçerli bir metin olmalıdır.",
+                message="Her hedef için bir platform ve format seçin.",
                 field=f"targets[{idx}]",
             )
 
@@ -142,7 +142,7 @@ def validate_social_brief_request(
         if target_key in seen_target_keys:
             raise SocialBriefValidationError(
                 error_code="DUPLICATE_TARGET",
-                message=f"Tekrarlanan hedef kombinasyonu: {t.platform}/{t.content_format}",
+                message=f"Aynı platform/format hedefi birden fazla kez seçilmiş: {t.platform}/{t.content_format}",
                 field=f"targets[{idx}]",
             )
         seen_target_keys.add(target_key)
@@ -159,7 +159,7 @@ def validate_social_brief_request(
             if t.duration_preset_id is None:
                 raise SocialBriefValidationError(
                     error_code="DURATION_PRESET_REQUIRED",
-                    message=f"Video formatı ({t.platform}/{t.content_format}) için duration_preset_id zorunludur.",
+                    message=f"Video formatı ({t.platform}/{t.content_format}) için bir süre seçin.",
                     field=f"targets[{idx}].duration_preset_id",
                 )
 
@@ -167,7 +167,7 @@ def validate_social_brief_request(
             if preset is None:
                 raise SocialBriefValidationError(
                     error_code="INVALID_DURATION_PRESET",
-                    message=f"Geçersiz süre ön ayarı: '{t.duration_preset_id}'",
+                    message=f"Seçilen süre geçersiz ({t.platform}/{t.content_format}). Listeden bir süre seçin.",
                     field=f"targets[{idx}].duration_preset_id",
                 )
 
@@ -176,8 +176,8 @@ def validate_social_brief_request(
                 raise SocialBriefValidationError(
                     error_code="DURATION_PROFILE_MISMATCH",
                     message=(
-                        f"Süre ön ayarı '{t.duration_preset_id}' formatın ({t.platform}/{t.content_format}) "
-                        f"süre profili ({fmt.duration_profile}) ile uyumsuzdur."
+                        f"Seçilen süre bu format ({t.platform}/{t.content_format}) için "
+                        "kullanılamaz. Listeden bu formata uygun bir süre seçin."
                     ),
                     field=f"targets[{idx}].duration_preset_id",
                 )

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List
 
+from app.core.keyword_junk import junk_reason
 from app.core.keyword_normalize import normalize_keyword
 
 
@@ -29,12 +30,16 @@ def build_refreshed_workspace_keywords(
     refreshed_ideas: Iterable[Any],
     include_new_ideas: bool = False,
     data_source: str = "google_ads_api",
+    geo_target_id: str | None = None,
+    language_id: str | None = None,
 ) -> Dict[str, Any]:
     """
     Merge Google Ads idea metrics into the existing workspace keyword set.
 
     Existing keywords are preserved if Google Ads does not return an exact
     normalized match. New ideas are included only when include_new_ideas=True.
+    Yeni olculen (yenilenen + yeni) satirlar geo/language_id ile damgalanir
+    (calisma pazari); Google'dan donmeyen satirlar eski degerini korur.
     """
     existing_items = list(existing)
     existing_by_norm = {
@@ -68,8 +73,8 @@ def build_refreshed_workspace_keywords(
                 "data_source": data_source,
                 "sector": item.sector,
                 "target_market": item.target_market,
-                "geo_target_id": item.geo_target_id,
-                "language_id": item.language_id,
+                "geo_target_id": geo_target_id or item.geo_target_id,
+                "language_id": language_id or item.language_id,
                 "notes": item.notes,
             })
         else:
@@ -94,6 +99,9 @@ def build_refreshed_workspace_keywords(
         for normalized, idea in idea_by_norm.items():
             if normalized in existing_by_norm:
                 continue
+            # Ortak cop filtresi: yeni fikirler bos / yalniz sayi-sembol olamaz.
+            if junk_reason(idea.keyword) is not None:
+                continue
             added_rows.append({
                 "keyword_id": None,
                 "keyword": idea.keyword,
@@ -104,8 +112,8 @@ def build_refreshed_workspace_keywords(
                 "data_source": data_source,
                 "sector": None,
                 "target_market": None,
-                "geo_target_id": None,
-                "language_id": None,
+                "geo_target_id": geo_target_id,
+                "language_id": language_id,
                 "notes": None,
             })
 

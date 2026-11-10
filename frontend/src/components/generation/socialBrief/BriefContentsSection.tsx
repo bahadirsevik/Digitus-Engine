@@ -73,7 +73,10 @@ export default function BriefContentsSection({
       setContents(res.data.items)
       setContentsLoaded(true)
     } catch (err) {
-      if (alive.current) setReadError(socialErrorText(err, 'Kayıtlı içerikler okunamadı.'))
+      if (alive.current)
+        setReadError(
+          socialErrorText(err, 'Kayıtlı içerikler yüklenemedi. Sayfayı yenileyip tekrar deneyin.')
+        )
     }
   }, [workspaceId, brief.id, alive])
 
@@ -88,7 +91,13 @@ export default function BriefContentsSection({
         await Promise.all([ctx.refreshState(), loadContents()])
       }
     } catch (err) {
-      if (alive.current) setReadError(socialErrorText(err, 'İçerik üretim durumu okunamadı.'))
+      if (alive.current)
+        setReadError(
+          socialErrorText(
+            err,
+            'İçerik üretim durumu yüklenemedi. Sayfayı yenileyip tekrar deneyin.'
+          )
+        )
     }
   }, [brief.id, latestId, workspaceId, alive, latest?.status, ctx, loadContents])
 
@@ -301,6 +310,14 @@ export default function BriefContentsSection({
         </div>
       )}
 
+      {status === 'failed' && !choosingNewIdeas && (
+        <div className="channels-alert channels-alert-error sb-stage-alert" role="alert">
+          <AlertTriangle size={14} /> <b>İçerik üretimi başarısız oldu.</b>{' '}
+          {reasonText(attemptRes?.reason_code ?? latest?.reason_code) ||
+            'Seçtiğiniz fikirlerle yeniden deneyebilirsiniz.'}
+        </div>
+      )}
+
       {attemptRes && !active && (
         <div className="sb-attempt-summary" role="status">
           {choosingNewIdeas && <strong>Önceki üretimin özeti</strong>}
@@ -309,7 +326,7 @@ export default function BriefContentsSection({
             <b>{attemptRes.successful_idea_ids.length}</b> · Üretilemeyen{' '}
             <b>{attemptRes.unresolved_idea_ids.length}</b>
           </span>
-          {attemptRes.reason_code && (
+          {attemptRes.reason_code && (status !== 'failed' || choosingNewIdeas) && (
             <span className="sb-muted">{reasonText(attemptRes.reason_code)}</span>
           )}
           {attemptRes.warnings.length > 0 && (

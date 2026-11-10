@@ -23,6 +23,7 @@ from app.core.social.category_contract import (
 from app.core.social.category_flow import SocialCategoryGenerationStart
 from app.core.social.provider_schema import to_gemini_response_schema
 from app.generators.ai_service import logical_request, mark_attempt_failed, scoped
+from app.generators.output_language import with_output_block
 from app.generators.social.brief_category_prompt import (
     SocialCategoryPromptError,
     build_category_retry_correction,
@@ -64,8 +65,9 @@ class SocialCategoryAIResult:
 class SocialBriefCategoryGenerator:
     """Sosyal brief kategori üretim adaptörü."""
 
-    def __init__(self, ai_service: Any) -> None:
+    def __init__(self, ai_service: Any, output_ctx: Any = None) -> None:
         self.ai = scoped(ai_service, "social_brief_categories")
+        self._output_ctx = output_ctx  # None -> Türkçe/Seçilmedi
 
     def generate(
         self,
@@ -133,7 +135,7 @@ class SocialBriefCategoryGenerator:
 
         # 2. Prompt oluşturma
         try:
-            prompt = build_social_category_prompt(start)
+            prompt = with_output_block(build_social_category_prompt(start), self._output_ctx)
         except SocialCategoryPromptError as exc:
             raise SocialCategoryGenerationError(
                 exc.message,

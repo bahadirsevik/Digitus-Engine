@@ -11,6 +11,8 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from app.schemas.ads import AdGroupStandardReport
+
 
 # ==================== ENUMS ====================
 
@@ -87,8 +89,16 @@ class ExportListResponse(BaseModel):
 
 # ==================== DATA COLLECTION SCHEMAS ====================
 
-class SummaryData(BaseModel):
-    """Özet bölümü verileri."""
+class MarketHeaderFields(BaseModel):
+    """Raporun pazar başlığı (çalışmanın hedef konumu + çıktı dili); seçilmemişse 'Seçilmedi'."""
+    market_label: str = "Seçilmedi"
+    target_location: str = "Seçilmedi"
+    output_language: str = "Seçilmedi"
+    volume_source: str = "Google Ads"
+
+
+class SummaryData(MarketHeaderFields):
+    """Özet bölümü verileri (pazar başlığı alanları dahil — özet her export'ta toplanır)."""
     scoring_run_id: int
     created_at: datetime
     total_keywords: int
@@ -212,12 +222,14 @@ class HeadlineData(BaseModel):
     headline_text: str
     headline_type: Optional[str] = None
     is_dki: bool = False
+    review: bool = False  # iddia incelemesi gerekli (validation_action == 'claim_review')
 
 
 class DescriptionData(BaseModel):
     """Reklam açıklaması."""
     description_text: str
     description_type: Optional[str] = None
+    review: bool = False  # iddia incelemesi gerekli
 
 
 class NegativeKeywordData(BaseModel):
@@ -233,16 +245,34 @@ class AdGroupData(BaseModel):
     group_name: str
     group_theme: Optional[str] = None
     target_keywords: List[str] = []
+    fill_keyword_ids: List[int] = []
+    # 15 KW teslim standardı raporu (yalnız olgu ve liste; yüzde/oran/puan yok)
+    standard_report: Optional[AdGroupStandardReport] = None
     
     headlines: List[HeadlineData] = []
     descriptions: List[DescriptionData] = []
     negative_keywords: List[NegativeKeywordData] = []
 
 
+class AdSetWarningData(BaseModel):
+    """Aktif ADS setinin iddia incelemesi satırı (açık bulgu veya uygulanmış düzeltme)."""
+    group_name: str = ''
+    asset_type: str = ''      # Başlık | Açıklama
+    asset_text: str = ''
+    kind: str = ''            # okunur sınıf metni (Risk — … | Profilde doğrulanamadı — …)
+    span: str = ''
+    reason: str = ''
+    original: str = ''
+    suggestion: str = ''
+    status: str = ''          # İnceleme gerekli | Düzeltme uygulandı
+
+
 class AdsData(BaseModel):
     """Tüm reklam grupları."""
     ad_groups: List[AdGroupData]
     total: int
+    claim_review_summary: str = ''  # aktif setin iddia incelemesi tek satırı (yoksa boş)
+    set_warnings: List[AdSetWarningData] = []  # "Set uyarıları" tablosu (boşsa gösterilmez)
 
 
 class HookData(BaseModel):
@@ -328,7 +358,7 @@ class BrandProfileCompetitorData(BaseModel):
     consistency_score: Optional[float] = None
 
 
-class BrandProfileData(BaseModel):
+class BrandProfileData(MarketHeaderFields):
     """Site analizinden uretilen marka/firma profili."""
     status: str
     company_url: Optional[str] = None

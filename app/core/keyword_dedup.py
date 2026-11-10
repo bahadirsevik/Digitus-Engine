@@ -5,8 +5,11 @@ Provides fuzzy matching with Turkish suffix stripping to identify
 near-duplicate keywords during bulk import. Keywords are merged only
 when both text similarity (≥85%) AND metrics (volume, competition) match.
 """
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 from loguru import logger
+
+from app.core.keyword_normalize import normalize_keyword
+from app.core.markets import clean_language_id
 
 try:
     from rapidfuzz import fuzz
@@ -39,6 +42,20 @@ TURKISH_SUFFIXES = [
 
 # Minimum similarity ratio (0-100) for fuzzy matching
 FUZZY_THRESHOLD = 85
+
+TURKISH_LANGUAGE_ID = "1037"
+
+
+def dedup_mode(language_id: Any = None) -> str:
+    """Çalışma diline göre tekilleştirme kipi (plan_pazar_dil_secimi 2-e).
+
+    'fuzzy_tr' = Türkçe ek kırpma + %85 benzerlik; 'exact' = yalnız normalize_keyword
+    eşitliği (+ aynı metrik). Türkçe ek kuralı başka dillerde ('agenda'/'safari')
+    yanlış birleştirme üretir. None/boş = Türkçe (çalışmasız eski çağrılar).
+    Her fuzzy blok kararı BU fonksiyondan alır (crud, import_plan, cleanup).
+    """
+    lang = clean_language_id(language_id)
+    return "fuzzy_tr" if lang in ("", TURKISH_LANGUAGE_ID) else "exact"
 
 # Turkish special chars → ASCII equivalents for normalization before fuzzy compare
 _TR_CHAR_MAP = str.maketrans({
@@ -154,6 +171,7 @@ def _tokens_aligned(stem_a: str, stem_b: str) -> bool:
 def deduplicate_keywords(
     keywords: List[Dict[str, Any]],
     return_merge_details: bool = False,
+    language_id: Optional[str] = None,
 ):
     """
     Remove fuzzy duplicates from a keyword list.
@@ -169,6 +187,7 @@ def deduplicate_keywords(
                   'monthly_volume', 'competition_score' keys
         return_merge_details: True → returns tuple (deduped, merged_details)
                               where merged_details = [{dropped, kept}, ...]
+        language_id: çalışma dili; Türkçe/None → fuzzy, diğerleri → exact (dedup_mode)
 
     Returns:
         Deduplicated keyword list, or (list, merged_details) if return_merge_details=True
@@ -176,10 +195,16 @@ def deduplicate_keywords(
     if not keywords or len(keywords) <= 1:
         return (keywords, []) if return_merge_details else keywords
 
+    if dedup_mode(language_id) == "exact":
+        details: List[Dict[str, str]] = []
+        result = _exact_dedup(keywords, details)
+        return (result, details) if return_merge_details else result
+
     if fuzz is None:
         logger.warning("fuzzy lib not available — skipping fuzzy dedup, using exact match only")
-        result = _exact_dedup(keywords)
-        return (result, []) if return_merge_details else result
+        details = []
+        result = _exact_dedup(keywords, details)
+        return (result, details) if return_merge_details else result
     
     # Build normalized+stemmed representations for fuzzy comparison
     # Pipeline: lowercase → suffix strip → Turkish char normalize
@@ -245,18 +270,26 @@ def deduplicate_keywords(
     return (deduped, merge_details) if return_merge_details else deduped
 
 
-def _exact_dedup(keywords: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Fallback: exact text dedup only (when thefuzz is unavailable)."""
+def _exact_dedup(
+    keywords: List[Dict[str, Any]],
+    merge_details: Optional[List[Dict[str, str]]] = None,
+) -> List[Dict[str, Any]]:
+    """Exact text dedup: normalize_keyword anahtarı + aynı metrik (fuzzy kapalı dil / lib yok)."""
     seen = {}
     result = []
-    
+
     for kw in keywords:
-        text = kw.get('keyword', '').lower().strip()
+        text = normalize_keyword(kw.get('keyword', ''))
         if text in seen:
             # Check metrics before skipping
             if are_metrics_equal(seen[text], kw):
+                if merge_details is not None:
+                    merge_details.append({
+                        'dropped': kw.get('keyword', ''),
+                        'kept': seen[text].get('keyword', ''),
+                    })
                 continue
         seen[text] = kw
         result.append(kw)
-    
+
     return result

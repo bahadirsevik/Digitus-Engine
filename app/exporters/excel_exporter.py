@@ -16,10 +16,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from app.exporters.ads_standard_format import STANDARD_HEADERS, standard_cells
 from app.exporters.base_exporter import BaseExporter
 from app.exporters.safe_text import safe_excel_text as _sx
 from app.exporters.seo_checklist_format import (
-    CHECK_ROW_HEADERS, check_rows, geo_evaluation_text, review_status_text,
+    CHECK_ROW_HEADERS, REVIEW_TEXT, SET_WARNING_HEADERS, check_rows, set_warning_cells, geo_evaluation_text, review_status_text,
 )
 from app.schemas.export import ExportSectionEnum, FullReport, BrandProfileData
 
@@ -110,6 +111,9 @@ class ExcelExporter(BaseExporter):
             ws.append(['Scoring Run ID', data.scoring_run_id])
             ws.append(['Tarih', data.generated_at.strftime('%Y-%m-%d %H:%M')])
             ws.append(['Toplam Kelime', data.summary.total_keywords])
+            ws.append(['Hedef Konum', _sx(data.summary.target_location)])
+            ws.append(['Çıktı Dili', _sx(data.summary.output_language)])
+            ws.append(['Hacim Kaynağı', _sx(data.summary.volume_source)])
             ws.append([])
             ws.append(['Kanal Dağılımı', ''])
             ws.append(['ADS Havuzu', data.summary.ads_count])
@@ -123,7 +127,7 @@ class ExcelExporter(BaseExporter):
             ws.append(['Sosyal İçerik', data.summary.social_content_count])
 
         ws.column_dimensions['A'].width = 25
-        ws.column_dimensions['B'].width = 20
+        ws.column_dimensions['B'].width = 40
 
     def _add_keywords_sheet(self, wb: Workbook, scoring):
         """Tüm kelimeler sheet'i."""
@@ -329,8 +333,33 @@ class ExcelExporter(BaseExporter):
             checks.column_dimensions[get_column_letter(i)].width = width
 
     def _add_ads_sheets(self, wb: Workbook, ads):
-        """Ads sheetleri (5 tane). Başlık/Açıklama/Negatif sheet'leri TÜM
+        """Ads sheetleri (6 tane). Başlık/Açıklama/Negatif sheet'leri TÜM
         kayıtları taşır; 'Reklam Metinleri' bilinçli bir ÖNİZLEME satırıdır."""
+        # Kelime Bazlı Reklamlar: (reklam grubu, hedef kelime) başına bir satır.
+        # Açıklamalar gruba aittir; grubun her kelimesi için tekrarlanır.
+        # Bu görünüm yeni reklam üretmez, mevcut grup içeriğini kelimeye açar.
+        ws = wb.create_sheet("Kelime Bazlı Reklamlar")
+        desc_count = max((len(g.descriptions) for g in ads.ad_groups), default=0)
+        headers = (['Kelime', 'Reklam Grubu']
+                   + [f'Açıklama {i}' for i in range(1, desc_count + 1)]
+                   + ['Başlıklar'])
+        ws.append(headers)
+        self._style_header(ws, 1, len(headers))
+        for g in ads.ad_groups:
+            descs = [d.description_text for d in g.descriptions]
+            descs += [''] * (desc_count - len(descs))
+            headline_cell = ' | '.join(h.headline_text for h in g.headlines)
+            for kw in g.target_keywords:
+                ws.append([_sx(v) for v in [kw, g.group_name, *descs, headline_cell]])
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for i in range(1, len(headers) + 1):
+            width = 30 if i <= 2 else (90 if i == len(headers) else 60)
+            ws.column_dimensions[get_column_letter(i)].width = width
+
         # Hazir reklam metinleri (RSA onizleme: ilk 3 baslik + 2 aciklama —
         # tam listeler asagidaki ozel sheet'lerde)
         ws = wb.create_sheet("Reklam Metinleri")
@@ -355,7 +384,8 @@ class ExcelExporter(BaseExporter):
 
         # Reklam Grupları
         ws = wb.create_sheet("Reklam Grupları")
-        headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı', 'Negatif Sayısı']
+        headers = ['Grup Adı', 'Hedef Kelimeler', 'Başlık Sayısı', 'Açıklama Sayısı',
+                   'Negatif Sayısı'] + STANDARD_HEADERS
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
@@ -365,34 +395,39 @@ class ExcelExporter(BaseExporter):
                 _sx(', '.join(g.target_keywords)),
                 len(g.headlines),
                 len(g.descriptions),
-                len(g.negative_keywords)
+                len(g.negative_keywords),
+                *[_sx(v) if isinstance(v, str) else v for v in standard_cells(g)],
             ])
 
         ws.column_dimensions['A'].width = 30
         ws.column_dimensions['B'].width = 40
+        for col in 'HIJKL':
+            ws.column_dimensions[col].width = 40
 
         # Başlıklar
         ws = wb.create_sheet("Başlıklar")
-        headers = ['Grup', 'Başlık', 'Tip', 'DKI']
+        headers = ['Grup', 'Başlık', 'Tip', 'DKI', 'İnceleme']
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
         for g in ads.ad_groups:
             for h in g.headlines:
-                ws.append([_sx(g.group_name), _sx(h.headline_text), _sx(h.headline_type), '✔' if h.is_dki else ''])
+                ws.append([_sx(g.group_name), _sx(h.headline_text), _sx(h.headline_type), '✔' if h.is_dki else '',
+                           REVIEW_TEXT if h.review else ''])
 
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 35
 
         # Açıklamalar
         ws = wb.create_sheet("Açıklamalar")
-        headers = ['Grup', 'Açıklama', 'Tip']
+        headers = ['Grup', 'Açıklama', 'Tip', 'İnceleme']
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
         for g in ads.ad_groups:
             for d in g.descriptions:
-                ws.append([_sx(g.group_name), _sx(d.description_text), _sx(d.description_type)])
+                ws.append([_sx(g.group_name), _sx(d.description_text), _sx(d.description_type),
+                           REVIEW_TEXT if d.review else ''])
 
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 80
@@ -410,6 +445,16 @@ class ExcelExporter(BaseExporter):
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 25
         ws.column_dimensions['D'].width = 40
+
+        # Set uyarıları (iddia incelemesi) — yalnız varsa
+        if ads.set_warnings:
+            ws = wb.create_sheet("Set Uyarıları")
+            ws.append(SET_WARNING_HEADERS)
+            self._style_header(ws, 1, len(SET_WARNING_HEADERS))
+            for w in ads.set_warnings:
+                ws.append([_sx(c) for c in set_warning_cells(w)])
+            ws.column_dimensions['C'].width = 40
+            ws.column_dimensions['F'].width = 40
 
     def _add_social_sheets(self, wb: Workbook, social):
         """Sosyal medya sheetleri — TAM alan matrisi (kesme yok, plan §8)."""

@@ -150,12 +150,23 @@ export default function KeywordAnchorReview({
 
   return (
     <div className="bpx-fade">
-      <h3 className="bpx-h3">Keyword Önerileri ve Marka Odakları</h3>
+      {workspace.pending_focus_url && (
+        <ol className="bpx-wizard-steps" aria-label="Akış adımları">
+          {['Profil', 'Rakipler', 'Anahtar Kelimeler', 'Alt sayfa'].map((label, i) => (
+            <li key={label} aria-current={i === 2 ? 'step' : undefined}>
+              {label}
+            </li>
+          ))}
+        </ol>
+      )}
+      <h3 className="bpx-h3">Anahtar Kelime Önerileri ve Marka Odakları</h3>
       <p className="bpx-sub">Detaylı hacim ve rekabet analizi bir sonraki adımda yapılacak.</p>
 
       {profileDirty && (
         <div className="bpx-stale">
-          <span>Marka odakları güncellendi; keyword önerileri eski profile göre üretilmişti.</span>
+          <span>
+            Marka odakları güncellendi; anahtar kelime önerileri eski profile göre üretilmişti.
+          </span>
           <button
             type="button"
             className="bpx-btn-raised"
@@ -163,13 +174,13 @@ export default function KeywordAnchorReview({
             disabled={busy}
           >
             {regenerating ? <Loader2 size={13} className="spin-icon" /> : <RefreshCw size={13} />}
-            Keyword önerilerini yeniden üret
+            Anahtar kelime önerilerini yeniden üret
           </button>
         </div>
       )}
 
       <div className="bpx-kw-header">
-        <h4 className="bpx-h4">Önerilen Keywordler ({keywords.length})</h4>
+        <h4 className="bpx-h4">Önerilen Anahtar Kelimeler ({keywords.length})</h4>
         <button
           type="button"
           className="bpx-btn-raised"
@@ -200,7 +211,7 @@ export default function KeywordAnchorReview({
             <input
               autoFocus
               value={newKeyword}
-              placeholder="Yeni keyword…"
+              placeholder="Yeni kelime…"
               onChange={(e) => setNewKeyword(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') commitNewKeyword()
@@ -312,7 +323,9 @@ export default function KeywordAnchorReview({
           ) : (
             <Check size={16} strokeWidth={2.4} />
           )}
-          Onayla ve analize geç
+          {workspace.pending_focus_url
+            ? 'Markayı onayla ve alt sayfaya devam et'
+            : 'Onayla ve analize geç'}
         </button>
       </div>
     </div>

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, Query
 
 from app.core.constants import ADS_TASK_STALE_SECONDS
 from app.database.models import AdGenerationSet, AdGroup, ScoringRun, TaskResult
+from app.generators.claim_review import set_needs_review
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,8 @@ def reconcile_stale_ads(db: Session, scoring_run_id: int) -> None:
         if linked_set is None or linked_set.status == SET_GENERATING:
             task.status = "failed"
             task.error_message = (
-                "Stale: ADS task süre aşımı — üretim yarım kaldı"
+                "Reklam üretimi zaman aşımına uğradı ve yarım kaldı. "
+                "Reklam üretimini yeniden başlatın."
             )
             task.completed_at = _utcnow()
             if linked_set is not None:
@@ -153,6 +155,82 @@ def reconcile_stale_ads(db: Session, scoring_run_id: int) -> None:
             )
 
 
+def reconcile_stale_ads_on_read(
+    *,
+    task_id: Optional[str] = None,
+    scoring_run_id: Optional[int] = None,
+    brand_profile_id: Optional[int] = None,
+) -> int:
+    """OKUMA anında ADS uzlaştırması (dispatch'e bağımlı kalmasın).
+
+    Frontend running ADS task'ı görünce "üret"i kapatır → dispatch (ve onun
+    içindeki reconcile) hiç çalışmaz. Burada: önce ucuz, kilitsiz sorgu (eşiği
+    aşmış ADS task'ı / orphan generating set); yalnız varsa run satırı kilitlenip
+    `reconcile_stale_ads` (semantik DEĞİŞMEDİ) çağrılır. Kilit `dispatch_ads_generation`
+    ile AYNI (ScoringRun) ve tek kilittir; `skip_locked` ile kilitli run (dispatch,
+    başka okuyucu ya da çağıranın kendi oturumu) BEKLENMEZ — sonraki okumada
+    yeniden denenir, deadlock/askıda kalma olmaz. Uzlaştırılan run sayısını döndürür.
+    """
+    from sqlalchemy import func, select
+
+    from app.database.connection import SessionLocal
+
+    cutoff = _utcnow() - timedelta(seconds=ADS_TASK_STALE_SECONDS)
+    run_scope = None
+    if brand_profile_id is not None:
+        run_scope = select(ScoringRun.id).where(ScoringRun.brand_profile_id == brand_profile_id)
+
+    def scoped(query, run_col, task_col):
+        if task_id is not None:
+            query = query.filter(task_col == task_id)
+        if scoring_run_id is not None:
+            query = query.filter(run_col == scoring_run_id)
+        if run_scope is not None:
+            query = query.filter(run_col.in_(run_scope))
+        return query
+
+    session = SessionLocal()
+    reconciled = 0
+    try:
+        stale_tasks = scoped(
+            session.query(TaskResult.scoring_run_id).filter(
+                TaskResult.task_type == "ads",
+                TaskResult.status.in_(("pending", "running")),
+                func.coalesce(TaskResult.started_at, TaskResult.created_at) < cutoff,
+                TaskResult.scoring_run_id.isnot(None),
+            ),
+            TaskResult.scoring_run_id, TaskResult.task_id)
+        stale_sets = scoped(
+            session.query(AdGenerationSet.scoring_run_id).filter(
+                AdGenerationSet.status == SET_GENERATING,
+                AdGenerationSet.created_at < cutoff,
+            ),
+            AdGenerationSet.scoring_run_id, AdGenerationSet.task_id)
+        run_ids = sorted({r[0] for r in stale_tasks.all()} | {r[0] for r in stale_sets.all()})
+        session.rollback()  # okuma transaction'ı kilit almadan kapanır
+
+        for run_id in run_ids:
+            locked = (
+                session.query(ScoringRun.id)
+                .filter(ScoringRun.id == run_id)
+                .with_for_update(skip_locked=True)
+                .first()
+            )
+            if locked is None:  # kilitli (dispatch/başka okuyucu) ya da silinmiş
+                session.rollback()
+                continue
+            reconcile_stale_ads(session, run_id)
+            session.commit()
+            reconciled += 1
+        return reconciled
+    except Exception as exc:
+        session.rollback()
+        logger.error(f"ADS okuma-ani uzlaştırması başarısız: {exc}")
+        return reconciled
+    finally:
+        session.close()
+
+
 def has_successful_set(db: Session, scoring_run_id: int) -> bool:
     return (
         db.query(AdGenerationSet.id)
@@ -188,7 +266,7 @@ def dispatch_ads_generation(
         .first()
     )
     if run is None:
-        raise ValueError(f"Scoring run {scoring_run_id} bulunamadı")
+        raise ValueError("Analiz bulunamadı.")
 
     # 2a. Stale reconciliation (kilit altında)
     reconcile_stale_ads(db, scoring_run_id)
@@ -260,7 +338,8 @@ def mark_dispatch_failed(db: Session, task_id: str, error: str) -> None:
     task = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
     if task is not None:
         task.status = "failed"
-        task.error_message = f"Enqueue hatası: {error[:200]}"
+        logger.error(f"ADS enqueue failed for task {task_id}: {error[:200]}")
+        task.error_message = "Reklam görevi kuyruğa alınamadı. Lütfen tekrar deneyin."
         task.completed_at = _utcnow()
     gen_set = (
         db.query(AdGenerationSet)
@@ -323,6 +402,11 @@ def finalize_ads_success(
         is not None
     )
     new_status = SET_DRAFT if prior_success else SET_ACTIVE
+
+    # N1 (plan_iddia_denetimi rev.4): inceleme isareti tasiyan set ilk uretim olsa bile
+    # otomatik active OLMAZ; kullanici activate ile acikca degerlendirir.
+    if set_needs_review(warnings):
+        new_status = SET_DRAFT
 
     # Staleness yarışı (codex bulgusu): üretim SÜRERKEN kanal ataması
     # yenilendiyse set is_stale=True işaretlenmiştir. is_stale ASLA burada
@@ -451,18 +535,18 @@ def activate_set(db: Session, gen_set: AdGenerationSet) -> AdGenerationSet:
     """
     if gen_set.status not in (SET_DRAFT, SET_ARCHIVED):
         raise ValueError(
-            f"Yalnız draft/archived setler aktive edilebilir (durum: {gen_set.status})"
+            "Yalnız tamamlanmış taslak veya arşivlenmiş reklam setleri etkinleştirilebilir."
         )
     if gen_set.is_stale:
         raise ValueError(
-            "Stale set aktive edilemez — kanal ataması yenilendi, "
-            "yeni ADS üretimi gerekli"
+            "Bu reklam seti güncel değil (kanal ataması yenilendi); etkinleştirilemez. "
+            "Reklam üretimini yeniden başlatın."
         )
     group_count = (
         db.query(AdGroup).filter(AdGroup.generation_set_id == gen_set.id).count()
     )
     if group_count == 0:
-        raise ValueError("Boş set aktive edilemez")
+        raise ValueError("Reklam grubu olmayan bir reklam seti etkinleştirilemez.")
 
     # Run kilidi: eşzamanlı aktivasyon/dispatch serileşir
     db.query(ScoringRun).filter(

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.engine import ai_runner as AI
 from app.core.engine.persistence import (
-    StageContext, load_stage_results, write_stage_results,
+    StageContext, load_stage_results, stage_route, write_stage_results,
 )
 from app.core.engine.seo import prompts as SEOP      # RELEVANCE sablonu ORTAK
 from app.core.engine.social import pipeline as PL
@@ -69,10 +69,12 @@ def social_models() -> Dict[str, str]:
                     else SOCIAL_MODEL) for stage in SOCIAL_STAGES}
 
 
-def _context(stage: str, firm_block_sha256: str) -> StageContext:
-    return StageContext(model=social_models()[stage],
+def _context(run: ScoringRun, stage: str, firm_block_sha256: str) -> StageContext:
+    # provider+model MUHURLU manifest'ten (global route'tan DEGIL)
+    provider, model = stage_route(run, stage)
+    return StageContext(model=model,
                         prompt_sha=social_prompt_shas()[stage],
-                        firm_block_sha256=firm_block_sha256)
+                        firm_block_sha256=firm_block_sha256, provider=provider)
 
 
 def _parse_relevance_response(raw: Any,
@@ -137,7 +139,7 @@ def _freeze_normbounds(db: Session, *, run: ScoringRun,
                        survivors: Sequence[Mapping[str, Any]],
                        firm_sha: str) -> Optional[PL.ENG.NormBounds]:
     """NormBounds'i mevcut run-scope persistence ile bir kez dondurur."""
-    ctx = _context(STAGE_NORMBOUNDS, firm_sha)
+    ctx = _context(run, STAGE_NORMBOUNDS, firm_sha)
     expected = _bounds_payload(survivors)
     cached = load_stage_results(db, run=run, stage=STAGE_NORMBOUNDS,
                                 scope_type="run", context=ctx)
@@ -172,7 +174,7 @@ def _stage(db: Session, *, run: ScoringRun, stage: str,
         alani `keyword_id`dir (`{"results": ...}` sarmali YOKTUR).
     Bu yuzden `result_key` / `response_id_field` asamaya gore verilir.
     """
-    ctx = _context(stage, firm_sha)
+    ctx = _context(run, stage, firm_sha)
     cached = load_stage_results(db, run=run, stage=stage,
                                 scope_type=SCOPE_KEYWORD, context=ctx)
     out: Dict[int, Dict[str, Any]] = {int(k): dict(v) for k, v in cached.items()}
@@ -180,8 +182,8 @@ def _stage(db: Session, *, run: ScoringRun, stage: str,
 
     def _job(batch):
         def run():                       # WORKER: yalniz AI + dogrulama
-            got = AI.run_batch(ai, stage=stage, model=SOCIAL_MODEL,
-                               thinking_level=SOCIAL_THINKING, rows=batch,
+            got = AI.run_batch(ai, stage=stage, model=ctx.model,
+                               provider=ctx.provider, thinking_level=SOCIAL_THINKING, rows=batch,
                                build_prompt=build_prompt, schema=schema,
                                max_tokens=max_tokens, result_key=result_key,
                                response_id_field=response_id_field,

@@ -121,6 +121,12 @@ def _refuse_legacy_social_attempt(finalize_failure, *, attempt_id: int,
 
 # ==================== SEO+GEO TASKS ====================
 
+SEO_REASON_AI = "AI yanıtı işlenemedi"
+SEO_REASON_UNEXPECTED = "Üretim sırasında beklenmeyen bir hata oluştu"
+SEO_REASON_NOT_FOUND = "Kelime kaydı bulunamadı"
+SEO_FAILED_KEYWORDS_CAP = 50  # parent result_data şişmesin
+
+
 @celery_app.task(
     bind=True,
     name="generation.seo_chunk",
@@ -133,6 +139,8 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
     Tek SEO chunk'ını işler.
     Max 10 kelime, max 10 dakika.
     """
+    from app.core.channel.ai_json import AIJsonParseError
+    from app.generators.ai_service import AIResponseError
     from app.generators.seo_geo.seo_geo_generator import SEOGeoGenerator
     from app.schemas.seo_geo import SEOGEOGenerateRequest
     from app.database.models import Keyword
@@ -162,9 +170,12 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
         generator = SEOGeoGenerator(db, ai)
 
         results = []
+        failed_keywords = []  # {"keyword", "reason"} — kullanıcıya gösterilen güvenli özet
+        claim_blocked = 0  # son-metin iddia kapısı fail → publish_review: review_required
         for i, kw_id in enumerate(keyword_ids):
             kw = db.query(Keyword).filter(Keyword.id == kw_id).first()
             if not kw:
+                failed_keywords.append({"keyword": f"#{kw_id}", "reason": SEO_REASON_NOT_FOUND})
                 continue
             
             try:
@@ -181,19 +192,27 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
                 
                 if content:
                     results.append(content.get('id'))
+                    if (content.get('claim_check') or {}).get('status') == 'fail':
+                        claim_blocked += 1
                     logger.info(f"SEO content generated for: {kw.keyword}")
+                else:
+                    failed_keywords.append({"keyword": kw.keyword, "reason": SEO_REASON_UNEXPECTED})
             except Exception as e:
                 logger.error(f"SEO content failed for {kw.keyword}: {e}")
+                reason = SEO_REASON_AI if isinstance(e, (AIJsonParseError, AIResponseError))                     else SEO_REASON_UNEXPECTED
+                failed_keywords.append({"keyword": kw.keyword, "reason": reason})
                 continue
         
         usage = collector.finalize()
-        return {'chunk_id': task_id, 'content_ids': results, 'count': len(results), 'usage': usage}
+        return {'chunk_id': task_id, 'content_ids': results, 'count': len(results),
+                'requested': len(keyword_ids), 'failed_keywords': failed_keywords,
+                'claim_blocked': claim_blocked, 'usage': usage}
 
     except SoftTimeLimitExceeded as e:
         logger.error(f"SEO chunk soft time limit exceeded: {e}")
         raise
-    except Exception as e:
-        logger.error(f"SEO chunk failed: {e}")
+    except Exception:
+        logger.exception("SEO chunk failed")
         raise
 
     finally:
@@ -224,24 +243,30 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
         return {'status': 'failed', 'reason': LEGACY_RUN_READ_ONLY}
 
     total_ids = []
+    failed_keywords = []
     for r in results:
         if r and 'content_ids' in r:
             total_ids.extend(r['content_ids'])
+            failed_keywords.extend(r.get('failed_keywords') or [])
+    # Sözleşme (frontend): result_data.requested_count + failed_keywords[].keyword/.reason
+    requested_count = sum(int((r or {}).get('requested') or 0) for r in results)
+    failed_keywords = failed_keywords[:SEO_FAILED_KEYWORDS_CAP]
 
     # Havuz bos olamaz (endpoint 404 doner) — 0 icerik, tum kelimelerin
     # uretimde elendigi anlamina gelir. "Tamamlandi" diye yutma, failed isaretle
     # ki kullanici Gorevler'de ve kanal sayfasinda gercegi gorsun.
     if not total_ids:
         error_message = (
-            "SEO icerik uretimi hic icerik uretemedi: tum kelimeler AI yaniti "
-            "islenemedigi icin atlandi. Yeniden deneyin; sorun surerse "
-            "worker loglarina bakin."
+            "SEO içerik üretimi hiç içerik üretemedi: hiçbir kelime tamamlanamadı "
+            "(ayrıntı için başarısız kelime listesine bakın). Yeniden deneyin."
         )
         update_task_status(
             parent_task_id,
             status='failed',
             progress=100,
-            result_data={'content_ids': [], 'total': 0, 'scoring_run_id': scoring_run_id},
+            result_data={'content_ids': [], 'total': 0, 'scoring_run_id': scoring_run_id,
+                         'requested_count': requested_count,
+                         'failed_keywords': failed_keywords},
             error_message=error_message
         )
         logger.error(f"SEO bulk produced zero contents for run {scoring_run_id}")
@@ -251,7 +276,12 @@ def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: 
         parent_task_id,
         status='completed',
         progress=100,
-        result_data={'content_ids': total_ids, 'total': len(total_ids)}
+        result_data={
+            'content_ids': total_ids, 'total': len(total_ids),
+            'requested_count': requested_count,
+            'failed_keywords': failed_keywords,
+            'claim_blocked_count': sum(int((r or {}).get('claim_blocked') or 0) for r in results),
+        }
     )
 
     logger.info(f"SEO bulk completed: {len(total_ids)} contents")
@@ -264,7 +294,7 @@ def finalize_seo_bulk_error(parent_task_id: str, scoring_run_id: int):
     Marks the parent seo_content task as failed when any chunk fails.
     """
     error_message = (
-        "SEO bulk generation failed: at least one chunk timed out or crashed."
+        "SEO içerik üretimi durdu: en az bir parça zaman aşımına uğradı veya beklenmeyen bir hata aldı. Lütfen tekrar deneyin."
     )
     update_task_status(
         parent_task_id,
@@ -330,6 +360,26 @@ def start_bulk_seo_generation(scoring_run_id: int, keyword_ids: List[int], tone:
 
 # ==================== GOOGLE ADS TASKS ====================
 
+def _standard_shortfalls(groups) -> list:
+    """15 başlık / 4 KW'li açıklama / 3 CTA hedefinden eksik kalan gruplar (yalnız sıfırdan farklılar)."""
+    return [
+        {"group": g.name, "missing_headlines": g.missing_headlines,
+         "missing_kw_descriptions": g.missing_kw_descriptions,
+         "missing_cta": g.missing_cta}
+        for g in groups if g.missing_headlines or g.missing_kw_descriptions or g.missing_cta
+    ]
+
+
+def _keyword_decisions(groups) -> list:
+    """KW başına AI kararları (yalnız bu üretim için bilgi; DB'ye yazılmaz).
+
+    `reason` AI'ın öz-bildirimidir, doğrulanmış neden DEĞİLDİR (canlıda 26 karakterlik
+    KW'ye "30 karakteri aşıyor" dedi); uzunluk/kapsam için kodun raporu esastır.
+    """
+    return [{"group": g.name, "source": "ai_self_report_unverified",
+             "decisions": g.keyword_decisions} for g in groups if g.keyword_decisions]
+
+
 @celery_app.task(bind=True, name="generation.ads_generate", time_limit=900, max_retries=2)
 def generate_ads_task(
     self,
@@ -359,6 +409,7 @@ def generate_ads_task(
     AI'a başlamadan VE sonuç yazmadan önce set 'generating' doğrulanır.
     """
     from app.generators.ads.ads_generator import AdsGenerator
+    from app.generators.claim_review import ads_set_warnings
     from app.generators.ads.generation_sets import (
         SET_GENERATING,
         finalize_ads_failure,
@@ -372,6 +423,7 @@ def generate_ads_task(
     task_id = self.request.id
     collector = None  # exception yolunda da finalize edilir (Codex v8-2)
     ai = None  # finally'de kapatılır (plan G)
+    set_warnings: list = []  # AdGenerationSet.warnings (atılan negatifler, plan 2.1)
 
     # İdempotent: kayıt endpoint dispatch kilidi altında zaten yaratıldı
     create_task_record(task_id, "ads", scoring_run_id)
@@ -394,7 +446,7 @@ def generate_ads_task(
             # Set'siz çağrı desteklenmez (dispatch her zaman set yaratır)
             update_task_status(
                 task_id, status="failed",
-                error_message="generation_set_id eksik — dispatch akışı kullanılmalı",
+                error_message="Reklam üretimi başlatılamadı. Reklam üretimini yeniden başlatın.",
             )
             return {"status": "failed", "reason": "missing_generation_set"}
 
@@ -427,8 +479,8 @@ def generate_ads_task(
             finalize_ads_failure(
                 db, gen_set,
                 error_message=(
-                    "Kanal ataması üretim başlamadan yenilendi — set bayatladı. "
-                    "Yeni ADS üretimi çalıştırın."
+                    "Kanal ataması üretim başlamadan yenilendi; bu reklam seti güncel değil. "
+                    "Reklam üretimini yeniden başlatın."
                 ),
             )
             logger.warning(
@@ -452,7 +504,7 @@ def generate_ads_task(
             if source_group is None or source_set_id is None:
                 finalize_ads_failure(
                     db, gen_set,
-                    error_message="Regenerate kaynağı bulunamadı",
+                    error_message="Yeniden üretilecek reklam grubu bulunamadı. Sayfayı yenileyip reklam setlerini kontrol edin.",
                 )
                 return {"status": "failed", "reason": "missing_source"}
 
@@ -462,16 +514,24 @@ def generate_ads_task(
                 source_set_id, gen_set.id, exclude_group_id=source_group_id
             )
             update_task_status(task_id, progress=40)
-            generator.regenerate_group_into_set(
+            regenerated = generator.regenerate_group_into_set(
                 source_group, gen_set.id,
                 brand_name=brand_name or "", brand_usp=brand_usp or "",
                 trusted_brand_usp=trusted_brand_usp or "",
+            )
+            cloned_review = generator.cloned_claim_review
+            set_warnings = ads_set_warnings(
+                regenerated.dropped_negatives,
+                [*cloned_review["findings"], *regenerated.claim_findings],
+                [*cloned_review["applied"], *regenerated.claim_applied],
             )
             groups_count = cloned + 1
             failed_groups = 0
             extra = {"operation": "group_regenerate",
                      "source_set_id": source_set_id,
                      "source_group_id": source_group_id,
+                     "standard_shortfalls": _standard_shortfalls([regenerated]),
+                     "keyword_decisions": _keyword_decisions([regenerated]),
                      "usage": collector.finalize()}
         else:
             request = AdsGenerateRequest(
@@ -490,10 +550,17 @@ def generate_ads_task(
             )
             groups_count = result.total_groups
             failed_groups = result.failed_groups
+            set_warnings = ads_set_warnings(
+                [w for g in result.ad_groups for w in (g.dropped_negatives or [])],
+                [f for g in result.ad_groups for f in g.claim_findings],
+                [f for g in result.ad_groups for f in g.claim_applied],
+            )
             extra = {
                 "operation": "full",
                 "headline_count": result.total_headlines,
                 "total_keywords": result.total_keywords,
+                "standard_shortfalls": _standard_shortfalls(result.ad_groups),
+                "keyword_decisions": _keyword_decisions(result.ad_groups),
                 "usage": collector.finalize(),
             }
 
@@ -501,12 +568,12 @@ def generate_ads_task(
             if groups_count == 0:
                 if result.total_keywords == 0:
                     error_message = (
-                        "ADS havuzu bos - once kanal atamasi yapin, sonra reklam uretin."
+                        "ADS havuzu boş — önce kanal ataması yapın, sonra reklam üretin."
                     )
                 else:
                     error_message = (
-                        "Hic reklam grubu uretilemedi: AI yanitlari islenemedi. "
-                        "Yeniden deneyin; sorun surerse worker loglarina bakin."
+                        "Hiç reklam grubu üretilemedi: yapay zekâ yanıtları işlenemedi. "
+                        "Yeniden deneyin; sorun sürerse sistem yöneticinize başvurun."
                     )
                 finalize_ads_failure(
                     db, gen_set, error_message=error_message,
@@ -528,6 +595,7 @@ def generate_ads_task(
             db, gen_set,
             groups_count=groups_count,
             failed_groups=failed_groups,
+            warnings=set_warnings,
             extra_result_data=extra,
         )
         if new_status == "aborted":
@@ -544,8 +612,9 @@ def generate_ads_task(
             "set_status": new_status,
         }
 
-    except Exception as e:
-        logger.error(f"Ads generation failed: {e}")
+    except Exception:
+        logger.exception("Ads generation failed")
+        ads_error = "Reklam üretimi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin."
         try:
             # Hata yolunda da harcanan token'lar TaskResult'a taşınır
             usage_extra = (
@@ -555,14 +624,14 @@ def generate_ads_task(
                 # Set finalize edilmişse (geç hata) DOKUNMAZ — completed set
                 # failed'a düşürülmez (finalize_ads_failure içinde korunur)
                 finalize_ads_failure(
-                    db, gen_set, error_message=str(e),
+                    db, gen_set, error_message=ads_error,
                     extra_result_data=usage_extra,
                 )
             else:
-                update_task_status(task_id, status="failed", error_message=str(e))
+                update_task_status(task_id, status="failed", error_message=ads_error)
         except Exception as inner:
             logger.error(f"Ads failure finalize hatası: {inner}")
-            update_task_status(task_id, status="failed", error_message=str(e))
+            update_task_status(task_id, status="failed", error_message=ads_error)
         raise
 
     finally:
@@ -612,8 +681,8 @@ def generate_social_task(
             status='failed',
             progress=100,
             error_message=(
-                "Bu gorev kaldirildi. Yeni sosyal icerik akisi icin brief "
-                "uclarini kullanin (/generation/social/briefs)."
+                "Bu toplu sosyal medya üretimi kaldırıldı. Sosyal medya içeriklerini "
+                "Sosyal Medya sayfasındaki brief akışıyla oluşturun."
             ),
         )
         db.close()
@@ -678,8 +747,8 @@ def generate_social_task(
                 progress=100,
                 result_data=result_data,
                 error_message=(
-                    "Tum icerikler desteklenmeyen iddia nedeniyle reddedildi. "
-                    "Ilgili fikirleri yeniden uretin."
+                    "Tüm içerikler desteklenmeyen iddia nedeniyle reddedildi. "
+                    "İlgili fikirleri yeniden üretin."
                 ),
             )
             logger.error("Social bulk: all contents claim-rejected")
@@ -698,7 +767,7 @@ def generate_social_task(
         )
         return {'status': 'completed', 'total_contents': result.total_contents}
         
-    except Exception as e:
+    except Exception:
         usage = collector.finalize() if collector is not None else None
         update_task_status(
             task_id,
@@ -710,9 +779,9 @@ def generate_social_task(
                 'policy_warnings': bulk_policy,
                 'usage': usage,
             },
-            error_message=str(e),
+            error_message="Sosyal içerik üretimi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin.",
         )
-        logger.error(f"Social generation failed: {e}")
+        logger.exception("Social generation failed")
         raise
 
     finally:
@@ -800,13 +869,13 @@ def social_contents_task(
         if not content_ids:
             if warnings or policy_warnings:
                 error_message = (
-                    "Tum icerikler desteklenmeyen iddia nedeniyle reddedildi. "
-                    "Ilgili fikirleri yeniden uretin."
+                    "Tüm içerikler desteklenmeyen iddia nedeniyle reddedildi. "
+                    "İlgili fikirleri yeniden üretin."
                 )
             else:
                 error_message = (
-                    "Hic sosyal icerik uretilemedi: fikirler bulunamadi veya AI "
-                    "yanitlari islenemedi. Yeniden deneyin."
+                    "Hiç sosyal medya içeriği üretilemedi: fikirler bulunamadı veya "
+                    "yapay zekâ yanıtları işlenemedi. Yeniden deneyin."
                 )
             update_task_status(
                 task_id,
@@ -843,7 +912,7 @@ def social_contents_task(
         )
         return {'status': 'completed', 'total': len(content_ids), 'warnings': warnings}
 
-    except Exception as e:
+    except Exception:
         usage = collector.finalize() if collector is not None else None
         update_task_status(
             task_id,
@@ -858,9 +927,9 @@ def social_contents_task(
                 'policy_warnings': policy_warnings,
                 'usage': usage,
             },
-            error_message=str(e),
+            error_message="Sosyal içerik üretimi beklenmeyen bir hata nedeniyle durdu. Lütfen tekrar deneyin.",
         )
-        logger.error(f"Social contents generation failed: {e}")
+        logger.exception("Social contents generation failed")
         raise
 
     finally:
@@ -933,7 +1002,7 @@ def _finalize_social_ideas_bootstrap_failure(
             attempt_id=attempt_id,
             task_id=task_id,
             reason_code="worker_bootstrap_failed",
-            error_message="Fikir üretimi worker hazırlığı tamamlanamadı.",
+            error_message="Fikir üretimi sunucuda başlatılamadı. Fikir üretimini yeniden başlatın.",
         )
         db.commit()
     except Exception:
@@ -1110,7 +1179,7 @@ def _finalize_social_ideas_retry_bootstrap_failure(
             attempt_id=attempt_id,
             task_id=task_id,
             reason_code="worker_bootstrap_failed",
-            error_message="Fikir üretimi worker hazırlığı tamamlanamadı.",
+            error_message="Fikir üretimi sunucuda başlatılamadı. Fikir üretimini yeniden başlatın.",
         )
         db.commit()
     except Exception:
@@ -1301,7 +1370,7 @@ def _finalize_social_contents_bootstrap_failure(
             attempt_id=attempt_id,
             task_id=task_id,
             reason_code="worker_bootstrap_failed",
-            error_message="Sosyal içerik worker hazırlığı tamamlanamadı.",
+            error_message="Sosyal medya içerik üretimi sunucuda başlatılamadı. İçerik üretimini yeniden başlatın.",
         )
         db.commit()
     except Exception:

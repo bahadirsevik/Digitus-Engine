@@ -6,6 +6,7 @@ Contains:
 2. ADS_RSA_GENERATION_PROMPT - Headlines + Descriptions + Negatives
 3. HEADLINE_REGENERATION_PROMPT - Single headline fix
 """
+from app.generators.claim_lexicon import CLAIM_REPAIR_RULE
 
 # ==================== KEYWORD GROUPING PROMPT ====================
 
@@ -14,19 +15,25 @@ ADS_GROUPING_PROMPT = '''
 Sen deneyimli bir Google Ads uzmanısın. Kelimeleri optimize reklam gruplarına ayırma konusunda uzmansın.
 
 # GÖREV
-Aşağıdaki anahtar kelimeleri reklam gruplarına ayır.
+Aşağıdaki {keyword_count} anahtar kelimeyi TAM {group_count} reklam grubuna ayır.
 
 # KURALLAR
-1. Her grupta 3-7 kelime olmalı (çok az = verimsiz, çok fazla = alakasız eşleşme)
-2. Aynı SATIN ALMA NİYETİndeki kelimeler bir grupta olmalı
-3. Farklı niyetler farklı gruplarda:
+1. TAM {group_count} grup oluştur; grupların kelime sayıları tam olarak şunlar olmalı: {group_sizes}
+   Her kelime TAM BİR grupta yer almalı (kelime atlama, tekrar etme).
+2. Önce aynı ÜRÜN ve aynı ARAMA NİYETİndeki kelimeleri bir araya getir; küçük temaları
+   en yakın temayla birleştir, gerekirse grup adını/temasını genişlet
+   Grup adı ve teması gruptaki TÜM kelimeleri kapsamalı: hedef boyuta ulaşmak için farklı
+   hizmetler/ürünler birleştirildiyse adı ve temayı buna göre genişlet
+   (örn: "SEO ve Web Tasarım Hizmetleri"); gruptaki kelimelerin yalnızca bir kısmını
+   anlatan dar bir ad verme
+3. Niyet örnekleri (gruplar bu kadar ayrıntılı bölünemiyorsa en yakın niyette birleştir):
    - Satın alma niyeti (laptop al, notebook satın al)
    - Araştırma niyeti (laptop özellikleri, laptop karşılaştır)
    - Fiyat odaklı (ucuz laptop, laptop fiyatları)
    - Commercial (en iyi laptop)
 4. Her gruba AÇIKLAYICI isim ver (örn: "Laptop Satın Alma - Fiyat Odaklı")
 5. Kötü grup isimleri kullanma: "Grup 1", "Kelimeler A"
-6. Toplam grup sayısı yaklaşık: ceil(kelime sayısı / 5)
+6. Grup sayısını ve boyutlarını yukarıdaki değerlerden değiştirme
 
 # ANAHTAR KELİMELER
 {keywords_json}
@@ -135,6 +142,8 @@ Dynamic başlık yazarken TAM OLARAK bu formatı kullan:
 
 ## Zorunlu
 - Minimum 10 adet negatif kelime üret
+- Hedef anahtar kelimeleri veya bunların parçalarını negatif anahtar kelime yapma
+  (ör. hedef "ucuz laptop" ise "ucuz" veya "laptop" negatif olamaz)
 
 ## Kategoriler
 | Kategori | Örnekler | Neden |
@@ -179,6 +188,60 @@ Sadece JSON döndür, açıklama ekleme.
 '''
 
 
+# ==================== RSA CANDIDATES PROMPT (15 KW standardı) ====================
+# Üretimde kullanılan aday prompt'u ADS_RSA_GENERATION_PROMPT'tan TÜRETİLİR:
+# kaynak sabit benchmark/idiomatic_prompts/manifest.json'da SHA ile mühürlü
+# (tests/unit/test_idiomatic_prompts.py) — sabitin kendisi DEĞİŞTİRİLMEZ.
+# Yerleştirme noktası kaybolursa import anında patlar (sessiz kayma olmasın).
+
+_KEYWORD_USE_BLOCK = '''# ANAHTAR KELİME KULLANIMI (ÖNEMLİ)
+- Başlıklar ve açıklamalar AKICI, DOĞAL ve dilbilgisi doğru olmalı (çıktı dilinde); arama sorgusu gibi
+  okunan, eksik ekli ya da yalnızca kelimeleri art arda sıralayan metin yazma
+- Bir anahtar kelimeyi yalnızca başlık AKICI, DOĞAL olduğunda, BÜTÜN hâlinde (ek
+  almadan, kelimeleri bölmeden, aynı sırada) kullan. Doğal olmuyorsa o kelime için başlık
+  YAZMA; bu kabul edilen bir sonuçtur. Kapsam sayısı için dilbilgisini ASLA bozma
+- Başlıkları ve açıklamaları BU GRUBUN anahtar kelimelerinden ve temasından üret. Marka ve
+  ürün bilgisini yalnızca grubun temasıyla ilgili olduğu ölçüde kullan; markanın bu grupla
+  ilgisi olmayan hizmetlerini başlık veya açıklamaya taşıma
+- BOZUK örnekler (YAZMA): "Instagram Reklam Verme İncele", "TikTok Reklam Verme Başlat",
+  "Facebook Reklam Vermek İçin", "Sosyal Medya Hizmetleri Al", "Sosyal Medya Danışmanlık Al",
+  "Web Sitesi Tasarimi" (ASCII, Türkçe karaktersiz), "B2B Odaklı Web Ajans", "SEO Ajansı İstanbul".
+  Bunun yerine aynı anlamı çıktı dilinde doğal bir ifadeyle yaz, ör. "Facebook'ta Reklam Verin" (kullanılabilir
+  reklam metnidir, tam kelime kapsamı sayılmaz)
+- Açıklamalarda da aynı doğallık kuralı geçerli; bozuk kalıpları başlıktan açıklamaya TAŞIMA
+- Açıklamalarda, anahtar kelimelerden cümleye doğal yerleşenleri BÜTÜN hâlinde kullan; doğal
+  yerleşen yoksa kelime kullanma, diğer anahtar kelimeleri açıklamalara zorla doldurma
+- 30 karakterden uzun anahtar kelimeler başlığa SIĞMAZ; bunları yalnızca açıklamalarda kullan: {long_keywords}{cta_instruction}
+- "keyword_headlines" dizisine aşağıdaki HER anahtar kelime için bir kayıt yaz:
+  {{"keyword_id": <kimlik>, "headline": "<headlines içindeki o başlığın BİREBİR aynısı>", "reason": ""}}.
+  Doğal başlık olmuyorsa headline "" bırak, reason'a kısa neden yaz (ör. "30 karakteri aşıyor",
+  "doğal başlık olmuyor", "iddia kuralı"); bu kabul edilen bir sonuçtur. Kayıtta yazdığın başlık "headlines" içinde de olmalı
+Anahtar kelime kimlikleri (keyword_headlines için):
+{keyword_ids_block}
+{completion_block}
+---
+
+'''
+
+_CANDIDATES_EDITS = (
+    ("- 3-15 adet başlık üret", "- {headline_instruction}"),
+    ("- 2-4 adet açıklama üret", "- {description_instruction}"),
+    ("# NEGATİF ANAHTAR KELİME KURALLARI",
+     _KEYWORD_USE_BLOCK + "# NEGATİF ANAHTAR KELİME KURALLARI"),
+)
+
+
+def _derive_candidates_prompt(base: str) -> str:
+    for old, new in _CANDIDATES_EDITS:
+        if base.count(old) != 1:
+            raise RuntimeError(f"ADS_RSA_GENERATION_PROMPT kaymış, bulunamadı: {old!r}")
+        base = base.replace(old, new)
+    return base
+
+
+ADS_RSA_CANDIDATES_PROMPT = _derive_candidates_prompt(ADS_RSA_GENERATION_PROMPT)
+
+
 # ==================== HEADLINE REGENERATION PROMPT ====================
 
 HEADLINE_REGENERATION_PROMPT = '''
@@ -197,7 +260,7 @@ Aşağıdaki Google Ads başlığını MUTLAKA 30 karakter veya daha kısa olaca
 # KURALLAR
 1. Anlamı koru
 2. Anahtar kelimeyi mümkünse içer
-3. Akıcı ve doğal Türkçe olsun
+3. Akıcı ve doğal olsun (çıktı dilinde)
 4. Kısaltmalar kullanabilirsin (ve → &)
 5. Gereksiz kelimeleri çıkar
 
@@ -254,7 +317,8 @@ Metni bu iddialar OLMADAN yeniden yaz.
    iddiasız, nötr fayda/CTA metni yaz.
 3. Anahtar kelime bağlamını koru: {keyword}
 4. MUTLAKA {max_length} karakter veya daha kısa olsun.
-5. Akıcı ve doğal Türkçe olsun.
+5. Akıcı ve doğal olsun (çıktı dilinde).
+6. ''' + CLAIM_REPAIR_RULE + '''
 
 # ÇIKTI
 Sadece yeni metni yaz. Tırnak kullanma. Açıklama ekleme.

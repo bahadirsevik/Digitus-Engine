@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_ai
+from app.core.http_headers import content_disposition, download_filename
 from app.generators.ai_service import AIService
 from app.core.channel.channel_engine import ChannelEngine
 from app.core.channel.assignment_dispatcher import (
@@ -19,7 +20,7 @@ from app.core.channel.assignment_dispatcher import (
 )
 from app.core.engine_version_gate import require_non_legacy_run
 from app.core.scoring.state_machine import mark_run_content_stale
-from app.core.workspace import pool_freshness_for_run, verify_scoring_run
+from app.core.workspace import pool_freshness_for_run, verify_scoring_run, verify_workspace
 from app.database.models import ChannelPool
 from app.schemas.channel import ChannelAssignRequest
 
@@ -59,8 +60,8 @@ def run_channel_assignment(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Active content generation task exists for this run. "
-                "Wait until it completes before re-running channel assignment."
+                "Bu analiz için içerik üretimi sürüyor. Kanal atamasını "
+                "yeniden çalıştırmadan önce üretimin bitmesini bekleyin."
             ),
         )
 
@@ -299,14 +300,14 @@ def export_channel_pool_xlsx(
 
     channel = channel.upper()
     if channel not in ["ADS", "SEO", "SOCIAL"]:
-        raise HTTPException(status_code=400, detail="Invalid channel")
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. ADS, SEO veya Sosyal medya seçin.")
 
     scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
     require_fresh_channel_pool(db, scoring_run)
 
     rows = collect_channel_pool(db, run_id, channel)
     if not rows:
-        raise HTTPException(status_code=400, detail=f"{channel} havuzu boş — önce kanal ataması yapın")
+        raise HTTPException(status_code=400, detail=f"{'Sosyal medya' if channel == 'SOCIAL' else channel} havuzu boş — önce kanal ataması yapın.")
 
     wb = Workbook()
     ws = wb.active
@@ -342,11 +343,15 @@ def export_channel_pool_xlsx(
     wb.save(output)
     output.seek(0)
 
-    filename = f"digitus_{channel}_havuzu_run{run_id}.xlsx"
+    filename = download_filename(
+        verify_workspace(db, brand_profile_id),
+        f"{'Sosyal' if channel == 'SOCIAL' else channel}_Havuzu",
+        ".xlsx",
+    )
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -360,7 +365,7 @@ def get_single_channel_pool(
 ):
     """Get pool for a specific channel."""
     if channel.upper() not in ["ADS", "SEO", "SOCIAL"]:
-        raise HTTPException(status_code=400, detail="Invalid channel")
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. ADS, SEO veya Sosyal medya seçin.")
 
     scoring_run = verify_scoring_run(db, run_id, brand_profile_id)
     engine = ChannelEngine(db, ai)

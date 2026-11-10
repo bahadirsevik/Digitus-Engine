@@ -20,7 +20,7 @@ import {
   policyStaleFromError,
   scoringApi,
 } from '../services/api'
-import { getStoredTaskId, useTaskPolling } from '../hooks/useTaskPolling'
+import { getStoredTaskId, setStoredTaskId, useTaskPolling } from '../hooks/useTaskPolling'
 import type { ScoringRun } from '../types/models'
 import type { Idea } from '../stores/socialStore'
 import ErrorBanner from './ErrorBanner'
@@ -278,6 +278,8 @@ export default function SocialStepper({
     setError(null)
     setClaimWarnings([])
     setPolicyWarnings([])
+    // Başlatıldığı run'ın saklama anahtarı istek anında yakalanır
+    const startKey = contentsTaskKey
     try {
       // P7: içerik üretimi Celery task'ı olarak koşar; polling tamamlanınca
       // yalnız yeni content_ids çekilip 4. adıma geçilir
@@ -288,7 +290,17 @@ export default function SocialStepper({
         },
         activeWorkspace.id
       )
-      store.setTaskId((res.data as { task_id: string }).task_id)
+      const startedTaskId = (res.data as { task_id: string }).task_id
+      // Görev kimliği her zaman başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
+      // olsa bile kaybolmaz); global store yalnız kapsam hâlâ aynıysa güncellenir.
+      setStoredTaskId(startKey, startedTaskId)
+      const live = useSocialStore.getState()
+      const liveWorkspaceId = useBrandStore.getState().activeWorkspace?.id ?? null
+      const liveKey =
+        liveWorkspaceId && live.scoringRunId
+          ? `social_content:${liveWorkspaceId}:${live.scoringRunId}`
+          : 'social_content'
+      if (liveKey === startKey) store.setTaskId(startedTaskId)
     } catch (err) {
       setError(apiErrorMessage(err, 'İçerik üretimi başlatılamadı'))
     } finally {

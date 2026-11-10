@@ -10,7 +10,8 @@ import {
   policyStaleFromError,
 } from '../services/api'
 import { useBrandStore } from '../stores/brandStore'
-import { useExportJob } from '../hooks/useExportJob'
+import { EXPORT_POLL_FAILED_MESSAGE, useExportJob } from '../hooks/useExportJob'
+import { POLL_RECHECK_LABEL } from '../hooks/useTaskPolling'
 import { FORMAT_LABEL, jobTypeLabel } from './exportLabels'
 import './ExportMenu.css'
 
@@ -51,8 +52,19 @@ export default function ExportMenu({ channel, runId, disabled }: Props) {
   const [poolBusy, setPoolBusy] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  const { activeJob, history, error, busy, startExport, downloadJob, refreshHistory, setError } =
-    useExportJob(runId, activeWorkspace?.id)
+  const {
+    activeJob,
+    history,
+    historyError,
+    error,
+    busy,
+    pollFailed,
+    recheck,
+    startExport,
+    downloadJob,
+    refreshHistory,
+    setError,
+  } = useExportJob(runId, activeWorkspace?.id)
 
   // Menü dışına tıklayınca kapan
   useEffect(() => {
@@ -179,6 +191,24 @@ export default function ExportMenu({ channel, runId, disabled }: Props) {
 
           {message && <div className="exm-error">{message}</div>}
 
+          {pollFailed && (
+            <div className="exm-error" role="alert">
+              {EXPORT_POLL_FAILED_MESSAGE}{' '}
+              <button type="button" className="chx-btn" onClick={recheck}>
+                {POLL_RECHECK_LABEL}
+              </button>
+            </div>
+          )}
+
+          {historyError && (
+            <div className="exm-error" role="alert">
+              {historyError}{' '}
+              <button type="button" className="chx-btn" onClick={() => void refreshHistory()}>
+                Geçmişi yeniden yükle
+              </button>
+            </div>
+          )}
+
           {history.length > 0 && (
             <div className="exm-history">
               <div className="exm-history-title">Son dışa aktarımlar</div>
@@ -195,7 +225,7 @@ export default function ExportMenu({ channel, runId, disabled }: Props) {
                     {job.policy_outdated && (
                       <span
                         className="exm-outdated"
-                        title="Bu rapor üretiminden sonra politika/profil değişti — güncel rapor için yeniden export alın"
+                        title="Bu rapor üretiminden sonra politika/profil değişti — güncel rapor için yeniden indirin"
                       >
                         eski politika
                       </span>

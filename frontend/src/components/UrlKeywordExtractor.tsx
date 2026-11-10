@@ -3,12 +3,16 @@ import { AlertCircle, Globe, Info, Loader2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useBrandStore } from '../stores/brandStore'
 import {
+  apiErrorCode,
+  apiErrorMessage,
   googleAdsUrlSeedApi,
   KeywordImportResponse,
   SkippedKeywordDetail,
   UrlSeedIdea,
 } from '../services/api'
 import KeywordImportResult from './KeywordImportResult'
+import { MarketLine } from './MarketBadge'
+import { FetchedMarket, fetchedMarketFrom, marketWorkspaceLink } from '../services/market'
 import {
   LOW_VOLUME_THRESHOLD,
   selectMinVolume,
@@ -20,7 +24,11 @@ import { getExcludeThemesFromProfile, previewThemeExclusions } from './themePrev
 import './GoogleAdsKeywordSearch.css'
 
 interface Props {
-  onImport: (keywords: UrlSeedIdea[]) => Promise<KeywordImportResponse | void>
+  // market: Google'a gerçekten gönderilen pazar; yoksa import satırlarında alan atlanır
+  onImport: (
+    keywords: UrlSeedIdea[],
+    market?: FetchedMarket
+  ) => Promise<KeywordImportResponse | void>
   // Rakip URL'leri kaynak kartından hazır URL ile açılır
   initialUrl?: string
   onForceInclude?: (detail: SkippedKeywordDetail) => Promise<void>
@@ -28,22 +36,7 @@ interface Props {
 
 const ideaVolume = (idea: UrlSeedIdea) => idea.monthly_volume || 0
 
-const normalizeGoogleAdsLanguageId = (languageId?: string | null) =>
-  languageId === '1055' ? '1037' : languageId || '1037'
-
-const errorMessageFrom = (err: unknown, fallback: string): string => {
-  const e = err as {
-    message?: string
-    detail?: unknown
-    response?: { data?: { detail?: string } }
-  }
-  return (
-    e?.message ||
-    (typeof e?.detail === 'string' ? e.detail : undefined) ||
-    e?.response?.data?.detail ||
-    fallback
-  )
-}
+const errorMessageFrom = apiErrorMessage
 
 export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclude }: Props) {
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
@@ -60,6 +53,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fetchedMarket, setFetchedMarket] = useState<FetchedMarket | null>(null)
+  const [marketNotSet, setMarketNotSet] = useState(false)
   const [importResult, setImportResult] = useState<
     { kind: 'success'; data: KeywordImportResponse } | { kind: 'error'; message: string } | null
   >(null)
@@ -89,6 +84,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     setSourceStatus(null)
     setImportResult(null)
     setError(null)
+    setFetchedMarket(null)
+    setMarketNotSet(false)
     setShowThemePreview(false)
   }, [activeWorkspace?.id, activeWorkspace?.company_url, initialUrl])
 
@@ -97,6 +94,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     const normalizedUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`
     setLoading(true)
     setError(null)
+    setMarketNotSet(false)
     setWarnings([])
     setSourceStatus(null)
     setImportResult(null)
@@ -108,11 +106,10 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
         max_results: maxResults,
         min_volume: minVolume,
         include_keyword_seed: includeSeed,
-        language_id: normalizeGoogleAdsLanguageId(activeWorkspace.default_language_id),
-        geo_target_id: activeWorkspace.default_geo_target_id || '2792',
         refresh: forceRefresh,
       })
       const data = res.data
+      setFetchedMarket(fetchedMarketFrom(data))
       const sorted = sortByVolumeDesc(data.ideas || [], ideaVolume)
       setIdeas(sorted)
       setSelected(new Set(sorted.map((idea) => idea.keyword)))
@@ -125,7 +122,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
       setSourceStatus(
         status
           ? [
-              status.reachable ? 'URL kontrolu basarili' : 'URL kontrolu uyari verdi',
+              status.reachable ? 'URL kontrolü başarılı' : 'URL kontrolü uyarı verdi',
               status.http_status ? `HTTP ${status.http_status}` : null,
               status.warning || null,
             ]
@@ -135,17 +132,18 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
       )
       if ((data.ideas || []).length === 0) {
         setError(
-          "Google Ads bu URL'den keyword fikri uretmedi. Alt kategori URL'si deneyin veya seed keyword ile arama yapin."
+          "Google Ads bu URL'den anahtar kelime fikri üretmedi. Alt kategori URL'si deneyin veya başlangıç kelimesiyle arama yapın."
         )
       }
     } catch (err: unknown) {
       setIdeas([])
       setTotal(0)
       setCached(false)
+      setMarketNotSet(apiErrorCode(err) === 'MARKET_NOT_SET')
       setError(
         errorMessageFrom(
           err,
-          "URL'den keyword cikarma basarisiz oldu. Alt kategori URL'si deneyin veya seed keyword ile Google Ads aramasi yapin."
+          "URL'den anahtar kelime çıkarma başarısız oldu. Alt kategori URL'si deneyin veya başlangıç kelimesiyle Google Ads araması yapın."
         )
       )
     } finally {
@@ -158,9 +156,9 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     setImportResult(null)
     try {
       const chosen = ideas.filter((idea) => selected.has(idea.keyword))
-      const data = await onImport(chosen)
+      const data = await onImport(chosen, fetchedMarket ?? undefined)
       if (!data) {
-        throw new Error('Aktarim sonucu alinamadi')
+        throw new Error('Aktarım sonucu alınamadı')
       }
       setImportResult({ kind: 'success', data })
       setIdeas([])
@@ -168,7 +166,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
     } catch (err: unknown) {
       setImportResult({
         kind: 'error',
-        message: errorMessageFrom(err, 'Aktarim basarisiz oldu'),
+        message: errorMessageFrom(err, 'Aktarım başarısız oldu'),
       })
     } finally {
       setImporting(false)
@@ -189,6 +187,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
 
   return (
     <div className="url-extractor">
+      <MarketLine label={fetchedMarket?.market_label || activeWorkspace?.market_label} />
+
       {/* Tasarım: URL (geniş) + Max Sonuç + Min Volume tek satırda */}
       <div className="kwx-grid-url">
         <label className="kwx-field">
@@ -202,7 +202,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
           />
         </label>
         <label className="kwx-field">
-          <span className="kwx-field-label">Max Sonuç</span>
+          <span className="kwx-field-label">En fazla sonuç</span>
           <input
             className="kwx-input"
             type="number"
@@ -211,7 +211,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
           />
         </label>
         <label className="kwx-field">
-          <span className="kwx-field-label">Min Volume</span>
+          <span className="kwx-field-label">En az aylık arama</span>
           <input
             className="kwx-input"
             type="number"
@@ -227,7 +227,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
           checked={includeSeed}
           onChange={(e) => setIncludeSeed(e.target.checked)}
         />
-        Marka seed kelimeleri de kullan
+        Markanın başlangıç kelimelerini de kullan
       </label>
 
       <div className="kwx-run-row-btn">
@@ -250,14 +250,14 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
         <div className="cache-badge">
           <div className="cache-copy">
             <Info size={14} />
-            <span>Onceki sonuc kullanildi. Guncel sorgu icin yeniden cekebilirsiniz.</span>
+            <span>Önceki sonuç kullanıldı. Güncel sorgu için yeniden çekebilirsiniz.</span>
           </div>
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => handleExtract(true)}
             disabled={loading || !url.trim() || !activeWorkspace?.id}
           >
-            Google Ads'ten yeniden cek
+            Google Ads'ten yeniden çek
           </button>
         </div>
       )}
@@ -268,12 +268,22 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
           <span>
             {[sourceStatus, ...warnings].filter(Boolean).join(' | ')}
             {warnings.length > 0 &&
-              " | Google Ads yine de denendi. Sonuc zayifsa alt kategori URL'si veya seed keyword deneyin."}
+              " | Google Ads yine de denendi. Sonuç zayıfsa alt kategori URL'si veya başlangıç kelimesi deneyin."}
           </span>
         </div>
       )}
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          {marketNotSet && activeWorkspace && (
+            <>
+              {' '}
+              <a href={marketWorkspaceLink(activeWorkspace.id)}>Çalışma profiline git</a>
+            </>
+          )}
+        </div>
+      )}
       <KeywordImportResult result={importResult} onForceInclude={onForceInclude} />
 
       {excludeThemes.length > 0 && ideas.length > 0 && (
@@ -284,8 +294,8 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
             <AlertCircle size={14} />
             <span>
               {themePreview.length > 0
-                ? `${themePreview.length} keyword yasakli tema filtresine takilacak.`
-                : 'Bu sonuclarda yasakli tema filtresine takilan keyword yok.'}
+                ? `${themePreview.length} kelime yasaklı tema filtresine takılacak.`
+                : 'Bu sonuçlarda yasaklı tema filtresine takılan kelime yok.'}
             </span>
             {themePreview.length > 0 && (
               <button
@@ -293,7 +303,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
                 className="skipped-toggle"
                 onClick={() => setShowThemePreview((v) => !v)}
               >
-                {showThemePreview ? 'elenenleri gizle' : 'elenenleri goster'}
+                {showThemePreview ? 'elenenleri gizle' : 'elenenleri göster'}
               </button>
             )}
           </div>
@@ -303,7 +313,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
                 <li key={item.keyword}>
                   <strong>{item.keyword}</strong>
                   <span className="skipped-reason">
-                    - Yasakli temayla eslesti: "{item.matched}"
+                    - Yasaklı temayla eşleşti: "{item.matched}"
                   </span>
                 </li>
               ))}
@@ -316,10 +326,10 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
         <>
           <div className="preview-header">
             <span>
-              {selected.size} secili / {ideas.length} / {total} keyword bulundu
-              {cached && ' (onceki sonuc)'}
+              {selected.size} seçili / {ideas.length} / {total} kelime bulundu
+              {cached && ' (önceki sonuç)'}
               {!showLowVolume && lowVolumeIdeas.length > 0 && (
-                <> · {lowVolumeIdeas.length} dusuk hacimli gizli</>
+                <> · {lowVolumeIdeas.length} düşük hacimli gizli</>
               )}
             </span>
             <button
@@ -329,10 +339,10 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
             >
               {importing ? (
                 <>
-                  <Loader2 size={15} className="spin-icon" /> Aktariliyor...
+                  <Loader2 size={15} className="spin-icon" /> Aktarılıyor...
                 </>
               ) : (
-                `Secilenleri Havuza Ekle (${selected.size})`
+                `Seçilenleri Havuza Ekle (${selected.size})`
               )}
             </button>
           </div>
@@ -342,14 +352,14 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
               className="btn btn-secondary btn-sm"
               onClick={() => setSelected(selectTopN(ideas, (i) => i.keyword, ideaVolume, 200))}
             >
-              Ilk 200'u sec
+              İlk 200'ü seç
             </button>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => setSelected(selectMinVolume(ideas, (i) => i.keyword, ideaVolume, 100))}
             >
-              Hacim ≥100 sec
+              Hacim ≥100 seç
             </button>
             <button
               type="button"
@@ -360,7 +370,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
                 )
               }
             >
-              {selected.size === ideas.length ? 'Secimi birak' : 'Tumunu sec'}
+              {selected.size === ideas.length ? 'Seçimi bırak' : 'Tümünü seç'}
             </button>
             {lowVolumeIdeas.length > 0 && (
               <button
@@ -368,7 +378,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
                 className="btn btn-secondary btn-sm"
                 onClick={() => setShowLowVolume((v) => !v)}
               >
-                Dusuk hacimlileri (&lt;{LOW_VOLUME_THRESHOLD}) {showLowVolume ? 'gizle' : 'goster'}{' '}
+                Düşük hacimlileri (&lt;{LOW_VOLUME_THRESHOLD}) {showLowVolume ? 'gizle' : 'göster'}{' '}
                 ({lowVolumeIdeas.length})
               </button>
             )}
@@ -377,11 +387,11 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
             <table>
               <thead>
                 <tr>
-                  <th aria-label="Sec"></th>
-                  <th>Keyword</th>
-                  <th>Aylik Arama</th>
-                  <th>Trend 3M</th>
-                  <th>Trend 12M</th>
+                  <th aria-label="Seç"></th>
+                  <th>Anahtar Kelime</th>
+                  <th>Aylık Arama</th>
+                  <th>3 Aylık Trend</th>
+                  <th>12 Aylık Trend</th>
                   <th>Rekabet</th>
                   <th>Filtre</th>
                 </tr>
@@ -394,7 +404,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
                       <td>
                         <input
                           type="checkbox"
-                          title={`${idea.keyword} sec`}
+                          title={`${idea.keyword} seç`}
                           checked={selected.has(idea.keyword)}
                           onChange={() => toggleSelected(idea.keyword)}
                         />
@@ -406,7 +416,7 @@ export default function UrlKeywordExtractor({ onImport, initialUrl, onForceInclu
                       <td>{idea.competition}</td>
                       <td>
                         {matchedTheme ? (
-                          <span className="theme-pill">Yasakli: {matchedTheme}</span>
+                          <span className="theme-pill">Yasaklı: {matchedTheme}</span>
                         ) : (
                           <span className="muted-cell">-</span>
                         )}

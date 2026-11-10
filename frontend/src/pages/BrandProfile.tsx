@@ -12,12 +12,13 @@
  *    içinde çalışmaya devam eder.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Check,
   CheckCircle2,
   Globe,
   ArrowRight,
+  ChevronDown,
   Plus,
   RotateCcw,
   AlertCircle,
@@ -27,11 +28,27 @@ import {
   Search,
 } from 'lucide-react'
 import { useBrandStore } from '../stores/brandStore'
-import { workspaceApi, ProfileConfirmRequest, WorkspaceResponse } from '../services/api'
 import {
+  workspaceApi,
+  FocusSettingsApplyResponse,
+  FocusSettingsPreviewResponse,
+  ProfileConfirmRequest,
+  WorkspaceResponse,
+} from '../services/api'
+import {
+  canHaveFocuses,
+  editableExcludeThemes,
   extractErrorMessage,
+  focusShortName,
   getWorkspacePhase,
+  HARD_EXCLUDE_CHIP_NOTE,
+  hasAnalyzedProfile,
+  isFocusWorkspace,
   listToTextarea,
+  orderWithFocuses,
+  parseExcludedInfo,
+  SOFT_EXCLUDE_HELP,
+  SOFT_EXCLUDE_LABEL,
   splitNewlineItems,
   statusLabel,
   toActiveWorkspace as workspaceToActiveWorkspace,
@@ -40,12 +57,17 @@ import {
   WorkspacePhase,
 } from './brandProfileState'
 import PolicyPanel from '../components/PolicyPanel'
+import ErrorBanner from '../components/ErrorBanner'
+import { MAX_POLL_FAILURES, POLL_RECHECK_LABEL } from '../hooks/useTaskPolling'
 import ProfileReviewCards from './brandProfile/ProfileReviewCards'
 import PolicyReviewSection from './brandProfile/PolicyReviewSection'
 import KeywordAnchorReview from './brandProfile/KeywordAnchorReview'
 import LoadingStep from './brandProfile/LoadingStep'
 import AiCompetitorDiscovery from './brandProfile/AiCompetitorDiscovery'
 import LocationPolicyControl from '../components/LocationPolicyControl'
+import MarketSelect from '../components/MarketSelect'
+import MarketCopyDialog from '../components/MarketCopyDialog'
+import type { MarketValue } from '../services/market'
 import {
   LocationFilterMode,
   readFocusCities,
@@ -70,7 +92,16 @@ interface ProfileFormState {
   location_exempt_terms: string[]
 }
 
-const LIST_FIELD_CONFIG = [
+type ListFieldKey =
+  | 'products'
+  | 'services'
+  | 'use_cases'
+  | 'problems_solved'
+  | 'brand_terms'
+  | 'protected_themes'
+  | 'exclude_themes'
+
+const LIST_FIELD_CONFIG: ReadonlyArray<{ key: ListFieldKey; label: string; help?: string }> = [
   { key: 'products', label: 'Ürünler' },
   { key: 'services', label: 'Hizmetler' },
   { key: 'use_cases', label: 'Kullanım Alanları' },
@@ -79,8 +110,10 @@ const LIST_FIELD_CONFIG = [
   // Korunacak temalar dışlanacak temalardan ÖNCE gösterilir: çakışmada
   // korumanın kazandığını okuma sırası da anlatsın.
   { key: 'protected_themes', label: 'Korunacak Temalar' },
-  { key: 'exclude_themes', label: 'Dışlanacak Temalar' },
-] as const
+  // Kutu A: yumuşak (eleme yapmaz). Kesin dışlama terimleri (kutu B) burada
+  // düzenlenemez; aşağıda salt-okunur çip olarak gösterilir.
+  { key: 'exclude_themes', label: SOFT_EXCLUDE_LABEL, help: SOFT_EXCLUDE_HELP },
+]
 
 function emptyProfileForm(): ProfileFormState {
   return {
@@ -100,7 +133,10 @@ function emptyProfileForm(): ProfileFormState {
   }
 }
 
-function profileToForm(profileData?: Record<string, unknown>): ProfileFormState {
+function profileToForm(
+  profileData?: Record<string, unknown>,
+  excludedInfo?: string | null
+): ProfileFormState {
   const form = emptyProfileForm()
   if (!profileData) return form
 
@@ -119,7 +155,8 @@ function profileToForm(profileData?: Record<string, unknown>): ProfileFormState 
     problems_solved: listToTextarea(profileData.problems_solved),
     brand_terms: listToTextarea(profileData.brand_terms),
     protected_themes: listToTextarea(profileData.protected_themes),
-    exclude_themes: listToTextarea(profileData.exclude_themes),
+    // Yalnız kullanıcının düzenleyebildiği A terimleri; B'den gelenler çip olarak ayrı
+    exclude_themes: listToTextarea(editableExcludeThemes(profileData.exclude_themes, excludedInfo)),
     location_filter_mode: readLocationFilterMode(profileData),
     focus_cities: readFocusCities(profileData),
     location_exempt_terms: readLocationExemptTerms(profileData),
@@ -172,7 +209,7 @@ const ANALYZE_STEPS = [
 ]
 const GENERATE_STEPS = [
   'Profil analiz ediliyor',
-  'Keyword havuzu oluşturuluyor',
+  'Anahtar kelime havuzu oluşturuluyor',
   'Marka odakları eşleştiriliyor',
 ]
 
@@ -184,6 +221,203 @@ const LOADING_PHASES: WorkspacePhase[] = [
   'generating_profile',
 ]
 
+function parseCompanyUrl(raw: string): URL | null {
+  try {
+    return new URL(raw.includes('//') ? raw : `https://${raw}`)
+  } catch {
+    return null
+  }
+}
+
+type ScopeChoice = 'both' | 'brand' | 'page'
+
+const SCOPE_OPTIONS: ReadonlyArray<{ value: ScopeChoice; title: string; desc: string }> = [
+  {
+    value: 'both',
+    title: 'Ana marka + bu alt sayfa',
+    desc: 'Ana sayfa ve ilgili birkaç sayfadan marka profili hazırlanır. Marka çalışmasını tamamlayınca (profil, rakipler, anahtar kelime onayı) bu alt sayfa markanın altında kendiliğinden hazırlanır ve onu da onaylarsınız. Alt sayfa markanın rakip, dışlama ve konum ayarlarını alır.',
+  },
+  {
+    value: 'brand',
+    title: 'Yalnız ana marka',
+    desc: 'Ana sayfa ve ilgili birkaç sayfadan marka profili hazırlanır. Girdiğiniz alt sayfa için çalışma açılmaz; sonra marka sayfasından ekleyebilirsiniz.',
+  },
+  {
+    value: 'page',
+    title: 'Yalnız bu alt sayfa',
+    desc: 'Yalnız bu sayfa okunur; markadan bağımsız tek sayfa çalışması açılır. Marka ayarları taşınmaz.',
+  },
+]
+
+const isRootPath = (u: URL) => u.pathname === '' || u.pathname === '/'
+
+// ─── Alt sayfalar kartı (onaylı marka) ────────────────────────────────
+
+function FocusesCard({
+  parent,
+  focuses,
+  onCreated,
+  onOpen,
+  onReload,
+}: {
+  parent: WorkspaceListRow
+  focuses: WorkspaceListRow[]
+  onCreated: (focus: WorkspaceResponse) => void
+  onOpen: (id: number) => void
+  onReload: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState('')
+  // Marka ayarlarını alt sayfalara uygula: önizleme -> uygula (Faz 3d)
+  const [preview, setPreview] = useState<FocusSettingsPreviewResponse['focuses'] | null>(null)
+  const [applyResult, setApplyResult] = useState<FocusSettingsApplyResponse | null>(null)
+  const [settingsBusy, setSettingsBusy] = useState(false)
+
+  const openPreview = async () => {
+    setSettingsBusy(true)
+    setError('')
+    setApplyResult(null)
+    try {
+      const res = await workspaceApi.previewFocusSettings(parent.id)
+      setPreview(res.data.focuses)
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  const applySettings = async () => {
+    setSettingsBusy(true)
+    setError('')
+    try {
+      const res = await workspaceApi.applyFocusSettings(parent.id)
+      setApplyResult(res.data)
+      setPreview(null)
+      onReload()
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  const add = async () => {
+    setAdding(true)
+    setError('')
+    try {
+      const res = await workspaceApi.createFocus(parent.id, url.trim())
+      setUrl('')
+      onCreated(res.data)
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="bpx-section bpx-focuses">
+      <div className="bpx-section-title">Alt sayfalar</div>
+      {focuses.length === 0 ? (
+        <p className="bpx-section-hint">Henüz alt sayfa yok.</p>
+      ) : (
+        <ul className="bpx-focus-list">
+          {focuses.map((f) => (
+            <li key={f.id}>
+              <button type="button" className="bpx-focus-link" onClick={() => onOpen(f.id)}>
+                {f.name}
+              </button>
+              <span className="bpx-focus-status">{statusLabel(f)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="bpx-focus-add">
+        <input
+          className="bpx-input"
+          type="text"
+          aria-label="Alt sayfa URL"
+          placeholder="https://… (markanın sitesindeki bir alt sayfa)"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          disabled={adding}
+        />
+        <button
+          type="button"
+          className="bpx-btn-raised"
+          onClick={() => void add()}
+          disabled={adding || !url.trim()}
+        >
+          {adding ? <Loader2 size={14} className="spin-icon" /> : <Plus size={14} />}
+          Alt sayfa ekle
+        </button>
+      </div>
+      {focuses.length > 0 && !preview && (
+        <button
+          type="button"
+          className="bpx-btn-raised"
+          onClick={() => void openPreview()}
+          disabled={settingsBusy}
+        >
+          {settingsBusy && <Loader2 size={14} className="spin-icon" />}
+          Marka ayarlarını alt sayfalara uygula
+        </button>
+      )}
+      {preview && (
+        <div className="bpx-focus-preview">
+          <div className="bpx-section-title">Önizleme</div>
+          <ul className="bpx-focus-list">
+            {preview.map((f) => (
+              <li key={f.id}>
+                <strong>{f.name}</strong>{' '}
+                {f.busy
+                  ? 'İşlem sürüyor — atlanacak'
+                  : f.changes.length === 0
+                    ? 'Değişiklik yok'
+                    : `Değişecek: ${f.changes.map((c) => c.label).join(', ')}`}
+              </li>
+            ))}
+          </ul>
+          {preview.some((f) => !f.busy && f.changes.length > 0) && (
+            <p className="bpx-section-hint">
+              Bu alt sayfadaki yerel düzenlemeler marka ayarlarıyla değiştirilecek.
+            </p>
+          )}
+          <button
+            type="button"
+            className="bpx-btn-primary"
+            onClick={() => void applySettings()}
+            disabled={settingsBusy}
+          >
+            Uygula
+          </button>
+          <button
+            type="button"
+            className="bpx-btn-raised"
+            onClick={() => setPreview(null)}
+            disabled={settingsBusy}
+          >
+            Vazgeç
+          </button>
+        </div>
+      )}
+      {applyResult && (
+        <div className="bpx-section-hint">
+          <p>{applyResult.applied.length} alt sayfaya uygulandı.</p>
+          {applyResult.skipped.map((s) => (
+            <p key={s.id}>
+              {s.name}: atlandı ({s.reason})
+            </p>
+          ))}
+        </div>
+      )}
+      {error && <div className="error-banner">{error}</div>}
+    </div>
+  )
+}
+
 // ─── Tek modal: yeni çalışma sihirbazı + mevcut kart detayı ───────────
 
 function WorkspaceModal({
@@ -192,21 +426,49 @@ function WorkspaceModal({
   onWorkspaceUpdated,
   onFinished,
   onRestore,
+  onOpenWorkspace,
+  onReloadList,
+  allWorkspaces,
 }: {
   workspace: WorkspaceListRow | null // null = "Yeni Çalışma" (url adımı)
   onClose: () => void
   onWorkspaceUpdated: (workspace: WorkspaceResponse) => void
   onFinished: (workspace: WorkspaceResponse) => void
-  onRestore: (id: number) => void
+  onRestore: (id: number) => Promise<string | null>
+  onOpenWorkspace: (id: number) => void
+  onReloadList: () => void
+  allWorkspaces: WorkspaceListRow[]
 }) {
   const [ws, setWs] = useState<WorkspaceListRow | null>(initialWorkspace)
+  // Sayfa hata bandı modal örtüsünün arkasında kalır; geri getirme hatası modalda gösterilir
+  const [restoreError, setRestoreError] = useState('')
   const [companyUrl, setCompanyUrl] = useState('')
   const [competitors, setCompetitors] = useState(['', '', ''])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  // Pazar: analiz başlamadan seçilir; varsayılan market-options.default'tan gelir
+  const [market, setMarket] = useState<MarketValue>({ geo_target_id: null, language_id: null })
+  const marketOptions = useBrandStore((s) => s.marketOptions)
+  const marketIncomplete = !market.geo_target_id || !market.language_id
+  // Alt sayfa URL'si için kapsam sorusu: seçim kontrolü (seçmek başlatmaz); URL değişince sıfırlanır
+  const [scopeChoice, setScopeChoice] = useState<ScopeChoice | null>(null)
+  // Alt sayfa / analiz tekrar deneme (şerit + başarısız analiz bandı)
+  const [focusBusy, setFocusBusy] = useState(false)
+  const [stripError, setStripError] = useState('')
+  const [retryingAnalysis, setRetryingAnalysis] = useState(false)
+  // Üst üste MAX_POLL_FAILURES yoklama hatası: analiz durumu bilinmiyor (başarısız DEĞİL)
+  const [wsPollFailed, setWsPollFailed] = useState(false)
+  const [wsPollAttempt, setWsPollAttempt] = useState(0)
 
   // Legacy formlar (keyword-önce çalışmalar + confirmed düzenleme)
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm())
+  // Kaydedilmemiş A/profil düzenlemesi var mı: kirliyken sunucudan yeniden
+  // yükleme (örn. kutu B kaydı sonrası) formu SIFIRLAMAZ.
+  const profileDirtyRef = useRef(false)
+  const editProfileForm = (updater: (form: ProfileFormState) => ProfileFormState) => {
+    profileDirtyRef.current = true
+    setProfileForm(updater)
+  }
   const [keywordDraft, setKeywordDraft] = useState<string[]>(
     initialWorkspace?.suggested_keywords || []
   )
@@ -216,17 +478,37 @@ function WorkspaceModal({
   const [startingKeywords, setStartingKeywords] = useState(false)
 
   const navigate = useNavigate()
+  const location = useLocation()
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
+  // Pazar kopyası uyarısı: yalnız dialogdan gelen gezinme durumunda; kapatınca durum silinir
+  const marketCopyId = (location.state as { marketCopyId?: number } | null)?.marketCopyId
+  const dismissMarketCopy = () =>
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+
+  useEffect(() => {
+    if (!marketOptions) return
+    setMarket((m) =>
+      m.geo_target_id || m.language_id
+        ? m
+        : {
+            geo_target_id: marketOptions.default.geo_target_id,
+            language_id: marketOptions.default.language_id,
+          }
+    )
+  }, [marketOptions])
 
   useEffect(() => {
     setWs(initialWorkspace)
     setKeywordDraft(initialWorkspace?.suggested_keywords || [])
     setCompetitorDiscoveryActive(false)
+    profileDirtyRef.current = false
   }, [initialWorkspace?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (ws?.profile_data) setProfileForm(profileToForm(ws.profile_data))
-  }, [ws?.profile_data])
+    if (ws?.profile_data && !profileDirtyRef.current) {
+      setProfileForm(profileToForm(ws.profile_data, ws.excluded_info))
+    }
+  }, [ws?.profile_data, ws?.excluded_info])
 
   useEffect(() => {
     setKeywordDraft(ws?.suggested_keywords || [])
@@ -243,33 +525,71 @@ function WorkspaceModal({
 
   const phase: WorkspacePhase | 'url' = ws ? getWorkspacePhase(ws) : 'url'
 
+  // Onaylı marka açılınca alt sayfa şeridi için güncel alt sayfa durumlarını sunucudan al
+  const brandOpenKey = ws && ws.status === 'confirmed' && !isFocusWorkspace(ws) ? ws.id : null
+  useEffect(() => {
+    if (brandOpenKey != null) onReloadList()
+    setStripError('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandOpenKey])
+
   // Yükleme fazlarında modal kendi poll'unu yapar (sihirbaz akışı modal
   // içinde ilerler; kullanıcı kapatırsa sayfa polling'i zaten devam eder)
   useEffect(() => {
     if (!ws || !LOADING_PHASES.includes(phase as WorkspacePhase)) return
-    const timer = window.setInterval(async () => {
+    let cancelled = false
+    let timer: number | undefined
+    let failures = 0
+    setWsPollFailed(false)
+    // Sıralı yoklama: sonraki istek öncekinin bitmesinden sonra planlanır
+    const tick = async () => {
       try {
         const res = await workspaceApi.get(ws.id)
+        if (cancelled) return
+        failures = 0
         const fresh = workspaceResponseToListRow(res.data as WorkspaceResponse, ws)
         setWs(fresh)
         onWorkspaceUpdated(res.data as WorkspaceResponse)
       } catch {
-        /* poll hatası sessiz — sonraki tikte tekrar dener */
+        if (cancelled) return
+        failures += 1
+        if (failures >= MAX_POLL_FAILURES) {
+          setWsPollFailed(true)
+          return
+        }
       }
-    }, MODAL_POLL_MS)
-    return () => window.clearInterval(timer)
+      timer = window.setTimeout(tick, MODAL_POLL_MS)
+    }
+    timer = window.setTimeout(tick, MODAL_POLL_MS)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ws?.id, phase])
+  }, [ws?.id, phase, wsPollAttempt])
 
-  const handleCreate = async () => {
-    if (!companyUrl.trim()) return
+  const createWorkspace = async (choice: ScopeChoice | 'root') => {
     setCreating(true)
     setError('')
     try {
+      const entered = companyUrl.trim()
+      const origin = parseCompanyUrl(entered)?.origin ?? entered
+      const target =
+        choice === 'root'
+          ? { company_url: entered, crawl_scope: 'site' as const }
+          : choice === 'page'
+            ? { company_url: entered, crawl_scope: 'page' as const }
+            : {
+                company_url: origin,
+                crawl_scope: 'site' as const,
+                ...(choice === 'both' ? { pending_focus_url: entered } : {}),
+              }
       const competitorUrls = competitors.map((c) => c.trim()).filter(Boolean)
       const res = await workspaceApi.create({
-        company_url: companyUrl.trim(),
+        ...target,
         competitor_urls: competitorUrls.length > 0 ? competitorUrls : undefined,
+        default_geo_target_id: market.geo_target_id ?? undefined,
+        default_language_id: market.language_id ?? undefined,
         flow_version: 'profile_first',
       })
       const created = res.data as WorkspaceResponse
@@ -282,6 +602,21 @@ function WorkspaceModal({
     }
   }
 
+  const handleCreate = () => {
+    if (!companyUrl.trim()) return
+    if (scopeNeeded) {
+      // Alt sayfa adresinde seçim yapılmadan başlatılmaz (buton da pasif)
+      if (scopeChoice) void createWorkspace(scopeChoice)
+      return
+    }
+    void createWorkspace('root')
+  }
+
+  const changeCompanyUrl = (value: string) => {
+    setCompanyUrl(value)
+    setScopeChoice(null)
+  }
+
   const handleModalWorkspaceUpdated = (updated: WorkspaceResponse) => {
     setWs((prev) => workspaceResponseToListRow(updated, prev || undefined))
     onWorkspaceUpdated(updated)
@@ -289,6 +624,53 @@ function WorkspaceModal({
 
   const handleFinished = (confirmed: WorkspaceResponse) => {
     onFinished(confirmed)
+  }
+
+  // Marka keyword onayı: sunucu alt sayfayı oluşturduysa o alt sayfaya geç (sayfadan ayrılma);
+  // oluşturamadıysa marka penceresinde kal ve hata şeridini göster.
+  const handleKeywordsApproved = (res: WorkspaceResponse) => {
+    if (res.focus_handoff_id) {
+      handleModalWorkspaceUpdated(res)
+      onReloadList()
+      onOpenWorkspace(res.focus_handoff_id)
+    } else if (res.pending_focus_error) {
+      handleModalWorkspaceUpdated(res)
+      onReloadList()
+    } else {
+      handleFinished(res)
+    }
+  }
+
+  const runFocusAction = async (call: (id: number) => Promise<{ data: WorkspaceResponse }>) => {
+    if (!ws) return
+    setFocusBusy(true)
+    setStripError('')
+    try {
+      const { data } = await call(ws.id)
+      handleModalWorkspaceUpdated(data)
+      if (data.focus_handoff_id) {
+        onReloadList()
+        onOpenWorkspace(data.focus_handoff_id)
+      }
+    } catch (err: unknown) {
+      setStripError(extractErrorMessage(err))
+    } finally {
+      setFocusBusy(false)
+    }
+  }
+
+  const retryAnalysis = async () => {
+    if (!ws) return
+    setRetryingAnalysis(true)
+    setError('')
+    try {
+      const res = await workspaceApi.retryAnalysis(ws.id)
+      handleModalWorkspaceUpdated(res.data)
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setRetryingAnalysis(false)
+    }
   }
 
   const continueToKeywordGeneration = async () => {
@@ -337,6 +719,7 @@ function WorkspaceModal({
         setError('Onay cevabı beklenen çalışma ile eşleşmedi. Listeyi yenileyip tekrar deneyin.')
         return
       }
+      profileDirtyRef.current = false
       handleFinished(confirmed)
     } catch (err: unknown) {
       setError(extractErrorMessage(err))
@@ -363,6 +746,25 @@ function WorkspaceModal({
       ws?.onboarding_flow !== 'profile_first')
 
   const urlValid = /\./.test(companyUrl)
+  const enteredUrl = parseCompanyUrl(companyUrl.trim())
+  const scopeNeeded = urlValid && !!enteredUrl && !isRootPath(enteredUrl)
+  // Başarısız + analiz edilmiş profili olmayan profil-önce çalışma aynı kayıtta tekrar denenebilir
+  const canRetryAnalysis =
+    phase === 'failed' &&
+    ws?.onboarding_flow === 'profile_first' &&
+    !hasAnalyzedProfile(ws.profile_data)
+  // Profil hazırken sonraki keyword üretimi başarısızsa site yeniden taranmadan yalnız o adım
+  const canRetryKeywords =
+    phase === 'failed' &&
+    ws?.onboarding_flow === 'profile_first' &&
+    hasAnalyzedProfile(ws.profile_data)
+  // Onaylı markanın onay bekleyen aktif alt sayfaları (sunucu verisinden, her açılışta)
+  const unfinishedFocuses =
+    ws && isConfirmed && !isArchived && !isFocusWorkspace(ws)
+      ? allWorkspaces.filter(
+          (w) => w.parent_brand_profile_id === ws.id && !w.deleted_at && w.status !== 'confirmed'
+        )
+      : []
   const isLoadingPhase = LOADING_PHASES.includes(phase as WorkspacePhase)
 
   const renderHeader = () => {
@@ -386,7 +788,17 @@ function WorkspaceModal({
           <div className="bpx-modal-title-row">
             <span className="bpx-modal-title">{ws.name}</span>
             <span className={`bpx-pill is-${tone}`}>{statusLabel(ws)}</span>
+            {isFocusWorkspace(ws) && <span className="bpx-focus-tag">Alt sayfa</span>}
           </div>
+          {ws.parent_brand_profile_id != null && (
+            <button
+              type="button"
+              className="bpx-focus-link"
+              onClick={() => onOpenWorkspace(ws.parent_brand_profile_id as number)}
+            >
+              Marka: {allWorkspaces.find((w) => w.id === ws.parent_brand_profile_id)?.name ?? '—'}
+            </button>
+          )}
           <a className="bpx-modal-url" href={ws.company_url} onClick={(e) => e.preventDefault()}>
             <Globe size={14} /> {ws.company_url}
           </a>
@@ -397,7 +809,11 @@ function WorkspaceModal({
           </button>
         )}
         {isArchived && (
-          <button type="button" className="bpx-btn-raised" onClick={() => onRestore(ws.id)}>
+          <button
+            type="button"
+            className="bpx-btn-raised"
+            onClick={async () => setRestoreError((await onRestore(ws.id)) || '')}
+          >
             <RotateCcw size={14} /> Arşivden Çıkar
           </button>
         )}
@@ -428,7 +844,7 @@ function WorkspaceModal({
               disabled={startingKeywords}
             >
               {startingKeywords ? <Loader2 size={15} className="spin-icon" /> : null}
-              Şimdi değil, keywordleri üret
+              Şimdi değil, anahtar kelimeleri üret
             </button>
             <button
               type="button"
@@ -471,7 +887,7 @@ function WorkspaceModal({
             placeholder="https://..."
             value={companyUrl}
             autoFocus
-            onChange={(e) => setCompanyUrl(e.target.value)}
+            onChange={(e) => changeCompanyUrl(e.target.value)}
           />
           <div className="bpx-field-gap" />
           <label className="bpx-label">
@@ -491,7 +907,52 @@ function WorkspaceModal({
               />
             ))}
           </div>
+          <div className="bpx-field-gap" />
+          <MarketSelect value={market} onChange={setMarket} disabled={creating} />
           {error && <div className="error-banner">{error}</div>}
+          {scopeNeeded && (
+            <div className="bpx-scope-ask" role="dialog" aria-labelledby="bpx-scope-ask-title">
+              <div id="bpx-scope-ask-title" className="bpx-scope-ask-title">
+                Bu adres bir alt sayfa
+              </div>
+              <p className="bpx-step-intro">
+                Girdiğiniz adres sitenin ana sayfası değil. Nasıl devam edelim? Bir seçenek
+                belirleyip &ldquo;Analizi Başlat&rdquo; düğmesine basın.
+              </p>
+              <div
+                className="bpx-scope-options"
+                role="radiogroup"
+                aria-labelledby="bpx-scope-ask-title"
+              >
+                {SCOPE_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`bpx-scope-option${scopeChoice === opt.value ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="bpx-scope-choice"
+                      value={opt.value}
+                      checked={scopeChoice === opt.value}
+                      onChange={() => setScopeChoice(opt.value)}
+                    />
+                    <span className="bpx-scope-option-body">
+                      <span className="bpx-scope-option-title">{opt.title}</span>
+                      <span className="bpx-scope-option-desc">{opt.desc}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="bpx-btn-ghost"
+                // Bu adresten vazgeçilir: alan temizlenir, seçimsiz başlatma yolu kalmaz
+                onClick={() => changeCompanyUrl('')}
+              >
+                Vazgeç
+              </button>
+            </div>
+          )}
           <div className="bpx-modal-footer is-end bpx-inline-footer">
             <button type="button" className="bpx-btn-ghost" onClick={onClose} disabled={creating}>
               İptal
@@ -500,7 +961,7 @@ function WorkspaceModal({
               type="button"
               className="bpx-btn-primary"
               onClick={handleCreate}
-              disabled={creating || !urlValid}
+              disabled={creating || !urlValid || marketIncomplete || (scopeNeeded && !scopeChoice)}
             >
               {creating ? (
                 <Loader2 size={15} className="spin-icon" />
@@ -528,7 +989,7 @@ function WorkspaceModal({
     if (phase === 'generating_keywords') {
       return (
         <LoadingStep
-          title="Keyword önerileri hazırlanıyor…"
+          title="Anahtar kelime önerileri hazırlanıyor…"
           sub="Onayladığınız profile göre size özel anahtar kelimeler ve marka odakları üretiliyor."
           steps={GENERATE_STEPS}
         />
@@ -542,7 +1003,7 @@ function WorkspaceModal({
         <KeywordAnchorReview
           workspace={ws}
           onWorkspaceUpdated={handleModalWorkspaceUpdated}
-          onApproved={handleFinished}
+          onApproved={handleKeywordsApproved}
         />
       )
     }
@@ -550,11 +1011,95 @@ function WorkspaceModal({
     // ── Legacy fazlar + failed + confirmed düzenleme ──
     return (
       <div className="bpx-fade">
-        {phase === 'failed' && (
-          <div className="error-banner">
-            Analiz başarısız oldu. Yeni bir çalışma oluşturmayı deneyebilir veya bu çalışmayı
-            arşivleyebilirsiniz.
-          </div>
+        {phase === 'failed' &&
+          (canRetryAnalysis ? (
+            <div className="error-banner bpx-banner-action">
+              <span>Analiz başarısız oldu.</span>
+              <button
+                type="button"
+                className="bpx-btn-raised"
+                onClick={() => void retryAnalysis()}
+                disabled={retryingAnalysis}
+              >
+                {retryingAnalysis && <Loader2 size={14} className="spin-icon" />}
+                Analizi tekrar dene
+              </button>
+            </div>
+          ) : canRetryKeywords ? (
+            <div className="error-banner bpx-banner-action">
+              <span>
+                Anahtar kelime üretimi tamamlanamadı. Profil hazır; site yeniden taranmaz.
+              </span>
+              <button
+                type="button"
+                className="bpx-btn-raised"
+                onClick={() => void continueToKeywordGeneration()}
+                disabled={startingKeywords}
+              >
+                {startingKeywords && <Loader2 size={14} className="spin-icon" />}
+                Anahtar kelime üretimini tekrar dene
+              </button>
+            </div>
+          ) : (
+            <div className="error-banner">
+              Analiz başarısız oldu. Yeni bir çalışma oluşturmayı deneyebilir veya bu çalışmayı
+              arşivleyebilirsiniz.
+            </div>
+          ))}
+
+        {isConfirmed && !isArchived && !isFocusWorkspace(ws) && (
+          <>
+            {marketCopyId === ws.id && (
+              <div className="bpx-focus-strip" role="status">
+                <span>
+                  Pazar kopyası — rakipleri ve konum ayarını bu pazar için gözden geçirin; rakip
+                  keşfini yeniden çalıştırabilirsiniz.
+                </span>
+                <button type="button" className="bpx-btn-raised" onClick={dismissMarketCopy}>
+                  Anladım
+                </button>
+              </div>
+            )}
+            {unfinishedFocuses.map((f) => (
+              <div className="bpx-focus-strip" key={f.id}>
+                <span>
+                  Alt sayfa: {focusShortName(f.name)} — {statusLabel(f)}
+                </span>
+                <button
+                  type="button"
+                  className="bpx-btn-raised"
+                  onClick={() => onOpenWorkspace(f.id)}
+                >
+                  Devam et
+                </button>
+              </div>
+            ))}
+            {ws.pending_focus_error && (
+              <div className="bpx-focus-strip is-error" role="alert">
+                <span>Alt sayfa hazırlanamadı: {ws.pending_focus_error}</span>
+                <span className="bpx-focus-strip-actions">
+                  <button
+                    type="button"
+                    className="bpx-btn-raised"
+                    disabled={focusBusy}
+                    onClick={() => void runFocusAction(workspaceApi.retryPendingFocus)}
+                  >
+                    {focusBusy && <Loader2 size={14} className="spin-icon" />}
+                    Tekrar dene
+                  </button>
+                  <button
+                    type="button"
+                    className="bpx-btn-ghost"
+                    disabled={focusBusy}
+                    onClick={() => void runFocusAction(workspaceApi.cancelPendingFocus)}
+                  >
+                    Vazgeç
+                  </button>
+                </span>
+              </div>
+            )}
+            {stripError && <div className="error-banner">{stripError}</div>}
+          </>
         )}
 
         {(phase === 'analyzing_keywords' || phase === 'generating_profile') && (
@@ -562,8 +1107,8 @@ function WorkspaceModal({
             title={phase === 'analyzing_keywords' ? 'Site okunuyor…' : 'Marka profili üretiliyor…'}
             sub={
               phase === 'analyzing_keywords'
-                ? 'İlk 10 keyword önerisi hazırlanıyor.'
-                : 'Onaylanan keywordlere göre marka profili üretiliyor.'
+                ? 'İlk 10 anahtar kelime önerisi hazırlanıyor.'
+                : 'Onaylanan anahtar kelimelere göre marka profili üretiliyor.'
             }
             steps={phase === 'analyzing_keywords' ? ANALYZE_STEPS : GENERATE_STEPS}
           />
@@ -572,7 +1117,7 @@ function WorkspaceModal({
         {canEditKeywordsLegacy && (
           <div className="suggested-keywords">
             <div className="section-title-row">
-              <h4>Onerilen Keywordler</h4>
+              <h4>Önerilen Anahtar Kelimeler</h4>
               <button
                 type="button"
                 className="bpx-btn-raised"
@@ -590,7 +1135,7 @@ function WorkspaceModal({
                   <input
                     type="text"
                     value={kw}
-                    placeholder={`Keyword ${idx + 1}`}
+                    placeholder={`Kelime ${idx + 1}`}
                     onChange={(e) =>
                       setKeywordDraft((items) =>
                         items.map((item, i) => (i === idx ? e.target.value : item))
@@ -621,10 +1166,26 @@ function WorkspaceModal({
                 ) : (
                   <CheckCircle2 size={14} />
                 )}
-                {approvingKeywords ? 'Profil Uretiliyor...' : 'Keywordleri Onayla'}
+                {approvingKeywords ? 'Profil Üretiliyor...' : 'Anahtar Kelimeleri Onayla'}
               </button>
             </div>
           </div>
+        )}
+
+        {isConfirmed && !isArchived && canHaveFocuses(ws) && (
+          <FocusesCard
+            key={ws.id}
+            parent={ws}
+            focuses={allWorkspaces.filter(
+              (w) => w.parent_brand_profile_id === ws.id && !w.deleted_at
+            )}
+            onCreated={(focus) => {
+              onWorkspaceUpdated(focus)
+              onOpenWorkspace(focus.id)
+            }}
+            onOpen={onOpenWorkspace}
+            onReload={onReloadList}
+          />
         )}
 
         {(isDraft || isConfirmed) && ws.profile_data && (
@@ -654,32 +1215,56 @@ function WorkspaceModal({
               mode={profileForm.location_filter_mode}
               focusCities={profileForm.focus_cities}
               exemptTerms={profileForm.location_exempt_terms}
-              onModeChange={(mode) => setProfileForm((f) => ({ ...f, location_filter_mode: mode }))}
+              onModeChange={(mode) =>
+                editProfileForm((f) => ({ ...f, location_filter_mode: mode }))
+              }
               onFocusCitiesChange={(cities) =>
-                setProfileForm((f) => ({ ...f, focus_cities: cities }))
+                editProfileForm((f) => ({ ...f, focus_cities: cities }))
               }
               onExemptTermsChange={(terms) =>
-                setProfileForm((f) => ({ ...f, location_exempt_terms: terms }))
+                editProfileForm((f) => ({ ...f, location_exempt_terms: terms }))
               }
               disabled={confirming}
             />
 
-            {LIST_FIELD_CONFIG.map(({ key, label }) => (
-              <div className="form-group" key={key}>
-                <label>{label}</label>
-                <textarea
-                  className="bpx-textarea"
-                  rows={3}
-                  value={profileForm[key as keyof ProfileFormState] as string}
-                  onChange={(e) =>
-                    setProfileForm((f) => ({
-                      ...f,
-                      [key]: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            ))}
+            {LIST_FIELD_CONFIG.map(({ key, label, help }) => {
+              const helpId = help ? `profile-field-help-${key}` : undefined
+              // Kesin dışlama (kutu B) terimleri: A'nın düzenlenebilir listesinden
+              // AYRI, salt-okunur. Kayıtta gönderilmez; sunucu korur.
+              const hardTerms = key === 'exclude_themes' ? parseExcludedInfo(ws.excluded_info) : []
+              return (
+                <div className="form-group" key={key}>
+                  <label htmlFor={`profile-field-${key}`}>{label}</label>
+                  {help && (
+                    <p className="bpx-section-hint" id={helpId}>
+                      {help}
+                    </p>
+                  )}
+                  <textarea
+                    id={`profile-field-${key}`}
+                    className="bpx-textarea"
+                    rows={3}
+                    aria-describedby={helpId}
+                    value={profileForm[key]}
+                    onChange={(e) => editProfileForm((f) => ({ ...f, [key]: e.target.value }))}
+                  />
+                  {hardTerms.length > 0 && (
+                    <div className="bpx-chiprow" data-testid="hard-exclude-chips">
+                      {hardTerms.map((term) => (
+                        <span
+                          key={term}
+                          className="bpx-chip is-readonly"
+                          title="Silmek için aşağıdaki Kesin dışlama kutusunu kullanın"
+                        >
+                          {term}
+                          <span className="bpx-chip-note">{HARD_EXCLUDE_CHIP_NOTE}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             <div className="bpx-modal-footer is-end bpx-inline-footer">
               <button
@@ -721,6 +1306,14 @@ function WorkspaceModal({
     <div className="bpx-overlay" onClick={onClose}>
       <div className="bpx-modal" onClick={(e) => e.stopPropagation()}>
         {renderHeader()}
+        {restoreError && <div className="error-banner">{restoreError}</div>}
+        {wsPollFailed && isLoadingPhase && (
+          <ErrorBanner
+            error={ANALYSIS_POLL_FAILED_MESSAGE}
+            onRetry={() => setWsPollAttempt((n) => n + 1)}
+            retryLabel={POLL_RECHECK_LABEL}
+          />
+        )}
         <div className={`bpx-modal-body${isLoadingPhase ? ' is-loading' : ''}`}>{renderBody()}</div>
       </div>
     </div>
@@ -729,20 +1322,130 @@ function WorkspaceModal({
 
 // ─── Kart ─────────────────────────────────────────────────────────────
 
+// Marka kartı "Çalışmaya geç" menüsü: "Ana marka" + her aktif alt sayfa (kısa ad)
+function FocusMenu({
+  brand,
+  focuses,
+  activeId,
+  onActivate,
+  onOpen,
+}: {
+  brand: WorkspaceListRow
+  focuses: WorkspaceListRow[]
+  activeId: number | null
+  onActivate: (ws: WorkspaceListRow) => void
+  onOpen: (id: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  useEffect(() => {
+    if (open) rootRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+  }, [open])
+
+  const items = [
+    { ws: brand, label: 'Ana marka' },
+    ...focuses.map((f) => ({ ws: f, label: focusShortName(f.name) })),
+  ]
+
+  const pick = (w: WorkspaceListRow) => {
+    setOpen(false)
+    if (w.status === 'confirmed') onActivate(w)
+    else onOpen(w.id)
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // Kart Enter ile pencere açar; menü etkileşimi karta sızmasın
+    e.stopPropagation()
+    if (e.key === 'Escape' && open) {
+      e.preventDefault()
+      setOpen(false)
+      buttonRef.current?.focus()
+    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && open) {
+      e.preventDefault()
+      const els = Array.from(
+        rootRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []
+      )
+      const at = els.indexOf(document.activeElement as HTMLElement)
+      els[(at + (e.key === 'ArrowDown' ? 1 : els.length - 1)) % els.length]?.focus()
+    }
+  }
+
+  return (
+    <div
+      className="bpx-menu"
+      ref={rootRef}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={onKeyDown}
+    >
+      <button
+        type="button"
+        ref={buttonRef}
+        className="bpx-btn-raised"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        Çalışmaya geç <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="bpx-menu-list" role="menu" aria-label="Çalışmaya geç">
+          {items.map(({ ws: w, label }) => (
+            <button
+              type="button"
+              role="menuitem"
+              key={w.id}
+              className="bpx-menu-item"
+              onClick={() => pick(w)}
+            >
+              <span>{label}</span>
+              {(w.id === activeId || w.status !== 'confirmed') && (
+                <span className="bpx-menu-status">
+                  {w.id === activeId ? 'Aktif' : statusLabel(w)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BrandCard({
   ws,
-  isActive,
+  activeId,
+  focuses,
+  matchedFocuses,
   onOpen,
+  onOpenFocus,
   onActivate,
   onArchive,
   onRestore,
+  onAddMarket,
+  nested,
 }: {
   ws: WorkspaceListRow
-  isActive: boolean
+  nested: boolean
+  activeId: number | null
+  focuses: WorkspaceListRow[] // yalnız aktif (arşivsiz) alt sayfalar
+  matchedFocuses: WorkspaceListRow[] // aramada marka kartını getiren alt sayfalar
   onOpen: () => void
-  onActivate: () => void
+  onOpenFocus: (id: number) => void
+  onActivate: (ws: WorkspaceListRow) => void
   onArchive: () => void
   onRestore: () => void
+  onAddMarket: (ws: WorkspaceListRow) => void
 }) {
   const phase = getWorkspacePhase(ws)
   const tone = pillTone(phase)
@@ -751,10 +1454,18 @@ function BrandCard({
     phase === 'generating_keywords' ||
     phase === 'analyzing_keywords' ||
     phase === 'generating_profile'
+  const activeFocus = focuses.find((f) => f.id === activeId)
+  const isActive = activeId === ws.id || !!activeFocus
+  const hasMenu = !ws.deleted_at && focuses.length > 0
+  // Pazar kopyası yalnız marka çalışmasından (alt sayfa ve arşivli değil); onaylı olmalı
+  const showMarketAction = !ws.deleted_at && !isFocusWorkspace(ws)
+  const canAddMarket = ws.status === 'confirmed'
 
   return (
     <div
-      className={`bpx-card${isActive ? ' is-active' : ''}${ws.deleted_at ? ' is-archived' : ''}`}
+      className={`bpx-card${isActive ? ' is-active' : ''}${ws.deleted_at ? ' is-archived' : ''}${
+        nested ? ' is-focus-nested' : ''
+      }`}
       onClick={onOpen}
       role="button"
       tabIndex={0}
@@ -763,7 +1474,13 @@ function BrandCard({
       }}
     >
       <div className="bpx-card-top">
-        <div className="bpx-card-name">{ws.name}</div>
+        <div className="bpx-card-name" title={ws.name}>
+          {ws.name}
+          {isFocusWorkspace(ws) && <span className="bpx-focus-tag">Alt sayfa</span>}
+          {!isFocusWorkspace(ws) && ws.crawl_scope === 'page' && (
+            <span className="bpx-focus-tag">Tek sayfa</span>
+          )}
+        </div>
         <div className="bpx-card-actions">
           <span className={`bpx-pill is-${tone}`}>
             {busy && <Loader2 size={9} className="spin-icon" />} {statusLabel(ws)}
@@ -790,6 +1507,31 @@ function BrandCard({
       <div className="bpx-card-desc">
         {(ws.profile_data?.sector as string) || 'Sektör bilgisi yok'}
       </div>
+      {(ws.market_label || showMarketAction) && (
+        <div className="bpx-card-market">
+          {ws.market_label && <span className="market-badge">{ws.market_label}</span>}
+          {showMarketAction && (
+            <button
+              type="button"
+              className="bpx-icon-btn is-add"
+              disabled={!canAddMarket}
+              title={canAddMarket ? 'Pazar ekle' : 'Önce profili onaylayın'}
+              aria-label="Pazar ekle"
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddMarket(ws)
+              }}
+            >
+              <Plus size={14} />
+            </button>
+          )}
+        </div>
+      )}
+      {matchedFocuses.length > 0 && (
+        <div className="bpx-card-match">
+          Eşleşen alt sayfa: {matchedFocuses.map((f) => focusShortName(f.name)).join(', ')}
+        </div>
+      )}
       <div className="bpx-card-footer">
         <div>
           <div className="bpx-card-meta-line">{ws.run_count} analiz</div>
@@ -806,6 +1548,21 @@ function BrandCard({
           >
             <RotateCcw size={14} /> Geri Getir
           </button>
+        ) : hasMenu ? (
+          <div className="bpx-card-switch">
+            {isActive && (
+              <span className="bpx-card-active-note">
+                Aktif: {activeFocus ? focusShortName(activeFocus.name) : 'Ana marka'}
+              </span>
+            )}
+            <FocusMenu
+              brand={ws}
+              focuses={focuses}
+              activeId={activeId}
+              onActivate={onActivate}
+              onOpen={onOpenFocus}
+            />
+          </div>
         ) : isActive ? (
           <span className="bpx-card-active-note">Aktif Çalışma</span>
         ) : (
@@ -814,7 +1571,7 @@ function BrandCard({
             className="bpx-btn-raised"
             onClick={(e) => {
               e.stopPropagation()
-              onActivate()
+              onActivate(ws)
             }}
           >
             Bu Çalışmaya Geç
@@ -827,6 +1584,8 @@ function BrandCard({
 
 const POLLING_STATUSES = new Set(['pending', 'running'])
 const POLL_INTERVAL_MS = 3000
+const ANALYSIS_POLL_FAILED_MESSAGE =
+  'Analiz durumu alınamıyor. Analiz arka planda devam ediyor olabilir.'
 
 // Türkçe duyarsız arama: "İstanbul" / "istanbul" / "ISTANBUL" ve "akıllı" / "akilli" eşleşir
 function normalizeSearchText(value: string): string {
@@ -873,7 +1632,12 @@ export default function BrandProfile() {
   const navigate = useNavigate()
   const activeWorkspace = useBrandStore((s) => s.activeWorkspace)
   const setActiveWorkspace = useBrandStore((s) => s.setActiveWorkspace)
+  const [marketSource, setMarketSource] = useState<WorkspaceListRow | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Liste yoklaması: ardışık hata sayacı efekt yeniden kurulsa da korunur
+  const listPollFailuresRef = useRef(0)
+  const [listPollFailed, setListPollFailed] = useState(false)
+  const [listPollAttempt, setListPollAttempt] = useState(0)
 
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true)
@@ -906,7 +1670,7 @@ export default function BrandProfile() {
     if (!workspaceIdParam) return
     const workspaceId = Number(workspaceIdParam)
     if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-      setError('Gecersiz marka calismasi id parametresi.')
+      setError('Bağlantıdaki marka çalışması geçersiz. Listeden bir çalışma seçin.')
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
@@ -927,7 +1691,9 @@ export default function BrandProfile() {
         if (workspace.deleted_at) {
           setSelectedWs(null)
           setModalOpen(false)
-          setError('Bu marka calismasi arsivlenmis. Panel acilmadi.')
+          setError(
+            'Bu marka çalışması arşivlenmiş. Görmek için "Arşivlenmiş Çalışmaları Göster" seçeneğini açın.'
+          )
           setSearchParams(
             (prev) => {
               const next = new URLSearchParams(prev)
@@ -945,7 +1711,7 @@ export default function BrandProfile() {
         if (cancelled) return
         setSelectedWs(null)
         setModalOpen(false)
-        setError(`Marka calismasi acilamadi: ${extractErrorMessage(err)}`)
+        setError(`Marka çalışması açılamadı: ${extractErrorMessage(err)}`)
         setSearchParams(
           (prev) => {
             const next = new URLSearchParams(prev)
@@ -974,9 +1740,15 @@ export default function BrandProfile() {
 
     if (pollingIds.length === 0) return
 
+    // Efekt yeniden kurulunca uçuştaki eski tick yeni zinciri çiftlemesin / yetim zamanlayıcı bırakmasın
+    let cancelled = false
     const tick = async () => {
+      if (cancelled) return
       try {
         const results = await Promise.all(pollingIds.map((id) => workspaceApi.get(id)))
+        if (cancelled) return
+        listPollFailuresRef.current = 0
+        setListPollFailed(false)
         const updated = results.map((r) => r.data as WorkspaceListRow)
         setWorkspaces((prev) =>
           prev.map((ws) => {
@@ -995,25 +1767,47 @@ export default function BrandProfile() {
           }
         })
       } catch {
-        /* sessiz — poll devam eder */
+        if (cancelled) return
+        listPollFailuresRef.current += 1
+        if (listPollFailuresRef.current >= MAX_POLL_FAILURES) {
+          setListPollFailed(true)
+          return
+        }
       }
+      if (cancelled) return
       pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
 
     pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
 
     return () => {
+      cancelled = true
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
     }
-  }, [workspaces, activeWorkspace, setActiveWorkspace])
+  }, [workspaces, activeWorkspace, setActiveWorkspace, listPollAttempt])
 
   const handleArchive = async (id: number) => {
+    // Arşivde onay yoktu; yalnız aktif alt sayfası olan markada, etkisini bildirmek için sorulur
+    const focusIds = workspaces
+      .filter((w) => w.parent_brand_profile_id === id && !w.deleted_at)
+      .map((w) => w.id)
+    const focusCount = focusIds.length
+    // Marka arşivlenince alt sayfaları da arşivlenir: seçili alt sayfa da temizlenmeli
+    const archivedIds = new Set([id, ...focusIds])
+    if (
+      focusCount > 0 &&
+      !window.confirm(
+        `Marka arşivlensin mi? Bu markanın ${focusCount} alt sayfası da arşivlenecek.`
+      )
+    ) {
+      return
+    }
     try {
       await workspaceApi.archive(id)
-      if (activeWorkspace?.id === id) {
+      if (activeWorkspace && archivedIds.has(activeWorkspace.id)) {
         setActiveWorkspace(null)
       }
-      if (selectedWs?.id === id) {
+      if (selectedWs && archivedIds.has(selectedWs.id)) {
         setSelectedWs(null)
         setModalOpen(false)
       }
@@ -1023,12 +1817,15 @@ export default function BrandProfile() {
     }
   }
 
-  const handleRestore = async (id: number) => {
+  const handleRestore = async (id: number): Promise<string | null> => {
     try {
       await workspaceApi.restore(id)
       fetchWorkspaces()
+      return null
     } catch (err: unknown) {
-      setError(extractErrorMessage(err))
+      const message = extractErrorMessage(err)
+      setError(message)
+      return message
     }
   }
 
@@ -1079,6 +1876,13 @@ export default function BrandProfile() {
     navigate('/keywords?tab=google-ads')
   }
 
+  // Pazar kopyasına geç: aktif yap + profil panelini aç; "kopya" bilgisi yalnız gezinme durumunda
+  const handleOpenMarketCopy = (first: WorkspaceResponse) => {
+    setMarketSource(null)
+    setActiveWorkspace(workspaceToActiveWorkspace(first))
+    navigate(`/brand-profile?workspace_id=${first.id}`, { state: { marketCopyId: first.id } })
+  }
+
   const closeModal = () => {
     setSelectedWs(null)
     setModalOpen(false)
@@ -1087,9 +1891,40 @@ export default function BrandProfile() {
 
   const archivedCount = archivedRows.length
   const tokens = useMemo(() => searchTokens(searchQuery), [searchQuery])
+  // Aktif alt sayfalar ayrı kart değil, marka kartının menüsünde; arşivli olanlar ayrı kart kalır
+  const focusesByParent = useMemo(() => {
+    const ids = new Set(workspaces.map((w) => w.id))
+    const map = new Map<number, WorkspaceListRow[]>()
+    workspaces.forEach((w) => {
+      const parent = w.parent_brand_profile_id
+      if (parent != null && !w.deleted_at && ids.has(parent))
+        map.set(parent, [...(map.get(parent) ?? []), w])
+    })
+    return map
+  }, [workspaces])
+  const nestedFocusIds = useMemo(
+    () => new Set([...focusesByParent.values()].flat().map((f) => f.id)),
+    [focusesByParent]
+  )
   const visibleWorkspaces = useMemo(
-    () => workspaces.filter((ws) => workspaceMatchesSearch(ws, tokens)),
-    [workspaces, tokens]
+    () =>
+      orderWithFocuses(
+        workspaces.filter(
+          (ws) =>
+            !nestedFocusIds.has(ws.id) &&
+            (workspaceMatchesSearch(ws, tokens) ||
+              (focusesByParent.get(ws.id) ?? []).some((f) => workspaceMatchesSearch(f, tokens)))
+        )
+      ),
+    [workspaces, tokens, nestedFocusIds, focusesByParent]
+  )
+  const visibleIds = useMemo(
+    () => new Set(visibleWorkspaces.map((ws) => ws.id)),
+    [visibleWorkspaces]
+  )
+  const knownWorkspaces = useMemo(
+    () => [...workspaces, ...archivedRows],
+    [workspaces, archivedRows]
   )
   // Arşiv gizliyken aramaya uyan arşivlenmiş çalışmalar — kullanıcıya ipucu olarak gösterilir
   const hiddenArchivedMatches = useMemo(
@@ -1153,7 +1988,7 @@ export default function BrandProfile() {
         </div>
         {tokens.length > 0 && (
           <span className="bpx-search-count">
-            {visibleWorkspaces.length} / {workspaces.length} çalışma
+            {visibleWorkspaces.length} / {workspaces.length - nestedFocusIds.size} çalışma
           </span>
         )}
       </div>
@@ -1168,6 +2003,17 @@ export default function BrandProfile() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {listPollFailed && (
+        <ErrorBanner
+          error={ANALYSIS_POLL_FAILED_MESSAGE}
+          onRetry={() => {
+            listPollFailuresRef.current = 0
+            setListPollFailed(false)
+            setListPollAttempt((n) => n + 1)
+          }}
+          retryLabel={POLL_RECHECK_LABEL}
+        />
+      )}
 
       {loading && workspaces.length === 0 && <div className="loading-indicator">Yükleniyor...</div>}
 
@@ -1186,17 +2032,31 @@ export default function BrandProfile() {
       )}
 
       <div className="bpx-grid">
-        {visibleWorkspaces.map((ws) => (
-          <BrandCard
-            key={ws.id}
-            ws={ws}
-            isActive={activeWorkspace?.id === ws.id}
-            onOpen={() => handleOpen(ws.id)}
-            onActivate={() => handleActivateWorkspace(ws)}
-            onArchive={() => handleArchive(ws.id)}
-            onRestore={() => handleRestore(ws.id)}
-          />
-        ))}
+        {visibleWorkspaces.map((ws) => {
+          const focuses = focusesByParent.get(ws.id) ?? []
+          return (
+            <BrandCard
+              key={ws.id}
+              ws={ws}
+              nested={
+                ws.parent_brand_profile_id != null && visibleIds.has(ws.parent_brand_profile_id)
+              }
+              activeId={activeWorkspace?.id ?? null}
+              focuses={focuses}
+              matchedFocuses={
+                tokens.length > 0 && !workspaceMatchesSearch(ws, tokens)
+                  ? focuses.filter((f) => workspaceMatchesSearch(f, tokens))
+                  : []
+              }
+              onOpen={() => handleOpen(ws.id)}
+              onOpenFocus={(id) => void handleOpen(id)}
+              onActivate={handleActivateWorkspace}
+              onArchive={() => handleArchive(ws.id)}
+              onRestore={() => handleRestore(ws.id)}
+              onAddMarket={setMarketSource}
+            />
+          )
+        })}
       </div>
 
       {/* Plan v13: Gelişmiş ayarlar (conquest istisnaları + manuel terimler).
@@ -1206,6 +2066,15 @@ export default function BrandProfile() {
         <PolicyPanel workspaceId={activeWorkspace.id} workspaceName={activeWorkspace.name} />
       )}
 
+      {marketSource && (
+        <MarketCopyDialog
+          source={{ id: marketSource.id, name: marketSource.name }}
+          onClose={() => setMarketSource(null)}
+          onCreated={() => void fetchWorkspaces()}
+          onOpenFirst={handleOpenMarketCopy}
+        />
+      )}
+
       {modalOpen && (
         <WorkspaceModal
           workspace={selectedWs}
@@ -1213,6 +2082,9 @@ export default function BrandProfile() {
           onWorkspaceUpdated={handleWorkspaceUpdated}
           onFinished={handleFinished}
           onRestore={handleRestore}
+          onOpenWorkspace={(id) => void handleOpen(id)}
+          onReloadList={() => void fetchWorkspaces()}
+          allWorkspaces={knownWorkspaces}
         />
       )}
     </div>
