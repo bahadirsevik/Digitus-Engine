@@ -63,3 +63,39 @@ describe('GoogleAdsKeywordSearch seed taslağı', () => {
     expect(chips()).toEqual(['delta'])
   })
 })
+
+describe('GoogleAdsKeywordSearch başlangıç kelimesi sınırı', () => {
+  afterEach(cleanup)
+
+  it('20 kelime varken yenisi eklenmez ve uyarı çıkar', () => {
+    const twenty = Array.from({ length: 20 }, (_, i) => `k${i}`)
+    useBrandStore.setState({
+      activeWorkspace: workspace([]),
+      seedDrafts: { 7: { base: '', words: twenty } },
+    })
+    renderSearch()
+    fireEvent.click(screen.getByText('Ekle'))
+    const input = screen.getByPlaceholderText('Kelime yaz…')
+    fireEvent.change(input, { target: { value: 'fazla' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(chips()).toHaveLength(20)
+    expect(screen.getByRole('alert').textContent).toMatch(/en fazla 20 başlangıç kelimesi/)
+
+    fireEvent.click(screen.getAllByTitle('Sil')[0])
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('kayıtlı listede 20den fazla kelime varsa arama kapalı ve kaç tane silineceği söylenir', () => {
+    const many = Array.from({ length: 23 }, (_, i) => `k${i}`)
+    useBrandStore.setState({
+      activeWorkspace: workspace([]),
+      seedDrafts: { 7: { base: '', words: many } },
+    })
+    renderSearch()
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /23 kelime var; aramak için 3 tanesini silin/
+    )
+    expect(screen.getByRole('button', { name: /Ara/ })).toBeDisabled()
+  })
+})
