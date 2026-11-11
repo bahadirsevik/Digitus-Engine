@@ -209,6 +209,8 @@ class RSAGenerator:
         self._grounding_facts = ""
         # Çalışma pazarı (çıktı dili + hedef konum) — generate_rsa'da set edilir
         self._output_ctx = DEFAULT_CONTEXT
+        self._revision_block = ""
+        self._preserved: Dict[str, list] = {}
         # Bu üretimin KW kararları (yalnız bilgi; sonraki üretimleri etkilemez)
         self._kw_decisions: Dict[str, Dict[str, str]] = {}
         # (asset_type, metin) -> {findings, applied}: iddia incelemesi (rev.4)
@@ -222,6 +224,8 @@ class RSAGenerator:
         product_facts: str = "",
         grounding_facts: str = "",
         output_ctx: Optional[OutputContext] = None,
+        revision_block: str = "",
+        preserved: Optional[Dict[str, list]] = None,
     ) -> AdGroupFullSchema:
         """
         Generate complete RSA set for an ad group.
@@ -235,6 +239,12 @@ class RSAGenerator:
                 kullanıcının İSTEKTE verdiği USP; generic fallback USP GİRMEZ).
                 Boşsa da grounding uygulanır — hiçbir sayısal iddia geçemez.
             output_ctx: Çıktı dili + hedef konum (çalışma pazarı); None → Türkçe/Seçilmedi
+            revision_block: Kullanıcı revizyon talebi bölümü (revision.build_revision_block);
+                boşsa normal üretim.
+            preserved: Revizyonda kapsam DIŞI bölümler {"headlines"|"descriptions"|"negatives":
+                kaynak liste}. Bu bölümler EN BAŞTAN kaynaktan alınır, modelden istenmez;
+                tamamlama/minimum/fallback/negatif top-up kararları yalnız kapsam içi bölümler
+                için verilir. Son birebir kontrol çağıranda (revision.verify_*).
 
         Returns:
             AdGroupFullSchema with validated headlines, descriptions, negatives
@@ -243,12 +253,17 @@ class RSAGenerator:
         self._product_facts = (product_facts or "").strip() or "—"
         self._grounding_facts = (grounding_facts or "").strip()
         self._output_ctx = output_ctx or DEFAULT_CONTEXT
+        self._revision_block = revision_block or ""
+        self._preserved = dict(preserved or {})
+        keep_h = self._preserved.get("headlines")
+        keep_d = self._preserved.get("descriptions")
+        keep_n = self._preserved.get("negatives")
         self._kw_decisions: Dict[str, Dict[str, str]] = {}
         self._asset_review = {}
-        
+
         # Get primary keyword for validation context
         primary_keyword = group.keywords[0] if group.keywords else ""
-        
+
         # Primary attempt: aday havuzu (doğrulama + iddia kontrolü SONRASI, kesme yok)
         h_pool, d_pool, negatives, headline_stats = self._generate_and_validate_components(
             group=group,
@@ -258,6 +273,11 @@ class RSAGenerator:
             stage="primary",
         )
         h_pool, d_pool = self._dedup(h_pool), self._dedup(d_pool)
+        # Revizyon: kapsam dışı havuz kaynak listedir (dedup/seçim/top-up uygulanmaz)
+        if keep_h is not None:
+            h_pool = list(keep_h)
+        if keep_d is not None:
+            d_pool = list(keep_d)
 
         # Tek tamamlama çağrısı (eski tam strict retry'ın yerine). Yalnız KW
         # kapsam eksikliği tetiklemez (K4); temiz adaylar korunur.
@@ -285,14 +305,23 @@ class RSAGenerator:
                 # Yeni başlık havuzu yalnız seçimi (CTA şartı > KW kapsamı > başlık sayısı)
                 # gerçekten iyileştiriyorsa alınır; aksi halde önceki havuz korunur.
                 merged_h = self._dedup(h_pool + c_h)
-                if self._selection_key(merged_h, group.keywords) > self._selection_key(h_pool, group.keywords):
+                if keep_h is None and (
+                    self._selection_key(merged_h, group.keywords)
+                    > self._selection_key(h_pool, group.keywords)
+                ):
                     h_pool = merged_h
-                d_pool = self._dedup(d_pool + c_d)
+                if keep_d is None:
+                    d_pool = self._dedup(d_pool + c_d)
                 negatives = negatives or c_negatives
                 for k, v in c_stats.items():
                     headline_stats[k] = headline_stats.get(k, 0) + v
 
         headlines, descriptions = self._select_assets(h_pool, d_pool, group.keywords)
+        # Kapsam dışı bölüm seçimden geçmez: kaynak sırası ve içeriği aynen
+        if keep_h is not None:
+            headlines = list(keep_h)
+        if keep_d is not None:
+            descriptions = list(keep_d)
 
         # Deterministic fallback (yalnız sert minimum 3/2 altı; 15'e ASLA doldurmaz)
         if self._below_minimum(headlines, descriptions):
@@ -312,8 +341,10 @@ class RSAGenerator:
                 fb_h, fb_d = self._enforce_grounding(fb_h, fb_d, group, fb_stats)
                 # Seçilen TEMİZ asset'ler korunur; fallback yalnız eksik tipi,
                 # temizlerin ARKASINA ve sert minimuma kadar tamamlar.
-                headlines = self._top_up(headlines, fb_h, self.MIN_HEADLINES)
-                descriptions = self._top_up(descriptions, fb_d, self.MIN_DESCRIPTIONS)
+                if keep_h is None:
+                    headlines = self._top_up(headlines, fb_h, self.MIN_HEADLINES)
+                if keep_d is None:
+                    descriptions = self._top_up(descriptions, fb_d, self.MIN_DESCRIPTIONS)
                 negatives = negatives or fb_negatives
                 for k, v in fb_stats.items():
                     headline_stats[k] = headline_stats.get(k, 0) + v
@@ -334,20 +365,24 @@ class RSAGenerator:
         # engelleyen negatifler atılır (birincil/retry/fallback hepsi buradan
         # geçer). Eksik kalan sayı için yalnız güvenli varsayılanlar eklenir;
         # güvenli aday yoksa DAHA AZ negatif döner (sayı doldurulmaz).
-        negatives, dropped_negatives = partition_negatives(
-            negatives, group.keywords, group.name
-        )
-        if len(negatives) < self.MIN_NEGATIVE_KEYWORDS:
-            logger.warning(f"Only {len(negatives)} negative keywords, adding defaults")
-            negatives = self._add_default_negatives(
-                negatives, targets=group.keywords,
-                excluded=[d["negative"] for d in dropped_negatives],
+        if keep_n is not None:
+            # Revizyon kapsamı dışı: kaynak negatifler aynen; eleme/varsayılan top-up YOK
+            negatives, dropped_negatives = list(keep_n), []
+        else:
+            negatives, dropped_negatives = partition_negatives(
+                negatives, group.keywords, group.name
             )
-        # Son emniyet: top-up dahil çıkan listede çakışan kalmasın
-        negatives, late_drops = partition_negatives(
-            negatives, group.keywords, group.name
-        )
-        dropped_negatives.extend(late_drops)
+            if len(negatives) < self.MIN_NEGATIVE_KEYWORDS:
+                logger.warning(f"Only {len(negatives)} negative keywords, adding defaults")
+                negatives = self._add_default_negatives(
+                    negatives, targets=group.keywords,
+                    excluded=[d["negative"] for d in dropped_negatives],
+                )
+            # Son emniyet: top-up dahil çıkan listede çakışan kalmasın
+            negatives, late_drops = partition_negatives(
+                negatives, group.keywords, group.name
+            )
+            dropped_negatives.extend(late_drops)
         for d in dropped_negatives:
             logger.warning(
                 f"Negative dropped (blocks group target) | group={d['group']} "
@@ -408,7 +443,10 @@ class RSAGenerator:
         headlines: List[HeadlineSchema],
         descriptions: List[DescriptionSchema]
     ) -> bool:
-        return len(headlines) < self.MIN_HEADLINES or len(descriptions) < self.MIN_DESCRIPTIONS
+        # Revizyonda korunan (kaynak) bölüm yeterli sayılır: karar yalnız kapsam içi için
+        h_low = "headlines" not in self._preserved and len(headlines) < self.MIN_HEADLINES
+        d_low = "descriptions" not in self._preserved and len(descriptions) < self.MIN_DESCRIPTIONS
+        return h_low or d_low
 
     @staticmethod
     def _contains_keyword(text: str, keywords: List[str]) -> bool:
@@ -419,8 +457,14 @@ class RSAGenerator:
 
     def _needs_completion(self, h_pool, d_pool, keywords: List[str]) -> bool:
         """15 başlık, 4 KW'li açıklama veya 3 CTA dolmadı mı? (sert minimum bunun içinde).
-        Seçim havuzdaki CTA'lardan en çok 3'ünü alır: havuzda <3 CTA = seçimde <3 CTA."""
-        kw_descriptions = sum(self._contains_keyword(d.text, keywords) for d in d_pool)
+        Seçim havuzdaki CTA'lardan en çok 3'ünü alır: havuzda <3 CTA = seçimde <3 CTA.
+        Revizyonda korunan bölümün eksiği tamamlama tetiklemez (o bölüm değişmeyecek)."""
+        kw_descriptions = (
+            self.MAX_DESCRIPTIONS if "descriptions" in self._preserved
+            else sum(self._contains_keyword(d.text, keywords) for d in d_pool)
+        )
+        if "headlines" in self._preserved:
+            return kw_descriptions < self.MAX_DESCRIPTIONS
         return (len(h_pool) < self.MAX_HEADLINES or kw_descriptions < self.MAX_DESCRIPTIONS
                 or sum(self._is_cta(h.text) for h in h_pool) < self.MIN_CTA)
 
@@ -772,6 +816,16 @@ class RSAGenerator:
                         )
             block = "\n".join([""] + lines) if lines else ""
 
+        # Revizyonda korunan bölüm modelden İSTENMEZ (kaynak aynen kullanılır)
+        if "headlines" in self._preserved:
+            h_instr = ("başlık ÜRETME ('headlines' ve 'keyword_headlines' dizilerini boş bırak; "
+                       "mevcut başlıklar aynen kullanılır)")
+        if "descriptions" in self._preserved:
+            d_instr = ("açıklama ÜRETME ('descriptions' dizisini boş bırak; "
+                       "mevcut açıklamalar aynen kullanılır)")
+        if self._revision_block:
+            block = "\n".join([block, self._revision_block])
+
         if self._output_ctx.language != DEFAULT_LANGUAGE:
             block = "\n".join([block, *_NON_TR_PROMPT_RULES])
 
@@ -791,7 +845,8 @@ class RSAGenerator:
             headline_instruction=h_instr,
             description_instruction=d_instr,
             long_keywords=", ".join(long_keywords) or "—",
-            cta_instruction=self.CTA_PRIMARY_INSTRUCTION if kept is None else "",
+            cta_instruction=(self.CTA_PRIMARY_INSTRUCTION
+                             if kept is None and "headlines" not in self._preserved else ""),
             completion_block=block,
         ), self._output_ctx)
     

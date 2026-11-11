@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios'
+import type { AdRevisionScope } from '../types/models'
 
 const API_BASE = '/api/v1'
 
@@ -734,8 +735,13 @@ export const generationApi = {
       params: { scoring_run_id: scoringRunId, brand_profile_id: brandProfileId },
     }),
 
-  regenerateAdGroup: (groupId: number, brand_profile_id?: number) =>
-    api.post(`/generation/ads/rsa/group/${groupId}/regenerate`, undefined, {
+  // Geri bildirimli revizyon: yalnız `scope` bölümleri değişir, gerisi aynen korunur
+  regenerateAdGroup: (
+    groupId: number,
+    brand_profile_id?: number,
+    revision?: { feedback: string; scope: AdRevisionScope[] }
+  ) =>
+    api.post(`/generation/ads/rsa/group/${groupId}/regenerate`, revision, {
       params: { brand_profile_id },
     }),
 

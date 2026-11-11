@@ -131,6 +131,17 @@ export interface AdGenerationSetSummary {
   claim_risk_count?: number
   claim_unverified_count?: number
   claim_review?: ClaimReview | null
+  // Geri bildirimli grup revizyonu ("Revize Et") ile üretildiyse
+  revision?: AdGroupRevisionInfo | null
+}
+
+export type AdRevisionScope = 'headlines' | 'descriptions' | 'negatives'
+
+export interface AdGroupRevisionInfo {
+  feedback: string
+  scope: AdRevisionScope[]
+  source_set_id: number
+  source_group_id: number
 }
 
 export interface AdsSetListResult {

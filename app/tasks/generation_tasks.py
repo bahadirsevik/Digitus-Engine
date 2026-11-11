@@ -394,6 +394,8 @@ def generate_ads_task(
     source_set_id: Optional[int] = None,
     source_group_id: Optional[int] = None,
     trusted_brand_usp: Optional[str] = None,
+    feedback: Optional[str] = None,
+    scope: Optional[list] = None,
 ):
     """
     Google Ads RSA üretimi (async Celery task — versiyonlanmış, Faz E).
@@ -514,11 +516,24 @@ def generate_ads_task(
                 source_set_id, gen_set.id, exclude_group_id=source_group_id
             )
             update_task_status(task_id, progress=40)
-            regenerated = generator.regenerate_group_into_set(
-                source_group, gen_set.id,
-                brand_name=brand_name or "", brand_usp=brand_usp or "",
-                trusted_brand_usp=trusted_brand_usp or "",
-            )
+            from app.generators.ads.revision import RevisionScopeError
+            try:
+                regenerated = generator.regenerate_group_into_set(
+                    source_group, gen_set.id,
+                    brand_name=brand_name or "", brand_usp=brand_usp or "",
+                    trusted_brand_usp=trusted_brand_usp or "",
+                    feedback=feedback, scope=scope,
+                )
+            except RevisionScopeError as scope_error:
+                # Kapsam dışı bölüm değişti: hiçbir grup yazılmaz (rollback), set failed
+                logger.error(f"ADS revizyon kapsam ihlali: set={gen_set.id} {scope_error}")
+                finalize_ads_failure(
+                    db, gen_set, error_message=str(scope_error),
+                    extra_result_data={"operation": "group_regenerate",
+                                       "reason": "revision_scope_violation",
+                                       "usage": collector.finalize()},
+                )
+                return {"status": "failed", "reason": "revision_scope_violation"}
             cloned_review = generator.cloned_claim_review
             set_warnings = ads_set_warnings(
                 regenerated.dropped_negatives,
@@ -530,6 +545,7 @@ def generate_ads_task(
             extra = {"operation": "group_regenerate",
                      "source_set_id": source_set_id,
                      "source_group_id": source_group_id,
+                     "revision_scope": scope if feedback else None,
                      "standard_shortfalls": _standard_shortfalls([regenerated]),
                      "keyword_decisions": _keyword_decisions([regenerated]),
                      "usage": collector.finalize()}

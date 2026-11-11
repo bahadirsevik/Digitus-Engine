@@ -580,7 +580,8 @@
 
 @media (max-width: 1100px) {
   .chx-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0,…): geniş tablo (min-width 420) hücreyi büyütmesin, kendi içinde kaysın */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -914,7 +915,7 @@
 .adsx-groups-grid {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -1319,4 +1320,36 @@
   gap: 12px;
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+/* Dar ekran: başlık ve analiz seçici sayfayı yatay kaydırmasın */
+@media (max-width: 560px) {
+  .chx-header-left,
+  .chx-title,
+  .chx-run-pill {
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
+  }
+
+  .chx-title h1,
+  .chx-title p {
+    white-space: normal;
+  }
+
+  /* Analiz seçici tam satır: seçim metni görünür kalsın (min-width:0 onu büzüyordu) */
+  .chx-run-pill {
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+  }
+
+  .chx-run-select {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+
+  .chx-run-select select {
+    width: 100%;
+  }
 }

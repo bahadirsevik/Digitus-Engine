@@ -547,6 +547,14 @@ class AdGenerationSet(Base):
     scoring_run = relationship("ScoringRun")
     ad_groups = relationship("AdGroup", back_populates="generation_set")
 
+    @property
+    def revision(self):
+        """Geri bildirimli grup revizyonu bilgisi (kolon değil; snapshot'tan okunur)."""
+        snap = self.request_snapshot or {}
+        if not snap.get("feedback"):
+            return None
+        return {k: snap.get(k) for k in ("feedback", "scope", "source_set_id", "source_group_id")}
+
     __table_args__ = (
         UniqueConstraint(
             'scoring_run_id', 'version_number',

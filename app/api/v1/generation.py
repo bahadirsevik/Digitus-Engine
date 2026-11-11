@@ -919,6 +919,10 @@ def regenerate_ads_group(
             request.brand_usp if request else None
         ) or ""
         effective_brand_usp = trusted_brand_usp or defaults.get("brand_usp", "")
+        # Geri bildirimli revizyon: yalnız seçili bölümler değişir (revision.py)
+        feedback = request.feedback if request else None
+        # Yalnız talep varsa eklenir: eski kodla çalışan worker düz regenerate'te TypeError atmasın
+        revision = {"feedback": feedback, "scope": list(request.scope)} if feedback else {}
 
         return _dispatch_ads(
             db,
@@ -930,12 +934,14 @@ def regenerate_ads_group(
                 "trusted_brand_usp": trusted_brand_usp,
                 "source_set_id": source_set.id,
                 "source_group_id": group_id,
+                **revision,
             },
             snapshot_extra={
                 "source_set_id": source_set.id,
                 "source_group_id": group_id,
                 "display_brand_usp": effective_brand_usp,
                 "trusted_brand_usp": trusted_brand_usp,
+                **revision,
             },
         )
     except HTTPException:

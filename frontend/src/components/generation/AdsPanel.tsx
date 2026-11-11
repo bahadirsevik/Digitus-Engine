@@ -5,7 +5,7 @@
  * kolonlu gridin sağ hücresine, banner/sonuçlar tam genişliğe oturur.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle, RefreshCw, Sparkles, X } from 'lucide-react'
+import { CheckCircle, Pencil, RefreshCw, Sparkles, X } from 'lucide-react'
 import {
   useTaskPolling,
   useScopedTaskId,
@@ -24,9 +24,11 @@ import {
   generationApi,
   policyStaleFromError,
 } from '../../services/api'
+import AdGroupReviseDialog from './AdGroupReviseDialog'
 import type {
   AdGenerationSetSummary,
   AdGroup,
+  AdRevisionScope,
   AdGroupStandardReport,
   AdsResult,
   AdsSetListResult,
@@ -54,8 +56,23 @@ const ASSET_TYPE_LABEL = { headline: 'Başlık', description: 'Açıklama' } as 
 const canActivateSet = (s: AdGenerationSetSummary) =>
   !s.is_stale && (s.status === 'draft' || s.status === 'archived') && (s.groups_count ?? 0) > 0
 
-const canRegenerateFromSet = (s: AdGenerationSetSummary | null | undefined) =>
-  !!s && !s.is_stale && (s.status === 'active' || s.status === 'draft' || s.status === 'archived')
+// Revize edilemiyorsa nedeni (null → revize edilebilir). Buton gizlenmez, pasif + nedenli görünür.
+const reviseBlockReason = (s: AdGenerationSetSummary | null | undefined): string | null => {
+  if (!s) return 'Reklam seti bilgisi yüklenemedi; sayfayı yenileyin.'
+  if (s.is_stale)
+    return 'Bu set güncel değil (kanal ataması yenilendi). Önce tüm reklamları yeniden üretin.'
+  if (s.status === 'active' || s.status === 'draft' || s.status === 'archived') return null
+  return 'Bu set tamamlanmadığı için içindeki grup revize edilemez.'
+}
+
+// Kartlardaki pasif "Revize Et" butonları nedeni sonuç başlığındaki tek satırdan okur
+const REVISE_REASON_ID = 'adsx-revise-reason'
+
+const SCOPE_LABELS: Record<AdRevisionScope, string> = {
+  headlines: 'başlıklar',
+  descriptions: 'açıklamalar',
+  negatives: 'negatif kelimeler',
+}
 
 // İnceleme gerekçeleri: set bazlı bulgu tablosu + otomatik düzeltilen (Orijinal → Öneri) liste
 function ClaimReviewDetails({ review }: { review?: ClaimReview | null }) {
@@ -168,9 +185,28 @@ function rsaStepFromProgress(progress: number): number {
   return 5
 }
 
-function GenBanner({ progress }: { progress: number }) {
-  const step = rsaStepFromProgress(progress)
-  const pct = Math.max(progress, 3)
+// Grup revizyonu görevinin adımları (worker: %10 klon, %40 seçili bölümler yeniden yazılır)
+const REVISION_STEPS = [
+  'Diğer gruplar taslağa kopyalanıyor',
+  'Seçilen bölümler yeniden yazılıyor',
+  'Kontroller ve kayıt',
+]
+
+function genProgress(progress: number, revising: boolean) {
+  const steps = revising ? REVISION_STEPS : RSA_STEPS
+  const step = revising
+    ? progress < 40
+      ? 0
+      : progress < 95
+        ? 1
+        : 2
+    : rsaStepFromProgress(progress)
+  const duration = revising ? 'Bu işlem 1–2 dakika sürebilir.' : 'Bu işlem 3–5 dakika sürebilir.'
+  return { steps, step, duration, pct: Math.max(progress, 3) }
+}
+
+function GenBanner({ progress, revisingName }: { progress: number; revisingName?: string }) {
+  const { steps, step, duration, pct } = genProgress(progress, !!revisingName)
   return (
     <div className="adsx-banner">
       <div className="adsx-banner-top">
@@ -180,12 +216,15 @@ function GenBanner({ progress }: { progress: number }) {
           </span>
         </span>
         <div className="adsx-banner-copy">
-          <div className="adsx-banner-title">Reklamlar üretiliyor</div>
+          <div className="adsx-banner-title">
+            {revisingName ? `“${revisingName}” grubu revize ediliyor` : 'Reklamlar üretiliyor'}
+          </div>
           <div className="adsx-banner-sub">
-            Havuzdaki kelimeler için RSA reklam grupları yapay zekâ ile oluşturuluyor.{' '}
-            <b className="warn">Bu işlem 3–5 dakika sürebilir.</b> Bu ekranı kapatabilirsiniz —
-            işlem arka planda sürer, durumu <b className="strong">Görevler</b>'den de
-            izleyebilirsiniz.
+            {revisingName
+              ? 'Talebiniz doğrultusunda seçtiğiniz bölümler yeniden yazılıyor; sonuç yeni bir taslak set olur.'
+              : 'Havuzdaki kelimeler için RSA reklam grupları yapay zekâ ile oluşturuluyor.'}{' '}
+            <b className="warn">{duration}</b> Bu ekranı kapatabilirsiniz — işlem arka planda sürer,
+            durumu <b className="strong">Görevler</b>'den de izleyebilirsiniz.
           </div>
         </div>
       </div>
@@ -193,7 +232,7 @@ function GenBanner({ progress }: { progress: number }) {
         <div className="adsx-progressbar-fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="adsx-steps">
-        {RSA_STEPS.map((label, i) => {
+        {steps.map((label, i) => {
           const state = i < step ? 'done' : i === step ? 'active' : 'todo'
           return (
             <div key={i} className={`adsx-step is-${state}`}>
@@ -215,9 +254,16 @@ function GenBanner({ progress }: { progress: number }) {
   )
 }
 
-function GenToast({ progress, onDismiss }: { progress: number; onDismiss: () => void }) {
-  const step = rsaStepFromProgress(progress)
-  const pct = Math.max(progress, 3)
+function GenToast({
+  progress,
+  onDismiss,
+  revisingName,
+}: {
+  progress: number
+  onDismiss: () => void
+  revisingName?: string
+}) {
+  const { steps, step, duration, pct } = genProgress(progress, !!revisingName)
   return (
     <div className="adsx-toast">
       <div className="adsx-toast-head">
@@ -227,8 +273,10 @@ function GenToast({ progress, onDismiss }: { progress: number; onDismiss: () => 
           </span>
         </span>
         <div className="adsx-toast-copy">
-          <div className="adsx-toast-title">Reklamlar üretiliyor</div>
-          <div className="adsx-toast-sub">{RSA_STEPS[Math.min(step, RSA_STEPS.length - 1)]}</div>
+          <div className="adsx-toast-title">
+            {revisingName ? `“${revisingName}” revize ediliyor` : 'Reklamlar üretiliyor'}
+          </div>
+          <div className="adsx-toast-sub">{steps[Math.min(step, steps.length - 1)]}</div>
         </div>
         <button type="button" className="adsx-toast-close" onClick={onDismiss} title="Kapat">
           <X size={13} />
@@ -237,14 +285,14 @@ function GenToast({ progress, onDismiss }: { progress: number; onDismiss: () => 
       <div className="adsx-toast-body">
         <div className="adsx-toast-meta">
           <span>
-            {step}/{RSA_STEPS.length} adım
+            {step}/{steps.length} adım
           </span>
           <span className="chx-mono">{pct}%</span>
         </div>
         <div className="adsx-toast-bar">
           <div className="adsx-progressbar-fill" style={{ width: `${pct}%` }} />
         </div>
-        <div className="adsx-toast-warn">Bu işlem 3–5 dakika sürebilir.</div>
+        <div className="adsx-toast-warn">{duration}</div>
       </div>
     </div>
   )
@@ -319,14 +367,17 @@ function StandardReport({ report }: { report?: AdGroupStandardReport | null }) {
 function AdGroupCard({
   group,
   previewUrl,
-  onRegenerate,
-  regenerateDisabled,
+  onRevise,
+  reviseDisabledReason,
+  isRevising,
   findings = [],
 }: {
   group: AdGroup
   previewUrl: string
-  onRegenerate?: (groupId: number) => void
-  regenerateDisabled?: boolean
+  onRevise?: (group: AdGroup) => void
+  // null/undefined → buton aktif; metin → pasif ve neden gösterilir
+  reviseDisabledReason?: string | null
+  isRevising?: boolean
   findings?: ClaimFinding[]
 }) {
   // Rozet tooltip'i: metni eşleşen bulguların gerekçesi
@@ -341,25 +392,40 @@ function AdGroupCard({
   const negatives = group.negative_keywords || []
 
   return (
-    <div className="adsx-group-card">
+    <div className={`adsx-group-card${isRevising ? ' is-revising' : ''}`} aria-busy={isRevising}>
       <div className="adsx-group-head">
         <span className="adsx-group-icon">
           <Sparkles size={15} />
         </span>
         <h3>{adGroupName(group)}</h3>
-        {onRegenerate && group.id != null && (
+        {onRevise && group.id != null && (
           <button
             type="button"
             className="adsx-regen-btn"
-            onClick={() => onRegenerate(group.id!)}
-            disabled={regenerateDisabled}
-            title="Bu grubu yeniden üret (yeni taslak set oluşturur)"
+            onClick={() => onRevise(group)}
+            disabled={!!reviseDisabledReason || isRevising}
+            title={
+              reviseDisabledReason || 'Değişmesini istediğiniz noktaları yazın; yeni taslak oluşur'
+            }
+            aria-describedby={reviseDisabledReason ? REVISE_REASON_ID : undefined}
           >
-            <RefreshCw size={12} strokeWidth={2.4} />
-            Yeniden Üret
+            {isRevising ? (
+              <span className="chx-spin">
+                <RefreshCw size={12} strokeWidth={2.4} />
+              </span>
+            ) : (
+              <Pencil size={12} strokeWidth={2.4} />
+            )}
+            {isRevising ? 'Revize ediliyor…' : 'Revize Et'}
           </button>
         )}
       </div>
+      {isRevising && (
+        <div className="adsx-group-revising" role="status">
+          Bu grup talebinize göre revize ediliyor. Bitince yeni taslak set burada açılır; mevcut
+          reklamlar o zamana kadar değişmez.
+        </div>
+      )}
       <StandardReport report={group.standard_report} />
       {adGroupTheme(group) && <div className="adsx-group-intent">{adGroupTheme(group)}</div>}
       {adGroupKeywords(group).length > 0 && (
@@ -494,6 +560,8 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   // Async üretim/regenerate bitince otomatik geçilecek set
   const [pendingSetId, setPendingSetId] = useState<number | null>(null)
   const [activating, setActivating] = useState(false)
+  // "Revize Et" penceresi açık olan grup
+  const [reviseTarget, setReviseTarget] = useState<AdGroup | null>(null)
 
   const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_ads === false
@@ -509,6 +577,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
     setSetsError(null)
     setLoading(false)
     setActivating(false)
+    setReviseTarget(null)
     setBrandName('')
     setWebsiteUrl('')
     setUsps('')
@@ -658,24 +727,44 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
     }
   }
 
-  const regenerateGroup = async (groupId: number) => {
-    if (!activeWorkspace?.id) return
+  // Revizyon isteği yolda iken ikinci istek gönderilmez (çift tıklama → 409 hatası olmasın)
+  const revisionInFlight = useRef(false)
+
+  // Dönüş: hata metni (pencere açık kalır, talep korunur) ya da null (başarı)
+  const reviseGroup = async (
+    groupId: number,
+    feedback: string,
+    scope: AdRevisionScope[]
+  ): Promise<string | null> => {
+    if (!activeWorkspace?.id || revisionInFlight.current) return null
+    revisionInFlight.current = true
     const requestScope = scopeRef.current
     setError(null)
     setToastOpen(true)
     try {
-      const res = await generationApi.regenerateAdGroup(groupId, activeWorkspace.id)
+      const res = await generationApi.regenerateAdGroup(groupId, activeWorkspace.id, {
+        feedback,
+        scope,
+      })
       const data = res.data as { task_id: string; generation_set_id?: number }
       // Görev kimliği HER ZAMAN başlatıldığı run'ın anahtarına yazılır (unmount/run değişimi
       // olsa bile kaybolmaz); UI state yalnız panel hâlâ aynı kapsamdaysa güncellenir.
       setStoredTaskId(taskStorageKey, data.task_id)
-      if (!mountedRef.current || scopeRef.current !== requestScope) return
+      if (!mountedRef.current || scopeRef.current !== requestScope) return null
       setPendingSetId(data.generation_set_id ?? null)
       setTaskId(data.task_id)
+      setReviseTarget(null)
+      // Üretilen set (revizyon bilgisiyle) hemen listelensin → hedef kart "revize ediliyor"
+      void fetchSets()
+      return null
     } catch (err: unknown) {
-      if (scopeRef.current !== requestScope) return
+      if (scopeRef.current !== requestScope) return null
       const stale = policyStaleFromError(err)
-      setError(stale ? stale.message : apiErrorMessage(err, 'Grup yeniden üretilemedi'))
+      if (stale) return stale.message
+      const message = apiErrorMessage(err, 'Grup revize edilemedi')
+      return apiErrorStatus(err) === 409 ? `Devam eden bir ADS üretimi var — ${message}` : message
+    } finally {
+      revisionInFlight.current = false
     }
   }
 
@@ -747,6 +836,24 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
   const activatableDraft = sets.find(canActivateSet)
   // Kısmi başarı: üretilemeyen gruplar sette YOK (sebep: AI çıktısı işlenemedi / RSA kuralları sağlanamadı)
   const failedGroups = shownSet?.failed_groups ?? 0
+
+  // Süren revizyon: üretilen setin revizyon bilgisinden (sayfa yenilense de) hedef grup bulunur
+  const revisionRunning = polling.isActive
+    ? (sets.find((s) => s.status === 'generating')?.revision ?? null)
+    : null
+  const revisingGroupId = revisionRunning?.source_group_id ?? null
+  const revisingName = revisionRunning
+    ? (() => {
+        const g = results?.ad_groups?.find((x) => x.id === revisingGroupId)
+        return g ? adGroupName(g) : 'Reklam grubu'
+      })()
+    : undefined
+  const reviseReason =
+    reviseBlockReason(shownSet) ??
+    (generating || activating ? 'Devam eden bir üretim var; bitmesini bekleyin.' : null)
+  const activeVersion = sets.find((s) => s.id === activeSetId)?.version_number
+  const versionOf = (setId: number) => sets.find((s) => s.id === setId)?.version_number
+  const shownRevision = shownSet?.revision ?? null
 
   return (
     <div className="adsx-root">
@@ -825,7 +932,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       {/* Üretim ilerlemesi — tam genişlik banner (gerçek task progress) */}
       {polling.isActive && (
         <div className="adsx-span">
-          <GenBanner progress={polling.progress} />
+          <GenBanner progress={polling.progress} revisingName={revisingName} />
         </div>
       )}
       {polling.pollFailed && (
@@ -877,7 +984,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                   onClick={() => setSelectedSetId(s.id === activeSetId ? null : s.id)}
                   title={`v${s.version_number} — ${SET_STATUS_LABELS[s.status]}${
                     s.is_stale ? ' (güncel değil)' : ''
-                  }`}
+                  }${s.revision ? ` — Revizyon talebi: “${s.revision.feedback}”` : ''}`}
                 >
                   v{s.version_number}
                   <span className={`adsx-set-badge is-${s.status}`}>
@@ -887,6 +994,7 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                   {s.review_required && (
                     <span className="adsx-set-badge is-draft">İnceleme gerekli</span>
                   )}
+                  {s.revision && <span className="adsx-set-badge is-revision">Revizyon</span>}
                   {typeof s.groups_count === 'number' && (
                     <span className="adsx-set-count">{s.groups_count} grup</span>
                   )}
@@ -938,6 +1046,47 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
               <span className="adsx-set-badge is-active">Aktif Set</span>
             )}
           </div>
+
+          {shownSet && shownRevision && (
+            <div
+              className={`adsx-revision-note${shownSet.status === 'draft' ? ' is-draft' : ''}`}
+              role="status"
+            >
+              <div>
+                <b>v{shownSet.version_number}</b>
+                {versionOf(shownRevision.source_set_id) != null &&
+                  ` (v${versionOf(shownRevision.source_set_id)} setinden)`}{' '}
+                “{shownRevision.feedback}” talebiyle revize edildi; değişen bölümler:{' '}
+                {shownRevision.scope.map((s) => SCOPE_LABELS[s]).join(', ')}. Diğer bölümler ve
+                diğer gruplar aynen korundu.
+              </div>
+              {shownSet.status === 'draft' && (
+                <div className="adsx-revision-note-foot">
+                  <span>
+                    Bu bir taslak: siz “Aktif Yap” diyene kadar kullanılmaz.{' '}
+                    {activeVersion != null
+                      ? `Kullanımdaki set hâlâ v${activeVersion}.`
+                      : 'Şu an kullanımda aktif set yok.'}
+                  </span>
+                  {activeSetId != null && (
+                    <button
+                      type="button"
+                      className="adsx-revise-cancel"
+                      onClick={() => setSelectedSetId(null)}
+                    >
+                      Aktif sete dön (v{activeVersion})
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {reviseReason && (
+            <div id={REVISE_REASON_ID} className="adsx-revise-reason">
+              Revize Et kullanılamıyor: {reviseReason}
+            </div>
+          )}
 
           {failedGroups > 0 && results && (
             <div className="adsx-sets-empty" role="status">
@@ -1010,8 +1159,9 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
                 key={group.id ?? idx}
                 group={group}
                 previewUrl={previewUrl}
-                onRegenerate={canRegenerateFromSet(shownSet) ? regenerateGroup : undefined}
-                regenerateDisabled={generating || activating}
+                onRevise={setReviseTarget}
+                reviseDisabledReason={reviseReason}
+                isRevising={revisingGroupId != null && group.id === revisingGroupId}
                 findings={reviewSet?.claim_review?.findings}
               />
             ))}
@@ -1020,7 +1170,19 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       )}
 
       {polling.isActive && toastOpen && (
-        <GenToast progress={polling.progress} onDismiss={() => setToastOpen(false)} />
+        <GenToast
+          progress={polling.progress}
+          onDismiss={() => setToastOpen(false)}
+          revisingName={revisingName}
+        />
+      )}
+
+      {reviseTarget && reviseTarget.id != null && (
+        <AdGroupReviseDialog
+          groupName={adGroupName(reviseTarget)}
+          onSubmit={(feedback, scope) => reviseGroup(reviseTarget.id!, feedback, scope)}
+          onClose={() => setReviseTarget(null)}
+        />
       )}
     </div>
   )

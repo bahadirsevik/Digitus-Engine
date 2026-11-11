@@ -314,7 +314,7 @@
 .seox-grid {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -783,6 +783,9 @@
 .adsx-review {
   margin: 10px 0;
   font-size: 12.5px;
+  /* 6 kolonlu gerekçe tablosu dar ekranda sayfayı değil kendini kaydırır */
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .adsx-review > summary {
@@ -842,4 +845,301 @@
 
 .adsx-std-details > summary {
   cursor: pointer;
+}
+
+/* ADS "Revize Et": pencere + kart üstü durum + taslak açıklaması */
+.adsx-set-badge.is-revision {
+  color: var(--info-text);
+  background: var(--info-soft);
+  border-color: var(--info-soft);
+}
+
+.adsx-group-card.is-revising {
+  border-color: var(--info);
+  box-shadow: 0 0 0 3px var(--info-soft);
+}
+
+.adsx-group-revising,
+.adsx-revise-reason {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  border-radius: 8px;
+  padding: 8px 11px;
+}
+
+.adsx-group-revising {
+  color: var(--info-text);
+  background: var(--info-soft);
+}
+
+.adsx-revise-reason {
+  color: var(--text-secondary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+}
+
+.adsx-revision-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--info-soft);
+  border: 1px solid var(--info-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+
+.adsx-revision-note.is-draft {
+  background: var(--warning-soft);
+  border-color: var(--warning-soft);
+}
+
+.adsx-revision-note-foot {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  color: var(--warning-text);
+  font-weight: 600;
+}
+
+.adsx-revision-note-foot span {
+  flex: 1 1 240px;
+}
+
+.adsx-revise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--overlay-modal, rgba(0, 0, 0, 0.55));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.adsx-revise {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+}
+
+.adsx-revise-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 0;
+}
+
+.adsx-revise-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.adsx-revise-group {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.adsx-revise-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.adsx-revise-body {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adsx-revise-scope {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adsx-revise-scope legend,
+.adsx-revise-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.adsx-revise-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.adsx-revise-warn {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--warning-text);
+}
+
+.adsx-revise-text {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 96px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+
+.adsx-revise-text:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.adsx-revise-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.adsx-revise-hint .chx-mono {
+  flex: none;
+}
+
+.adsx-revise-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 18px 16px;
+}
+
+.adsx-revise-foot .adsx-activate-btn {
+  margin-left: 0;
+}
+
+.adsx-revise-cancel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.adsx-revise-cancel:disabled,
+.adsx-revise-close:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .adsx-revise-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .adsx-revise {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .adsx-revise-foot {
+    flex-direction: column-reverse;
+  }
+
+  .adsx-revise-foot button {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .adsx-revise-check {
+    min-height: 44px;
+    flex: 1 1 140px;
+  }
+
+  .adsx-group-head {
+    flex-wrap: wrap;
+  }
+
+  /* Başlık/Açıklama/Negatif sekmeleri dar kartta alt satıra insin */
+  .adsx-tabs {
+    flex-wrap: wrap;
+  }
+
+  /* Rozetli set chip'i (v2 · Taslak · İnceleme · Revizyon) dar ekranda kırılsın */
+  .adsx-set-chip {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  /* SEO kartı: üst satır (kelime + inceleme + tarih) kırılsın, uzun URL bölünsün */
+  .seox-card-top,
+  .seox-meta-right {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .seox-link-url,
+  .seox-serp-url {
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  .seox-review {
+    white-space: normal;
+  }
+
+  /* Uzun anahtar kelime chip'i kart genişliğini aşmasın */
+  .adsx-chip-row .adsx-chip {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Uzun grup adında buton metni iki satıra kırılmasın */
+.adsx-group-head .adsx-regen-btn {
+  flex: none;
+  white-space: nowrap;
 }

@@ -475,13 +475,24 @@ class AdsGenerator:
         brand_name: str = "",
         brand_usp: str = "",
         trusted_brand_usp: str = "",
+        feedback: Optional[str] = None,
+        scope: Optional[List[str]] = None,
     ) -> AdGroupFullSchema:
         """Hedef grubu yeni set içine YENİDEN üretir (kaynak grup değişmez).
 
         Commit ETMEZ — worker finalize tek transaction'da commit'ler.
         Grounding zinciri full generation ile AYNIDIR (Faz F).
+
+        feedback verilirse REVİZYON: talep + mevcut metinler prompt'a girer; kapsam
+        dışı bölümler kaynaktan aynen alınır ve kayıt öncesi doğrulanır
+        (ihlal → RevisionScopeError, grup kaydedilmez).
         """
+        from app.generators.ads import revision as rev
         from app.schemas.ads import KeywordGroupSchema
+
+        feedback = (feedback or "").strip()
+        scope = rev.normalize_scope(scope)
+        current = rev.source_assets(source_group) if feedback else None
 
         input_group = KeywordGroupSchema(
             name=source_group.group_name,
@@ -505,15 +516,62 @@ class AdsGenerator:
             product_facts=product_facts,
             grounding_facts=grounding_facts,
             output_ctx=output_context_for_run(self.db, source_group.scoring_run_id),
+            revision_block=rev.build_revision_block(feedback, scope, current) if feedback else "",
+            # Kapsam dışı bölümler üretimin BAŞINDA kaynaktan: tamamlama/minimum/top-up
+            # kararları yalnız kapsam içi bölümler için verilir
+            preserved={s: current[s] for s in rev.SCOPES if s not in scope} if feedback else None,
         )
-        self._save_to_database(
+        if feedback:
+            new_group = self._apply_revision_scope(source_group, new_group, current, scope)
+            # Kaydı engelleyen kapı: kapsam dışı bölüm birebir kaynak değilse yazılmaz
+            rev.verify_scope_preserved(new_group, current, scope)
+        saved = self._save_to_database(
             [new_group],
             scoring_run_id=source_group.scoring_run_id,
             generation_set_id=target_set_id,
             commit=False,
         )
+        if feedback:
+            # İkinci kapı: DB'ye YAZILAN satırlar kaynakla birebir mi? (commit öncesi;
+            # ihlalde worker rollback eder, set failed olur)
+            self.db.flush()
+            self.db.expire(saved[0])
+            rev.verify_saved_scope(saved[0], source_group, scope)
         return new_group
-    
+
+    def _apply_revision_scope(self, source_group: AdGroup, new_group, current: dict, scope: List[str]):
+        """Kapsam dışını kaynakla birleştirir; standart eksikleri BİRLEŞMİŞ içerikten yeniden sayar."""
+        from app.database.models import AdGenerationSet
+        from app.generators.ads import revision as rev
+
+        src_set = (
+            self.db.query(AdGenerationSet)
+            .filter(AdGenerationSet.id == source_group.generation_set_id)
+            .first()
+        )
+        cur = (set_review(src_set.warnings if src_set else None) or {}).get("current") or {}
+        mine = {
+            key: [f for f in cur.get(key) or [] if f.get("group_id") == source_group.id]
+            for key in ("findings", "applied")
+        }
+        merged = rev.merge_out_of_scope(new_group, current, scope, mine["findings"], mine["applied"])
+        rg = self.rsa_generator
+        kws = merged.keywords
+        update = {
+            "missing_headlines": max(0, rg.MAX_HEADLINES - len(merged.headlines)),
+            "missing_kw_descriptions": max(0, rg.MAX_DESCRIPTIONS - sum(
+                rg._contains_keyword(d.text, kws) for d in merged.descriptions)),
+            "missing_cta": max(0, rg.MIN_CTA - sum(rg._is_cta(h.text) for h in merged.headlines)),
+        }
+        if "headlines" not in scope:
+            update.update(
+                headlines_generated=source_group.headlines_generated or 0,
+                headlines_eliminated=source_group.headlines_eliminated or 0,
+                headlines_shortened=0, headlines_regenerated=0,
+                dki_converted_count=source_group.dki_converted_count or 0,
+            )
+        return merged.model_copy(update=update)
+
     def _model_to_schema(self, group: AdGroup, language: Optional[str] = None) -> AdGroupDBSchema:
         """Convert database model to schema."""
         return AdGroupDBSchema(

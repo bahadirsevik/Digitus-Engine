@@ -2,8 +2,8 @@
 Pydantic schemas for Google Ads RSA generation.
 """
 from datetime import datetime
-from typing import Any, Optional, List, Dict
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Optional, List, Dict, Literal
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 
 # ==================== REQUEST SCHEMAS ====================
@@ -20,9 +20,31 @@ class AdsGenerateRequest(BaseModel):
 
 
 class AdGroupRegenerateRequest(BaseModel):
-    """Request for regenerating a specific ad group."""
+    """Request for regenerating a specific ad group.
+
+    feedback verilirse REVİZYON: yalnız `scope` bölümleri değişir, gerisi kaynaktan
+    aynen korunur (app/generators/ads/revision.py). feedback yoksa eski tam yeniden üretim.
+    """
     brand_name: Optional[str] = None
     brand_usp: Optional[str] = None
+    feedback: Optional[str] = Field(None, max_length=500)
+    scope: List[Literal["headlines", "descriptions", "negatives"]] = Field(default_factory=list)
+
+    @field_validator("feedback")
+    @classmethod
+    def _feedback_text(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) < 5:
+            raise ValueError("Değiştirilmesini istediğiniz noktaları en az 5 karakterle yazın.")
+        return v
+
+    @model_validator(mode="after")
+    def _scope_needs_feedback(self):
+        if self.feedback and not self.scope:
+            raise ValueError("Revize edilecek en az bir bölüm seçin.")
+        return self
 
 
 # ==================== KEYWORD GROUPING ====================
@@ -263,6 +285,9 @@ class AdGenerationSetSummary(BaseModel):
     claim_risk_count: int = 0
     claim_unverified_count: int = 0
     claim_review: Optional[Dict[str, Any]] = None  # {findings: [...], applied: [...]}
+    # Geri bildirimli grup revizyonu ise {feedback, scope, source_set_id, source_group_id}
+    # (AdGenerationSet.revision property'si request_snapshot'tan okur)
+    revision: Optional[Dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
 

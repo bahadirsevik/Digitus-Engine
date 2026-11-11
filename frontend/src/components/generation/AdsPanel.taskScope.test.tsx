@@ -5,7 +5,7 @@
  * panelini değiştirmez ve B'de başlayan görev A'nın kaydını ezmez.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import AdsPanel from './AdsPanel'
 import { useBrandStore } from '../../stores/brandStore'
 
@@ -231,7 +231,7 @@ describe('AdsPanel görev kapsamı (run bazlı)', () => {
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledWith('task-late', 10))
   })
 
-  it('grup yeniden üretimi başlatılırken unmount olursa görev kimliği kaybolmaz', async () => {
+  it('grup revizyonu başlatılırken unmount olursa görev kimliği kaybolmaz', async () => {
     mocks.getAdsRsa.mockResolvedValue({
       data: {
         total_groups: 1,
@@ -258,7 +258,11 @@ describe('AdsPanel görev kapsamı (run bazlı)', () => {
     const spy = vi.spyOn(api.generationApi, 'regenerateAdGroup').mockImplementation(regenerate)
 
     const first = render(<AdsPanel runId={1} />)
-    fireEvent.click(await screen.findByText('Yeniden Üret'))
+    fireEvent.click(await screen.findByRole('button', { name: /Revize Et/ }))
+    fireEvent.change(screen.getByLabelText('Neyi değiştirelim?'), {
+      target: { value: 'Daha samimi olsun' },
+    })
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revize Et' }))
     await waitFor(() => expect(regenerate).toHaveBeenCalled())
 
     first.unmount()
