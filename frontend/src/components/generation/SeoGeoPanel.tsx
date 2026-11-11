@@ -14,6 +14,7 @@ import {
   Image as ImageIcon,
   Link2,
   MessageCircleQuestion,
+  Pencil,
   RefreshCw,
   Sparkles,
   Tag,
@@ -31,7 +32,9 @@ import ErrorBanner from '../ErrorBanner'
 import ClaimReevaluateButton from './ClaimReevaluateButton'
 import { useBrandStore } from '../../stores/brandStore'
 import { apiErrorMessage, generationApi, policyStaleFromError } from '../../services/api'
-import type { ScoringRun, SEOGeoItem } from '../../types/models'
+import type { ScoringRun, SEOGeoItem, SeoRevisionScope } from '../../types/models'
+import ReviseDialog, { type ScopeOption } from './ReviseDialog'
+import SeoRevisionPanel from './SeoRevisionPanel'
 import '../../pages/Generation.css'
 
 // Tasarımdaki üretim adımları; gerçek task progress eşiklerinden türetilir
@@ -43,6 +46,25 @@ const SEO_STEPS = [
   'İç/dış link önerileri çıkarılıyor',
   'SEO & GEO skorları hesaplanıyor',
 ]
+
+const SEO_SCOPE_OPTIONS: ScopeOption<SeoRevisionScope>[] = [
+  { value: 'title_meta', label: 'Başlık ve meta' },
+  { value: 'intro', label: 'Giriş' },
+  { value: 'body', label: 'Gövde (alt başlıklar, bölümler, SSS)' },
+]
+const SEO_REVISION_POLL_MS = 4000
+
+// Revize edilemiyorsa nedeni (null → revize edilebilir)
+const seoReviseBlockReason = (item: SEOGeoItem): string | null => {
+  if (item.is_stale) return 'Bu içerik güncel değil (kanal ataması yenilendi); revize edilemez.'
+  if (item.pending_revision?.status === 'generating') return 'Bu içerik şu an revize ediliyor.'
+  return null
+}
+
+const newIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 // Başarısız kelime listesi uzunsa ilk N satır görünür, kalanı açılır bölümde
 const FAILED_KEYWORDS_SHOWN = 5
@@ -178,7 +200,25 @@ function GenToast({ progress, onDismiss }: { progress: number; onDismiss: () => 
 
 // Tasarım: zengin içerik kartı — tag+tarih, başlık+slug, SERP önizlemesi,
 // giriş paragrafı, H2 alt başlıklar, İÇ/DIŞ link önerileri, istatistik+skorlar
-function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
+function ContentCard({
+  item,
+  host,
+  onRevise,
+  revisionBusy,
+  revisionError,
+  onAccept,
+  onDiscard,
+}: {
+  item: SEOGeoItem
+  host: string
+  onRevise: (item: SEOGeoItem) => void
+  revisionBusy: boolean
+  revisionError?: string | null
+  onAccept: (revisionId: number) => void
+  onDiscard: (revisionId: number) => void
+}) {
+  const reviseReason = seoReviseBlockReason(item)
+  const pending = item.pending_revision
   const slug = item.url_suggestion ? `/${item.url_suggestion.replace(/^\//, '')}` : null
   const metaLen = item.meta_description?.length || 0
   const subs = item.subheadings || []
@@ -228,8 +268,34 @@ function ContentCard({ item, host }: { item: SEOGeoItem; host: string }) {
               <Calendar size={12} /> {date}
             </span>
           )}
+          <button
+            type="button"
+            className="adsx-regen-btn seox-revise-btn"
+            onClick={() => onRevise(item)}
+            disabled={!!reviseReason || revisionBusy}
+            title={reviseReason || 'Değişmesini istediğiniz noktaları yazın; öneri önce önizlenir'}
+          >
+            <Pencil size={12} strokeWidth={2.4} />
+            Revize Et
+          </button>
         </span>
       </div>
+      {item.is_stale && reviseReason && <div className="adsx-revise-reason">{reviseReason}</div>}
+      {/* Öneri kapanınca (ör. kabulde 409 → öneri iptal) hata kartta kalır */}
+      {revisionError && !pending && (
+        <div className="seox-rev-error" role="alert">
+          {revisionError}
+        </div>
+      )}
+      {pending && (
+        <SeoRevisionPanel
+          revision={pending}
+          busy={revisionBusy}
+          error={revisionError}
+          onAccept={() => onAccept(pending.id)}
+          onDiscard={() => onDiscard(pending.id)}
+        />
+      )}
 
       {review?.required && reviewReasons.length > 0 && (
         <ul className="seox-review-list seox-review-top">{reviewReasons}</ul>
@@ -391,6 +457,15 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
   // Sonuç listesi YÜKLEME hatası (üretim hatasından ayrı): yalnız yeniden yükleme sunar
   const [loadError, setLoadError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(true)
+  // "Revize Et": pencere hedefi + o açılışın idempotency anahtarı (çift gönderim aynı revizyon)
+  const [reviseTarget, setReviseTarget] = useState<SEOGeoItem | null>(null)
+  const reviseKeyRef = useRef('')
+  // Anahtar yalnız AYNI talebin tekrarında yeniden kullanılır; talep/kapsam değişince yenilenir
+  const lastRevisePayloadRef = useRef('')
+  const revisionInFlight = useRef(false)
+  // Kart bazlı kabul/iptal durumu ve hatası (hata ilgili kartta görünür)
+  const [revisionBusy, setRevisionBusy] = useState<Record<number, boolean>>({})
+  const [revisionErrors, setRevisionErrors] = useState<Record<number, string>>({})
 
   const polling = useTaskPolling(taskId, taskStorageKey, 3000, activeWorkspace?.id, runId)
   const channelDisabled = run?.enable_seo === false
@@ -406,6 +481,9 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
     setError(null)
     setLoadError(null)
     setLoading(false)
+    setReviseTarget(null)
+    setRevisionBusy({})
+    setRevisionErrors({})
   }, [scopeKey])
 
   const fetchResults = useCallback(async () => {
@@ -431,6 +509,88 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
       void fetchResults()
     }
   }, [polling.isCompleted, fetchResults])
+
+  // Revizyon sürerken liste yoklanır (sunucu lease'i dolanı da okuma anında failed yapar)
+  const anyRevising = results.some((r) => r.pending_revision?.status === 'generating')
+  useEffect(() => {
+    if (!anyRevising) return
+    const timer = setInterval(() => void fetchResults(), SEO_REVISION_POLL_MS)
+    return () => clearInterval(timer)
+  }, [anyRevising, fetchResults])
+
+  const openRevise = (item: SEOGeoItem) => {
+    reviseKeyRef.current = newIdempotencyKey()
+    lastRevisePayloadRef.current = ''
+    setReviseTarget(item)
+  }
+
+  // Dönüş: hata metni (pencere açık kalır, talep korunur) ya da null (başarı)
+  const submitRevise = async (
+    contentId: number,
+    feedback: string,
+    scope: SeoRevisionScope[]
+  ): Promise<string | null> => {
+    if (!activeWorkspace?.id || revisionInFlight.current) return null
+    revisionInFlight.current = true
+    const requestScope = scopeRef.current
+    const payloadSignature = JSON.stringify([feedback, scope])
+    if (lastRevisePayloadRef.current && lastRevisePayloadRef.current !== payloadSignature) {
+      reviseKeyRef.current = newIdempotencyKey()
+    }
+    lastRevisePayloadRef.current = payloadSignature
+    try {
+      await generationApi.reviseSeoGeo(contentId, activeWorkspace.id, {
+        feedback,
+        scope,
+        idempotency_key: reviseKeyRef.current,
+      })
+      if (!mountedRef.current || scopeRef.current !== requestScope) return null
+      setReviseTarget(null)
+      setRevisionErrors((cur) => ({ ...cur, [contentId]: '' }))
+      void fetchResults()
+      return null
+    } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return null
+      const stale = policyStaleFromError(err)
+      if (stale) return stale.message
+      return apiErrorMessage(err, 'Revizyon başlatılamadı')
+    } finally {
+      revisionInFlight.current = false
+    }
+  }
+
+  const revisionAction = async (
+    contentId: number,
+    revisionId: number,
+    action: 'accept' | 'discard'
+  ) => {
+    if (!activeWorkspace?.id || revisionBusy[contentId]) return
+    const requestScope = scopeRef.current
+    setRevisionBusy((cur) => ({ ...cur, [contentId]: true }))
+    setRevisionErrors((cur) => ({ ...cur, [contentId]: '' }))
+    try {
+      if (action === 'accept') {
+        await generationApi.acceptSeoRevision(revisionId, activeWorkspace.id)
+      } else {
+        await generationApi.discardSeoRevision(revisionId, activeWorkspace.id)
+      }
+    } catch (err: unknown) {
+      if (scopeRef.current !== requestScope) return
+      const stale = policyStaleFromError(err)
+      const message = stale
+        ? stale.message
+        : apiErrorMessage(err, action === 'accept' ? 'Öneri uygulanamadı' : 'Öneri kapatılamadı')
+      setRevisionErrors((cur) => ({
+        ...cur,
+        [contentId]: message,
+      }))
+    } finally {
+      if (scopeRef.current === requestScope) {
+        setRevisionBusy((cur) => ({ ...cur, [contentId]: false }))
+        void fetchResults()
+      }
+    }
+  }
 
   const startGeneration = async () => {
     if (!activeWorkspace?.id) {
@@ -637,7 +797,16 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
           </div>
           <div className="seox-grid">
             {results.map((item) => (
-              <ContentCard key={item.id} item={item} host={host} />
+              <ContentCard
+                key={item.id}
+                item={item}
+                host={host}
+                onRevise={openRevise}
+                revisionBusy={!!revisionBusy[item.id]}
+                revisionError={revisionErrors[item.id] || null}
+                onAccept={(revisionId) => void revisionAction(item.id, revisionId, 'accept')}
+                onDiscard={(revisionId) => void revisionAction(item.id, revisionId, 'discard')}
+              />
             ))}
           </div>
         </div>
@@ -645,6 +814,19 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
 
       {polling.isActive && toastOpen && (
         <GenToast progress={polling.progress} onDismiss={() => setToastOpen(false)} />
+      )}
+
+      {reviseTarget && (
+        <ReviseDialog
+          title="İçeriği revize et"
+          subjectName={reviseTarget.title || reviseTarget.keyword}
+          scopeOptions={SEO_SCOPE_OPTIONS}
+          defaultScope={['title_meta', 'intro']}
+          outcomeNote="Öneri önce bu kartta önizlenir; siz “Kabul Et” diyene kadar mevcut içerik kullanılır. URL, linkler ve görsel alt metinleri değişmez; SEO/GEO ve iddia kontrolleri yine uygulanır."
+          placeholder="Örn. Girişi daha kısa ve samimi yap, başlıkta yılı öne al."
+          onSubmit={(feedback, scope) => submitRevise(reviseTarget.id, feedback, scope)}
+          onClose={() => setReviseTarget(null)}
+        />
       )}
     </div>
   )

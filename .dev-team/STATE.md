@@ -7,6 +7,24 @@ Active phase: **Hedef konum (ulke/sehir) + cikti dili secimi — main repo `plan
 Onceki aktif is (dagitim bekliyor): Marka alt sayfa + SPA crawler — Faz 1 7fd5dec, Faz 2 1426f7d, Faz 3a+3b 62e0127, Faz 3c+3d 914ffe5, 3e 65cfe3f + 8e6a27a (push yok); sunucu dali dg-auth-merge d9e045e (uzak 78aac3a).
 Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida).
 
+## ACIK KONTROLLER (yayin oncesi)
+
+- [ ] ADS "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (11.11 tarayici kontrolu route mock'luydu). Yayin oncesi: worker restart sonrasi bir grupta kapsam=aciklamalar talebi → yeni draft set; basliklar/negatifler kaynakla birebir mi, iddia kaydi dogru mu, "Aktif Yap" akisi. Ucretli cagri — kullanici onayiyla.
+- [ ] SEO "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (worker + oneri + kabul; tarayici kontrolu mock'lu). Dev DB migration'i 11.11'de uygulandi; ucretli cagri — kullanici onayiyla.
+- Kapsam disi (bu ise eklenmeyecek, kullanici karari 11.11): Sosyal havuz satirlari kart icinde kirpiliyor; dar ekranda marka pili "Ak…" kesiliyor.
+
+## Just completed (11.11 — SEO "Revize Et"; commit var, push YOK; Architect/Konsey KOSMADI — kararlar Codex 2 tur onayli planda; ajanlar: yalniz QA (Sonnet), gerekce kullaniciya basta yazildi)
+
+- Model: `content_revisions` (kanal-bagimsiz; generating→ready→accepted|discarded, failed; attempt_token, idempotency_key, lease_expires_at; partial unique: kaynak basina tek generating + (kaynak, key)) + `seo_geo_contents.revision_count`. Migration `20261111_001` (idempotent, down 20261029_001).
+- `app/core/content_revisions.py`: create (ayni key+ayni talep → ayni revizyon; ayni key farkli talep → 409; eszamanli ayni key → kazanan doner; eski 'ready' discarded), `fail_expired` (okuma ani), token+status kosullu `mark_ready/mark_failed`.
+- `app/generators/seo_geo/revision.py`: kapsam title_meta(title, meta) / intro / body(subheadings, body_sections, bullet_points, faq_items); URL, linkler, alt metinler HEP korunur. `revise_content`: oneri → izinli alanlar birlestir → kapi 1 → SEO/GEO + `_claim_gate(allowed_fields)` (onarim yalniz izinli alanlara) → kapi 2. Ilk uretimin revise/expand turlari CALISMAZ.
+- Uclar: POST `/seo-geo/{id}/revise` (202), POST `/seo-geo/revisions/{id}/accept` (once workspace kilidi+guard, sonra revizyon/icerik FOR UPDATE — deadlock sirasi; ready + source_version==revision_count; icerik kolonlari + content_data + SEO/GEO uyumluluk + sayac TEK transaction; tekrar kabul no-op), POST `.../discard`; liste ucu `pending_revision` + `revision_count`. Worker `generation.seo_revise` (kaynak surum degistiyse AI'siz durur). Export kimligi (id, revision_count) KOLON sorgusuyla.
+- UI: ortak `ReviseDialog` (ADS+SEO), `SeoRevisionPanel` (hazirlaniyor+Iptal / onizleme once→sonra + skor + Kabul/Vazgec / basarisiz+Kapat), kart ici hata, talep degisince yeni idempotency anahtari, yalniz revizyon surerken 4 sn yoklama.
+- QA (Sonnet) bulgulari: deadlock sirasi, kapanan oneride kaybolan hata, key/talep uyusmazligi, eszamanli ayni key, kaynak-surum erken durdurma → DUZELTILDI. Bilincli sinir: kuyruga alma basarisizsa onceki 'ready' oneri de discarded kalir; oneri sonrasi iddia yeniden degerlendirmesi kabulde oneri anindaki kontrollerle ezilir.
+- Testler: BE tam paket 5725 gecti / 2 bilinen (test_hybrid_run_db) / 112 atlandi; ruff temiz; yeni 10 SEO revizyon testi. FE 439/439 + lint/format/build. Tarayici: SEO liste yaniti route mock'lu (3 durum) 1440/390/360, yatay tasma 0.
+- Dev DB (ortak, Digitus-Engine-main ile): kullanici onayiyla 20261029_001 → 20261111_001 uygulandi (230 icerik revision_count=0); app + iki worker yeniden baslatildi, `generation.seo_revise` kayitli. Gercek (mock'suz) kontrol: 5 run'in SEO listesi + 9 icerik detayi 200, cross-ws 404; revize/accept/discard uclarinda AI'siz yollar (422 dogrulama, 401, 404) dogru, content_revisions 0 kaldi; gercek sayfa 1440/390/360 tasma 0. Not: iki 422 mesaji Pydantic varsayilani (Ingilizce) — UI istemci dogrulamasi gondermeden onler.
+- Dagitim: alembic upgrade + celery_worker restart (yeni task).
+
 ## Just completed (11.11 — ADS "Revize Et" (geri bildirimli grup revizyonu); commit/push YOK; Architect/Konsey KOSMADI — plan Codex 2 tur onayli)
 
 - "Yeniden Uret" → "Revize Et": pencere (kapsam: basliklar/aciklamalar/negatifler + zorunlu talep 5-500 kr). `AdGroupRegenerateRequest.feedback/scope`; talepsiz istek eski davranis ve task kwargs'ina feedback/scope EKLENMEZ (eski worker uyumu).

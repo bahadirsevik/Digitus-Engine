@@ -193,6 +193,30 @@ export interface SEOGeoItem {
   image_alt_texts?: string[]
   publish_review?: PublishReview | null
   created_at?: string | null
+  // Kabul edilmiş kullanıcı revizyonu sayısı + bekleyen ("Revize Et") revizyon
+  revision_count?: number
+  pending_revision?: SeoPendingRevision | null
+}
+
+export type SeoRevisionScope = 'title_meta' | 'intro' | 'body'
+
+export interface SeoRevisionChange {
+  field: string
+  label: string
+  before: unknown
+  after: unknown
+}
+
+export interface SeoPendingRevision {
+  id: number
+  status: 'generating' | 'ready' | 'failed'
+  feedback: string
+  scope: SeoRevisionScope[]
+  error_message?: string | null
+  created_at?: string | null
+  changes: SeoRevisionChange[]
+  scores?: { seo_before: number; geo_before: number; seo_after: number; geo_after: number } | null
+  publish_review?: PublishReview | null
 }
 
 export interface SocialIdea {

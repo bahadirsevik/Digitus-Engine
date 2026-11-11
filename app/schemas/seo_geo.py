@@ -3,9 +3,9 @@ Pydantic schemas for SEO+GEO Content Generation.
 Roadmap2.md - Bölüm 6
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from decimal import Decimal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 # ==================== REQUEST SCHEMAS ====================
@@ -21,6 +21,22 @@ class SEOGEOGenerateRequest(BaseModel):
     tone: str = Field(default="informative", description="İçerik tonu: informative, professional, casual")
     word_count_min: int = Field(default=500, ge=300, le=700, description="Minimum kelime sayısı")
     word_count_max: int = Field(default=600, ge=400, le=800, description="Maximum kelime sayısı")
+
+
+class SEORevisionRequest(BaseModel):
+    """SEO içerik revizyonu ("Revize Et"): talep yalnız `scope` alanlarına uygulanır."""
+    feedback: str = Field(..., max_length=500)
+    scope: List[Literal["title_meta", "intro", "body"]] = Field(..., min_length=1)
+    # Aynı gönderimin tekrarı (çift tıklama, ağ yeniden denemesi) aynı revizyonu döndürür
+    idempotency_key: Optional[str] = Field(None, max_length=64)
+
+    @field_validator("feedback")
+    @classmethod
+    def _feedback_text(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 5:
+            raise ValueError("Değiştirilmesini istediğiniz noktaları en az 5 karakterle yazın.")
+        return v
 
 
 class SEOGEOBulkRequest(BaseModel):

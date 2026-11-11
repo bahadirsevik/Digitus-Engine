@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios'
-import type { AdRevisionScope } from '../types/models'
+import type { AdRevisionScope, SeoRevisionScope } from '../types/models'
 
 const API_BASE = '/api/v1'
 
@@ -708,6 +708,28 @@ export const generationApi = {
 
   listSeoGeo: (runId: number, limit = 100, brand_profile_id?: number) =>
     api.get(`/generation/seo-geo/list/${runId}`, { params: { limit, brand_profile_id } }),
+
+  // SEO "Revize Et": öneri önce önizlenir; kabul edilene kadar canlı içerik değişmez
+  reviseSeoGeo: (
+    contentId: number,
+    brand_profile_id: number,
+    body: { feedback: string; scope: SeoRevisionScope[]; idempotency_key: string }
+  ) =>
+    api.post<{ revision_id: number; status: string; created: boolean }>(
+      `/generation/seo-geo/${contentId}/revise`,
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  acceptSeoRevision: (revisionId: number, brand_profile_id: number) =>
+    api.post(`/generation/seo-geo/revisions/${revisionId}/accept`, undefined, {
+      params: { brand_profile_id },
+    }),
+
+  discardSeoRevision: (revisionId: number, brand_profile_id: number) =>
+    api.post(`/generation/seo-geo/revisions/${revisionId}/discard`, undefined, {
+      params: { brand_profile_id },
+    }),
 
   bulkSeoGeo: (runId: number, limit = 10, brand_profile_id?: number, tone = 'informative') =>
     api.post(`/generation/seo-geo/bulk/${runId}`, undefined, {

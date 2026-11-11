@@ -222,6 +222,88 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
         _close_ai(ai)
         db.close()
 
+SEO_REVISION_FAILED = "Revizyon üretilemedi; içerik değişmedi. Yeniden deneyebilirsiniz."
+SEO_REVISION_AI_FAILED = "Yapay zekâ yanıtı işlenemedi; içerik değişmedi. Yeniden deneyebilirsiniz."
+
+
+@celery_app.task(
+    bind=True, name="generation.seo_revise",
+    soft_time_limit=540, time_limit=600, max_retries=0,
+)
+def revise_seo_content_task(self, revision_id: int, attempt_token: str):
+    """SEO kullanıcı revizyonu: öneriyi üretir ve revizyonu 'ready' yapar (canlı içerik DEĞİŞMEZ).
+
+    Bütün yazımlar attempt_token + status='generating' koşullu: lease'i dolup failed
+    edilmiş ya da yeni talepte iptal edilmiş revizyona geç kalan worker yazamaz.
+    """
+    from app.core import content_revisions as cr
+    from app.core.channel.ai_json import AIJsonParseError
+    from app.database.models import ContentOutput, ContentRevision, SEOGeoContent
+    from app.generators.ai_service import AIResponseError, get_ai_service
+    from app.generators.seo_geo.revision import RevisionScopeError
+    from app.generators.seo_geo.seo_geo_generator import SEOGeoGenerator
+
+    db = SessionLocal()
+    ai = None
+    collector = None
+    try:
+        rev = db.get(ContentRevision, revision_id)
+        if rev is None or rev.status != cr.GENERATING or rev.attempt_token != attempt_token:
+            return {"status": "aborted"}
+        refusal = _legacy_refusal(db, rev.scoring_run_id)
+        if refusal is not None:
+            cr.mark_failed(db, revision_id, attempt_token, refusal["message"])
+            return {"status": "failed", "reason": refusal["reason"]}
+        content = db.get(SEOGeoContent, rev.source_content_id)
+        output = db.get(ContentOutput, content.content_output_id) if content else None
+        if content is None or output is None:
+            cr.mark_failed(db, revision_id, attempt_token, "Revize edilecek içerik bulunamadı.")
+            return {"status": "failed", "reason": "missing_source"}
+        if (content.revision_count or 0) != rev.source_version:
+            # Talep sonrası içerik başka bir kabulle değişti: AI harcamadan dur
+            cr.mark_failed(db, revision_id, attempt_token,
+                           "İçerik bu talepten sonra değişti; güncel içerik üzerinden yeniden revize edin.")
+            return {"status": "failed", "reason": "source_changed"}
+
+        from app.core.telemetry import UsageCollector
+        collector = UsageCollector(scoring_run_id=rev.scoring_run_id, task_id=self.request.id)
+        ai = get_ai_service()
+        ai.collector = collector
+        try:
+            proposed = SEOGeoGenerator(db, ai).revise_content(
+                content, output, rev.feedback, rev.scope,
+            )
+        except RevisionScopeError as e:
+            db.rollback()
+            logger.error(f"SEO revizyon kapsam ihlali: revision={revision_id} {e}")
+            cr.mark_failed(db, revision_id, attempt_token, str(e))
+            return {"status": "failed", "reason": "revision_scope_violation"}
+        except (AIJsonParseError, AIResponseError, ValueError) as e:
+            db.rollback()
+            logger.warning(f"SEO revizyon üretilemedi: revision={revision_id} {e}")
+            cr.mark_failed(db, revision_id, attempt_token, SEO_REVISION_AI_FAILED)
+            return {"status": "failed", "reason": "ai_output"}
+        proposed["usage"] = collector.finalize()
+        db.rollback()  # okuma oturumu; öneri tek koşullu UPDATE ile yazılır
+        if not cr.mark_ready(db, revision_id, attempt_token, proposed):
+            logger.warning(f"SEO revizyon artık bu denemeye ait değil, öneri yazılmadı: {revision_id}")
+            return {"status": "aborted"}
+        return {"status": "ready", "revision_id": revision_id}
+    except Exception:
+        logger.exception(f"SEO revizyon görevi beklenmeyen hata: revision={revision_id}")
+        try:
+            db.rollback()
+            cr.mark_failed(db, revision_id, attempt_token, SEO_REVISION_FAILED)
+        except Exception as inner:
+            logger.error(f"SEO revizyon failed yazılamadı: {inner}")
+        raise
+    finally:
+        if collector is not None:
+            collector.flush()
+        _close_ai(ai)
+        db.close()
+
+
 @celery_app.task(name="generation.seo_finalize")
 def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: int):
     """Tüm SEO chunk'ları bitince çağrılır."""

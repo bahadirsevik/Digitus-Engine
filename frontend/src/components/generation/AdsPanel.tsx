@@ -24,7 +24,7 @@ import {
   generationApi,
   policyStaleFromError,
 } from '../../services/api'
-import AdGroupReviseDialog from './AdGroupReviseDialog'
+import ReviseDialog, { type ScopeOption } from './ReviseDialog'
 import type {
   AdGenerationSetSummary,
   AdGroup,
@@ -64,6 +64,12 @@ const reviseBlockReason = (s: AdGenerationSetSummary | null | undefined): string
   if (s.status === 'active' || s.status === 'draft' || s.status === 'archived') return null
   return 'Bu set tamamlanmadığı için içindeki grup revize edilemez.'
 }
+
+const ADS_SCOPE_OPTIONS: ScopeOption<AdRevisionScope>[] = [
+  { value: 'headlines', label: 'Başlıklar' },
+  { value: 'descriptions', label: 'Açıklamalar' },
+  { value: 'negatives', label: 'Negatif kelimeler' },
+]
 
 // Kartlardaki pasif "Revize Et" butonları nedeni sonuç başlığındaki tek satırdan okur
 const REVISE_REASON_ID = 'adsx-revise-reason'
@@ -1178,8 +1184,13 @@ export default function AdsPanel({ runId, run }: { runId: number; run?: ScoringR
       )}
 
       {reviseTarget && reviseTarget.id != null && (
-        <AdGroupReviseDialog
-          groupName={adGroupName(reviseTarget)}
+        <ReviseDialog
+          title="Reklam grubunu revize et"
+          subjectName={adGroupName(reviseTarget)}
+          scopeOptions={ADS_SCOPE_OPTIONS}
+          defaultScope={['headlines', 'descriptions']}
+          outcomeNote="Sonuç yeni bir taslak olur; siz “Aktif Yap” diyene kadar mevcut reklamlar kullanılır. Karakter sınırları ve iddia kontrolleri yine uygulanır."
+          placeholder="Örn. Açıklamaları daha samimi yap, fiyat vurgusunu azalt."
           onSubmit={(feedback, scope) => reviseGroup(reviseTarget.id!, feedback, scope)}
           onClose={() => setReviseTarget(null)}
         />

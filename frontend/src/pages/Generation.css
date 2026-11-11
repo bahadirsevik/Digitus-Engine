@@ -1143,3 +1143,88 @@
   flex: none;
   white-space: nowrap;
 }
+
+/* SEO "Revize Et": kart içi durum + önce/sonra önizlemesi */
+.seox-revise-btn {
+  margin-left: 0;
+}
+
+.seox-rev {
+  margin-top: 10px;
+}
+
+.seox-rev-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.seox-rev-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 12.5px;
+  color: var(--error-text);
+  background: var(--error-soft);
+  border-radius: 8px;
+  padding: 8px 11px;
+}
+
+.seox-rev-failed span {
+  flex: 1 1 220px;
+}
+
+.seox-rev-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.seox-rev-before {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.seox-rev-before summary {
+  cursor: pointer;
+}
+
+.seox-rev-before p {
+  margin: 4px 0;
+  text-decoration: line-through;
+}
+
+.seox-rev-after p {
+  margin: 4px 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--success);
+  background: var(--success-soft);
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.seox-rev-scores {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.seox-rev-warn,
+.seox-rev-error {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--error-text);
+}
+
+.seox-rev-empty {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}

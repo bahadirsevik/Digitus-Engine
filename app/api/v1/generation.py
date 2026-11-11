@@ -3,6 +3,7 @@ Content generation endpoints.
 Roadmap2.md - Bölüm 6, 7 güncellemesi dahil.
 """
 import math
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from loguru import logger
@@ -30,7 +31,7 @@ from app.schemas.content import (
     ContentGenerationSummary
 )
 from app.schemas.seo_geo import (
-    SEOGEOGenerateRequest, SEOGEOBulkRequest,
+    SEOGEOGenerateRequest, SEOGEOBulkRequest, SEORevisionRequest,
     SEOGEOContentResponse, SEOGEOBulkResponse,
     ComplianceReportResponse
 )
@@ -539,8 +540,14 @@ def list_seo_geo_contents(
                 'anchor': content.external_link_anchor,
                 'url': content.external_link_url,
             } if content.external_link_anchor or content.external_link_url else None,
+            'revision_count': content.revision_count or 0,
         })
-    
+
+    # Kullanıcı revizyonu durumu (okuma anında lease'i dolanlar failed yapılır)
+    pending = _latest_seo_revisions(db, [c.id for c in contents])
+    for item in results:
+        item['pending_revision'] = _revision_summary(pending.get(item['id']))
+
     return {
         'scoring_run_id': scoring_run_id,
         'total': total,
@@ -548,6 +555,232 @@ def list_seo_geo_contents(
         'limit': limit,
         'items': results
     }
+
+
+# ==================== SEO KULLANICI REVİZYONU ("Revize Et") ====================
+# Akış: POST revise (202) → worker öneriyi üretir (ready) → kullanıcı önizler →
+# accept (canlı içerik AYNI id ile, tek transaction) | discard. Liste ucu durumu taşır.
+
+_REVISION_STATUS_409 = {
+    "generating": "Revizyon hâlâ hazırlanıyor; bitmesini bekleyin.",
+    "discarded": "Bu öneri iptal edildi.",
+    "failed": "Bu revizyon başarısız oldu; yeniden deneyin.",
+}
+
+
+def _seo_content_in_workspace(db: Session, content_id: int, brand_profile_id: int, lock: bool = False):
+    query = db.query(SEOGeoContent).filter(SEOGeoContent.id == content_id)
+    if lock:
+        query = query.with_for_update()
+    content = query.first()
+    output = (
+        db.query(ContentOutput).filter(ContentOutput.id == content.content_output_id).first()
+        if content and content.content_output_id else None
+    )
+    if content is None or output is None or not output.scoring_run_id:
+        raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
+    verify_scoring_run(db, output.scoring_run_id, brand_profile_id)
+    return content, output
+
+
+def _latest_seo_revisions(db: Session, content_ids: List[int]) -> dict:
+    from app.core import content_revisions as cr
+    from app.database.models import ContentRevision
+
+    if not content_ids:
+        return {}
+    if cr.fail_expired(db, "SEO", content_ids):
+        db.commit()
+    latest: dict = {}
+    for rev in (
+        db.query(ContentRevision)
+        .filter(ContentRevision.channel == "SEO", ContentRevision.source_content_id.in_(content_ids))
+        .order_by(ContentRevision.id.desc())
+    ):
+        latest.setdefault(rev.source_content_id, rev)
+    return latest
+
+
+def _revision_summary(rev) -> Optional[dict]:
+    """Kartta gösterilecek bekleyen revizyon (kabul/iptal edilmişse None)."""
+    if rev is None or rev.status not in ("generating", "ready", "failed"):
+        return None
+    payload = (rev.proposed_payload or {}) if rev.status == "ready" else {}
+    return {
+        'id': rev.id,
+        'status': rev.status,
+        'feedback': rev.feedback,
+        'scope': rev.scope,
+        'error_message': rev.error_message,
+        'created_at': rev.created_at.isoformat() if rev.created_at else None,
+        'changes': payload.get('changes') or [],
+        'scores': payload.get('scores'),
+        'publish_review': payload.get('publish_review'),
+    }
+
+
+@router.post("/seo-geo/{content_id}/revise", status_code=202)
+def revise_seo_geo_content(
+    content_id: int,
+    request: SEORevisionRequest,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Kullanıcı talebiyle revizyon başlatır (async). Canlı içerik kabul edilene kadar DEĞİŞMEZ."""
+    import uuid
+
+    from app.core import content_revisions as cr
+    from app.tasks.generation_tasks import revise_seo_content_task
+
+    try:
+        content, output = _seo_content_in_workspace(db, content_id, brand_profile_id)
+        if output.is_stale:
+            raise HTTPException(
+                status_code=409,
+                detail="Bu içerik güncel değil (kanal ataması yenilendi); revize edilemez.",
+            )
+        _guard_generation_dispatch(db, output.scoring_run_id)
+        try:
+            rev, created = cr.create_revision(
+                db, channel="SEO", source_content_id=content.id,
+                scoring_run_id=output.scoring_run_id, brand_profile_id=brand_profile_id,
+                feedback=request.feedback, scope=list(request.scope),
+                source_version=content.revision_count or 0,
+                idempotency_key=request.idempotency_key,
+            )
+        except cr.RevisionConflict as conflict:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(conflict), "revision_id": conflict.revision_id},
+            )
+        db.commit()
+        if created:
+            task_id = str(uuid.uuid4())
+            try:
+                revise_seo_content_task.apply_async(
+                    kwargs={"revision_id": rev.id, "attempt_token": rev.attempt_token},
+                    task_id=task_id,
+                )
+            except Exception as enqueue_error:
+                cr.mark_failed(db, rev.id, rev.attempt_token,
+                               "Revizyon başlatılamadı. Yeniden deneyin.")
+                raise HTTPException(
+                    status_code=500,
+                    detail=safe_500_detail(enqueue_error, "Revizyon başlatılamadı"),
+                )
+            rev.task_id = task_id
+            db.commit()
+        return {'revision_id': rev.id, 'status': rev.status, 'created': created}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=safe_500_detail(e, "Revizyon başlatılamadı"))
+
+
+@router.post("/seo-geo/revisions/{revision_id}/accept")
+def accept_seo_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Öneriyi canlı içeriğe uygular — TEK transaction, kaynak sürüm kontrolüyle.
+
+    Tekrar eden kabul ikinci güncelleme yapmaz. İçerik öneriden sonra değiştiyse
+    (başka bir revizyon kabul edildi) eski öneri yeni içeriği EZMEZ: 409.
+    """
+    from app.core import content_revisions as cr
+    from app.database.models import ContentRevision
+    from app.generators.seo_geo.seo_geo_generator import apply_revision
+
+    try:
+        run_id = (
+            db.query(ContentRevision.scoring_run_id)
+            .filter(ContentRevision.id == revision_id, ContentRevision.channel == "SEO")
+            .scalar()
+        )
+        if run_id is None:
+            raise HTTPException(status_code=404, detail="Revizyon bulunamadı.")
+        verify_scoring_run(db, run_id, brand_profile_id)
+        # Kilit sırası revize ucuyla AYNI: önce workspace (brand_profiles) kilidi + güncellik
+        # kapısı, sonra revizyon/içerik satırları — ters sıra deadlock üretiyordu (QA 11.11)
+        _guard_generation_dispatch(db, run_id)
+        rev = (
+            db.query(ContentRevision)
+            .filter(ContentRevision.id == revision_id)
+            .with_for_update()
+            .first()
+        )
+        content, output = _seo_content_in_workspace(
+            db, rev.source_content_id, brand_profile_id, lock=True
+        )
+        if rev.status == cr.ACCEPTED:
+            return {'content_id': content.id, 'revision_count': content.revision_count,
+                    'status': rev.status}
+        if rev.status != cr.READY:
+            raise HTTPException(status_code=409, detail=_REVISION_STATUS_409[rev.status])
+        if output.is_stale:
+            raise HTTPException(
+                status_code=409,
+                detail="Bu içerik güncel değil (kanal ataması yenilendi); öneri uygulanmadı.",
+            )
+        if (content.revision_count or 0) != rev.source_version:
+            rev.status = cr.DISCARDED
+            db.commit()
+            raise HTTPException(
+                status_code=409,
+                detail="İçerik bu öneri hazırlandıktan sonra değişti; öneri uygulanmadı. "
+                       "Güncel içerik üzerinden yeniden revize edin.",
+            )
+        rev.previous_payload = {
+            'content': output.content_data,
+            'seo_score': float(output.seo_compliance_score or 0),
+            'geo_score': float(output.geo_compliance_score or 0),
+            'revision_count': content.revision_count or 0,
+        }
+        apply_revision(content, output, rev.proposed_payload)
+        rev.status = cr.ACCEPTED
+        rev.accepted_at = datetime.now(timezone.utc)
+        db.commit()
+        return {'content_id': content.id, 'revision_count': content.revision_count,
+                'status': rev.status}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=safe_500_detail(e, "Öneri uygulanamadı"))
+
+
+@router.post("/seo-geo/revisions/{revision_id}/discard")
+def discard_seo_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Öneriyi (ya da süren/başarısız revizyonu) kapatır; canlı içerik değişmez.
+    Süren revizyon kapatılırsa worker'ın geç yazımı token koşulu nedeniyle düşer."""
+    from app.core import content_revisions as cr
+    from app.database.models import ContentRevision
+
+    rev = (
+        db.query(ContentRevision)
+        .filter(ContentRevision.id == revision_id, ContentRevision.channel == "SEO")
+        .with_for_update()
+        .first()
+    )
+    if rev is None:
+        raise HTTPException(status_code=404, detail="Revizyon bulunamadı.")
+    verify_scoring_run(db, rev.scoring_run_id, brand_profile_id)
+    if rev.status == cr.ACCEPTED:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bu öneri zaten uygulandı.")
+    if rev.status != cr.DISCARDED:
+        rev.status = cr.DISCARDED
+        rev.completed_at = datetime.now(timezone.utc)
+    db.commit()
+    return {'revision_id': rev.id, 'status': rev.status}
 
 
 # ==================== GOOGLE ADS RSA ENDPOINTS (Roadmap2 Bölüm 7) ====================

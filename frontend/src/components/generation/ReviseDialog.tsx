@@ -1,32 +1,46 @@
 /**
- * "Revize Et" penceresi: kullanıcı reklam grubunda neyin değişeceğini yazar ve
+ * "Revize Et" penceresi (ADS + SEO ortak): kullanıcı neyin değişeceğini yazar ve
  * hangi bölümlerin değişeceğini seçer. Seçilmeyen bölümler sunucuda AYNEN korunur
- * (app/generators/ads/revision.py). Gönderim hatasında yazılan talep silinmez.
+ * (app/generators/ads/revision.py, app/generators/seo_geo/revision.py).
+ * Gönderim hatasında yazılan talep silinmez.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Loader2, X } from 'lucide-react'
-import type { AdRevisionScope } from '../../types/models'
 
 export const FEEDBACK_MIN = 5
 export const FEEDBACK_MAX = 500
 
-const SCOPE_OPTIONS: Array<{ value: AdRevisionScope; label: string }> = [
-  { value: 'headlines', label: 'Başlıklar' },
-  { value: 'descriptions', label: 'Açıklamalar' },
-  { value: 'negatives', label: 'Negatif kelimeler' },
-]
+export interface ScopeOption<S extends string> {
+  value: S
+  label: string
+}
 
-interface Props {
-  groupName: string
+interface Props<S extends string> {
+  title: string
+  subjectName: string
+  scopeOptions: ScopeOption<S>[]
+  defaultScope: S[]
+  // Sonucun nasıl kullanıma gireceği (ADS: taslak + Aktif Yap; SEO: önizleme + Kabul Et)
+  outcomeNote: string
+  placeholder: string
   // Hata metni döndürürse pencere açık kalır ve hatayı gösterir; null → başarı, kapanır
-  onSubmit: (feedback: string, scope: AdRevisionScope[]) => Promise<string | null>
+  onSubmit: (feedback: string, scope: S[]) => Promise<string | null>
   onClose: () => void
 }
 
-export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Props) {
+export default function ReviseDialog<S extends string>({
+  title,
+  subjectName,
+  scopeOptions,
+  defaultScope,
+  outcomeNote,
+  placeholder,
+  onSubmit,
+  onClose,
+}: Props<S>) {
   const uid = useId()
   const [feedback, setFeedback] = useState('')
-  const [scope, setScope] = useState<AdRevisionScope[]>(['headlines', 'descriptions'])
+  const [scope, setScope] = useState<S[]>(defaultScope)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -77,7 +91,7 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
   const trimmed = feedback.trim()
   const ready = trimmed.length >= FEEDBACK_MIN && scope.length > 0 && !submitting
 
-  const toggle = (value: AdRevisionScope) =>
+  const toggle = (value: S) =>
     setScope((cur) => (cur.includes(value) ? cur.filter((s) => s !== value) : [...cur, value]))
 
   const submit = async () => {
@@ -85,7 +99,7 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
     setSubmitting(true)
     setError('')
     // Kapsam sabit sırada gönderilir (sunucu da aynı sırayı kullanır)
-    const ordered = SCOPE_OPTIONS.map((o) => o.value).filter((v) => scope.includes(v))
+    const ordered = scopeOptions.map((o) => o.value).filter((v) => scope.includes(v))
     const failure = await onSubmit(trimmed, ordered)
     setSubmitting(false)
     if (failure) setError(failure)
@@ -94,7 +108,7 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
   const titleId = `${uid}-title`
   const textId = `${uid}-text`
   const hintId = `${uid}-hint`
-  const kept = SCOPE_OPTIONS.filter((o) => !scope.includes(o.value)).map((o) => o.label)
+  const kept = scopeOptions.filter((o) => !scope.includes(o.value)).map((o) => o.label)
 
   return (
     // Yazılmış talep yanlışlıkla dışarı tıklanınca kaybolmasın (Vazgeç/Esc/× ile kapanır)
@@ -114,9 +128,9 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
         <div className="adsx-revise-head">
           <div>
             <div id={titleId} className="adsx-revise-title">
-              Reklam grubunu revize et
+              {title}
             </div>
-            <div className="adsx-revise-group">{groupName}</div>
+            <div className="adsx-revise-group">{subjectName}</div>
           </div>
           <button
             type="button"
@@ -132,7 +146,7 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
         <div className="adsx-revise-body">
           <fieldset className="adsx-revise-scope" disabled={submitting}>
             <legend>Değişecek bölümler</legend>
-            {SCOPE_OPTIONS.map((o) => (
+            {scopeOptions.map((o) => (
               <label key={o.value} className="adsx-revise-check">
                 <input
                   type="checkbox"
@@ -160,7 +174,7 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
             value={feedback}
             disabled={submitting}
             aria-describedby={hintId}
-            placeholder="Örn. Açıklamaları daha samimi yap, fiyat vurgusunu azalt."
+            placeholder={placeholder}
             onChange={(e) => setFeedback(e.target.value)}
             autoFocus
           />
@@ -169,8 +183,7 @@ export default function AdGroupReviseDialog({ groupName, onSubmit, onClose }: Pr
               {kept.length > 0
                 ? `${kept.join(', ')} aynen korunur.`
                 : 'Tüm bölümler talebinize göre yeniden yazılır.'}{' '}
-              Sonuç yeni bir taslak olur; siz “Aktif Yap” diyene kadar mevcut reklamlar kullanılır.
-              Karakter sınırları ve iddia kontrolleri yine uygulanır.
+              {outcomeNote}
             </span>
             <span className="chx-mono">
               {feedback.length}/{FEEDBACK_MAX}

@@ -434,7 +434,11 @@ class SEOGeoContent(Base):
     subheading_count = Column(Integer)
     keyword_count = Column(Integer)
     keyword_density = Column(Numeric(4, 2))  # Ã–rn: 1.58%
-    
+
+    # Kabul edilen kullanıcı revizyonu sayısı (aynı id yerinde güncellenir):
+    # export kimliği + revizyon kabulünde kaynak-sürüm kontrolü bunu okur
+    revision_count = Column(Integer, nullable=False, default=0, server_default="0")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -507,6 +511,56 @@ class GEOComplianceResult(Base):
     
     # Relationships
     seo_geo_content = relationship("SEOGeoContent", back_populates="geo_compliance")
+
+
+class ContentRevision(Base):
+    """Kullanıcı geri bildirimli içerik revizyonu (SEO; ileride sosyal).
+
+    Akış: generating → ready (önizleme) → accepted | discarded; hata/lease aşımı → failed.
+    Canlı içerik yalnız KABULDE, aynı id üzerinde güncellenir. `source_version` kabulde
+    kaynak içeriğin sayacıyla (SEO: SEOGeoContent.revision_count) eşleşmeli — eski öneri
+    yeni içeriği ezemez. Worker yazımları `attempt_token` + status='generating' koşullu.
+    """
+    __tablename__ = "content_revisions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel = Column(String(20), nullable=False)  # 'SEO'
+    source_content_id = Column(Integer, nullable=False)  # kanal tablosundaki içerik id'si
+    scoring_run_id = Column(Integer, ForeignKey("scoring_runs.id", ondelete="CASCADE"), nullable=False)
+    brand_profile_id = Column(Integer, ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False)
+    feedback = Column(Text, nullable=False)
+    scope = Column(JSON, nullable=False)
+    source_version = Column(Integer, nullable=False)
+    proposed_payload = Column(JSON)   # önizleme: birleşmiş içerik + kontrol sonuçları
+    previous_payload = Column(JSON)   # kabulde yazılır: değiştirilen içeriğin önceki hali
+    status = Column(String(20), nullable=False, server_default="generating")
+    error_message = Column(Text)
+    attempt_token = Column(String(64), nullable=False)
+    idempotency_key = Column(String(64))
+    task_id = Column(String(155))
+    lease_expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True))
+    accepted_at = Column(DateTime(timezone=True))
+
+    __table_args__ = (
+        # Aynı içerikte aynı anda TEK üretim
+        Index(
+            "uq_content_revision_generating",
+            "channel", "source_content_id",
+            unique=True,
+            postgresql_where=text("status = 'generating'"),
+        ),
+        # Aynı istek tekrarı aynı revizyonu döndürür
+        Index(
+            "uq_content_revision_idempotency",
+            "channel", "source_content_id", "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("idx_content_revision_source", "channel", "source_content_id", "status"),
+    )
 
 
 # ==================== GOOGLE ADS MODELS ====================
