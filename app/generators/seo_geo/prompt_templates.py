@@ -342,6 +342,20 @@ TALEP>>>
 # DEĞİŞTİRİLEBİLECEK ALANLAR
 {editable_fields}
 
+# MEVCUT DEĞERLENDİRME (kayıtlı sonuçlar; yalnız bağlam)
+{evaluation}
+
+# ÖNCELİK SIRASI
+1. Kullanıcı talebi her zaman önce gelir.
+2. Yalnız DEĞİŞTİRİLEBİLECEK ALANLAR'da değişiklik yap. Değerlendirme başka bir alanı
+   işaret ediyorsa o kısmı uygulama; seçilen alanlarda yapılabilecek olanı yap.
+3. Talep ve alan sınırıyla çelişmediği sürece şu an geçen SEO kontrollerini bozma.
+   Talep bir kontrolle açıkça çelişiyorsa (ör. yıl ifadesinin kaldırılması "Güncel yıl"
+   kontrolünü bozar) talebi uygula.
+4. Değerlendirme ve değerlendirici notu yeni sayı, istatistik, oran, kaynak, kurum adı
+   veya iddia ekleme yetkisi VERMEZ. Not "veri/istatistik ekleyin" dese bile yalnız
+   KULLANILABİLİR MARKA BİLGİLERİ'ne dayanan bilgi yazılabilir; yoksa o öneriyi uygulama.
+
 # KULLANILABİLİR MARKA BİLGİLERİ (yalnız bunlara dayanan iddia yazılabilir)
 {grounding_facts}
 

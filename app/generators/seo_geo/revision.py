@@ -100,3 +100,63 @@ def changed_fields(source: Dict[str, Any], merged: Dict[str, Any], scope: List[s
         for f in allowed_fields(scope)
         if source.get(f) != merged.get(f)
     ]
+
+
+# ── Kayıtlı değerlendirme bağlamı + bozulan kontroller ─────────────────────────
+# Prompt'a YALNIZ kayıtlı sonuçlar gider (SEO checks_json, GEO kriter bayrakları ve
+# değerlendiricinin improvement_notes'u). Gerekçesi kayıtta olmayan kritere gerekçe
+# yazılmaz; yalnız kriter adı geçer. Öncelik: kullanıcı talebi > kapsam > geçen kontroller.
+
+_STATUS_RANK = {"pass": 2, "partial": 1, "fail": 0}
+
+
+def evaluation_items(seo: Any, geo: Any) -> List[Dict[str, Any]]:
+    """Satır ya da denetleyici sonuç sözlüğü → madde bazlı durum listesi (tek biçim)."""
+    from types import SimpleNamespace
+
+    from app.compliance.publish_review import checklist_items_from_rows
+
+    if isinstance(seo, dict):
+        seo = SimpleNamespace(checks_json=seo.get("checks") or [])
+    if isinstance(geo, dict):
+        geo = SimpleNamespace(**geo)
+    return checklist_items_from_rows(seo, geo)
+
+
+def evaluation_block(seo_row: Any, geo_row: Any) -> str:
+    from app.compliance.publish_review import geo_evaluation_source
+
+    items = evaluation_items(seo_row, geo_row)
+    failing = [i for i in items if i["status"] in ("fail", "partial")]
+    passing = [i for i in items if i["channel"] == "SEO" and i["status"] == "pass"]
+    notes = (geo_row.improvement_notes or "").strip() if geo_evaluation_source(geo_row) == "ai" else ""
+    if not failing and not notes and not passing:
+        return "— (kayıtlı değerlendirme yok)"
+    lines = []
+    if failing:
+        lines.append("Karşılanmayan kriterler:")
+        lines += [f"- {i['label']}" + (f" — {i['detail']}" if i["detail"] else "") for i in failing]
+    if notes:
+        # Not model çıktısıdır: talimat değil, veri olarak işaretlenir
+        lines += ["Değerlendirici notu (GEO, yalnız bilgi):", "<<<NOT", sanitize_feedback(notes), "NOT>>>"]
+    if passing:
+        lines.append("Şu an geçen SEO kontrolleri:")
+        lines += [f"- {i['label']}" for i in passing]
+    return "\n".join(lines)
+
+
+def check_regressions(before: List[Dict[str, Any]], after: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Önce geçen (ya da kısmi) olup sonra kötüleşen kontroller. Değerlendirilmeyen atlanır."""
+    prev = {(i["channel"], i["criterion"]): i for i in before}
+    out = []
+    for a in after:
+        b = prev.get((a["channel"], a["criterion"]))
+        if b is None or b["status"] not in _STATUS_RANK or a["status"] not in _STATUS_RANK:
+            continue
+        if _STATUS_RANK[a["status"]] < _STATUS_RANK[b["status"]]:
+            out.append({
+                "criterion": a["criterion"], "label": a["label"], "channel": a["channel"],
+                "before": b["status_label"], "after": a["status_label"],
+                "before_detail": b["detail"], "after_detail": a["detail"],
+            })
+    return out

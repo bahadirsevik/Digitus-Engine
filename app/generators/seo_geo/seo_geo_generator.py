@@ -342,6 +342,7 @@ class SEOGEOGenerator:
             content_json=json.dumps(source, ensure_ascii=False),
             feedback=rev.sanitize_feedback(feedback),
             editable_fields="\n".join(f"- {f}" for f in allowed),
+            evaluation=rev.evaluation_block(content_row.seo_compliance, content_row.geo_compliance),
             grounding_facts=grounding_facts or "— (marka bilgisi yok: hiçbir hizmet/sertifika/iddia kullanma)",
             claim_rule=CLAIM_REPAIR_RULE,
             word_count_min=wmin,
@@ -384,6 +385,11 @@ class SEOGEOGenerator:
             'claim_check': claim_check,
             'publish_review': publish_review_from_results(seo_result, geo_result),
             'changes': rev.changed_fields(source, merged, scope),
+            # Önizleme: önceden geçip bozulan kontroller (yalnız gösterilir; ek üretim yok)
+            'regressions': rev.check_regressions(
+                rev.evaluation_items(content_row.seo_compliance, content_row.geo_compliance),
+                rev.evaluation_items(seo_result, geo_result),
+            ),
             'scores': {
                 'seo_before': _score(content_row.seo_compliance),
                 'geo_before': _score(content_row.geo_compliance),

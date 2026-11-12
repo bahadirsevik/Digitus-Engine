@@ -207,6 +207,8 @@ def test_full_flow_preview_accept_and_export_identity(
     list_url = f'/api/v1/generation/seo-geo/list/{run.id}?brand_profile_id={ws.id}'
     item = client.get(list_url).json()['items'][0]
     assert item['title'] == SOURCE['title']  # önizleme: canlı içerik değişmedi
+    assert item['revised_at'] is None
+    created_before = item['created_at']
     pending = item['pending_revision']
     assert pending['status'] == 'ready'
     assert {c['field'] for c in pending['changes']} == {'title', 'meta_description'}
@@ -234,6 +236,8 @@ def test_full_flow_preview_accept_and_export_identity(
     assert collect_exportable_identity(db_session, run.id, 'seo_content') != before
     item = client.get(list_url).json()['items'][0]
     assert item['pending_revision'] is None and item['revision_count'] == 1
+    # Kart revizyon tarihini gösterir; üretim tarihi (created_at) aynı kalır
+    assert item['revised_at'] is not None and item['created_at'] == created_before
 
 
 def test_stale_proposal_cannot_overwrite_newer_content(
@@ -349,3 +353,100 @@ def test_worker_stops_without_ai_when_source_changed(
     ai = RevisionAI({'title': NEW_TITLE, 'meta_description': NEW_META})
     assert _run_worker(monkeypatch, sent, ai) == {'status': 'failed', 'reason': 'source_changed'}
     assert ai.prompts == []
+
+
+# ── Kayıtlı değerlendirme bağlamı + bozulan kontroller (12.11) ─────────────────
+
+def _source_checked(db, make_workspace, make_scoring_run, geo=None, name='rev-eval'):
+    """Kaynağı GERÇEK SEO denetleyici sonucuyla kaydeder (önce/sonra karşılaştırması için)."""
+    from app.compliance.seo_checker import SEOComplianceChecker
+
+    ws = make_workspace(name=name, company_url='https://ornek.example')
+    run = make_scoring_run(brand_profile_id=ws.id, status='channel_assigned')
+    kw = Keyword(keyword='hisse takip', monthly_volume=1000)
+    db.add(kw)
+    db.commit()
+    db.add(ChannelPool(scoring_run_id=run.id, keyword_id=kw.id, channel='SEO', final_rank=1))
+    db.commit()
+    seo = SEOComplianceChecker().check(content=dict(SOURCE), keyword='hisse takip',
+                                       word_count_min=500, word_count_max=600)
+    row = SEOGEOGenerator(db, RevisionAI({}))._save_to_database(
+        kw, dict(SOURCE), seo, dict(geo or PASSING_GEO), scoring_run_id=run.id,
+    )
+    return ws, run, row
+
+
+def test_year_removal_request_wins_and_regression_is_shown(db_session, make_workspace, make_scoring_run):
+    _, _, row = _source_checked(db_session, make_workspace, make_scoring_run)
+    bodies = list(SOURCE['body_sections'])
+    bodies[2] = 'Takip kolaylasti. Kisa cumle.'
+    ai = RevisionAI({'title': 'Hisse Takip Nedir? Rehber', 'meta_description': NEW_META,
+                     'subheadings': SOURCE['subheadings'], 'body_sections': bodies})
+    payload = _revise(db_session, row, ai, ['title_meta', 'body'], feedback='Yıl ifadesini kaldır')
+
+    prompt = ai.prompts[0]
+    # Geçen kontrol listede; ama talep açıkça çelişirse talebin uygulanacağı yazılı
+    assert '- Güncel yıl' in prompt
+    assert 'Kullanıcı talebi her zaman önce gelir' in prompt
+    assert 'yıl ifadesinin kaldırılması "Güncel yıl"' in prompt
+    assert '2026' not in payload['content']['title'] + ''.join(payload['content']['body_sections'])
+    regs = {r['criterion']: r for r in payload['regressions']}
+    assert regs['mentions_current_year']['before'] == 'Geçti'
+    assert regs['mentions_current_year']['after'] == 'Başarısız'
+    assert len(ai.prompts) == 1  # otomatik ek üretim / puan döngüsü yok
+
+
+def test_intro_keyword_drop_is_reported_without_extra_generation(
+    db_session, make_workspace, make_scoring_run,
+):
+    _, _, row = _source_checked(db_session, make_workspace, make_scoring_run)
+    ai = RevisionAI({'intro_paragraph': 'Hisse takip portfoyu tek panelde gosterir. Anlik calisir.'})
+    payload = _revise(db_session, row, ai, ['intro'], feedback='Girişi sadeleştir')
+
+    assert '- Girişte anahtar kelime (≥2)' in ai.prompts[0]  # geçen kontrol korunsun diye
+    [reg] = [r for r in payload['regressions'] if r['criterion'] == 'intro_keyword_count']
+    assert (reg['before'], reg['after']) == ('Geçti', 'Kısmi')
+    assert '1 kez' in reg['after_detail']
+    assert len(ai.prompts) == 1
+
+
+def test_stored_notes_reach_prompt_without_invented_reasons_and_scope_stays(
+    client, db_session, make_workspace, make_scoring_run,
+):
+    notes = "Sondaki 'Önemli Noktalar' tekrarı kaldırılmalı; ilk 200 kelime çocuk takibini de özetlemeli."
+    geo = {**PASSING_GEO, 'info_hierarchy_strong': False, 'improvement_notes': notes,
+           'total_passed': 6, 'score': 0.86}
+    ws, run, row = _source_checked(db_session, make_workspace, make_scoring_run, geo=geo)
+    ai = RevisionAI({'intro_paragraph': 'Hisse takip ozeti. Hisse takip anlik calisir.'})
+    payload = _revise(db_session, row, ai, ['intro'],
+                      feedback='İlk ~200 kelime konuyu özetlemiyor')
+
+    prompt = ai.prompts[0]
+    assert 'Karşılanmayan kriterler:' in prompt
+    # Kayıtlı notta gerekçe var → nota aynen; kriter satırında UYDURMA gerekçe yok
+    assert '- İlk ~200 kelimede özet / Özet→Detay→Örnek\n' in prompt
+    assert "Sondaki 'Önemli Noktalar' tekrarı kaldırılmalı" in prompt
+    assert '<<<NOT' in prompt
+    # Not yeni sayı/kaynak uydurma yetkisi vermez (iddia politikası aynen)
+    assert 'yeni sayı, istatistik, oran, kaynak, kurum adı' in prompt
+    assert 'yetkisi VERMEZ' in prompt
+    # Not gövdeyi işaret etse de yalnız seçilen alan değişir
+    assert '- intro_paragraph' in prompt and '- body_sections' not in prompt
+    assert [c['field'] for c in payload['changes']] == ['intro_paragraph']
+    assert payload['content']['body_sections'] == SOURCE['body_sections']
+
+    # Kart: kayıtlı not liste yanıtında; AI değerlendirmesi yapılamadıysa not gösterilmez
+    item = client.get(f'/api/v1/generation/seo-geo/list/{run.id}?brand_profile_id={ws.id}').json()['items'][0]
+    assert item['geo_notes'] == notes
+
+
+def test_fallback_geo_note_is_not_used_as_evaluation(client, db_session, make_workspace, make_scoring_run):
+    from app.compliance.publish_review import GEO_FALLBACK_NOTE_PREFIX
+
+    geo = {**PASSING_GEO, 'improvement_notes': f'{GEO_FALLBACK_NOTE_PREFIX}: zaman aşımı'}
+    ws, run, row = _source_checked(db_session, make_workspace, make_scoring_run, geo=geo)
+    ai = RevisionAI({'title': NEW_TITLE, 'meta_description': NEW_META})
+    _revise(db_session, row, ai, ['title_meta'])
+    assert GEO_FALLBACK_NOTE_PREFIX not in ai.prompts[0]
+    item = client.get(f'/api/v1/generation/seo-geo/list/{run.id}?brand_profile_id={ws.id}').json()['items'][0]
+    assert item['geo_notes'] is None

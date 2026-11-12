@@ -24,6 +24,8 @@ interface Props<S extends string> {
   // Sonucun nasıl kullanıma gireceği (ADS: taslak + Aktif Yap; SEO: önizleme + Kabul Et)
   outcomeNote: string
   placeholder: string
+  // Seçilen bölümler bilinen bir sorunu düzeltmeye yetmiyorsa gösterilecek uyarı
+  scopeHint?: (scope: S[]) => string | null
   // Hata metni döndürürse pencere açık kalır ve hatayı gösterir; null → başarı, kapanır
   onSubmit: (feedback: string, scope: S[]) => Promise<string | null>
   onClose: () => void
@@ -36,6 +38,7 @@ export default function ReviseDialog<S extends string>({
   defaultScope,
   outcomeNote,
   placeholder,
+  scopeHint,
   onSubmit,
   onClose,
 }: Props<S>) {
@@ -110,6 +113,7 @@ export default function ReviseDialog<S extends string>({
   const textId = `${uid}-text`
   const hintId = `${uid}-hint`
   const kept = scopeOptions.filter((o) => !scope.includes(o.value)).map((o) => o.label)
+  const hint = scopeHint ? scopeHint(scope) : null
 
   return (
     // Yazılmış talep yanlışlıkla dışarı tıklanınca kaybolmasın (Vazgeç/Esc/× ile kapanır)
@@ -161,6 +165,11 @@ export default function ReviseDialog<S extends string>({
           {scope.length === 0 && (
             <p className="adsx-revise-warn" role="alert">
               En az bir bölüm seçin.
+            </p>
+          )}
+          {scope.length > 0 && hint && (
+            <p className="adsx-revise-warn" role="status">
+              {hint}
             </p>
           )}
 

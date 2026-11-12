@@ -1228,3 +1228,16 @@
   font-size: 12.5px;
   color: var(--text-secondary);
 }
+
+/* Kayıtlı değerlendirici notu (SEO kartı) ve önizlemedeki bozulan kontroller */
+.seox-review-notes {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary, #9aa4b2);
+  overflow-wrap: anywhere;
+}
+.seox-rev-warn ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

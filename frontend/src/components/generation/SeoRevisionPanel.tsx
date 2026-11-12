@@ -102,6 +102,19 @@ export default function SeoRevisionPanel({
           {pct(s.geo_after)}
         </div>
       )}
+      {(revision.regressions?.length ?? 0) > 0 && (
+        <div className="seox-rev-warn" role="note" aria-label="Bozulan kontroller">
+          <b>Önceden geçen kontroller bu öneride bozuldu:</b>
+          <ul>
+            {revision.regressions!.map((r) => (
+              <li key={`${r.channel}-${r.criterion}`}>
+                {r.label}: {r.before} → {r.after}
+                {r.after_detail ? ` (${r.after_detail})` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {revision.publish_review?.required && (
         <div className="seox-rev-warn">
           {revision.publish_review.label}:{' '}

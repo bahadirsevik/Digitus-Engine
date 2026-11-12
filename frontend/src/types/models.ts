@@ -195,6 +195,10 @@ export interface SEOGeoItem {
   created_at?: string | null
   // Kabul edilmiş kullanıcı revizyonu sayısı + bekleyen ("Revize Et") revizyon
   revision_count?: number
+  // Son kabul edilen revizyonun tarihi (created_at üretim tarihi olarak kalır)
+  revised_at?: string | null
+  // Değerlendiricinin kayıtlı notu (GEO AI değerlendirmesi yapıldıysa)
+  geo_notes?: string | null
   pending_revision?: SeoPendingRevision | null
 }
 
@@ -217,6 +221,18 @@ export interface SeoPendingRevision {
   changes: SeoRevisionChange[]
   scores?: { seo_before: number; geo_before: number; seo_after: number; geo_after: number } | null
   publish_review?: PublishReview | null
+  // Önceden geçip öneride bozulan kontroller (yalnız gösterilir)
+  regressions?: SeoCheckRegression[]
+}
+
+export interface SeoCheckRegression {
+  criterion: string
+  label: string
+  channel: 'SEO' | 'GEO'
+  before: string
+  after: string
+  before_detail?: string
+  after_detail?: string
 }
 
 export interface SocialIdea {

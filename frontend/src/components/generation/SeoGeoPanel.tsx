@@ -110,6 +110,23 @@ const hostFrom = (url?: string | null) => {
   }
 }
 
+// Bazı kriterler seçilen bölümlerle düzeltilemez; kullanıcı göndermeden önce uyarılır
+const SCOPE_NEEDS: Record<string, { scopes: SeoRevisionScope[]; text: string }> = {
+  info_hierarchy_strong: {
+    scopes: ['intro', 'body'],
+    text: '“İlk ~200 kelimede özet” sorunu girişle birlikte gövdenin başını da kapsar; Giriş ve Gövde seçilmezse düzelmeyebilir.',
+  },
+}
+
+const seoScopeHint = (item: SEOGeoItem, scope: SeoRevisionScope[]): string | null => {
+  const failing = item.publish_review?.critical_failures ?? []
+  const hints = failing
+    .map((f) => SCOPE_NEEDS[f.criterion])
+    .filter((n) => n && n.scopes.some((s) => !scope.includes(s)))
+    .map((n) => n!.text)
+  return hints.length ? hints.join(' ') : null
+}
+
 const shortDate = (iso?: string | null) => {
   if (!iso) return null
   const d = new Date(iso)
@@ -223,6 +240,7 @@ function ContentCard({
   const metaLen = item.meta_description?.length || 0
   const subs = item.subheadings || []
   const date = shortDate(item.created_at)
+  const revisedDate = shortDate(item.revised_at)
   const review = item.publish_review
   const reviewReasons = (review?.critical_failures || []).map((f, i) => (
     <li key={`f${i}`}>
@@ -263,10 +281,16 @@ function ContentCard({
               {review.label}
             </span>
           )}
-          {date && (
-            <span className="seox-date chx-mono">
-              <Calendar size={12} /> {date}
+          {revisedDate ? (
+            <span className="seox-date chx-mono" title={date ? `Üretim: ${date}` : undefined}>
+              <Calendar size={12} /> Revize: {revisedDate}
             </span>
+          ) : (
+            date && (
+              <span className="seox-date chx-mono">
+                <Calendar size={12} /> {date}
+              </span>
+            )
           )}
           <button
             type="button"
@@ -299,6 +323,11 @@ function ContentCard({
 
       {review?.required && reviewReasons.length > 0 && (
         <ul className="seox-review-list seox-review-top">{reviewReasons}</ul>
+      )}
+      {review?.required && item.geo_notes && (
+        <p className="seox-review-notes">
+          <span className="seox-review-src">Değerlendirici notu</span> {item.geo_notes}
+        </p>
       )}
 
       <h3 className="seox-title">{item.title || item.keyword}</h3>
@@ -824,6 +853,7 @@ export default function SeoGeoPanel({ runId, run }: { runId: number; run?: Scori
           defaultScope={['title_meta', 'intro']}
           outcomeNote="Öneri önce bu kartta önizlenir; siz “Kabul Et” diyene kadar mevcut içerik kullanılır. URL, linkler ve görsel alt metinleri değişmez; SEO/GEO ve iddia kontrolleri yine uygulanır."
           placeholder="Örn. Girişi daha kısa ve samimi yap, başlıkta yılı öne al."
+          scopeHint={(scope) => seoScopeHint(reviseTarget, scope)}
           onSubmit={(feedback, scope) => submitRevise(reviseTarget.id, feedback, scope)}
           onClose={() => setReviseTarget(null)}
         />

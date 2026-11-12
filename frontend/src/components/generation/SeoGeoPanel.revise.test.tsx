@@ -188,4 +188,76 @@ describe('SeoGeoPanel — Revize Et', () => {
       screen.getByText(/güncel değil \(kanal ataması yenilendi\); revize edilemez/)
     ).toBeTruthy()
   })
+  it('revize edilmiş içerikte kabul tarihi gösterilir; üretim tarihi ipucunda kalır', async () => {
+    mocks.listSeoGeo.mockResolvedValue(
+      listWith({
+        ...baseItem,
+        created_at: '2026-10-31T19:16:00Z',
+        revised_at: '2026-11-12T09:30:00Z',
+        revision_count: 1,
+      })
+    )
+    render(<SeoGeoPanel runId={1} />)
+    const stamp = await screen.findByText(/Revize: 12\.11\.2026/)
+    expect(stamp.closest('span')?.getAttribute('title')).toBe('Üretim: 31.10.2026')
+  })
+  const hierarchyReview = {
+    required: true,
+    status: 'review_required' as const,
+    label: 'Yayın öncesi inceleme gerekli',
+    critical_failures: [
+      {
+        criterion: 'info_hierarchy_strong',
+        source: 'geo_ai' as const,
+        detail: 'İlk ~200 kelime konuyu özetlemiyor (AI değerlendirmesi)',
+      },
+    ],
+    manual_checks: [],
+  }
+
+  it('kartta kayıtlı değerlendirici notu gösterilir', async () => {
+    mocks.listSeoGeo.mockResolvedValue(
+      listWith({
+        ...baseItem,
+        publish_review: hierarchyReview,
+        geo_notes: 'Sondaki tekrar eden madde listesi kaldırılmalı.',
+      })
+    )
+    render(<SeoGeoPanel runId={1} />)
+    expect(await screen.findByText('Sondaki tekrar eden madde listesi kaldırılmalı.')).toBeTruthy()
+  })
+
+  it('seçilen kapsam sorunu düzeltmeye yetmiyorsa pencere uyarır; Gövde seçilince kalkar', async () => {
+    mocks.listSeoGeo.mockResolvedValue(listWith({ ...baseItem, publish_review: hierarchyReview }))
+    render(<SeoGeoPanel runId={1} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Revize Et/ }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/Giriş ve Gövde seçilmezse düzelmeyebilir/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByLabelText('Gövde (alt başlıklar, bölümler, SSS)'))
+    expect(within(dialog).queryByText(/Giriş ve Gövde seçilmezse/)).toBeNull()
+  })
+
+  it('önizlemede önceden geçip bozulan kontroller listelenir', async () => {
+    mocks.listSeoGeo.mockResolvedValue(
+      listWith({
+        ...baseItem,
+        pending_revision: {
+          ...readyRevision,
+          regressions: [
+            {
+              criterion: 'intro_keyword_count',
+              label: 'Girişte anahtar kelime (≥2)',
+              channel: 'SEO',
+              before: 'Geçti',
+              after: 'Kısmi',
+              after_detail: 'Giriş paragrafında keyword: 1 kez (min 2)',
+            },
+          ],
+        },
+      })
+    )
+    render(<SeoGeoPanel runId={1} />)
+    const note = await screen.findByRole('note', { name: 'Bozulan kontroller' })
+    expect(within(note).getByText(/Girişte anahtar kelime \(≥2\): Geçti → Kısmi/)).toBeTruthy()
+  })
 })

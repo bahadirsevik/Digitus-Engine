@@ -10,9 +10,18 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 ## ACIK KONTROLLER (yayin oncesi)
 
 - [x] ADS "Revize Et" GERCEK AI (12.11, run 93 / set 40 grup 263, kapsam=aciklamalar): yeni taslak set 50; 15 baslik (sort_order ile) + 10 negatif birebir; 4 aciklama samimi + fiyat vurgusu yok, hepsi <=90; iddia sayaci set 40 ile ayni (1). Aktivasyon oncesi export eski / sonrasi yeni aciklamalar. Set 40 tekrar aktif, 50 arsivde, taslak 45 dokunulmadi.
-- [~] SEO "Revize Et" GERCEK AI (12.11, icerik 223, kapsam=baslik+meta): oneri + kabul OK — baslik/meta degisti, yil kalkti, 11 korunan alan birebir, content_data senkron, revision_count=1, skor degismedi. EXPORT DOGRULANAMADI: export keyword basina EN SON icerigi alir; 223 ile 226 ayni kelime ("dis hekimi") → export'ta yalniz 226 (223 revizyondan once de yoktu). Export dogrulamasi icin 226 uzerinde 1 ucretli deneme gerekir — kullanici onayi bekliyor.
+- [x] SEO "Revize Et" GERCEK AI: (a) 12.11 icerik 223 (baslik+meta): oneri+kabul OK, 11 korunan alan birebir, revision_count=1; 223 export'a girmez (keyword basina en son icerik → 226). (b) 12.11 icerik 226 (once collector+export'ta oldugu dogrulandi), talep "yil ifadesini kaldir": baslik/metadan yalniz "2026" kalkti, 11 korunan alan birebir (oneri + kabul sonrasi DB), skor ayni (SEO 0.94 / GEO 1.0), revision_count=1, content_data senkron; export kabul oncesi eski baslik+meta, sonrasi yalniz yeni baslik+meta (URL ayni).
 - [x] SOSYAL "Revize Et" GERCEK AI (12.11, brief 26 / icerik 103, kapsam=kancalar): kancalar 102/98→40/41 kr, biri soru; 11 korunan alan + uyarilar birebir; kabul: ayni id, regeneration_count=1; brief Excel + run export yeni kancalari gosterir. CANLI BULGU: gercek model kancaya ab_score ekliyor → GET /revisions yanit semasi (extra=forbid) 500 veriyordu; SocialRevisionHook ile duzeltildi + test ab_score tasiyor (commit bekliyor).
 - Kapsam disi (bu ise eklenmeyecek, kullanici karari 11.11): Sosyal havuz satirlari kart icinde kirpiliyor; dar ekranda marka pili "Ak…" kesiliyor.
+
+## Just completed (12.11 — SEO revizyon iyilestirmeleri; commit var, push YOK; ucretli cagri YOK)
+
+- Kullanici bulgusu: 223'te 2 kez "ilk 200 kelime ozetlemiyor" revizyonu → kriter hala basarisiz. Kok neden: (1) prompt'a yalniz sabit kriter etiketi gidiyordu, degerlendiricinin kayitli improvement_notes'u gitmiyordu; (2) kapsam giris+baslik — "ilk 200 kelime" girisle birlikte govdenin basini, notun istedigi "Onemli Noktalar" tekrari govdeyi kapsiyor; (3) rev.4 SEO 0.96→0.87 (giriste keyword 2→1, guncel yil) onizlemede adiyla gorunmuyordu.
+- A: `revision.evaluation_block` — prompt'a KAYITLI basarisiz kriterler (SEO detayi checks_json'dan), GEO notu (yalniz AI degerlendirmesi; fallback notu degil; <<<NOT veri blogu) ve gecen SEO kontrolleri. Oncelik: talep > kapsam > gecen kontroller (yil kaldirma ornegi yazili). Kural 4: not yeni sayi/istatistik/kaynak/kurum/iddia yetkisi VERMEZ; iddia politikasi degismedi.
+- B: kartta kayitli `geo_notes` (inceleme gerekiyorsa); ReviseDialog `scopeHint` — info_hierarchy_strong basarisizken Giris+Govde secilmezse uyari (gonderimi engellemez).
+- C: `revision.check_regressions` → oneri payload'unda `regressions` (once gecen/kismi, sonra kotulesen SEO+GEO kontrolleri); SeoRevisionPanel listeler. Otomatik ek uretim/puan dongusu YOK.
+- Revizyon tarihi: liste ucu `revised_at` (son kabul accepted_at); kart "Revize: tarih", uretim tarihi ipucunda. created_at degismez; migration yok.
+- Testler: SEO revizyon 14 (yil kaldirma, giris keyword, kapsam yetersizligi + kayitli not, fallback notu, revised_at); ilgili BE alt kume 510 gecti; ruff temiz; FE 450/450 + lint/format/build. Gercek AI ile denenmedi.
 
 ## Just completed (11.11 — SOSYAL "Revize Et"; commit/push YOK; Architect/Konsey KOSMADI — plan Codex 2 tur onayli; ajanlar: yalniz QA (Sonnet), gerekce basta yazildi)
 

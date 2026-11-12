@@ -524,6 +524,8 @@ def list_seo_geo_contents(
             'publish_review': publish_review_from_rows(
                 content.seo_compliance, content.geo_compliance
             ),
+            # Değerlendiricinin KAYITLI notu (AI değerlendirmesi yapıldıysa); kart gösterir
+            'geo_notes': _stored_geo_notes(content.geo_compliance),
             'created_at': content.created_at.isoformat() if content.created_at else None,
             # Kart ozeti alanlari (tam govde bilerek dahil edilmez)
             'intro_paragraph': content.intro_paragraph,
@@ -547,8 +549,20 @@ def list_seo_geo_contents(
 
     # Kullanıcı revizyonu durumu (okuma anında lease'i dolanlar failed yapılır)
     pending = _latest_seo_revisions(db, [c.id for c in contents])
+    # Kabul aynı satırı günceller (created_at = üretim tarihi kalır); son kabul tarihi ayrıca döner
+    from sqlalchemy import func
+    from app.database.models import ContentRevision
+    revised = dict(
+        db.query(ContentRevision.source_content_id, func.max(ContentRevision.accepted_at))
+        .filter(ContentRevision.channel == "SEO", ContentRevision.status == "accepted",
+                ContentRevision.source_content_id.in_([c.id for c in contents] or [0]))
+        .group_by(ContentRevision.source_content_id)
+        .all()
+    )
     for item in results:
         item['pending_revision'] = _revision_summary(pending.get(item['id']))
+        revised_at = revised.get(item['id'])
+        item['revised_at'] = revised_at.isoformat() if revised_at else None
 
     return {
         'scoring_run_id': scoring_run_id,
@@ -603,6 +617,14 @@ def _latest_seo_revisions(db: Session, content_ids: List[int]) -> dict:
     return latest
 
 
+def _stored_geo_notes(geo_row) -> Optional[str]:
+    from app.compliance.publish_review import geo_evaluation_source
+
+    if geo_evaluation_source(geo_row) != "ai":
+        return None
+    return (geo_row.improvement_notes or "").strip() or None
+
+
 def _revision_summary(rev) -> Optional[dict]:
     """Kartta gösterilecek bekleyen revizyon (kabul/iptal edilmişse None)."""
     if rev is None or rev.status not in ("generating", "ready", "failed"):
@@ -618,6 +640,7 @@ def _revision_summary(rev) -> Optional[dict]:
         'changes': payload.get('changes') or [],
         'scores': payload.get('scores'),
         'publish_review': payload.get('publish_review'),
+        'regressions': payload.get('regressions') or [],
     }
 
 
