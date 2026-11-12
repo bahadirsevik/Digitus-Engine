@@ -14,6 +14,16 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 - [x] SOSYAL "Revize Et" GERCEK AI (12.11, brief 26 / icerik 103, kapsam=kancalar): kancalar 102/98→40/41 kr, biri soru; 11 korunan alan + uyarilar birebir; kabul: ayni id, regeneration_count=1; brief Excel + run export yeni kancalari gosterir. CANLI BULGU: gercek model kancaya ab_score ekliyor → GET /revisions yanit semasi (extra=forbid) 500 veriyordu; SocialRevisionHook ile duzeltildi + test ab_score tasiyor (commit bekliyor).
 - Kapsam disi (bu ise eklenmeyecek, kullanici karari 11.11): Sosyal havuz satirlari kart icinde kirpiliyor; dar ekranda marka pili "Ak…" kesiliyor.
 
+## Just completed (12.11 — SEO 223 Giris+Govde gercek AI denemesi + "degerlendirme yalniz baglam" siniri; commit var, push YOK)
+
+- Deneme (1 ucretli talep, revizyon 6, kapsam intro+body; talep: ilk 200 kelime konulari ozetlesin + tekrarlayan "Onemli Noktalar" genel ozete donussun): KISMEN BASARILI.
+  - Karsilanan: ilk 200 kelime 5 konunun hepsini aniyor (muayene, dis korkusu, tedaviler, ilk randevu, cocuk); "Onemli Noktalar" 4 maddesi tedavi tekrari yerine genel ozet. Kapsam disi (baslik, meta, URL, linkler, alt metinler) birebir; alt basliklar ayni. SEO 0.87→0.90, GEO 0.71→0.86 (no_fluff gecti).
+  - Karsilanmayan: GEO info_hierarchy_strong hala basarisiz (yeni not: giris sonraki bolumleri "kisa birer cumleyle ozetlemeli"; giris konulari icindekiler gibi sayiyor).
+  - Istenmeyen: model girise "2026 yili" ekledi (talepte yok; kayitli degerlendirmede "Guncel yil" karsilanmayan kriterdi). Kelime sayisi 558→485 (hedef 500-600) — onizlemede gerileme olarak listelendi. SSS'de bir cevap mutlak ifadeden yumusatildi (kapsam ici). Iddia denetimi kaynaktaki "3. hasta" yuzunden hala inceleme gerekli.
+  - Revizyon 6 KABUL EDILMEDI (onizlemede bekliyor; Vazgec karari kullanicida). Canli 223 degismedi (revision_count 3).
+- Duzeltme: prompt'a kesin sinir — MEVCUT DEGERLENDIRME yalniz baglamdir, bagimsiz duzenleme hedefi degildir; talebin istemedigi kriteri (or. "Guncel yil", kelime sayisi) duzeltmek icin icerik eklenmez/cikarilmaz/degistirilmez. 3 mevcut SEO testine bu sinir eklendi (14/14).
+- YENI PROMPT GERCEK AI ILE HENUZ DENENMEDI. Denemeden once dev celery_worker restart gerekir (su an eski prompt).
+
 ## Just completed (12.11 — SEO revizyon iyilestirmeleri; commit var, push YOK; ucretli cagri YOK)
 
 - Kullanici bulgusu: 223'te 2 kez "ilk 200 kelime ozetlemiyor" revizyonu → kriter hala basarisiz. Kok neden: (1) prompt'a yalniz sabit kriter etiketi gidiyordu, degerlendiricinin kayitli improvement_notes'u gitmiyordu; (2) kapsam giris+baslik — "ilk 200 kelime" girisle birlikte govdenin basini, notun istedigi "Onemli Noktalar" tekrari govdeyi kapsiyor; (3) rev.4 SEO 0.96→0.87 (giriste keyword 2→1, guncel yil) onizlemede adiyla gorunmuyordu.

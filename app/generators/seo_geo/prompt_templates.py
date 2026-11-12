@@ -353,6 +353,10 @@ Kesin sınırlar (talep dahil hiçbir şey bunları aşamaz):
   oran, kaynak, kurum adı veya iddia ekleme yetkisi VERMEZ. Not "veri/istatistik ekleyin"
   dese bile yalnız KULLANILABİLİR MARKA BİLGİLERİ'ne dayanan bilgi yazılabilir; yoksa o
   öneriyi uygulama.
+- MEVCUT DEĞERLENDİRME yalnız bağlamdır; kendi başına düzenleme hedefi DEĞİLDİR. Talebin
+  istemediği bir kriteri (ör. "Güncel yıl", kelime sayısı) düzeltmek için içerik ekleme,
+  çıkarma veya değiştirme. Değerlendirmeyi yalnız talebin hangi somut sorunu kastettiğini
+  anlamak ve talebi uygularken neyi bozmaman gerektiğini görmek için kullan.
 Bu sınırlar içinde:
 1. Kullanıcı talebi, şu an geçen SEO kontrollerini korumaktan önceliklidir.
 2. Talep bir kontrolle açıkça çelişiyorsa (ör. yıl ifadesinin kaldırılması "Güncel yıl"

@@ -376,6 +376,15 @@ def _source_checked(db, make_workspace, make_scoring_run, geo=None, name='rev-ev
     return ws, run, row
 
 
+def _assert_evaluation_is_context_only(prompt):
+    """Değerlendirme bağımsız düzenleme hedefi değildir; kural kesin sınırlar arasında."""
+    flat = ' '.join(prompt.split())
+    assert 'yalnız bağlamdır; kendi başına düzenleme hedefi DEĞİLDİR' in flat
+    assert 'Talebin istemediği bir kriteri (ör. "Güncel yıl", kelime sayısı) düzeltmek için' in flat
+    rule = flat.index('kendi başına düzenleme hedefi')
+    assert flat.index('Kesin sınırlar') < rule < flat.index('Bu sınırlar içinde')
+
+
 def test_year_removal_request_wins_and_regression_is_shown(db_session, make_workspace, make_scoring_run):
     _, _, row = _source_checked(db_session, make_workspace, make_scoring_run)
     bodies = list(SOURCE['body_sections'])
@@ -391,6 +400,7 @@ def test_year_removal_request_wins_and_regression_is_shown(db_session, make_work
     assert prompt.index('Kesin sınırlar') < prompt.index('Bu sınırlar içinde')
     assert 'Kullanıcı talebi, şu an geçen SEO kontrollerini korumaktan önceliklidir' in prompt
     assert 'yıl ifadesinin kaldırılması "Güncel yıl"' in prompt
+    _assert_evaluation_is_context_only(prompt)
     assert '2026' not in payload['content']['title'] + ''.join(payload['content']['body_sections'])
     regs = {r['criterion']: r for r in payload['regressions']}
     assert regs['mentions_current_year']['before'] == 'Geçti'
@@ -406,6 +416,7 @@ def test_intro_keyword_drop_is_reported_without_extra_generation(
     payload = _revise(db_session, row, ai, ['intro'], feedback='Girişi sadeleştir')
 
     assert '- Girişte anahtar kelime (≥2)' in ai.prompts[0]  # geçen kontrol korunsun diye
+    _assert_evaluation_is_context_only(ai.prompts[0])
     [reg] = [r for r in payload['regressions'] if r['criterion'] == 'intro_keyword_count']
     assert (reg['before'], reg['after']) == ('Geçti', 'Kısmi')
     assert '1 kez' in reg['after_detail']
@@ -432,6 +443,7 @@ def test_stored_notes_reach_prompt_without_invented_reasons_and_scope_stays(
     # Not yeni sayı/kaynak uydurma yetkisi vermez (iddia politikası aynen)
     assert 'yeni sayı, istatistik, oran, kaynak, kurum adı' in ' '.join(prompt.split())
     assert 'yetkisi VERMEZ' in prompt
+    _assert_evaluation_is_context_only(prompt)
     # Not gövdeyi işaret etse de yalnız seçilen alan değişir
     assert '- intro_paragraph' in prompt and '- body_sections' not in prompt
     assert [c['field'] for c in payload['changes']] == ['intro_paragraph']
