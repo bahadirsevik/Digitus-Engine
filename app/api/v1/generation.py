@@ -58,6 +58,8 @@ from app.schemas.social_brief import (
     SocialBriefStateResponse,
     SocialContentHistoryItemResponse,
     SocialContentHistoryResponse,
+    SocialContentRevisionListResponse,
+    SocialContentRevisionRequest,
     SocialHistoryHookResponse,
     SocialBriefCategoriesGenerateRequest,
     SocialBriefContentsAttemptResponse,
@@ -3549,6 +3551,184 @@ def get_social_brief_contents_attempt(
                 "message": "İçerik sonuçları okunurken beklenmeyen bir hata oluştu. Sayfayı yenileyin.",
             },
         )
+
+
+# ==================== SOSYAL İÇERİK REVİZYONU ("Revize Et") ====================
+
+_SOCIAL_REVISION_HTTP = {
+    "NOT_FOUND": 404,
+    "REVISION_INVALID_SCOPE": 400,
+}
+
+
+def _require_social_brief_flow() -> None:
+    if not getattr(settings, "ENABLE_SOCIAL_BRIEF_FLOW", False):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "FEATURE_DISABLED",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
+            },
+        )
+
+
+def _social_revision_http(e) -> HTTPException:
+    return HTTPException(
+        status_code=_SOCIAL_REVISION_HTTP.get(e.code, 409),
+        detail={"code": e.code, "message": e.message},
+    )
+
+
+def _social_revision_list(db: Session, brief_id: int, brand_profile_id: int) -> SocialContentRevisionListResponse:
+    from app.core.social.content_revision import list_brief_revisions
+
+    items = list_brief_revisions(db, brief_id=brief_id, brand_profile_id=brand_profile_id)
+    db.commit()  # okuma anında lease'i dolan revizyonların failed yazımı
+    return SocialContentRevisionListResponse(brief_id=brief_id, items=items)
+
+
+@router.post(
+    "/social/briefs/{brief_id}/contents/{content_id}/revise",
+    response_model=SocialContentRevisionListResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def revise_social_brief_content(
+    brief_id: int,
+    content_id: int,
+    request: SocialContentRevisionRequest,
+    response: Response,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Kayıtlı içerik için geri bildirimli revizyon başlatır. Öneri kabul edilene kadar
+    canlı içerik DEĞİŞMEZ. Yanıt: brief'in güncel revizyon durumları."""
+    from app.core.social.content_revision import SocialRevisionError, begin_social_content_revision
+    from app.generators.social.attempt_state import finalize_content_revision_attempt_failure
+    from app.tasks.generation_tasks import revise_social_content_task
+
+    _require_social_brief_flow()
+    require_non_legacy_brief(db, brief_id, brand_profile_id)
+    try:
+        attempt, created = begin_social_content_revision(
+            db, brief_id=brief_id, content_id=content_id, brand_profile_id=brand_profile_id,
+            feedback=request.feedback, scope=list(request.scope),
+            idempotency_key=request.idempotency_key,
+        )
+        attempt_id = attempt.id
+        db.commit()
+    except SocialRevisionError as e:
+        db.rollback()
+        raise _social_revision_http(e)
+    except AttemptConflictError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ATTEMPT_CONFLICT",
+                "message": "Bu brief'te süren bir revizyon var; bitince yeniden deneyin.",
+            },
+        )
+    except AttemptNotWritableError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ATTEMPT_NOT_WRITABLE", "message": "Bu içerik şu an revize edilemiyor; sayfayı yenileyin."},
+        )
+
+    if created:
+        task_id = str(uuid.uuid4())
+        try:
+            revise_social_content_task.apply_async(args=[attempt_id], task_id=task_id)
+        except Exception:
+            logger.exception("Sosyal revizyon görevi kuyruğa alınamadı")
+            try:
+                finalize_content_revision_attempt_failure(
+                    db, attempt_id=attempt_id, task_id=task_id, reason_code="dispatch_failed",
+                    error_message="Sosyal revizyon görevi kuyruğa alınamadı.",
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Kuyruğa alınamayan sosyal revizyon kapatılamadı")
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "REVISION_DISPATCH_FAILED", "message": "Revizyon başlatılamadı. Yeniden deneyin."},
+            )
+    else:
+        response.status_code = status.HTTP_200_OK
+    return _social_revision_list(db, brief_id, brand_profile_id)
+
+
+@router.get(
+    "/social/briefs/{brief_id}/revisions",
+    response_model=SocialContentRevisionListResponse,
+)
+def list_social_brief_revisions(
+    brief_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Brief içeriklerinin en son revizyon durumları (süren / hazır öneri / başarısız)."""
+    from app.core.social.content_revision import SocialRevisionError
+
+    _require_social_brief_flow()
+    try:
+        return _social_revision_list(db, brief_id, brand_profile_id)
+    except SocialRevisionError as e:
+        db.rollback()
+        raise _social_revision_http(e)
+
+
+@router.post("/social/revisions/{revision_id}/accept")
+def accept_social_content_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Öneriyi canlı içeriğe yazar (aynı içerik; regeneration_count +1). Tekrar kabul no-op."""
+    from app.core.social.content_contract import SocialContentOutputValidationError
+    from app.core.social.content_persistence import SocialContentPersistenceError
+    from app.core.social.content_revision import SocialRevisionError, accept_social_revision
+
+    _require_social_brief_flow()
+    try:
+        content = accept_social_revision(db, attempt_id=revision_id, brand_profile_id=brand_profile_id)
+        result = {"status": "accepted", "content_id": content.id,
+                  "regeneration_count": content.regeneration_count}
+        db.commit()
+        return result
+    except SocialRevisionError as e:
+        if e.commit:
+            db.commit()
+        else:
+            db.rollback()
+        raise _social_revision_http(e)
+    except (SocialContentOutputValidationError, SocialContentPersistenceError):
+        db.rollback()
+        logger.exception("Sosyal revizyon kabul doğrulaması başarısız")
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "REVISION_INVALID", "message": "Öneri doğrulanamadı; içerik değişmedi. Yeniden revize edin."},
+        )
+
+
+@router.post("/social/revisions/{revision_id}/discard")
+def discard_social_content_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Hazır öneriden vazgeçer ya da başarısız revizyon bildirimini kapatır."""
+    from app.core.social.content_revision import SocialRevisionError, discard_social_revision
+
+    _require_social_brief_flow()
+    try:
+        discard_social_revision(db, attempt_id=revision_id, brand_profile_id=brand_profile_id)
+        db.commit()
+    except SocialRevisionError as e:
+        db.rollback()
+        raise _social_revision_http(e)
+    return {"status": "discarded"}
 
 
 

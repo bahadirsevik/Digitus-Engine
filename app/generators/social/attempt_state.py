@@ -32,7 +32,8 @@ from app.database.models import (
 
 ACTIVE_ATTEMPT_STATUSES = ("pending", "running")
 TERMINAL_ATTEMPT_STATUSES = ("completed", "partial", "failed")
-ALLOWED_STAGES = ("categories", "ideas", "ideas_retry", "contents")
+# content_revision: kullanıcı içerik revizyonu (brief başına tek aktif; öneri content_revisions'ta)
+ALLOWED_STAGES = ("categories", "ideas", "ideas_retry", "contents", "content_revision")
 
 # Sosyal içerik Celery hard limit'i 1200 saniyedir; lease güvenli marjla 1500 saniye seçilmiştir.
 SOCIAL_ATTEMPT_LEASE_SECONDS = 1500
@@ -1686,6 +1687,41 @@ def finalize_ideas_retry_attempt_failure(
         error_message=error_message,
         expected_stage="ideas_retry",
         now=now,
+    )
+
+
+ALLOWED_CONTENT_REVISION_FAILURE_REASONS = PENDING_ALLOWED_FAILURE_REASONS | frozenset({
+    "revision_ai_failed",
+    "revision_rejected",
+    "revision_no_change",
+    "revision_scope_violation",
+    "revision_source_changed",
+    "revision_input_invalid",
+    "revision_failed",
+})
+
+
+def finalize_content_revision_attempt_failure(
+    db: Session,
+    *,
+    attempt_id: int,
+    task_id: str,
+    reason_code: str,
+    error_message: str,
+    now: datetime | None = None,
+    pending_claimed: bool = False,
+) -> tuple[SocialGenerationAttempt, bool]:
+    """Kullanıcı içerik revizyonu attempt'ini failure durumunda canonical kilit sırasıyla sonlandırır."""
+    return _finalize_social_idea_attempt_failure(
+        db,
+        attempt_id=attempt_id,
+        task_id=task_id,
+        reason_code=reason_code,
+        error_message=error_message,
+        expected_stage="content_revision",
+        now=now,
+        allowed_reasons=ALLOWED_CONTENT_REVISION_FAILURE_REASONS,
+        pending_claimed=pending_claimed,
     )
 
 

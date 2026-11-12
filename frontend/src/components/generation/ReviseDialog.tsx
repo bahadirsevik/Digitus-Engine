@@ -1,7 +1,8 @@
 /**
- * "Revize Et" penceresi (ADS + SEO ortak): kullanıcı neyin değişeceğini yazar ve
+ * "Revize Et" penceresi (ADS + SEO + sosyal ortak): kullanıcı neyin değişeceğini yazar ve
  * hangi bölümlerin değişeceğini seçer. Seçilmeyen bölümler sunucuda AYNEN korunur
- * (app/generators/ads/revision.py, app/generators/seo_geo/revision.py).
+ * (app/generators/ads/revision.py, app/generators/seo_geo/revision.py,
+ * app/core/social/content_revision.py).
  * Gönderim hatasında yazılan talep silinmez.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'

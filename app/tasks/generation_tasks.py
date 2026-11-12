@@ -304,6 +304,125 @@ def revise_seo_content_task(self, revision_id: int, attempt_token: str):
         db.close()
 
 
+@celery_app.task(
+    bind=True, name="generation.social_content_revise",
+    soft_time_limit=540, time_limit=600, max_retries=0,
+)
+def revise_social_content_task(self, attempt_id: int):
+    """Sosyal içerik kullanıcı revizyonu: öneriyi content_revisions'a 'ready' yazar (canlı içerik DEĞİŞMEZ).
+
+    Lease/sahiplik SocialGenerationAttempt (stage='content_revision') üzerindedir: geç kalan
+    worker lock_attempt_for_write'tan geçemez, kapatılmış revizyona öneri yazamaz.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.core.social import content_revision as scr
+    from app.database.models import ScoringRun, SocialBrief, SocialGenerationAttempt
+    from app.generators.output_language import output_context_for_run
+    from app.generators.social.attempt_state import (
+        AttemptNotClaimableError,
+        AttemptNotWritableError,
+        claim_attempt,
+        finalize_content_revision_attempt_failure,
+    )
+
+    task_id = self.request.id
+    db = SessionLocal()
+    ai = None
+    collector = None
+    claimed = False
+
+    def fail(reason: str, message: Optional[str] = None) -> dict:
+        # Claim öncesi hata: pending attempt'i yalnız pending'e izinli bir sebep kapatabilir
+        if not claimed and reason not in ("legacy_run_read_only",):
+            reason = "worker_bootstrap_failed"
+        db.rollback()
+        try:
+            finalize_content_revision_attempt_failure(
+                db, attempt_id=attempt_id, task_id=task_id, reason_code=reason,
+                error_message=message or scr.FAILURE_MESSAGES.get(reason, scr.DEFAULT_FAILURE_MESSAGE),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Sosyal revizyon başarısız durumu kaydedilemedi")
+        return {"status": "failed", "reason": reason}
+
+    try:
+        attempt = db.get(SocialGenerationAttempt, attempt_id)
+        if attempt is None or attempt.stage != scr.STAGE:
+            return {"status": "aborted"}
+        brief = db.get(SocialBrief, attempt.brief_id)
+        refusal = _legacy_refusal(db, brief.scoring_run_id) if brief is not None else None
+        if refusal is not None:
+            return fail("legacy_run_read_only", refusal["message"])
+        try:
+            claimed_attempt = claim_attempt(db, attempt_id=attempt_id, task_id=task_id)
+            # Lease görev sınırına (600 sn) yakın tutulur: öldürülen worker brief'i
+            # (brief başına tek revizyon) 25 dk değil ~11 dk kilitler
+            claimed_attempt.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=660)
+            db.commit()
+            claimed = True
+        except AttemptNotClaimableError:
+            db.commit()  # süresi dolmuş lease'in failed yazımı kalıcı olsun
+            return {"status": "aborted"}
+
+        try:
+            work = scr.prepare_revision_work(db, attempt)
+        except scr.SocialRevisionError as e:
+            return fail(e.reason_code)
+        except Exception:
+            logger.exception("Sosyal revizyon girdisi hazırlanamadı")
+            return fail("revision_input_invalid")
+
+        run = db.get(ScoringRun, work.scoring_run_id)
+        output_ctx = output_context_for_run(db, run.id)
+        from app.core.telemetry import UsageCollector
+        from app.generators.ai_service import get_ai_service
+        collector = UsageCollector(
+            scoring_run_id=run.id, brand_profile_id=run.brand_profile_id, task_id=task_id,
+        )
+        ai = get_ai_service()
+        if hasattr(ai, "collector"):
+            ai.collector = collector
+        db.rollback()  # AI çağrısı süresince okuma transaction'ı açık kalmasın
+
+        try:
+            outcome = scr.execute_social_content_revision(
+                ai_service=ai, prompt_input=work.prompt_input, grounding=work.grounding,
+                source=work.source, feedback=work.request["feedback"], scope=work.request["scope"],
+                output_ctx=output_ctx,
+            )
+        except scr.SocialRevisionError as e:
+            logger.warning(f"Sosyal revizyon önerisi üretilemedi: attempt={attempt_id} {e.code}")
+            return fail(e.reason_code)
+
+        try:
+            revision = scr.write_revision_ready(
+                db, attempt_id=attempt_id, task_id=task_id, outcome=outcome,
+            )
+            db.flush()
+            revision_id = revision.id
+            db.commit()
+        except AttemptNotWritableError:
+            db.commit()  # lock_attempt_for_write'ın yazdığı kapanış durumu
+            logger.warning(f"Sosyal revizyon artık bu worker'a ait değil, öneri yazılmadı: {attempt_id}")
+            return {"status": "aborted"}
+        return {"status": "ready", "attempt_id": attempt_id, "revision_id": revision_id}
+    except Exception:
+        logger.exception(f"Sosyal revizyon görevi beklenmeyen hata: attempt={attempt_id}")
+        fail("revision_failed")
+        raise
+    finally:
+        if collector is not None:
+            try:
+                collector.flush()
+            except Exception:
+                logger.warning("Sosyal revizyon telemetrisi yazılamadı.")
+        _close_ai(ai)
+        db.close()
+
+
 @celery_app.task(name="generation.seo_finalize")
 def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: int):
     """Tüm SEO chunk'ları bitince çağrılır."""

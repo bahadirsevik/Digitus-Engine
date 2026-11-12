@@ -100,6 +100,7 @@ class SocialBriefContentGenerator:
     def generate(
         self,
         prompt_input: SocialContentPromptInput,
+        extra_instructions: str = "",
     ) -> SocialContentAIResult:
         """Fikir için içerik üretimini gerçekleştirir ve doğrulanmış sonuç döner.
 
@@ -114,7 +115,10 @@ class SocialBriefContentGenerator:
         """
         # 1. Girdi ve target doğrulaması (0 AI çağrısı)
         try:
-            prompt = with_output_block(build_social_content_prompt(prompt_input), self._output_ctx)
+            # extra_instructions: kullanıcı revizyon bloğu (yalnız revizyon akışı verir)
+            prompt = with_output_block(
+                build_social_content_prompt(prompt_input) + extra_instructions, self._output_ctx
+            )
         except SocialContentPromptError as exc:
             raise SocialContentGenerationError(
                 exc.message,

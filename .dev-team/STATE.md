@@ -11,7 +11,18 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 
 - [ ] ADS "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (11.11 tarayici kontrolu route mock'luydu). Yayin oncesi: worker restart sonrasi bir grupta kapsam=aciklamalar talebi → yeni draft set; basliklar/negatifler kaynakla birebir mi, iddia kaydi dogru mu, "Aktif Yap" akisi. Ucretli cagri — kullanici onayiyla.
 - [ ] SEO "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (worker + oneri + kabul; tarayici kontrolu mock'lu). Dev DB migration'i 11.11'de uygulandi; ucretli cagri — kullanici onayiyla.
+- [ ] SOSYAL "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (worker + oneri + kabul). Oncesinde dev `celery_worker` restart (yeni task `generation.social_content_revise`); ucretli cagri — kullanici onayiyla.
 - Kapsam disi (bu ise eklenmeyecek, kullanici karari 11.11): Sosyal havuz satirlari kart icinde kirpiliyor; dar ekranda marka pili "Ak…" kesiliyor.
+
+## Just completed (11.11 — SOSYAL "Revize Et"; commit/push YOK; Architect/Konsey KOSMADI — plan Codex 2 tur onayli; ajanlar: yalniz QA (Sonnet), gerekce basta yazildi)
+
+- Lease/idempotency: mevcut `SocialGenerationAttempt`, yeni stage `content_revision` (migration YOK; stage'de CHECK yok). Mevcut tekil-aktif index geregi BRIEF basina tek revizyon (bilincli sinir; UI diger kartlarin butonunu gerekceyle kapatir). Iptal yok. `content_revisions` (channel='social') yalniz oneri/onceki hal; attempt_token="sga:<attempt_id>".
+- `app/core/social/content_revision.py`: kapsam hooks / text(caption,cta,hashtags) / body(format_payload; yalniz video/carousel/thread) / production(gorsel,video,platform,paylasim notlari). Model tam paket uretir → yalniz secili alanlar kaynakla birlestirilir → sozlesme (senaryo+sure YENIDEN) → kalite/iddia → en fazla 1 onarim (yalniz secili alanlar alinir; K8 fallback) → kapsam kapisi. Dayanak: icerigi ureten contents attempt'inin product_facts/USP'si.
+- Kabul: BrandProfile→Run→Brief→attempt→revizyon→icerik kilidi; regeneration_count==source_version (degilse oneri discarded + 409); oneri sozlesmeden yeniden gecer + kapsam kapisi + `validate_and_build_persisted_social_content`; ayni satir, regeneration_count+1 (export kimligi bunu okur). Tekrar kabul no-op. Yeni talep eski 'ready' oneriyi kapatir.
+- Uclar: POST `/social/briefs/{b}/contents/{c}/revise` (202; yanit brief revizyon listesi), GET `/social/briefs/{b}/revisions`, POST `/social/revisions/{attempt_id}/accept|discard`. Worker `generation.social_content_revise` (claim sonrasi lease 660 sn; claim oncesi hata → worker_bootstrap_failed).
+- UI: kart basliginda "Revize Et" (pasif nedeni), ortak `ReviseDialog`, `SocialRevisionPanel` (suruyor / tam kart onizleme + Kabul/Vazgec / basarisiz + Kapat), `useSocialRevisions` (yoklama, sira numarasi, 5xx sonrasi yeni anahtar).
+- QA (Sonnet): 503 sonrasi ayni anahtar olu denemeyi oynatiyordu, claim oncesi hata pending birakiyordu, sert kill brief'i 25 dk kilitliyordu, gizli eski oneri kabul edilebiliyordu, yoklama yarisi, erisilebilirlik → DUZELTILDI + testler. Bilincli: kabulde uyari listesi yeni metnin denetimiyle degisir (eski metnin inceleme gecmisi tasinmaz).
+- Testler: BE tam paket 5734 gecti / 2 bilinen (test_hybrid_run_db) / 112 atlandi (QA duzeltmeleri oncesi); duzeltme sonrasi ruff temiz + sosyal/uretim/export/iddia alt kumesi 2672 gecti; yeni 14 sosyal revizyon testi. FE 446/446 + lint/format/build. Tarayici (gercek veri, mock'suz): pencere/kapsamlar/Esc+odak donusu, 1440/390/360 tasma 0; ucretsiz uclar 200/404/422/400, kayit acilmadi.
 
 ## Just completed (11.11 — SEO "Revize Et"; commit var, push YOK; Architect/Konsey KOSMADI — kararlar Codex 2 tur onayli planda; ajanlar: yalniz QA (Sonnet), gerekce kullaniciya basta yazildi)
 

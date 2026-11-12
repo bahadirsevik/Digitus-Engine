@@ -1945,6 +1945,41 @@ export interface SocialContentHistoryResponse {
   items: SocialContentHistoryItemResponse[]
 }
 
+export type SocialRevisionScope = 'hooks' | 'text' | 'body' | 'production'
+
+export interface SocialRevisionProposed {
+  hooks: { text: string; style?: string | null }[]
+  caption: string
+  cta_text?: string | null
+  hashtags: string[]
+  format_payload?: SocialFormatPayload | null
+  scenario?: string | null
+  visual_suggestion?: string | null
+  video_concept?: string | null
+  industry_posting_suggestion?: string | null
+  platform_notes?: string | null
+  duration_status?: string | null
+  actual_duration_sec?: number | null
+  validation_warnings: string[]
+}
+
+export interface SocialContentRevisionItem {
+  id: number
+  content_id: number
+  status: 'generating' | 'ready' | 'failed'
+  feedback?: string | null
+  scope: SocialRevisionScope[]
+  created_at?: string | null
+  proposed?: SocialRevisionProposed | null
+  changes: string[]
+  error_message?: string | null
+}
+
+export interface SocialContentRevisionListResponse {
+  brief_id: number
+  items: SocialContentRevisionItem[]
+}
+
 export const socialBriefApi = {
   getFormatMatrix: () => api.get<SocialFormatMatrixResponse>('/generation/social/format-matrix'),
 
@@ -2041,6 +2076,35 @@ export const socialBriefApi = {
   ) =>
     api.get<SocialContentHistoryResponse>('/generation/social/contents/history', {
       params: { brand_profile_id, ...params },
+    }),
+
+  reviseContent: (
+    brief_id: number,
+    content_id: number,
+    data: { feedback: string; scope: SocialRevisionScope[]; idempotency_key: string },
+    brand_profile_id: number
+  ) =>
+    api.post<SocialContentRevisionListResponse>(
+      `/generation/social/briefs/${brief_id}/contents/${content_id}/revise`,
+      data,
+      { params: { brand_profile_id } }
+    ),
+
+  listRevisions: (brief_id: number, brand_profile_id: number) =>
+    api.get<SocialContentRevisionListResponse>(`/generation/social/briefs/${brief_id}/revisions`, {
+      params: { brand_profile_id },
+    }),
+
+  acceptRevision: (revision_id: number, brand_profile_id: number) =>
+    api.post<{ status: string; content_id: number; regeneration_count: number }>(
+      `/generation/social/revisions/${revision_id}/accept`,
+      null,
+      { params: { brand_profile_id } }
+    ),
+
+  discardRevision: (revision_id: number, brand_profile_id: number) =>
+    api.post<{ status: string }>(`/generation/social/revisions/${revision_id}/discard`, null, {
+      params: { brand_profile_id },
     }),
 }
 

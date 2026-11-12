@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -587,3 +587,59 @@ class SocialContentHistoryResponse(BaseModel):
     has_more: bool
     items: List[SocialContentHistoryItemResponse] = Field(default_factory=list)
 
+
+
+# ==================== KULLANICI İÇERİK REVİZYONU ("Revize Et") ====================
+
+class SocialContentRevisionRequest(BaseModel):
+    """Talep yalnız `scope` bölümlerine uygulanır; platform/format/süre hedefi korunur."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: str = Field(..., max_length=500)
+    scope: List[Literal["hooks", "text", "body", "production"]] = Field(..., min_length=1)
+    # Aynı gönderimin tekrarı (çift tıklama, ağ yeniden denemesi) aynı revizyonu döndürür
+    idempotency_key: str = Field(..., min_length=8, max_length=64)
+
+    @field_validator("feedback")
+    @classmethod
+    def _feedback_text(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 5:
+            raise ValueError("Değiştirilmesini istediğiniz noktaları en az 5 karakterle yazın.")
+        return v
+
+
+class SocialRevisionProposedContent(BaseModel):
+    hooks: List[SocialHistoryHookResponse] = Field(default_factory=list)
+    caption: str
+    cta_text: Optional[str] = None
+    hashtags: List[str] = Field(default_factory=list)
+    format_payload: Optional[Dict[str, Any]] = None
+    scenario: Optional[str] = None
+    visual_suggestion: Optional[str] = None
+    video_concept: Optional[str] = None
+    industry_posting_suggestion: Optional[str] = None
+    platform_notes: Optional[str] = None
+    duration_status: Optional[str] = None
+    actual_duration_sec: Optional[int] = None
+    validation_warnings: List[str] = Field(default_factory=list)
+
+
+class SocialContentRevisionItem(BaseModel):
+    """İçeriğin en son revizyonu: generating | ready | failed (kabul/vazgeç listelenmez)."""
+
+    id: int = Field(..., description="Revizyon kimliği (kabul/vazgeç uçlarında kullanılır)")
+    content_id: int
+    status: Literal["generating", "ready", "failed"]
+    feedback: Optional[str] = None
+    scope: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    proposed: Optional[SocialRevisionProposedContent] = None
+    changes: List[str] = Field(default_factory=list)
+    error_message: Optional[str] = None
+
+
+class SocialContentRevisionListResponse(BaseModel):
+    brief_id: int
+    items: List[SocialContentRevisionItem] = Field(default_factory=list)

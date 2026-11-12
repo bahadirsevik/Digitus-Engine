@@ -1098,3 +1098,16 @@
 .sb-repair-list li {
   margin-bottom: 6px;
 }
+
+/* "Revize Et" satırı: buton + pasif nedeni (dar ekranda alt satıra kayar) */
+.sb-revise-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+.sb-revise-row .sb-muted {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
