@@ -23,6 +23,14 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
   - Revizyon 6 KABUL EDILMEDI (onizlemede bekliyor; Vazgec karari kullanicida). Canli 223 degismedi (revision_count 3).
 - Duzeltme: prompt'a kesin sinir — MEVCUT DEGERLENDIRME yalniz baglamdir, bagimsiz duzenleme hedefi degildir; talebin istemedigi kriteri (or. "Guncel yil", kelime sayisi) duzeltmek icin icerik eklenmez/cikarilmaz/degistirilmez. 3 mevcut SEO testine bu sinir eklendi (14/14).
 - YENI PROMPT GERCEK AI ILE HENUZ DENENMEDI. Denemeden once dev celery_worker restart gerekir (su an eski prompt).
+- 12.11 karsilastirma denemesi (kullanici onayli, tek talep): ayni talep + intro+body ile yeni prompt. Worker yeni prompt'la restart edildi. NOT: yeni talep acilinca bekleyen revizyon 6 ('ready') sistem tarafindan otomatik 'discarded' olur — kabul edilmeden kapanir (kullanici bilgisiyle).
+  - SONUC (revizyon 7, KABUL EDILMEDI → kullanici karariyla 12.11'de VAZGECILDI ('discarded'); rev 6 da 'discarded'; canli 223 13 alanda degismedi, revision_count 3):
+    - Rev 6 (eski prompt) → rev 7 (yeni prompt): talep edilmeyen yil EKLENMEDI (rev 6'da "2026 yili" vardi); kelime 485 → 566 (hedef 500-600, kaynak 557); govde bolumleri BIREBIR (rev 6'da 5 bolum kisalmisti); kontrol gerilemesi YOK (rev 6: kelime sayisi); SEO 0.91 / GEO 0.86.
+    - Talep: ilk 200 kelime 5 konuyu kisaca ozetliyor (rev 6'daki icindekiler tarzi yerine); "Onemli Noktalar" genel ozet. GEO info_hierarchy_strong GECMEDI; nedeni NETLESMEDI (yeni not, girisin zaten andigi konularin kapsanmasini istiyor; degerlendirilen 200 kelimelik pencerenin 115 kelimesi 1. govde bolumu detayi — hangisinin belirleyici oldugu tek denemeyle ayrismiyor).
+    - Kapsam disi (baslik, meta, URL, linkler, alt metinler) birebir; alt basliklar ayni.
+    - Degerlendiriciye giden ilk 200 kelime: geo_checker._first_words = giris + govde bolumleri METNI (ALT BASLIKSIZ), ilk 200 kelime (rev 7: 85 giris + 115 kelime 1. bolum detayi, cumle ortasinda kesiliyor). Kayittan deterministik yeniden uretildi, AI cagrisi yok.
+    - SSS'de TALEP DISI ANLAM DEGISIKLIGI (rev 6 ve 7'de ayni): "Ilk diş hekimi randevusunda acı hissedilir mi?" cevabi "...herhangi bir agri verici mudahale icermez" → "...acil durumlar haricinde cerrahi mudahale icermez". Iddia "agri yok"tan "cerrahi yok"a kaydi — talepte SSS yoktu; Govde kapsami izin verdigi icin kod engellemedi. Kaynak REVIZYON URETIMI, iddia onarimi DEGIL: rev 6 ve 7'de telemetri yalniz 2 AI cagrisi (seo_generation + geo_compliance; onarim cagrisi yok), claim_review'da applied/original BOS. (Onceki raporda "buyuk olasilikla iddia onarimi" tahmini YANLISTI.)
+    - Iddia denetimi kaynaktaki "3. hasta" yuzunden hala inceleme gerekli.
 
 ## Just completed (12.11 — SEO revizyon iyilestirmeleri; commit var, push YOK; ucretli cagri YOK)
 
