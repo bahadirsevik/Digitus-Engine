@@ -387,7 +387,9 @@ def test_year_removal_request_wins_and_regression_is_shown(db_session, make_work
     prompt = ai.prompts[0]
     # Geçen kontrol listede; ama talep açıkça çelişirse talebin uygulanacağı yazılı
     assert '- Güncel yıl' in prompt
-    assert 'Kullanıcı talebi her zaman önce gelir' in prompt
+    # Kapsam ve iddia kuralları kesin sınır; bu sınırlar içinde talep > geçen kontroller
+    assert prompt.index('Kesin sınırlar') < prompt.index('Bu sınırlar içinde')
+    assert 'Kullanıcı talebi, şu an geçen SEO kontrollerini korumaktan önceliklidir' in prompt
     assert 'yıl ifadesinin kaldırılması "Güncel yıl"' in prompt
     assert '2026' not in payload['content']['title'] + ''.join(payload['content']['body_sections'])
     regs = {r['criterion']: r for r in payload['regressions']}
@@ -428,7 +430,7 @@ def test_stored_notes_reach_prompt_without_invented_reasons_and_scope_stays(
     assert "Sondaki 'Önemli Noktalar' tekrarı kaldırılmalı" in prompt
     assert '<<<NOT' in prompt
     # Not yeni sayı/kaynak uydurma yetkisi vermez (iddia politikası aynen)
-    assert 'yeni sayı, istatistik, oran, kaynak, kurum adı' in prompt
+    assert 'yeni sayı, istatistik, oran, kaynak, kurum adı' in ' '.join(prompt.split())
     assert 'yetkisi VERMEZ' in prompt
     # Not gövdeyi işaret etse de yalnız seçilen alan değişir
     assert '- intro_paragraph' in prompt and '- body_sections' not in prompt
