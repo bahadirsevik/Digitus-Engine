@@ -31,7 +31,8 @@ SOURCE_HOOKS = [
 SOURCE_CAPTION = "Bu harika bir Instagram gönderisi metnidir."
 SOURCE_CTA = "Daha fazlası için profildeki linke tıklayın."
 SOURCE_TAGS = ["dijital", "pazarlama", "strateji", "icerik", "sosyalmedya"]
-NEW_HOOKS = [{"text": "Bunu daha önce hiç düşündünüz mü?", "style": "curiosity"}]
+# ab_score: gerçek model kancaya ekler (yanıt şeması bunu taşımalı — 12.11 canlı deneme bulgusu)
+NEW_HOOKS = [{"text": "Bunu daha önce hiç düşündünüz mü?", "style": "curiosity", "ab_score": 0.8}]
 
 
 def _ai_content(**over):
@@ -49,6 +50,11 @@ def _ai_content(**over):
     }
     data.update(over)
     return data
+
+
+def _hooks(hooks):
+    """Yanıt boş ab_score'u None olarak taşır; kaynakla karşılaştırırken atılır."""
+    return [{k: v for k, v in h.items() if v is not None} for h in hooks]
 
 
 class RevisionAI:
@@ -331,7 +337,7 @@ def test_claim_repair_only_touches_selected_section(
     [item] = _list(client, ws, brief)
     proposed = item["proposed"]
     assert proposed["caption"] == "Müşterilerimizi dinleyerek çalışıyoruz."
-    assert proposed["hooks"] == SOURCE_HOOKS  # onarımın kapsam dışı çıktısı atıldı
+    assert _hooks(proposed["hooks"]) == SOURCE_HOOKS  # onarımın kapsam dışı çıktısı atıldı
     assert set(item["changes"]) <= {"caption", "cta_text", "hashtags"}
 
 
@@ -392,7 +398,7 @@ def test_video_body_revision_recomputes_duration_and_hooks_revision_keeps_script
     proposed = item["proposed"]
     assert proposed["actual_duration_sec"] == 55 and proposed["duration_status"] == "valid"
     assert proposed["scenario"] != source_scenario and "Sahne 2" in proposed["scenario"]
-    assert proposed["hooks"] == SOURCE_HOOKS
+    assert _hooks(proposed["hooks"]) == SOURCE_HOOKS
 
     ok = client.post(f"/api/v1/generation/social/revisions/{item['id']}/accept",
                      params={"brand_profile_id": ws.id})

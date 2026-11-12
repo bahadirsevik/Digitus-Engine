@@ -610,8 +610,15 @@ class SocialContentRevisionRequest(BaseModel):
         return v
 
 
+class SocialRevisionHook(BaseModel):
+    # Model kancaya opsiyonel ab_score ekler (kayıtlı satırlarda da bulunur)
+    text: str
+    style: Optional[str] = None
+    ab_score: Optional[float] = None
+
+
 class SocialRevisionProposedContent(BaseModel):
-    hooks: List[SocialHistoryHookResponse] = Field(default_factory=list)
+    hooks: List[SocialRevisionHook] = Field(default_factory=list)
     caption: str
     cta_text: Optional[str] = None
     hashtags: List[str] = Field(default_factory=list)

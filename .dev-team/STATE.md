@@ -9,9 +9,9 @@ Beklemede: Gemini→Claude karsilastirma Faz 1 degerlendirmesi PATRONDA (asagida
 
 ## ACIK KONTROLLER (yayin oncesi)
 
-- [ ] ADS "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (11.11 tarayici kontrolu route mock'luydu). Yayin oncesi: worker restart sonrasi bir grupta kapsam=aciklamalar talebi → yeni draft set; basliklar/negatifler kaynakla birebir mi, iddia kaydi dogru mu, "Aktif Yap" akisi. Ucretli cagri — kullanici onayiyla.
-- [ ] SEO "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (worker + oneri + kabul; tarayici kontrolu mock'lu). Dev DB migration'i 11.11'de uygulandi; ucretli cagri — kullanici onayiyla.
-- [ ] SOSYAL "Revize Et" GERCEK AI ile uctan uca dogrulanmadi (worker + oneri + kabul). Oncesinde dev `celery_worker` restart (yeni task `generation.social_content_revise`); ucretli cagri — kullanici onayiyla.
+- [x] ADS "Revize Et" GERCEK AI (12.11, run 93 / set 40 grup 263, kapsam=aciklamalar): yeni taslak set 50; 15 baslik (sort_order ile) + 10 negatif birebir; 4 aciklama samimi + fiyat vurgusu yok, hepsi <=90; iddia sayaci set 40 ile ayni (1). Aktivasyon oncesi export eski / sonrasi yeni aciklamalar. Set 40 tekrar aktif, 50 arsivde, taslak 45 dokunulmadi.
+- [~] SEO "Revize Et" GERCEK AI (12.11, icerik 223, kapsam=baslik+meta): oneri + kabul OK — baslik/meta degisti, yil kalkti, 11 korunan alan birebir, content_data senkron, revision_count=1, skor degismedi. EXPORT DOGRULANAMADI: export keyword basina EN SON icerigi alir; 223 ile 226 ayni kelime ("dis hekimi") → export'ta yalniz 226 (223 revizyondan once de yoktu). Export dogrulamasi icin 226 uzerinde 1 ucretli deneme gerekir — kullanici onayi bekliyor.
+- [x] SOSYAL "Revize Et" GERCEK AI (12.11, brief 26 / icerik 103, kapsam=kancalar): kancalar 102/98→40/41 kr, biri soru; 11 korunan alan + uyarilar birebir; kabul: ayni id, regeneration_count=1; brief Excel + run export yeni kancalari gosterir. CANLI BULGU: gercek model kancaya ab_score ekliyor → GET /revisions yanit semasi (extra=forbid) 500 veriyordu; SocialRevisionHook ile duzeltildi + test ab_score tasiyor (commit bekliyor).
 - Kapsam disi (bu ise eklenmeyecek, kullanici karari 11.11): Sosyal havuz satirlari kart icinde kirpiliyor; dar ekranda marka pili "Ak…" kesiliyor.
 
 ## Just completed (11.11 — SOSYAL "Revize Et"; commit/push YOK; Architect/Konsey KOSMADI — plan Codex 2 tur onayli; ajanlar: yalniz QA (Sonnet), gerekce basta yazildi)
