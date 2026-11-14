@@ -2000,3 +2000,70 @@ def _prevent_workspace_keyword_snapshot_update(mapper, connection, target):
             "WorkspaceKeyword snapshot fields are immutable: "
             + ", ".join(sorted(changed))
         )
+
+
+# ==================== DIGITAL AUDIT (Dijital varlik denetimi) ====================
+
+class DigitalAudit(Base):
+    """
+    Dijital varlik denetimi calismasi. ScoringRun'dan BAGIMSIZDIR; workspace'e baglanir.
+
+    status: pending | running | completed | partial | failed
+    Worker olurse `lease_expires_at` dolunca okuma aninda uzlastirilir
+    (app/core/digital_audit/service.py::reconcile_expired).
+    """
+    __tablename__ = "digital_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    brand_profile_id = Column(
+        Integer, ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    # Baslangicta dondurulan kapsam: {"method_version", "limits"}
+    scope = Column(JSON, nullable=True)
+    # Musteri/analist beyani: {soru_anahtari: {"value", "note"}}. Otomatik bulgulardan AYRI durur.
+    answers = Column(JSON, nullable=True)
+    task_id = Column(String(155), nullable=True, unique=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    targets = relationship(
+        "DigitalAuditTarget", back_populates="audit",
+        cascade="all, delete-orphan", order_by="DigitalAuditTarget.position",
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_digital_audit_active", "brand_profile_id",
+            unique=True, postgresql_where=text("status IN ('pending', 'running')"),
+        ),
+        Index("idx_digital_audit_workspace", "brand_profile_id", "created_at"),
+    )
+
+
+class DigitalAuditTarget(Base):
+    """Denetlenen tek site (marka ya da rakip) ve bulgulari.
+
+    status: pending | completed | blocked | failed
+    """
+    __tablename__ = "digital_audit_targets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(
+        Integer, ForeignKey("digital_audits.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position = Column(Integer, nullable=False, default=0)
+    kind = Column(String(12), nullable=False)  # own | competitor
+    url = Column(String(500), nullable=False)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    pages_checked = Column(Integer, nullable=False, default=0, server_default="0")
+    findings = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    audit = relationship("DigitalAudit", back_populates="targets")
+

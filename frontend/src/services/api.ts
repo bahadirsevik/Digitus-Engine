@@ -2108,4 +2108,83 @@ export const socialBriefApi = {
     }),
 }
 
+// Dijital varlık denetimi (ScoringRun'dan bağımsız; workspace'e bağlı)
+export type AuditFindingState = 'observed' | 'not_observed' | 'unknown' | 'blocked' | 'error'
+export type AuditAssessment = 'ok' | 'warning' | 'problem' | 'info' | null
+
+export interface AuditFinding {
+  section: string
+  check: string
+  label: string
+  state: AuditFindingState
+  assessment: AuditAssessment
+  value: Record<string, unknown> | null
+  note: string | null
+  source: string | null
+  limits: string[]
+}
+
+export interface AuditTarget {
+  id: number
+  kind: 'own' | 'competitor'
+  url: string
+  status: 'pending' | 'completed' | 'blocked' | 'failed'
+  pages_checked: number
+  error_message: string | null
+  findings?: AuditFinding[]
+}
+
+export type AuditStatus = 'pending' | 'running' | 'completed' | 'partial' | 'failed'
+
+export interface AuditQuestion {
+  key: string
+  label: string
+  options: string[] | null
+}
+
+export type AuditAnswers = Record<string, { value?: string | null; note?: string | null }>
+
+export interface DigitalAuditSummary {
+  id: number
+  status: AuditStatus
+  progress: number
+  error_message: string | null
+  created_at: string
+  completed_at: string | null
+  targets: AuditTarget[]
+}
+
+export interface DigitalAuditDetail extends DigitalAuditSummary {
+  answers: AuditAnswers
+  questions: AuditQuestion[]
+}
+
+export const digitalAuditApi = {
+  start: (brand_profile_id: number, body: { own_url?: string; competitor_urls: string[] }) =>
+    api.post<{ audit_id: number; status: AuditStatus; reused: boolean }>(
+      '/digital-audit/audits',
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  list: (brand_profile_id: number) =>
+    api.get<{ audits: DigitalAuditSummary[] }>('/digital-audit/audits', {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  get: (auditId: number, brand_profile_id: number) =>
+    api.get<DigitalAuditDetail>(`/digital-audit/audits/${auditId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  saveAnswers: (auditId: number, brand_profile_id: number, answers: AuditAnswers) =>
+    api.put<{ answers: AuditAnswers }>(
+      `/digital-audit/audits/${auditId}/answers`,
+      { answers },
+      { params: { brand_profile_id } }
+    ),
+}
+
 export default api

@@ -20,6 +20,7 @@ celery_app = Celery(
         "app.tasks.policy_preview_tasks",
         "app.tasks.competitor_discovery_tasks",
         "app.tasks.screening_tasks",
+        "app.tasks.digital_audit_tasks",
     ]
 )
 

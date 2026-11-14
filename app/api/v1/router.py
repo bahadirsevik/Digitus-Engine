@@ -12,6 +12,7 @@ from app.api.v1.tasks import router as tasks_router
 from app.api.v1.brand_profile import router as brand_profile_router
 from app.api.v1.google_ads import router as google_ads_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.digital_audit import router as digital_audit_router
 from app.core.security import verify_api_key
 
 
@@ -72,4 +73,10 @@ api_router.include_router(
     dashboard_router,
     prefix="/dashboard",
     tags=["Dashboard"]
+)
+
+api_router.include_router(
+    digital_audit_router,
+    prefix="/digital-audit",
+    tags=["Digital Audit"]
 )

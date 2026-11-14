@@ -10,6 +10,7 @@ import GoogleAdsExplorer from './pages/GoogleAdsExplorer'
 import ChannelAds from './pages/ChannelAds'
 import ChannelSeoGeo from './pages/ChannelSeoGeo'
 import ChannelSocial from './pages/ChannelSocial'
+import DigitalAudit from './pages/DigitalAudit'
 import RedirectWithParams from './components/RedirectWithParams'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
           <Route path="/ads" element={<ChannelAds />} />
           <Route path="/seo-geo" element={<ChannelSeoGeo />} />
           <Route path="/social" element={<ChannelSocial />} />
+          <Route path="/digital-audit" element={<DigitalAudit />} />
           <Route path="/generation" element={<GenerationRedirect />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/export" element={<Export />} />

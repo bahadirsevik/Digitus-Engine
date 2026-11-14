@@ -161,6 +161,10 @@ class Settings(BaseSettings):
     # YASAKLADIGI icin alan tanimli olmazsa uygulama acilista coker.
     TYPESAFE_API_KEY: Optional[str] = None
 
+    # Dijital varlik denetimi: PageSpeed Insights (ve ileride YouTube/Places) icin
+    # Google Cloud API anahtari. Bossa hiz olcumu "bilinmiyor" doner; denetim surer.
+    GOOGLE_CLOUD_API_KEY: Optional[str] = None
+
     # ---- SERP saglayicisi (SerpApi) — YALNIZ deney tarafi.
     # Uretim akisinda (scoring/channel/generation) OKUNMAZ; yalniz
     # scripts/ altindaki olcum kosulari kullanir. Anahtar bossa SERP

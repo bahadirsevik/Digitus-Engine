@@ -46,6 +46,10 @@ class TlsVerificationError(UnsafeUrlError):
     """TLS sertifika doğrulaması başarısız (verify=True bilinçli)."""
 
 
+class UnsupportedContentType(UnsafeUrlError):
+    """Sunucu yanit verdi ama icerik turu izinli degil (hedef ERISILEBILIR)."""
+
+
 class FetchBudgetExceeded(UnsafeUrlError):
     """İstek sayısı / toplam süre bütçesi aşıldı; istek GÖNDERİLMEDEN fırlatılır."""
 
@@ -193,7 +197,7 @@ def safe_fetch(
                         raise HttpStatusError(resp.status_code)
                     content_type = _media_type(resp.headers)
                     if content_type not in allowed:
-                        raise UnsafeUrlError(
+                        raise UnsupportedContentType(
                             "Yalnızca HTML içerik desteklenir"
                             if allowed <= HTML_TYPES
                             else "Desteklenmeyen içerik türü"

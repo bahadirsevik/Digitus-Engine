@@ -2,6 +2,7 @@ import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   BadgeDollarSign,
+  ClipboardCheck,
   Globe2,
   Key,
   LayoutDashboard,
@@ -26,6 +27,7 @@ const navItems = [
   { path: '/ads', icon: BadgeDollarSign, label: 'ADS' },
   { path: '/seo-geo', icon: Search, label: 'SEO+GEO' },
   { path: '/social', icon: Share2, label: 'Sosyal Medya' },
+  { path: '/digital-audit', icon: ClipboardCheck, label: 'Dijital Denetim' },
   { path: '/tasks', icon: ListTodo, label: 'Görevler' },
 ]
 
