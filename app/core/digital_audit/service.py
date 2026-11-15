@@ -16,7 +16,7 @@ from sqlalchemy import exists, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.digital_audit import runner
+from app.core.digital_audit import runner, visibility
 from app.core.digital_audit.signals import site_key
 from app.database.models import BrandProfile, DigitalAudit, DigitalAuditTarget
 
@@ -96,7 +96,7 @@ def _active(db: Session, brand_profile_id: int) -> Optional[DigitalAudit]:
 
 
 def start_audit(db: Session, workspace: BrandProfile, own_url: Optional[str],
-                competitor_urls: List[str]) -> Tuple[DigitalAudit, bool]:
+                competitor_urls: List[str], visibility_request: Optional[Dict] = None) -> Tuple[DigitalAudit, bool]:
     """Yeni denetim kaydi acar ya da suren denetimi dondurur: (audit, reused).
 
     Workspace basina tek aktif denetim DB'de garanti edilir (uq_digital_audit_active);
@@ -120,11 +120,21 @@ def start_audit(db: Session, workspace: BrandProfile, own_url: Optional[str],
     if len(competitors) > MAX_COMPETITORS:
         raise AuditInputError(f"En fazla {MAX_COMPETITORS} rakip eklenebilir.")
 
+    config = None
+    if visibility_request is not None:
+        try:
+            config = visibility.clean_config(visibility_request.get("keywords") or [],
+                                             visibility_request.get("location"), visibility_request.get("brand_name"))
+        except visibility.VisibilityInputError as exc:
+            raise AuditInputError(str(exc))
+
     audit = DigitalAudit(
         brand_profile_id=workspace.id, status="pending", progress=0,
         task_id=str(uuid.uuid4()), lease_expires_at=_now() + timedelta(seconds=LEASE_SECONDS),
         scope={"method_version": runner.METHOD_VERSION,
-               "limits": {"max_pages": runner.MAX_PAGES, "max_link_checks": runner.MAX_LINK_CHECKS}},
+               "limits": {"max_pages": runner.MAX_PAGES, "max_link_checks": runner.MAX_LINK_CHECKS},
+               # Istege bagli ucretli olcum; kapsam baslangicta dondurulur
+               "visibility": config},
     )
     audit.targets = [DigitalAuditTarget(position=0, kind="own", url=own)] + [
         DigitalAuditTarget(position=i + 1, kind="competitor", url=url) for i, url in enumerate(competitors)
@@ -182,12 +192,14 @@ def run_audit(db: Session, audit_id: int, task_id: str) -> str:
         db.query(DigitalAuditTarget).filter(DigitalAuditTarget.audit_id == audit_id)
         .order_by(DigitalAuditTarget.position).all()
     )
+    timed_out = False
     for index, target in enumerate(targets):
         url, own = target.url, target.kind == "own"
         try:
             result = runner.run_target(url, own)
         except SoftTimeLimitExceeded:
             logger.warning(f"Dijital denetim süre sınırına takıldı (audit={audit_id})")
+            timed_out = True
             break
         except Exception:
             # Tek hedefin beklenmeyen hatasi digerlerini durdurmaz.
@@ -203,6 +215,25 @@ def run_audit(db: Session, audit_id: int, task_id: str) -> str:
         target.error_message = result.get("error_message")
         target.completed_at = _now()
         db.commit()
+
+    config = (db.get(DigitalAudit, audit_id).scope or {}).get("visibility")
+    if config and not timed_out:
+        def tick(partial: Optional[Dict]) -> None:
+            values = {"visibility": partial} if partial is not None else {}
+            ours = _still_ours(db, audit_id, task_id, progress=97, **values)
+            db.commit()
+            if not ours:
+                raise visibility.LeaseLost()
+
+        try:
+            visibility.run(config, targets, tick)
+        except visibility.LeaseLost:
+            return "superseded"
+        except SoftTimeLimitExceeded:
+            logger.warning(f"Görünürlük ölçümü süre sınırına takıldı (audit={audit_id})")
+        except Exception:
+            # Zenginlestirme site denetimini bozmaz: o ana kadar kaydedilen bolumler kalir.
+            logger.exception(f"Görünürlük ölçümü başarısız (audit={audit_id})")
 
     statuses = [t.status for t in targets]
     if all(s in TARGET_DONE for s in statuses):
@@ -257,6 +288,7 @@ def serialize(audit: DigitalAudit, detail: bool = False) -> Dict:
     }
     if detail:
         data["scope"] = audit.scope or {}
+        data["visibility"] = audit.visibility
         data["answers"] = audit.answers or {}
         data["questions"] = QUESTIONS
     return data

@@ -61,6 +61,71 @@ def _audit_blocks(audit) -> List[Block]:
     return blocks
 
 
+def _rank(row: Dict, site: str) -> str:
+    if row.get("error"):
+        return "Ölçülmedi"
+    position = (row.get("positions") or {}).get(site)
+    return str(position) if position else f"İlk {row.get('checked_top') or 0}'de gözlenmedi"
+
+
+def _visibility_blocks(audit) -> List[Block]:
+    """Arama gorunurlugu, YouTube ve Google profil BAGLANTILARI.
+
+    Google profil icerigi (puan, yorum, adres) rapora GIRMEZ: yalniz harita baglantisi (plan 3.3).
+    """
+    data = audit.visibility or {}
+    blocks: List[Block] = []
+    sites = data.get("sites") or []
+    serp = data.get("serp") or {}
+    if serp.get("status") == "ok":
+        blocks.append(("h1", "Arama görünürlüğü [Gözlem]"))
+        blocks.append(("p", f"Ölçüm: {(data.get('measured_at') or '')[:10]}, konum {serp.get('location_used') or data.get('location')}, "
+                            "masaüstü, Google Türkiye. Anlık ölçümdür; sıra konuma, cihaza ve güne göre değişir. "
+                            f"Kullanılan sorgu: {serp.get('queries_used')} / {serp.get('query_limit')}."))
+        rows = serp.get("keywords") or []
+        if rows:
+            blocks.append(("h2", "Anahtar kelime sıraları"))
+            blocks.append(("table", ["Kelime"] + sites, [[r["keyword"]] + [_rank(r, s) for s in sites] for r in rows]))
+            blocks.append(("h2", "Reklam ve harita kutusu"))
+            blocks.append(("table", ["Kelime", "Reklamı görülen siteler", "Harita kutusu"], [
+                [r["keyword"], "Ölçülmedi" if r.get("error") else (", ".join(r["ads"]) or "Bu sorguda reklam görülmedi"),
+                 "Ölçülmedi" if r.get("error") else ("Görüldü" if r.get("local_pack") else "Görülmedi")] for r in rows]))
+            blocks.append(("p", "Reklamın görülmemesi kampanyanın kapalı olduğu anlamına gelmez."))
+        brand = serp.get("brand")
+        if brand and not brand.get("error"):
+            blocks += [("h2", f"Marka araması: {brand['query']}"), ("bullets", [
+                f"Marka sitesinin sırası: {brand['own_position'] or 'ilk 10 sonuçta gözlenmedi'}",
+                f"Bilgi paneli: {'görüldü' if brand['knowledge_panel'] else 'görülmedi'}",
+                "Marka adında reklamı görülen başka siteler: " + (", ".join(brand["other_ads"]) or "görülmedi")])]
+        for entry in serp.get("reputation") or []:
+            if entry.get("results"):
+                blocks += [("h2", f"Arama: {entry['query']}"), ("bullets", [
+                    f"{r['position']}. {r['title']} ({r['domain'] or r['shown']})" for r in entry["results"]])]
+        if serp.get("reputation"):
+            blocks.append(("p", "İlk sonuç sayfasında çıkan başlıklardır; tüm internetin sayımı değildir ve içerikleri okunmamıştır."))
+
+    channels = (data.get("youtube") or {}).get("channels") or {}
+    found = {site: c for site, c in channels.items() if c.get("status") == "ok"}
+    if channels:
+        blocks.append(("h1", "YouTube [Gözlem]"))
+        if found:
+            blocks.append(("table", ["Site", "Kanal", "Abone", "Video", "Son yükleme", "Son 90 gün", "Son videolarda ort. izlenme"], [
+                [site, c["title"], "gizli" if c["subscribers"] is None else str(c["subscribers"]), str(c["video_count"]),
+                 c["last_upload"] or "-", str(c["uploads_90d"]),
+                 f"{c['recent_avg_views']} ({c['recent_sample']} video)" if c["recent_avg_views"] is not None else "-"]
+                for site, c in found.items()]))
+            blocks.append(("p", "Abone sayısı YouTube'un gösterdiği yuvarlanmış değerdir. Ortalama izlenme, son videoların izlenme ortalamasıdır."))
+        blocks += _bullets("Kanalı ölçülemeyen siteler", [f"{site}: {c.get('reason')}" for site, c in channels.items() if c.get("status") != "ok"])
+
+    profiles = (data.get("places") or {}).get("profiles") or {}
+    if profiles:
+        blocks.append(("h1", "Google İşletme Profili"))
+        blocks.append(("bullets", [
+            f"{site}: {p['maps_url']}" if p.get("maps_url") else f"{site}: {p.get('reason')}" for site, p in profiles.items()]))
+        blocks.append(("p", "Google'ın kullanım koşulları gereği puan, yorum ve adres bilgisi bu rapora alınmaz; güncel bilgi bağlantıdan görülür."))
+    return blocks
+
+
 def _bullets(title: str, items: List[str]) -> List[Block]:
     return [("h2", title), ("bullets", items)] if items else []
 
@@ -194,6 +259,7 @@ def build_blocks(workspace, audit=None, report=None) -> List[Block]:
     ]
     if audit is not None:
         blocks += _audit_blocks(audit)
+        blocks += _visibility_blocks(audit)
     if report is not None:
         blocks += _research_blocks(report)
     blocks += [("h1", "Sınırlar"), ("bullets", [

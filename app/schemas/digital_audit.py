@@ -4,9 +4,17 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class VisibilityRequest(BaseModel):
+    """Istege bagli ucretli olcum: arama gorunurlugu + YouTube + Google profili."""
+    keywords: List[str] = Field(default_factory=list, max_length=30)
+    location: Optional[str] = Field(None, max_length=120)
+    brand_name: Optional[str] = Field(None, max_length=120)
+
+
 class StartAuditRequest(BaseModel):
     own_url: Optional[str] = Field(None, max_length=500, description="Boşsa workspace'in site adresi")
     competitor_urls: List[str] = Field(default_factory=list, max_length=10)
+    visibility: Optional[VisibilityRequest] = None
 
 
 class AnswerItem(BaseModel):

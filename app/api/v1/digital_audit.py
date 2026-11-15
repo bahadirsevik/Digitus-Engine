@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.core.digital_audit import report_doc, research, research_service, service
+from app.core.digital_audit import report_doc, research, research_service, service, visibility
 from app.core.http_headers import content_disposition
 from app.core.workspace import verify_workspace
 from app.database.connection import get_db
@@ -44,7 +44,9 @@ def start_audit(
     """Denetimi baslatir. Suren denetim varsa onu dondurur (reused=true)."""
     workspace = verify_workspace(db, brand_profile_id)
     try:
-        audit, reused = service.start_audit(db, workspace, request.own_url, request.competitor_urls)
+        audit, reused = service.start_audit(
+            db, workspace, request.own_url, request.competitor_urls,
+            request.visibility.model_dump() if request.visibility else None)
     except service.AuditInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if not reused:
@@ -79,6 +81,13 @@ def list_audits(brand_profile_id: int = Query(...), db: Session = Depends(get_db
 @router.get("/audits/{audit_id}")
 def get_audit(audit_id: int, brand_profile_id: int = Query(...), db: Session = Depends(get_db)):
     return service.serialize(_get_audit(db, audit_id, brand_profile_id), detail=True)
+
+
+@router.get("/audits/{audit_id}/places")
+def get_live_places(audit_id: int, brand_profile_id: int = Query(...), db: Session = Depends(get_db)):
+    """Eslesen Google isletme profillerinin TAZE bilgisi. Saklanmaz, rapora girmez (plan 3.3)."""
+    audit = _get_audit(db, audit_id, brand_profile_id)
+    return {"profiles": visibility.live_profiles(audit.visibility)}
 
 
 @router.put("/audits/{audit_id}/answers")

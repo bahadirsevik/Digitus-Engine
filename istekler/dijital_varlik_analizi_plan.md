@@ -396,3 +396,34 @@ Araştırma ve fikir bölümü geliştirildi ve geliştirme ortamında pilot mar
 - Rapor dosyası her indirmede yeniden üretilir; saklanmaz. Kıyas tablosunda hücre ayrıntıları (not, değer) yer almaz.
 - Araştırmayı iptal etme düğmesi yok. Brief aşamasında kilit dolarsa araştırma "kısmi" görünür (bölümler kaybolmaz).
 - Hedef kitle alıntılarında üçüncü taraf işletme adı geçebilir (şikayet siteleri). İstem bunu yasaklıyor ama kodla denetlenmiyor; müşteriye gitmeden önce okunmalı.
+
+## 13. Faz 3 durumu (15.11.2026)
+
+Veri zenginleştirme geliştirildi ve geliştirme ortamında pilot markayla bir kez canlı çalıştırıldı. Push edilmedi.
+
+**Yapılanlar**
+- Denetim başlatılırken isteğe bağlı "görünürlük ölçümü" seçilir (kelimeler, arama konumu, marka adı). Seçilmezse hiçbir ücretli sorgu harcanmaz. Kapsam başlangıçta dondurulur; sonuç `digital_audits.visibility` alanına yazılır (migration `20261115_002`). Ayrı tablo ve ayrı görev yok: site denetiminin son adımıdır.
+- Arama görünürlüğü (SerpApi, Google Türkiye, masaüstü): kelime başına ilk 20 sonuç (2 sorgu); marka ve rakiplerin sırası aynı sonuç sayfasından okunur. Reklamı görülen siteler, harita kutusunun görülüp görülmediği, marka aramasında sitenin sırası, bilgi paneli, marka adında başkasının reklamı, "şikayet" ve "yorum" aramalarının ilk sayfası.
+- YouTube: sitede bağlantısı bulunan kanalın abone, video sayısı, son yükleme, son 90 gündeki yükleme ve son videoların ortalama izlenmesi.
+- Google İşletme Profili: yalnız web sitesi adresi eşleşen profil kabul edilir; veritabanına yalnız işletme kimliği yazılır. Puan, yorum sayısı, adres ve telefon ekranda düğmeye basılınca Google'dan taze çekilir (`GET /audits/{id}/places`); saklanmaz, rapor dosyasına girmez (yalnız harita bağlantısı girer), yapay zekâya gönderilmez.
+- Kıyas: marka ve rakipler aynı tabloda, aynı sorgudan. Sıralar sentezin girdisine de eklenir (profil verisi hariç).
+- Testler: 14 backend, 4 frontend.
+
+**Kabul ölçütleri**
+- Konum, cihaz ve tarih her ölçümle saklanır ve ekranda, raporda yazılır. Gözlenmeyen sıra "ilk 20'de gözlenmedi" olarak, ölçülemeyen sorgu "ölçülmedi" olarak ayrı görünür.
+- Servis kesilirse site denetimi tamamlanır; bölüm "alınamadı" görünür. Art arda 3 başarısız sorgudan sonra kalan sorgular harcanmaz.
+- Tavan: denetim başına en fazla 10 kelime ve 23 arama sorgusu. Bütün siteler ilk sayfada bulunduysa ikinci sayfa sorgusu harcanmaz.
+
+**Canlı deneme (pilot marka + 3 rakip, 2 kelime)**
+- 271 saniye (site denetimi dahil), 7 arama sorgusu. İki kelimede dört sitenin hiçbiri ilk 20'de gözlenmedi; iki sorguda da başka kliniklerin reklamı ve harita kutusu görüldü. Marka aramasında kendi sitesi ilk 10'da gözlenmedi, bilgi paneli görüldü (pilotla aynı sonuç).
+- YouTube: markanın kanalı ölçüldü; üç rakibin sitesinde kanal bağlantısı görülmedi. Dört sitenin dördünde Google profili web sitesi adresiyle eşleşti.
+
+**Bilinen sınırlar**
+- Harita sıralaması yok: yalnız harita kutusunun görülüp görülmediği saklanır (kutudaki işletme adları ve puanlar Google içeriğidir). `site:` indeks sayısı yok (pilotta güvenilmezdi).
+- Yalnız masaüstü ve tek konum. Konum adı arama servisinin tanıdığı biçimde yazılmalı ("Istanbul, Turkey"); tanımadığı konumda sorgu "ölçülmedi" döner.
+- Site eşleştirmesi görünen adres satırından yapılır; satır adres içermiyorsa (YouTube, Instagram sonuçları) o sonuç hiçbir siteyle eşleşmez.
+- İtibar aramalarında yalnız başlık ve alan adı saklanır; sonuç bağlantıları şifreli geldiği için tıklanabilir bağlantı yok ve sayfa içerikleri okunmaz.
+- YouTube yalnız sitede bağlantısı varsa ölçülür; `/c/ad` biçimli eski adresler çözülemez. Instagram, Facebook, TikTok ve LinkedIn otomatik ölçülmez (plan 3.4).
+- Google profili: sahiplenme, fotoğraf, yorum metni ve işletme cevapları yok. Web sitesi yazmayan profil eşleşmez. Her "güncel bilgiyi getir" tıklaması eşleşen profil başına bir ücretli çağrıdır.
+- Görünürlüğü yeniden ölçmek için denetimin tamamı yeniden çalıştırılır.
+- Sıralama sonuçları, plandaki üç sorguluk elle karşılaştırma yapılana kadar ön bulgudur.

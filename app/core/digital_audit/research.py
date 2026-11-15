@@ -441,7 +441,17 @@ def audit_facts(audit) -> Dict:
             checks.append(item)
         sites.append({"site": target.url, "role": "marka" if target.kind == "own" else "rakip",
                       "kontroller": checks, "olculemeyen": unmeasured})
-    return {"siteler": sites, "musteri_beyani": audit.answers or {}}
+    facts = {"siteler": sites, "musteri_beyani": audit.answers or {}}
+    # Arama gorunurlugu (varsa). Google profil icerigi BILEREK yok: yapay zekaya gonderilmez (plan 3.3).
+    serp = (getattr(audit, "visibility", None) or {}).get("serp") or {}
+    if serp.get("status") == "ok":
+        facts["arama_gorunurlugu"] = {
+            "not": "Anlık ölçüm. null = ölçülen ilk sonuçlarda gözlenmedi (sitenin hiç çıkmadığı anlamına gelmez).",
+            "konum": serp.get("location_used"),
+            "kelimeler": [{"kelime": r["keyword"], "siralar": r["positions"], "reklami_gorulen": r["ads"],
+                           "harita_kutusu": r["local_pack"]} for r in serp.get("keywords") or [] if not r.get("error")],
+        }
+    return facts
 
 
 def _texts(items: List[Dict], field: str = "text") -> List[str]:

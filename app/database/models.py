@@ -2024,6 +2024,9 @@ class DigitalAudit(Base):
     scope = Column(JSON, nullable=True)
     # Musteri/analist beyani: {soru_anahtari: {"value", "note"}}. Otomatik bulgulardan AYRI durur.
     answers = Column(JSON, nullable=True)
+    # Faz 3 (istege bagli): arama gorunurlugu, YouTube, Google profil kimlikleri.
+    # Places icin YALNIZ place_id saklanir (app/integrations/places.py).
+    visibility = Column(JSON, nullable=True)
     task_id = Column(String(155), nullable=True, unique=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)

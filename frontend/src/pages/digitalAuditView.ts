@@ -1,4 +1,4 @@
-import type { AuditFinding, AuditStatus, AuditTarget } from '../services/api'
+import type { VisibilityKeywordRow, AuditFinding, AuditStatus, AuditTarget } from '../services/api'
 
 export const SECTION_LABEL: Record<string, string> = {
   site: 'Web sitesi',
@@ -206,4 +206,11 @@ export function hostOf(url: string): string {
   } catch {
     return url
   }
+}
+
+/** "Gözlenmedi" ölçülen derinlikle birlikte yazılır; ölçülemeyen sorgu "yok" gibi görünmez. */
+export function rankText(row: VisibilityKeywordRow, site: string): string {
+  if (row.error) return 'Ölçülmedi'
+  const position = row.positions[site]
+  return position ? `${position}. sıra` : `İlk ${row.checked_top}'de gözlenmedi`
 }

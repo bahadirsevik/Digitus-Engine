@@ -2154,13 +2154,95 @@ export interface DigitalAuditSummary {
   targets: AuditTarget[]
 }
 
+export interface VisibilityKeywordRow {
+  keyword: string
+  /** site -> sıra; null = ölçülen ilk `checked_top` sonuçta gözlenmedi */
+  positions: Record<string, number | null>
+  ads: string[]
+  local_pack: boolean
+  checked_top: number
+  top: string[]
+  error?: string
+}
+
+interface VisibilitySection {
+  status: 'ok' | 'unavailable' | 'failed'
+  reason?: string | null
+}
+
+export interface YoutubeChannel {
+  status: 'ok' | 'unavailable' | 'failed' | 'not_observed' | 'unknown'
+  reason?: string
+  title?: string
+  subscribers?: number | null
+  video_count?: number
+  last_upload?: string | null
+  uploads_90d?: number
+  recent_avg_views?: number | null
+  recent_sample?: number
+}
+
+export interface AuditVisibility {
+  measured_at: string
+  location: string
+  sites: string[]
+  serp?: VisibilitySection & {
+    keywords: VisibilityKeywordRow[]
+    brand: {
+      query: string
+      own_position?: number | null
+      knowledge_panel?: boolean
+      other_ads?: string[]
+      error?: string
+    } | null
+    reputation: {
+      query: string
+      error?: string
+      results: { position: number; title: string; domain: string; shown: string }[]
+    }[]
+    queries_used: number
+    query_limit: number
+    location_used: string | null
+    device: string
+  }
+  youtube?: VisibilitySection & { channels?: Record<string, YoutubeChannel> }
+  places?: VisibilitySection & {
+    profiles?: Record<
+      string,
+      { status: string; place_id?: string; maps_url?: string; reason?: string }
+    >
+  }
+}
+
+/** Google profilinin taze bilgisi: saklanmaz, yalnız ekranda gösterilir */
+export interface LivePlace {
+  available: boolean
+  reason?: string
+  name?: string
+  address?: string
+  phone?: string
+  rating?: number | null
+  rating_count?: number | null
+  category?: string
+}
+
+export interface VisibilityRequest {
+  keywords: string[]
+  location?: string
+  brand_name?: string
+}
+
 export interface DigitalAuditDetail extends DigitalAuditSummary {
   answers: AuditAnswers
   questions: AuditQuestion[]
+  visibility?: AuditVisibility | null
 }
 
 export const digitalAuditApi = {
-  start: (brand_profile_id: number, body: { own_url?: string; competitor_urls: string[] }) =>
+  start: (
+    brand_profile_id: number,
+    body: { own_url?: string; competitor_urls: string[]; visibility?: VisibilityRequest }
+  ) =>
     api.post<{ audit_id: number; status: AuditStatus; reused: boolean }>(
       '/digital-audit/audits',
       body,
@@ -2177,6 +2259,11 @@ export const digitalAuditApi = {
     api.get<DigitalAuditDetail>(`/digital-audit/audits/${auditId}`, {
       params: { brand_profile_id },
       timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  livePlaces: (auditId: number, brand_profile_id: number) =>
+    api.get<{ profiles: Record<string, LivePlace> }>(`/digital-audit/audits/${auditId}/places`, {
+      params: { brand_profile_id },
     }),
 
   saveAnswers: (auditId: number, brand_profile_id: number, answers: AuditAnswers) =>

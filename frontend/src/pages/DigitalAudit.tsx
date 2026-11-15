@@ -19,10 +19,12 @@ import {
   hostOf,
 } from './digitalAuditView'
 import DigitalResearch from './DigitalResearch'
+import DigitalVisibility from './DigitalVisibility'
 import './DigitalAudit.css'
 
 const POLL_MS = 3000
 const MAX_COMPETITORS = 3
+const MAX_KEYWORDS = 10
 const isActive = (status?: string) => status === 'pending' || status === 'running'
 
 export default function DigitalAudit() {
@@ -33,6 +35,10 @@ export default function DigitalAudit() {
   const [ownUrl, setOwnUrl] = useState('')
   const [competitors, setCompetitors] = useState<string[]>(['', '', ''])
   const [answers, setAnswers] = useState<AuditAnswers>({})
+  const [measure, setMeasure] = useState(false)
+  const [keywordText, setKeywordText] = useState('')
+  const [location, setLocation] = useState('Istanbul, Turkey')
+  const [brandName, setBrandName] = useState('')
   const [loading, setLoading] = useState(false)
   const [starting, setStarting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -64,6 +70,8 @@ export default function DigitalAudit() {
     setAnswers({})
     setError(null)
     setOwnUrl(workspace?.company_url || '')
+    setBrandName(workspace?.name || '')
+    setMeasure(false)
     const known = (workspace?.competitor_urls || []).slice(0, MAX_COMPETITORS)
     setCompetitors([...known, '', '', ''].slice(0, MAX_COMPETITORS))
     if (!workspaceId) return
@@ -98,6 +106,9 @@ export default function DigitalAudit() {
       const res = await digitalAuditApi.start(workspaceId, {
         own_url: ownUrl.trim() || undefined,
         competitor_urls: competitors.map((c) => c.trim()).filter(Boolean),
+        visibility: measure
+          ? { keywords, location: location.trim(), brand_name: brandName.trim() }
+          : undefined,
       })
       await loadList(workspaceId)
       await loadDetail(res.data.audit_id, workspaceId, true)
@@ -149,6 +160,11 @@ export default function DigitalAudit() {
   }
 
   const running = isActive(detail?.status)
+  const keywords = keywordText
+    .split('\n')
+    .map((k) => k.trim())
+    .filter(Boolean)
+  const tooManyKeywords = keywords.length > MAX_KEYWORDS
   const targets = detail?.targets || []
   const sections = buildSections(targets)
 
@@ -221,7 +237,58 @@ export default function DigitalAudit() {
               </label>
             ))}
           </div>
-          <button className="btn btn-primary" onClick={start} disabled={starting || running}>
+          <label className="research-check">
+            <input
+              type="checkbox"
+              checked={measure}
+              onChange={(e) => setMeasure(e.target.checked)}
+            />
+            Arama görünürlüğü, YouTube ve Google profilini de ölç (ücretli arama sorgusu kullanır)
+          </label>
+          {measure && (
+            <>
+              <div className="audit-url-grid">
+                <label>
+                  Anahtar kelimeler (her satıra bir tane, en fazla {MAX_KEYWORDS})
+                  <textarea
+                    className="input"
+                    rows={4}
+                    value={keywordText}
+                    onChange={(e) => setKeywordText(e.target.value)}
+                    placeholder={'ataköy diş hekimi\nbakırköy implant'}
+                  />
+                </label>
+                <label>
+                  Arama konumu
+                  <input
+                    className="input"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Istanbul, Turkey"
+                  />
+                </label>
+                <label>
+                  Marka adı (marka ve itibar araması için)
+                  <input
+                    className="input"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="audit-hint">
+                Kelime başına en fazla 2, marka adı için 3 arama sorgusu harcanır (bu denetimde en
+                fazla {keywords.length * 2 + (brandName.trim() ? 3 : 0)}; üst sınır 23). Masaüstü,
+                Google Türkiye, ilk 20 sonuç.
+                {tooManyKeywords && ` En fazla ${MAX_KEYWORDS} kelime girilebilir.`}
+              </p>
+            </>
+          )}
+          <button
+            className="btn btn-primary"
+            onClick={start}
+            disabled={starting || running || (measure && tooManyKeywords)}
+          >
             {starting || running ? (
               <Loader2 size={18} className="animate-spin" />
             ) : (
@@ -339,6 +406,14 @@ export default function DigitalAudit() {
                 </div>
               </section>
             ))}
+
+            {detail.visibility && (
+              <DigitalVisibility
+                auditId={detail.id}
+                workspaceId={workspaceId!}
+                visibility={detail.visibility}
+              />
+            )}
 
             <section className="glass-card audit-section">
               <h2>Müşteriye sorulacaklar</h2>
