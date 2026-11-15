@@ -12,7 +12,7 @@ from app.generators.ai_service import GroundedCompletion
 
 SOURCE = {"url": "u1", "final_url": "https://kaynak.test/rapor", "kind": "html",
           "text": "Türkiye'de 2023 yılında 45 000 diş hekimi görev yaptı. Kişi başı başvuru 1,5 oldu. "
-                  "Muayene ücreti 750,00 TL olarak açıklandı. Randevu almak çok zor diyen hastalar var."}
+                  "Muayene ücreti 750,00 TL olarak açıklandı. Kurumun 3 şubesi var. Randevu almak çok zor diyen hastalar var."}
 
 
 # --- kaynakta rakam arama ---------------------------------------------------
@@ -31,6 +31,8 @@ SOURCE = {"url": "u1", "final_url": "https://kaynak.test/rapor", "kind": "html",
     ("45.000 ile 99.999 arası", "not_found"),
     ("45.000 ile 750,00 arası", "found"),
     ("45.000 hekim, kişi başı 1,5", "short"),
+    ("5 şube ve 45.000 hekim", "not_found"),   # tek haneli rakam kaynakta yok
+    ("3 şube ve 45.000 hekim", "short"),       # kaynakta var: analist onayina kalir
 ])
 def test_check_claim_statuses(value, status):
     assert source_check.check_claim(value, [SOURCE])["status"] == status
@@ -51,6 +53,9 @@ def test_dates_and_years_are_not_claims():
 def test_narrative_number_must_exist_in_source():
     assert source_check.text_numbers_verified("Sektörde 45.000 hekim var", [SOURCE]) is True
     assert source_check.text_numbers_verified("Sektörde 99.000 hekim var", [SOURCE]) is False
+    assert source_check.text_numbers_verified("5 şubesi var", [SOURCE]) is False  # tek haneli de sessiz gecmez
+    assert source_check.text_numbers_verified("5 şubesi var", []) is False
+    assert source_check.text_numbers_verified("3 şubesi var", [SOURCE]) is True
 
 
 def test_three_digit_number_is_only_a_candidate():

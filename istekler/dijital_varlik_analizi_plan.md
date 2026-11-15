@@ -388,7 +388,7 @@ Araştırma ve fikir bölümü geliştirildi ve geliştirme ortamında pilot mar
 
 **Bilinen sınırlar**
 - Otomatik kontrol yalnız rakamın kaynakta geçtiğini gösterir; doğru şey için geçtiğini analist bağlamdan onaylar. Yıl bağlamda görülmezse uyarı çıkar; coğrafya kontrol edilmez.
-- "4 milyon" gibi tek haneli ya da yazıyla büyütülmüş rakamlar denetlenemez ve rapora girmez.
+- Tek haneli rakamlar da kaynakta aranır; bulunamazsa iddia ya da anlatı maddesi rapora girmez, bulunursa iddia analist onayına kalır. Tek haneli rakam hemen her metinde geçtiği için bu kontrol zayıftır: "4 milyon" gibi yazıyla büyütülmüş rakamlarda asıl güvence analistin bağlamı okumasıdır.
 - Okunamayan kaynak (bot engeli, taranmış PDF) rakamın "bulunamadı" çıkmasına yol açar. Araştırma başına en fazla 25 kaynak ve 300 saniye.
 - Arama talebi, workspace'in en hacimli 20 kelimesinden hesaplanır; workspace'te kelime ya da Google Ads bağlantısı yoksa bölüm "veri yok" görünür. Teklif aralığı hesap para birimindedir.
 - Sektör ortalamaları, rakip fiyat karşılaştırması ve yorum temaları (3.11) bu sürümde yok.

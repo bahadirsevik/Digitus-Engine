@@ -108,7 +108,9 @@ def find_number(number: str, sources: List[Dict], year: Optional[str] = None) ->
 
 def check_claim(value: str, sources: List[Dict], year: Optional[str] = None) -> Dict:
     """Sayisal iddia: {status: found|short|not_found|no_number, source_url, context, year_in_context}."""
-    numbers = [n for n in numbers_in(str(value or "")) if len(_digits(n)) >= 2]
+    # Tek haneli rakam da aranir ("5 sube ve 45.000 hekim"): bulunamazsa iddia reddedilir,
+    # bulunursa kisa rakam olarak analist onayina kalir.
+    numbers = numbers_in(str(value or ""))
     if not numbers:
         return {"status": "no_number"}
     # Degerdeki rakamlarin HEPSI aranir ("45.000 ile 99.999 arasi"): ilkinin bulunmasi digerlerini tasimaz.
@@ -122,7 +124,7 @@ def check_claim(value: str, sources: List[Dict], year: Optional[str] = None) -> 
 
 def text_numbers_verified(text: str, sources: List[Dict]) -> Optional[bool]:
     """Anlati metnindeki rakamlarin HEPSI kaynakta geciyor mu? Rakam yoksa None."""
-    numbers = [n for n in numbers_in(text) if len(_digits(n)) >= 2]
+    numbers = numbers_in(text)  # tek haneliler dahil: "5 subesi var" kaynaksiz gecmez
     if not numbers:
         return None
     return all(find_number(n, sources) for n in numbers)
