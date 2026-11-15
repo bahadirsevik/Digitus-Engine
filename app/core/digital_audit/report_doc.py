@@ -24,6 +24,8 @@ _SECTION = {"site": "Web sitesi", "seo": "SEO", "tracking": "Ölçümleme", "con
             "ecommerce": "E-ticaret", "speed": "Hız"}
 LEGEND = ("[Gözlem] otomatik ölçüm · [Beyan] müşteri cevabı · [Kaynak] kaynakta doğrulanan bilgi · "
           "[Hipotez] bulgulardan türetilen, doğrulanması gereken yorum")
+STALE_NOTE = ("Rapora alınan rakamlar bu bölüm üretildikten sonra değişti; bölüm güncel olmadığı için "
+              "rapora alınmadı. Yeniden üretilmesi gerekir.")
 
 
 def _host(url: str) -> str:
@@ -130,8 +132,11 @@ def _research_blocks(report) -> List[Block]:
                            [[q["keyword"], str(q["monthly_volume"])] for q in audience["question_keywords"]]))
         blocks += _bullets("Güven beklentileri", _texts(audience.get("trust")))
 
+    # Analistin rakam kararlari degistiyse eski sentez ve briefler reddedilen rakami tasiyabilir: girmez.
     synthesis = sections.get("synthesis") or {}
-    if synthesis.get("status") == "ok":
+    if research.synthesis_stale(report):
+        blocks += [("h1", "Olası segmentler [Hipotez]"), ("p", STALE_NOTE)]
+    elif synthesis.get("status") == "ok":
         blocks.append(("h1", "Olası segmentler [Hipotez]"))
         for s in synthesis["segments"]:
             blocks.append(("h2", f"{s['name']} ({s['stage']})"))
@@ -151,7 +156,9 @@ def _research_blocks(report) -> List[Block]:
             f"platformda doğrulanmadı): {', '.join(m['interests'])}" for m in synthesis.get("meta_audiences") or []])
 
     briefs = report.briefs or {}
-    if briefs.get("status") == "ok":
+    if research.briefs_stale(report):
+        blocks += [("h1", "Reklam ve kreatif briefler [Hipotez]"), ("p", STALE_NOTE)]
+    elif briefs.get("status") == "ok":
         blocks.append(("h1", "Reklam ve kreatif briefler [Hipotez]"))
         notes = {b.get("restriction_note") for b in briefs["ad_ideas"] + briefs["creative_briefs"]} - {None}
         for note in notes:

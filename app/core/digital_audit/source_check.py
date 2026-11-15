@@ -111,10 +111,13 @@ def check_claim(value: str, sources: List[Dict], year: Optional[str] = None) -> 
     numbers = [n for n in numbers_in(str(value or "")) if len(_digits(n)) >= 2]
     if not numbers:
         return {"status": "no_number"}
-    hit = find_number(numbers[0], sources, year)
-    if not hit:
+    # Degerdeki rakamlarin HEPSI aranir ("45.000 ile 99.999 arasi"): ilkinin bulunmasi digerlerini tasimaz.
+    hits = [find_number(n, sources, year) for n in numbers]
+    if not all(hits):
         return {"status": "not_found"}
-    return {"status": "found" if len(_digits(numbers[0])) >= MIN_DIGITS else "short", **hit}
+    short = any(len(_digits(n)) < MIN_DIGITS for n in numbers)
+    context = " … ".join(dict.fromkeys(hit["context"] for hit in hits))
+    return {"status": "short" if short else "found", **hits[0], "context": context}
 
 
 def text_numbers_verified(text: str, sources: List[Dict]) -> Optional[bool]:

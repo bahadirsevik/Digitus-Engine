@@ -27,6 +27,10 @@ SOURCE = {"url": "u1", "final_url": "https://kaynak.test/rapor", "kind": "html",
     ("2023 yılında 750", "not_found"),
     ("yaklaşık çok", "no_number"),
     ("4500", "not_found"),        # 45 000'in parcasi eslesmez
+    # Degerdeki rakamlarin hepsi aranir: ilkinin bulunmasi digerini rapora tasimaz
+    ("45.000 ile 99.999 arası", "not_found"),
+    ("45.000 ile 750,00 arası", "found"),
+    ("45.000 hekim, kişi başı 1,5", "short"),
 ])
 def test_check_claim_statuses(value, status):
     assert source_check.check_claim(value, [SOURCE])["status"] == status
@@ -279,6 +283,44 @@ def test_report_contains_only_verified_numbers_and_marks_hypotheses():
     assert "3,2 milyar" not in text and "99.000" not in text
     assert "[Hipotez]" in text and "hukuki görüş değildir" in text
     assert "rakam kaynakta doğrulanamadı" in text  # kisit silinmez, isaretlenir
+
+
+def test_report_drops_synthesis_and_briefs_made_before_a_claim_decision_changed():
+    """Analist 45.000'i reddederse, o rakamla uretilmis segment ve brief rapora girmez."""
+    workspace = SimpleNamespace(name="Marka", company_url="https://marka.test")
+    report = _report()
+    report.sections["synthesis"]["segments"][0]["evidence"] = "45.000 hekim var"
+    report.sections["synthesis"]["claim_ids"] = ["sector:0"]
+    report.briefs = {"status": "ok", "claim_ids": ["sector:0"], "creative_briefs": [], "ad_ideas": [
+        {"segment": "Acil hasta", "channel": "Meta", "insight": "45.000 hekim", "offer": "o", "message": "m",
+         "cta": "c", "test_hypothesis": "h", "warnings": [], "restriction_note": None}]}
+    assert "45.000 hekim" in repr(report_doc.build_blocks(workspace, None, report))
+    report.claim_overrides = ["sector:0"]
+    assert research.synthesis_stale(report) and research.briefs_stale(report)
+    text = repr(report_doc.build_blocks(workspace, None, report))
+    assert "45.000" not in text and "Acil hasta" not in text and "güncel olmadığı" in text
+    report.claim_overrides = []  # karar geri alinirsa cikti yeniden gecerlidir
+    assert not research.synthesis_stale(report) and not research.briefs_stale(report)
+
+
+def test_audit_facts_carry_result_not_just_check_name():
+    """'Kontrol yapildi' ile 'sorun bulundu' ayrilir: noindex yokken modele 'kapali sayfa gozlendi' gitmez."""
+    def f(label, state, assessment=None, value=None, note=None, limits=None):
+        return {"section": "seo", "check": label, "label": label, "state": state, "assessment": assessment,
+                "value": value, "note": note, "source": None, "limits": limits or []}
+
+    audit = SimpleNamespace(answers={}, targets=[SimpleNamespace(url="https://marka.test", kind="own", findings=[
+        f("Arama motorlarına kapalı sayfa", "observed", "ok", {"noindex_pages": []}),
+        f("Açılış hızı (mobil)", "observed", "problem", {"available": True, "scores": {"performance": 15}, "raw": "x" * 900},
+          limits=["Laboratuvar ölçümüdür."]),
+        f("Sitemap", "unknown", note="okunamadı"),
+    ])])
+    site = research.audit_facts(audit)["siteler"][0]
+    noindex, speed = site["kontroller"]
+    assert noindex["sonuc"] == "iyi" and "noindex_pages" in noindex["deger"]
+    assert speed["sonuc"] == "sorun" and '"performance": 15' in speed["deger"] and "xxx" not in speed["deger"]
+    assert speed["sinirlar"] == ["Laboratuvar ölçümüdür."]
+    assert site["olculemeyen"] == ["Sitemap"]
 
 
 @pytest.mark.parametrize("fmt,magic", [("docx", b"PK"), ("pdf", b"%PDF")])

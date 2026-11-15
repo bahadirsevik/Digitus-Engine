@@ -2325,7 +2325,7 @@ export interface ResearchBriefs {
 export interface DigitalResearchSummary {
   id: number
   status: AuditStatus
-  stage: 'research' | 'briefs'
+  stage: 'research' | 'synthesis' | 'briefs'
   progress: number
   error_message: string | null
   inputs: { sector?: string; geography?: string; focus?: string | null }
@@ -2343,6 +2343,9 @@ export interface DigitalResearchDetail extends DigitalResearchSummary {
   }
   briefs: ResearchBriefs | null
   claim_overrides: string[]
+  /** Rakam kararları üretimden sonra değişti: bölüm rapora girmez, yenilenmesi gerekir */
+  synthesis_stale?: boolean
+  briefs_stale?: boolean
   usage: Record<string, number>
   channels: Record<string, string>
 }
@@ -2368,9 +2371,16 @@ export const digitalResearchApi = {
     }),
 
   saveClaimOverrides: (reportId: number, brand_profile_id: number, overrides: string[]) =>
-    api.put<{ claim_overrides: string[] }>(
+    api.put<{ claim_overrides: string[]; synthesis_stale?: boolean; briefs_stale?: boolean }>(
       `/digital-audit/research/${reportId}/claims`,
       { overrides },
+      { params: { brand_profile_id } }
+    ),
+
+  refreshSynthesis: (reportId: number, brand_profile_id: number) =>
+    api.post<{ research_id: number; status: AuditStatus }>(
+      `/digital-audit/research/${reportId}/synthesis`,
+      null,
       { params: { brand_profile_id } }
     ),
 

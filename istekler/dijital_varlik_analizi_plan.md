@@ -374,6 +374,11 @@ Araştırma ve fikir bölümü geliştirildi ve geliştirme ortamında pilot mar
 - Segmentler, öneriler ve briefler "Hipotez" etiketi taşır. Bulgularda karşılığı olmayan rakam, üstünlük ya da garanti ifadesi kodla işaretlenir.
 - Sektörde reklam kısıtı bulunduysa her brief "uzman değerlendirmesi olmadan yayıma hazır sayılmaz" uyarısı taşır.
 
+**İnceleme sonrası düzeltmeler (15.11.2026)**
+- Analist bir rakam kararını değiştirince, eski kararla üretilmiş segmentler ve briefler güncelliğini kaybeder: rapora girmez, üzerlerinden brief üretilemez. "Segmentleri yenile" (`POST /research/{id}/synthesis`) yalnız sentezi güncel kararlarla yeniden üretir ve eski briefleri siler. Her üretim, kullandığı rakam listesini çıktıyla birlikte saklar; üretim sürerken karar değişirse sonuç kaydedilir ama güncel sayılmaz. Karar geri alınırsa çıktı yeniden geçerlidir.
+- Bir iddianın değerinde birden fazla rakam varsa hepsi kaynakta aranır; biri bulunamazsa iddia "bulunamadı" olur, biri kısaysa iddia "kısa rakam" olur.
+- Sentez artık site denetiminin yalnız kontrol adlarını değil; sonucunu (iyi / uyarı / sorun / bilgi), değerini, notunu ve sınırlarını alır. Ölçülemeyen kontroller ayrı listelenir.
+
 **Canlı denemenin öğrettikleri (pilot marka, 5 çalıştırma)**
 - Aramalı çağrının isteminde çıktı biçimi, alan adı ya da şema olduğunda model arama yapmadan hafızadan yazdı (9 denemede 0 arama); sade araştırma isteminde 6 denemenin 6'sında arama yaptı. Bu yüzden araştırma iki çağrıdır: biçimsiz arama, ardından metni şemaya döken ayrı çağrı. Kaynak dönmeyen arama başarısız sayılır.
 - Sağlayıcı, uzun birebir alıntı istenince yanıtı bir kez boş döndürdü. Alıntı tek kısa cümleyle sınırlandı ve kesilen çağrı bir kez yeniden deneniyor.

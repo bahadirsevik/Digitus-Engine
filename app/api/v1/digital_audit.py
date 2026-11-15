@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.core.digital_audit import report_doc, research_service, service
+from app.core.digital_audit import report_doc, research, research_service, service
 from app.core.http_headers import content_disposition
 from app.core.workspace import verify_workspace
 from app.database.connection import get_db
@@ -176,7 +176,22 @@ def put_claim_overrides(
         research_service.save_claim_overrides(db, report, request.overrides)
     except research_service.ResearchInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {"claim_overrides": report.claim_overrides or []}
+    return {"claim_overrides": report.claim_overrides or [],
+            "synthesis_stale": research.synthesis_stale(report), "briefs_stale": research.briefs_stale(report)}
+
+
+@router.post("/research/{report_id}/synthesis", status_code=202)
+def refresh_synthesis(report_id: int, brand_profile_id: int = Query(...), db: Session = Depends(get_db)):
+    """Segmentleri analistin guncel rakam kararlariyla yeniden uretir (eski briefler silinir)."""
+    report = _get_research(db, report_id, brand_profile_id)
+    try:
+        research_service.request_synthesis(db, report)
+    except research_service.ResearchInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except research_service.ResearchStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    _dispatch_research(db, report)
+    return {"research_id": report.id, "status": report.status}
 
 
 @router.post("/research/{report_id}/briefs", status_code=202)

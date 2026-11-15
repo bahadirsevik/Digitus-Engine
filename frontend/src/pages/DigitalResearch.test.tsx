@@ -14,6 +14,7 @@ vi.mock('../services/api', async (importOriginal) => {
       get: vi.fn(),
       saveClaimOverrides: vi.fn(),
       startBriefs: vi.fn(),
+      refreshSynthesis: vi.fn(),
       exportReport: vi.fn(),
     },
   }
@@ -160,6 +161,19 @@ describe('DigitalResearch', () => {
     fireEvent.click(await screen.findByLabelText('Diş hekimi sayısı rapora girsin'))
     await waitFor(() => expect(api.saveClaimOverrides).toHaveBeenCalledWith(3, 1, ['sector:0']))
     expect(await screen.findByText('Rapordan çıkarıldı')).toBeInTheDocument()
+  })
+
+  it('rakam kararı değişince brief formunu kapatır ve segmentleri yeniletir', async () => {
+    api.saveClaimOverrides.mockReturnValue(
+      ok({ claim_overrides: ['sector:0'], synthesis_stale: true, briefs_stale: false })
+    )
+    api.refreshSynthesis.mockReturnValue(ok({ research_id: 3, status: 'pending' }))
+    render(<DigitalResearch workspaceId={1} />)
+    fireEvent.click(await screen.findByLabelText('Diş hekimi sayısı rapora girsin'))
+    const refresh = await screen.findByRole('button', { name: /Segmentleri yenile/ })
+    expect(screen.queryByRole('button', { name: /Brief üret/ })).not.toBeInTheDocument()
+    fireEvent.click(refresh)
+    await waitFor(() => expect(api.refreshSynthesis).toHaveBeenCalledWith(3, 1))
   })
 
   it('segment ve kanal seçilmeden brief üretilemez', async () => {

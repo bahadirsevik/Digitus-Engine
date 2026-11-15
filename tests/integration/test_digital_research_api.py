@@ -45,6 +45,7 @@ class FakeAI:
     def __init__(self, no_sources=(), fail_on=()):
         self.no_sources, self.fail_on = set(no_sources), set(fail_on)
         self.grounded_count = 0
+        self.prompts = {}
 
     def for_stage(self, stage, **kw):
         self.stage = stage
@@ -62,6 +63,7 @@ class FakeAI:
     def complete_json(self, prompt, max_tokens=6000, response_schema=None, **kw):
         if self.stage in self.fail_on:
             raise RuntimeError("provider down")
+        self.prompts[self.stage] = prompt
         return json.dumps(PAYLOADS[self.stage], ensure_ascii=False)
 
 
@@ -261,7 +263,7 @@ def test_analyst_can_override_a_claim_decision(client, db_session, make_workspac
     url = f"/api/v1/digital-audit/research/{report_id}/claims?brand_profile_id={ws.id}"
     assert client.put(url, json={"overrides": ["sector:9"]}).status_code == 400
     assert client.put(url, json={"overrides": ["sector:1"]}).status_code == 400  # kaynakta bulunamayan alinamaz
-    assert client.put(url, json={"overrides": ["sector:0"]}).json() == {"claim_overrides": ["sector:0"]}
+    assert client.put(url, json={"overrides": ["sector:0"]}).json()["claim_overrides"] == ["sector:0"]
     report = db_session.get(DigitalResearch, report_id)
     db_session.refresh(report)
     assert research.verified_claims(report.sections["sector"], report.claim_overrides) == []
@@ -298,6 +300,92 @@ def test_failed_brief_generation_keeps_research(client, db_session, make_workspa
     assert body["briefs"]["status"] == "failed" and len(body["sections"]["synthesis"]["segments"]) == 2
 
 
+# --- karar degisince bayatlama ---------------------------------------------
+
+def _urls(report_id, ws):
+    base = f"/api/v1/digital-audit/research/{report_id}"
+    return {name: f"{base}/{name}?brand_profile_id={ws.id}" for name in ("claims", "briefs", "synthesis")}
+
+
+def _blocks(db, ws, report_id):
+    from app.core.digital_audit import report_doc
+
+    db.expire_all()
+    return repr(report_doc.build_blocks(ws, None, db.get(DigitalResearch, report_id)))
+
+
+def test_rejected_claim_makes_synthesis_stale_until_refreshed(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    report_id = completed_report(client, db_session, ws, dispatched)
+    url = _urls(report_id, ws)
+    assert get(client, report_id, ws).json()["synthesis_stale"] is False
+    assert "Acil hasta" in _blocks(db_session, ws, report_id)
+
+    res = client.put(url["claims"], json={"overrides": ["sector:0"]}).json()
+    assert res["synthesis_stale"] is True
+    # Eski sentez rapora girmez, uzerinden brief uretilemez
+    assert "Acil hasta" not in _blocks(db_session, ws, report_id)
+    assert client.post(url["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 409
+    # Karar geri alinirsa sentez yeniden gecerlidir
+    assert client.put(url["claims"], json={"overrides": []}).json()["synthesis_stale"] is False
+    client.put(url["claims"], json={"overrides": ["sector:0"]})
+
+    assert client.post(url["synthesis"]).status_code == 202
+    assert client.post(url["synthesis"]).status_code == 409  # yenileme suruyor
+    ai = FakeAI()
+    assert run(db_session, dispatched, ai) == "completed"
+    assert "45.000" not in ai.prompts["audit_synthesis"]  # reddedilen rakam modele gitmez
+    assert ai.grounded_count == 0  # arastirma tekrarlanmaz, yalniz sentez
+    body = get(client, report_id, ws).json()
+    assert body["synthesis_stale"] is False and body["sections"]["sector"]["status"] == "ok"
+    assert "Acil hasta" in _blocks(db_session, ws, report_id)
+
+
+def test_refreshing_synthesis_drops_old_briefs(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    report_id = completed_report(client, db_session, ws, dispatched)
+    url = _urls(report_id, ws)
+    client.post(url["briefs"], json={"segments": [0], "channels": ["meta"]})
+    assert run(db_session, dispatched) == "completed"
+    client.put(url["claims"], json={"overrides": ["sector:0"]})
+    body = get(client, report_id, ws).json()
+    assert body["briefs_stale"] is True and "Dişiniz mi ağrıyor?" not in _blocks(db_session, ws, report_id)
+    client.post(url["synthesis"])
+    assert run(db_session, dispatched) == "completed"
+    assert get(client, report_id, ws).json()["briefs"] is None
+
+
+def test_decision_changed_during_generation_leaves_result_stale(client, db_session, make_workspace, dispatched,
+                                                                monkeypatch):
+    """Brief uretilirken analist karar degistirirse, eski kararla uretilen sonuc guncel sayilmaz."""
+    ws = make_workspace("Marka")
+    report_id = completed_report(client, db_session, ws, dispatched)
+    url = _urls(report_id, ws)
+    client.post(url["briefs"], json={"segments": [0], "channels": ["meta"]})
+    real = research.generate_briefs
+
+    def slow_briefs(*args, **kwargs):
+        assert client.put(url["claims"], json={"overrides": ["sector:0"]}).status_code == 200
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(research, "generate_briefs", slow_briefs)
+    ai = FakeAI()
+    assert run(db_session, dispatched, ai) == "completed"
+    assert "45.000" in ai.prompts["audit_briefs"]  # uretim eski kararla yapildi
+    body = get(client, report_id, ws).json()
+    assert body["briefs"]["status"] == "ok" and body["briefs_stale"] is True and body["synthesis_stale"] is True
+    assert "Dişiniz mi ağrıyor?" not in _blocks(db_session, ws, report_id)
+
+
+def test_failed_synthesis_can_be_retried(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    report_id = start(client, ws).json()["research_id"]
+    assert run(db_session, dispatched, FakeAI(fail_on={"audit_synthesis"})) == "partial"
+    assert client.post(_urls(report_id, ws)["synthesis"]).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    assert len(get(client, report_id, ws).json()["sections"]["synthesis"]["segments"]) == 2
+
+
 # --- rapor dosyasi ----------------------------------------------------------
 
 def test_export_without_scoring_run(client, db_session, make_workspace, dispatched):
@@ -330,6 +418,7 @@ def test_other_workspace_cannot_reach_report(client, db_session, make_workspace,
     assert client.put(f"/api/v1/digital-audit/research/{report_id}/claims?{other}", json={"overrides": []}).status_code == 404
     assert client.post(f"/api/v1/digital-audit/research/{report_id}/briefs?{other}",
                        json={"segments": [0], "channels": ["meta"]}).status_code == 404
+    assert client.post(f"/api/v1/digital-audit/research/{report_id}/synthesis?{other}").status_code == 404
     assert client.get(f"/api/v1/digital-audit/export?{other}&research_id={report_id}").status_code == 404
     assert client.get(f"/api/v1/digital-audit/research?{other}").json() == {"reports": []}
     assert client.get("/api/v1/digital-audit/research?brand_profile_id=999999").status_code == 404

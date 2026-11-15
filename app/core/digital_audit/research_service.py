@@ -115,13 +115,28 @@ def request_briefs(db: Session, report: DigitalResearch, segments: List[int], ch
     channels = list(dict.fromkeys(channels))
     if not channels or any(c not in research.CHANNELS for c in channels):
         raise ResearchInputError("Geçerli en az bir kanal seçin.")
+    if research.synthesis_stale(report):
+        raise ResearchStateError("Rakam kararları değişti; brief üretmeden önce segmentleri yenileyin.")
+    _requeue(db, report, "briefs",
+             {"status": "pending", "selection": {"segments": segments, "channels": channels}})
+
+
+def request_synthesis(db: Session, report: DigitalResearch) -> None:
+    """Sentezi analistin guncel rakam kararlariyla yeniden uretir. Eski briefler silinir
+    (segmentler degisecegi icin gecersizdir)."""
+    sections = report.sections or {}
+    if not any((sections.get(name) or {}).get("status") == "ok" for name in ("sector", "audience")):
+        raise ResearchInputError("Segment üretmek için araştırma bölümü yok.")
+    _requeue(db, report, "synthesis", None)
+
+
+def _requeue(db: Session, report: DigitalResearch, stage: str, briefs: Optional[Dict]) -> None:
     try:
         claimed = db.execute(
             update(DigitalResearch)
             .where(DigitalResearch.id == report.id, DigitalResearch.status.in_(FINAL))
-            .values(status="pending", stage="briefs", progress=0, task_id=str(uuid.uuid4()),
-                    lease_expires_at=_lease(), error_message=None, completed_at=None,
-                    briefs={"status": "pending", "selection": {"segments": segments, "channels": channels}})
+            .values(status="pending", stage=stage, progress=0, task_id=str(uuid.uuid4()),
+                    lease_expires_at=_lease(), error_message=None, completed_at=None, briefs=briefs)
             .execution_options(synchronize_session=False)
         ).rowcount
         db.commit()
@@ -134,9 +149,10 @@ def request_briefs(db: Session, report: DigitalResearch, segments: List[int], ch
 
 
 def mark_dispatch_failed(db: Session, report: DigitalResearch) -> None:
-    if report.stage == "briefs":  # arastirma sonucu yerinde durur; yalniz brief istegi dusmustur
+    if report.stage != "research":  # arastirma sonucu yerinde durur; yalniz ek istek dusmustur
         report.status = _final_status(report.sections or {})
-        report.briefs = {**(report.briefs or {}), "status": "failed", "error": "Kuyruğa alınamadı."}
+        if report.stage == "briefs":
+            report.briefs = {**(report.briefs or {}), "status": "failed", "error": "Kuyruğa alınamadı."}
     else:
         report.status = "failed"
     report.error_message = "Araştırma kuyruğa alınamadı. Lütfen tekrar deneyin."
@@ -194,18 +210,31 @@ def run_research(db: Session, report_id: int, task_id: str, ai, ads_service=None
                      usage=dict(usage), progress=progress, **extra)
 
     try:
-        if report.stage == "briefs":
-            selection = (report.briefs or {}).get("selection") or {}
-            chosen = [sections["synthesis"]["segments"][i] for i in selection.get("segments", [])]
-            facts = research.build_facts(workspace, audit, sections, report.claim_overrides)
+        if report.stage in ("synthesis", "briefs"):
+            # Kullanilan kararlar ciktiyla birlikte saklanir: analist uretim surerken karar
+            # degistirirse sonuc okuma aninda bayat gorunur (research.synthesis_stale).
+            overrides = list(report.claim_overrides or [])
+            used = research.claim_ids(sections.get("sector"), overrides)
+            facts = research.build_facts(workspace, audit, sections, overrides)
             try:
-                briefs = research.generate_briefs(ai, facts, chosen, selection.get("channels", []), usage)
+                if report.stage == "synthesis":
+                    sections["synthesis"] = {**research.synthesize(ai, facts, usage), "claim_ids": used}
+                    extra = {}
+                else:
+                    selection = (report.briefs or {}).get("selection") or {}
+                    chosen = [sections["synthesis"]["segments"][i] for i in selection.get("segments", [])]
+                    briefs = research.generate_briefs(ai, facts, chosen, selection.get("channels", []), usage)
+                    extra = {"briefs": {**briefs, "selection": selection, "claim_ids": used}}
             except SoftTimeLimitExceeded:
                 raise
             except Exception as exc:
-                logger.exception(f"Brief üretimi başarısız (research={report_id})")
-                briefs = _failed(exc)
-            if not checkpoint(95, briefs={**briefs, "selection": selection}):
+                logger.exception(f"{report.stage} üretimi başarısız (research={report_id})")
+                if report.stage == "synthesis":
+                    sections["synthesis"] = _failed(exc)
+                    extra = {}
+                else:
+                    extra = {"briefs": {**_failed(exc), "selection": (report.briefs or {}).get("selection") or {}}}
+            if not checkpoint(95, **extra):
                 return "superseded"
         else:
             if not _run_research_steps(db, workspace, audit, report.inputs or {}, sections, usage,
@@ -282,7 +311,7 @@ def _run_research_steps(db, workspace, audit, inputs, sections, usage, ai, ads_s
         facts = research.build_facts(workspace, audit, sections)
         synthesis = attempt("synthesis", lambda: research.synthesize(ai, facts, usage))
         if synthesis:
-            sections["synthesis"] = synthesis
+            sections["synthesis"] = {**synthesis, "claim_ids": research.claim_ids(sections.get("sector"))}
     else:
         sections["synthesis"] = {"status": "failed", "error": "Araştırma sonuç vermediği için sentez yapılmadı."}
     return checkpoint(95)
@@ -290,6 +319,9 @@ def _run_research_steps(db, workspace, audit, inputs, sections, usage, ai, ads_s
 
 def save_claim_overrides(db: Session, report: DigitalResearch, overrides: List[str]) -> None:
     """Analistin baglami okuyup kararini degistirdigi iddialar. Bulgulari DEGISTIRMEZ.
+
+    Onceki kararlarla uretilmis sentez ve briefler bu andan sonra bayat sayilir
+    (research.synthesis_stale): rapora girmez, yenilenmeleri gerekir.
 
     Yalniz kaynakta gecen iddialar (found / short) icin; bulunamayan iddia rapora alinamaz.
     """
@@ -312,6 +344,7 @@ def serialize(report: DigitalResearch, detail: bool = False) -> Dict:
         data.update(
             audit_id=report.audit_id, sections=report.sections or {}, briefs=report.briefs,
             claim_overrides=report.claim_overrides or [], usage=report.usage or {},
+            synthesis_stale=research.synthesis_stale(report), briefs_stale=research.briefs_stale(report),
             channels=research.CHANNELS,
         )
     return data

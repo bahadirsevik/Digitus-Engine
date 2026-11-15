@@ -167,9 +167,17 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
       : [...current, claim.id]
     return guarded('İddia güncellenemedi', async () => {
       const res = await digitalResearchApi.saveClaimOverrides(detail.id, workspaceId, next)
-      setDetail((cur) => (cur ? { ...cur, claim_overrides: res.data.claim_overrides } : cur))
+      setDetail((cur) => (cur ? { ...cur, ...res.data } : cur))
     })
   }
+
+  const refreshSynthesis = () =>
+    detail &&
+    guarded('Segmentler yenilenemedi', async () => {
+      await digitalResearchApi.refreshSynthesis(detail.id, workspaceId)
+      setSegments([])
+      await loadDetail(detail.id, workspaceId)
+    })
 
   const startBriefs = () =>
     detail &&
@@ -338,7 +346,9 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
               <strong>
                 {running && detail.stage === 'briefs'
                   ? 'Briefler üretiliyor'
-                  : AUDIT_STATUS_LABEL[detail.status]}
+                  : running && detail.stage === 'synthesis'
+                    ? 'Segmentler yenileniyor'
+                    : AUDIT_STATUS_LABEL[detail.status]}
               </strong>
               {running && <span>%{detail.progress}</span>}
               <span>
@@ -467,6 +477,24 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
                 Olası segmentler <span className="audit-chip audit-chip-neutral">Hipotez</span>
               </h2>
               <SectionFailure section={synthesis} />
+              {(detail.synthesis_stale || synthesis.status === 'failed') && (
+                <div className="research-actions">
+                  {detail.synthesis_stale && (
+                    <p className="audit-status-note">
+                      Rapora alınan rakamlar değişti. Bu segmentler eski rakamlarla üretildi; rapora
+                      girmez ve brief üretilemez. Kararlarınızı bitirince segmentleri yenileyin
+                      (mevcut briefler silinir).
+                    </p>
+                  )}
+                  <button
+                    className="btn btn-primary"
+                    onClick={refreshSynthesis}
+                    disabled={busy || running}
+                  >
+                    <Play size={18} /> Segmentleri yenile
+                  </button>
+                </div>
+              )}
               <div className="research-cards">
                 {synthesis.segments?.map((s, i) => (
                   <article key={s.name} className="research-card">
@@ -526,7 +554,7 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
                 }))}
               />
 
-              {synthesis.status === 'ok' && (
+              {synthesis.status === 'ok' && !detail.synthesis_stale && (
                 <div className="research-brief-form">
                   <h3>Brief üret</h3>
                   <p className="audit-hint">
@@ -564,6 +592,12 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
                 <span className="audit-chip audit-chip-neutral">Hipotez</span>
               </h2>
               <SectionFailure section={briefs} />
+              {detail.briefs_stale && (
+                <p className="audit-status-note">
+                  Bu briefler eski rakamlarla üretildi; rapora girmez. Segmentleri yenileyip briefi
+                  yeniden üretin.
+                </p>
+              )}
               {[...(briefs.ad_ideas || []), ...(briefs.creative_briefs || [])].some(
                 (b) => b.restriction_note
               ) && (
