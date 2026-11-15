@@ -446,10 +446,12 @@ def audit_facts(audit) -> Dict:
     serp = (getattr(audit, "visibility", None) or {}).get("serp") or {}
     if serp.get("status") == "ok":
         facts["arama_gorunurlugu"] = {
-            "not": "Anlık ölçüm. null = ölçülen ilk sonuçlarda gözlenmedi (sitenin hiç çıkmadığı anlamına gelmez).",
+            "not": "Anlık ölçüm. null = ölçülen ilk sonuçlarda gözlenmedi (sitenin hiç çıkmadığı anlamına gelmez). "
+                   "adresi_okunamayan > 0 ise null sıra belirsizdir; yokluk gibi yazma.",
             "konum": serp.get("location_used"),
             "kelimeler": [{"kelime": r["keyword"], "siralar": r["positions"], "reklami_gorulen": r["ads"],
-                           "harita_kutusu": r["local_pack"]} for r in serp.get("keywords") or [] if not r.get("error")],
+                           "harita_kutusu": r["local_pack"],
+                           "adresi_okunamayan": (r.get("unresolved") or 0) + (r.get("ads_unresolved") or 0)} for r in serp.get("keywords") or [] if not r.get("error")],
         }
     return facts
 

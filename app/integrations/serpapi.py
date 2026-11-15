@@ -12,6 +12,7 @@ from app.config import settings
 DEVICE = "desktop"
 PAGE_SIZE = 10
 _HOST = re.compile(r"[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}")
+_GOOGLE = re.compile(r"google\.[a-z.]+$")  # yonlendirme baglantisi: hedef site degil
 
 
 class SerpError(RuntimeError):
@@ -23,18 +24,24 @@ def is_configured() -> bool:
 
 
 def _domain(item: Dict) -> str:
-    # Google sonuc baglantisini sifreli veriyor (/goto?url=...); alan adi gorunen adres
-    # satirindan okunur. Satir bazen adres icermez: o zaman alan adi bos kalir (Faz 0 pilotu).
-    shown = (item.get("displayed_link") or "").split(" ")[0]
-    host = urlparse(shown if "://" in shown else f"https://{shown}").hostname or ""
-    host = host.lower().removeprefix("www.")
-    # "6.1 B+ görüntüleme" gibi satirlar alan adi degildir
-    return host if _HOST.fullmatch(host) else ""
+    # Once gercek hedef baglantisi. Google bunu bazen sifreli verir (/goto?url=...): o zaman
+    # gorunen adres satirina dusulur. Ikisi de adres vermezse alan adi bos kalir ve sonuc
+    # "cozulemedi" sayilir ("6.1 B+ görüntüleme" gibi satirlar alan adi degildir).
+    for key in ("link", "displayed_link"):
+        raw = (item.get(key) or "").split(" ")[0]
+        try:
+            host = urlparse(raw if "://" in raw else f"https://{raw}").hostname or ""
+        except ValueError:
+            continue
+        host = host.lower().removeprefix("www.")
+        if _HOST.fullmatch(host) and not (key == "link" and _GOOGLE.match(host)):
+            return host
+    return ""
 
 
 def search(query: str, location: str, page: int = 0) -> Dict:
     """Tek sonuc sayfasi: {organic: [{position, domain, title, shown}], ads: [domain],
-    local_pack, knowledge_panel, location_used}. position sayfalar arasi kesintisizdir."""
+    ads_unresolved, local_pack, knowledge_panel, location_used}. position sayfalar arasi kesintisizdir."""
     if not is_configured():
         raise SerpError("not_configured")
     try:
@@ -55,9 +62,11 @@ def search(query: str, location: str, page: int = 0) -> Dict:
     if data.get("error") and not organic:
         raise SerpError(str(data["error"])[:120])
     local = data.get("local_results")
+    ads = [_domain(ad) for ad in data.get("ads") or []]
     return {
         "organic": organic,
-        "ads": list(dict.fromkeys(d for d in (_domain(ad) for ad in data.get("ads") or []) if d)),
+        "ads": list(dict.fromkeys(d for d in ads if d)),
+        "ads_unresolved": ads.count(""),  # adresi okunamayan reklam: "reklam yok" sayilmaz
         "local_pack": bool(local.get("places") if isinstance(local, dict) else local),
         "knowledge_panel": bool(data.get("knowledge_graph")),
         "location_used": (data.get("search_parameters") or {}).get("location_used"),

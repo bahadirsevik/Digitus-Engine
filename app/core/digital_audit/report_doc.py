@@ -65,7 +65,20 @@ def _rank(row: Dict, site: str) -> str:
     if row.get("error"):
         return "Ölçülmedi"
     position = (row.get("positions") or {}).get(site)
-    return str(position) if position else f"İlk {row.get('checked_top') or 0}'de gözlenmedi"
+    if position:
+        return str(position)
+    return f"İlk {row.get('checked_top') or 0}'de " + _unseen(row.get("unresolved"))
+
+
+def _unseen(unresolved) -> str:
+    """Adresi okunamayan sonuc varsa 'gozlenmedi' kesin yokluk gibi yazilmaz."""
+    return f"eşleşmedi ({unresolved} sonucun adresi okunamadı)" if unresolved else "gözlenmedi"
+
+
+def _ads(domains, unresolved) -> str:
+    if unresolved:
+        return ", ".join(list(domains) + [f"{unresolved} reklamın adresi okunamadı"])
+    return ", ".join(domains)
 
 
 def _visibility_blocks(audit) -> List[Block]:
@@ -88,15 +101,15 @@ def _visibility_blocks(audit) -> List[Block]:
             blocks.append(("table", ["Kelime"] + sites, [[r["keyword"]] + [_rank(r, s) for s in sites] for r in rows]))
             blocks.append(("h2", "Reklam ve harita kutusu"))
             blocks.append(("table", ["Kelime", "Reklamı görülen siteler", "Harita kutusu"], [
-                [r["keyword"], "Ölçülmedi" if r.get("error") else (", ".join(r["ads"]) or "Bu sorguda reklam görülmedi"),
+                [r["keyword"], "Ölçülmedi" if r.get("error") else (_ads(r["ads"], r.get("ads_unresolved")) or "Bu sorguda reklam görülmedi"),
                  "Ölçülmedi" if r.get("error") else ("Görüldü" if r.get("local_pack") else "Görülmedi")] for r in rows]))
             blocks.append(("p", "Reklamın görülmemesi kampanyanın kapalı olduğu anlamına gelmez."))
         brand = serp.get("brand")
         if brand and not brand.get("error"):
             blocks += [("h2", f"Marka araması: {brand['query']}"), ("bullets", [
-                f"Marka sitesinin sırası: {brand['own_position'] or 'ilk 10 sonuçta gözlenmedi'}",
+                f"Marka sitesinin sırası: {brand['own_position'] or 'ilk 10 sonuçta ' + _unseen(brand.get('unresolved'))}",
                 f"Bilgi paneli: {'görüldü' if brand['knowledge_panel'] else 'görülmedi'}",
-                "Marka adında reklamı görülen başka siteler: " + (", ".join(brand["other_ads"]) or "görülmedi")])]
+                "Marka adında reklamı görülen başka siteler: " + (_ads(brand["other_ads"], brand.get("ads_unresolved")) or "görülmedi")])]
         for entry in serp.get("reputation") or []:
             if entry.get("results"):
                 blocks += [("h2", f"Arama: {entry['query']}"), ("bullets", [
@@ -109,12 +122,13 @@ def _visibility_blocks(audit) -> List[Block]:
     if channels:
         blocks.append(("h1", "YouTube [Gözlem]"))
         if found:
-            blocks.append(("table", ["Site", "Kanal", "Abone", "Video", "Son yükleme", "Son 90 gün", "Son videolarda ort. izlenme"], [
+            blocks.append(("table", ["Site", "Kanal", "Abone", "Video", "Son yükleme", "Son 90 günde (incelenen son videolar içinde)", "Son videolarda ort. izlenme"], [
                 [site, c["title"], "gizli" if c["subscribers"] is None else str(c["subscribers"]), str(c["video_count"]),
-                 c["last_upload"] or "-", str(c["uploads_90d"]),
+                 c["last_upload"] or "-", f"{c['uploads_90d']} (son {c['recent_sample']} video içinde)",
                  f"{c['recent_avg_views']} ({c['recent_sample']} video)" if c["recent_avg_views"] is not None else "-"]
                 for site, c in found.items()]))
-            blocks.append(("p", "Abone sayısı YouTube'un gösterdiği yuvarlanmış değerdir. Ortalama izlenme, son videoların izlenme ortalamasıdır."))
+            blocks.append(("p", "Abone sayısı YouTube'un gösterdiği yuvarlanmış değerdir. Ortalama izlenme, son videoların izlenme ortalamasıdır. "
+                                "Son 90 gün sayısı yalnız incelenen son videolar içindedir; dönem toplamı değildir."))
         blocks += _bullets("Kanalı ölçülemeyen siteler", [f"{site}: {c.get('reason')}" for site, c in channels.items() if c.get("status") != "ok"])
 
     profiles = (data.get("places") or {}).get("profiles") or {}

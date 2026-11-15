@@ -95,6 +95,7 @@ def _serp(config: Dict, sites: List[str], own: str, tick: Callable[[], None]) ->
                 row["checked_top"] = (page + 1) * serpapi.PAGE_SIZE
                 if page == 0:
                     row["ads"], row["local_pack"] = result["ads"], result["local_pack"]
+                    row["ads_unresolved"] = result.get("ads_unresolved", 0)
                 # Butun siteler bulunduysa ikinci sayfa sorgusu harcanmaz
                 if all(serpapi.position_of(organic, site) for site in sites) or not result["organic"]:
                     break
@@ -102,6 +103,8 @@ def _serp(config: Dict, sites: List[str], own: str, tick: Callable[[], None]) ->
             if not organic:
                 row["error"] = QUERY_FAILED
         row["positions"] = {site: serpapi.position_of(organic, site) for site in sites}
+        # Adresi okunamayan sonuc bir siteye ait olabilir: "gozlenmedi" kesin yokluk degildir
+        row["unresolved"] = sum(1 for item in organic if not item["domain"])
         row["top"] = [item["domain"] for item in organic[:serpapi.PAGE_SIZE] if item["domain"]]
         keywords.append(row)
 
@@ -112,6 +115,8 @@ def _serp(config: Dict, sites: List[str], own: str, tick: Callable[[], None]) ->
             result = query(name)
             brand = {"query": name, "own_position": serpapi.position_of(result["organic"], own),
                      "knowledge_panel": result["knowledge_panel"],
+                     "unresolved": sum(1 for item in result["organic"] if not item["domain"]),
+                     "ads_unresolved": result.get("ads_unresolved", 0),
                      "other_ads": [d for d in result["ads"] if d != own and not d.endswith("." + own)]}
         except serpapi.SerpError:
             brand = {"query": name, "error": QUERY_FAILED}

@@ -40,6 +40,23 @@ def test_serp_page_is_parsed_from_displayed_address(monkeypatch):
     assert serpapi.position_of(page["organic"], "arka.test") is None
 
 
+def test_serp_real_link_wins_and_unreadable_results_are_counted(monkeypatch):
+    """Gorunen satir adres icermese de gercek baglanti siteyi verir; ikisi de yoksa sonuc sayilir."""
+    payload = {
+        "organic_results": [
+            {"title": "A", "link": "https://marka.test/", "displayed_link": "6.1 B+ görüntüleme"},
+            {"title": "B", "link": "https://www.google.com.tr/goto?url=X", "displayed_link": "YouTube · Kanal"},
+        ],
+        "ads": [{"link": "https://rakip.test/randevu", "displayed_link": "Sponsorlu"}, {"displayed_link": "Sponsorlu"}],
+    }
+    monkeypatch.setattr(settings, "SERPAPI_API_KEY", "k")
+    monkeypatch.setattr(serpapi.httpx, "get", lambda url, **kw: Response(payload))
+    page = serpapi.search("q", "loc")
+    assert [o["domain"] for o in page["organic"]] == ["marka.test", ""]
+    assert serpapi.position_of(page["organic"], "marka.test") == 1
+    assert page["ads"] == ["rakip.test"] and page["ads_unresolved"] == 1
+
+
 def test_serp_errors_are_raised_not_read_as_empty_results(monkeypatch):
     monkeypatch.setattr(settings, "SERPAPI_API_KEY", None)
     with pytest.raises(serpapi.SerpError):

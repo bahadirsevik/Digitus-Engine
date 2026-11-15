@@ -2162,6 +2162,9 @@ export interface VisibilityKeywordRow {
   local_pack: boolean
   checked_top: number
   top: string[]
+  /** adresi okunamayan organik sonuç / reklam sayısı: varsa "gözlenmedi" kesin değildir */
+  unresolved?: number
+  ads_unresolved?: number
   error?: string
 }
 
@@ -2193,6 +2196,8 @@ export interface AuditVisibility {
       own_position?: number | null
       knowledge_panel?: boolean
       other_ads?: string[]
+      unresolved?: number
+      ads_unresolved?: number
       error?: string
     } | null
     reputation: {

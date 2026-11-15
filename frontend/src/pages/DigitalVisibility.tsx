@@ -6,7 +6,7 @@ import {
   type AuditVisibility,
   type LivePlace,
 } from '../services/api'
-import { rankText } from './digitalAuditView'
+import { adsText, rankText, unseenText } from './digitalAuditView'
 
 interface Props {
   auditId: number
@@ -96,7 +96,8 @@ export default function DigitalVisibility({ auditId, workspaceId, visibility }: 
                           <td>
                             {row.error
                               ? 'Ölçülmedi'
-                              : row.ads.join(', ') || 'Bu sorguda reklam görülmedi'}
+                              : adsText(row.ads, row.ads_unresolved) ||
+                                'Bu sorguda reklam görülmedi'}
                           </td>
                           <td>
                             {row.error ? 'Ölçülmedi' : row.local_pack ? 'Görüldü' : 'Görülmedi'}
@@ -123,12 +124,13 @@ export default function DigitalVisibility({ auditId, workspaceId, visibility }: 
                     <ul className="research-list">
                       <li>
                         Marka sitesinin sırası:{' '}
-                        {serp.brand.own_position || 'ilk 10 sonuçta gözlenmedi'}
+                        {serp.brand.own_position ||
+                          `ilk 10 sonuçta ${unseenText(serp.brand.unresolved)}`}
                       </li>
                       <li>Bilgi paneli: {serp.brand.knowledge_panel ? 'görüldü' : 'görülmedi'}</li>
                       <li>
                         Marka adında reklamı görülen başka siteler:{' '}
-                        {serp.brand.other_ads?.join(', ') || 'görülmedi'}
+                        {adsText(serp.brand.other_ads, serp.brand.ads_unresolved) || 'görülmedi'}
                       </li>
                     </ul>
                   </>
@@ -172,7 +174,7 @@ export default function DigitalVisibility({ auditId, workspaceId, visibility }: 
                   <th>Abone</th>
                   <th>Video</th>
                   <th>Son yükleme</th>
-                  <th>Son 90 gün</th>
+                  <th>Son 90 günde (incelenen son videolar içinde)</th>
                   <th>Son videolarda ort. izlenme</th>
                 </tr>
               </thead>
@@ -188,7 +190,9 @@ export default function DigitalVisibility({ auditId, workspaceId, visibility }: 
                         </td>
                         <td>{c.video_count}</td>
                         <td>{c.last_upload || '-'}</td>
-                        <td>{c.uploads_90d} video</td>
+                        <td>
+                          {c.uploads_90d} (son {c.recent_sample} video içinde)
+                        </td>
                         <td>
                           {c.recent_avg_views != null
                             ? `${c.recent_avg_views.toLocaleString('tr-TR')} (${c.recent_sample} video)`

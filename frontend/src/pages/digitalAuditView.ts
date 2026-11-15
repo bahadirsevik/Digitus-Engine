@@ -212,5 +212,14 @@ export function hostOf(url: string): string {
 export function rankText(row: VisibilityKeywordRow, site: string): string {
   if (row.error) return 'Ölçülmedi'
   const position = row.positions[site]
-  return position ? `${position}. sıra` : `İlk ${row.checked_top}'de gözlenmedi`
+  return position ? `${position}. sıra` : `İlk ${row.checked_top}'de ${unseenText(row.unresolved)}`
+}
+
+/** Adresi okunamayan sonuç varsa "gözlenmedi" kesin yokluk gibi yazılmaz. */
+export function unseenText(unresolved?: number): string {
+  return unresolved ? `eşleşmedi (${unresolved} sonucun adresi okunamadı)` : 'gözlenmedi'
+}
+
+export function adsText(domains: string[] = [], unresolved?: number): string {
+  return [...domains, ...(unresolved ? [`${unresolved} reklamın adresi okunamadı`] : [])].join(', ')
 }

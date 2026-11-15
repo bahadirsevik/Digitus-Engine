@@ -421,7 +421,8 @@ Veri zenginleştirme geliştirildi ve geliştirme ortamında pilot markayla bir 
 **Bilinen sınırlar**
 - Harita sıralaması yok: yalnız harita kutusunun görülüp görülmediği saklanır (kutudaki işletme adları ve puanlar Google içeriğidir). `site:` indeks sayısı yok (pilotta güvenilmezdi).
 - Yalnız masaüstü ve tek konum. Konum adı arama servisinin tanıdığı biçimde yazılmalı ("Istanbul, Turkey"); tanımadığı konumda sorgu "ölçülmedi" döner.
-- Site eşleştirmesi görünen adres satırından yapılır; satır adres içermiyorsa (YouTube, Instagram sonuçları) o sonuç hiçbir siteyle eşleşmez.
+- Site eşleştirmesi önce sonucun gerçek bağlantısından, o şifreliyse görünen adres satırından yapılır. İkisi de adres vermeyen sonuç hiçbir siteyle eşleşmez; bu sonuçlar sayılır ve sıra "gözlenmedi" yerine "eşleşmedi (N sonucun adresi okunamadı)" yazılır. Reklamlar için de aynı (inceleme sonrası düzeltme).
+- YouTube "son 90 gün" sayısı dönem toplamı değildir: yalnız incelenen son 20 video içinde sayılır ve ekranda, raporda böyle etiketlenir.
 - İtibar aramalarında yalnız başlık ve alan adı saklanır; sonuç bağlantıları şifreli geldiği için tıklanabilir bağlantı yok ve sayfa içerikleri okunmaz.
 - YouTube yalnız sitede bağlantısı varsa ölçülür; `/c/ad` biçimli eski adresler çözülemez. Instagram, Facebook, TikTok ve LinkedIn otomatik ölçülmez (plan 3.4).
 - Google profili: sahiplenme, fotoğraf, yorum metni ve işletme cevapları yok. Web sitesi yazmayan profil eşleşmez. Her "güncel bilgiyi getir" tıklaması eşleşen profil başına bir ücretli çağrıdır.

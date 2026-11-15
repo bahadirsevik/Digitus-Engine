@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import DigitalVisibility from './DigitalVisibility'
-import { rankText } from './digitalAuditView'
+import { adsText, rankText } from './digitalAuditView'
 import { digitalAuditApi, type AuditVisibility } from '../services/api'
 
 vi.mock('../services/api', async (importOriginal) => {
@@ -81,6 +81,11 @@ describe('DigitalVisibility', () => {
     expect(rankText(found, 'marka.test')).toBe('14. sıra')
     expect(rankText(found, 'rakip.test')).toBe("İlk 20'de gözlenmedi")
     expect(rankText(failed, 'marka.test')).toBe('Ölçülmedi')
+    // Adresi okunamayan sonuç varsa kesin yokluk yazılmaz
+    expect(rankText({ ...found, unresolved: 2 }, 'rakip.test')).toBe(
+      "İlk 20'de eşleşmedi (2 sonucun adresi okunamadı)"
+    )
+    expect(adsText([], 1)).toBe('1 reklamın adresi okunamadı')
   })
 
   it('ölçüm koşullarını, reklamı ve itibar aramasını gösterir', () => {
@@ -92,6 +97,7 @@ describe('DigitalVisibility', () => {
     expect(within(row).getByText('rakip.test')).toBeInTheDocument()
     expect(screen.getByText(/Şikayet başlığı/)).toBeInTheDocument()
     expect(screen.getByText('gizli')).toBeInTheDocument()
+    expect(screen.getByText(/3 \(son 20 video içinde\)/)).toBeInTheDocument()
     expect(screen.getByText('Gözlenmedi')).toBeInTheDocument()
   })
 

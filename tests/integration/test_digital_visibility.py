@@ -210,6 +210,27 @@ def test_report_and_synthesis_facts_carry_ranks_with_conditions(client, db_sessi
     assert res.status_code == 200 and res.content.startswith(b"%PDF")
 
 
+def test_unreadable_results_are_not_reported_as_absence(client, db_session, make_workspace, dispatched, services,
+                                                        monkeypatch):
+    """Adresi okunamayan sonuc bir siteye ait olabilir: rapor 'gozlenmedi' diye kesin konusmaz."""
+    organic = _organic(["dizin.test", ""] + [f"site{i}.test" for i in range(8)])
+    monkeypatch.setattr(serpapi, "search", lambda q, loc, page=0: {
+        "organic": organic, "ads": [], "ads_unresolved": 1, "local_pack": False, "knowledge_panel": False,
+        "location_used": "x"})
+    ws = make_workspace("Marka", company_url="https://marka.test")
+    audit_id = start(client, ws, {"keywords": ["diş hekimi"], "brand_name": "Marka"}).json()["audit_id"]
+    run(db_session, dispatched)
+    audit = db_session.get(DigitalAudit, audit_id)
+    row = audit.visibility["serp"]["keywords"][0]
+    assert row["unresolved"] == 2 and row["ads_unresolved"] == 1  # iki sayfa, sayfa basina bir okunamayan
+    text = repr(report_doc.build_blocks(ws, audit, None))
+    assert "İlk 20'de eşleşmedi (2 sonucun adresi okunamadı)" in text and "İlk 20'de gözlenmedi" not in text
+    assert "1 reklamın adresi okunamadı" in text and "Bu sorguda reklam görülmedi" not in text
+    assert "ilk 10 sonuçta eşleşmedi (1 sonucun adresi okunamadı)" in text
+    assert "son 20 video içinde" in text and "dönem toplamı değildir" in text
+    assert research.audit_facts(audit)["arama_gorunurlugu"]["kelimeler"][0]["adresi_okunamayan"] == 3
+
+
 def test_late_worker_cannot_write_visibility_after_reconcile(client, db_session, make_workspace, dispatched,
                                                              services, monkeypatch):
     ws = make_workspace("Marka", company_url="https://marka.test")
