@@ -337,7 +337,7 @@ Dahil değil: sosyal medya otomasyonu, sıralama ve arama görünürlüğü, Pla
 
 ## 11. Faz 1 durumu (14.11.2026)
 
-Çekirdek geliştirildi ve geliştirme ortamında gerçek sitelerle çalıştırıldı. Henüz commit edilmedi.
+Çekirdek geliştirildi, geliştirme ortamında gerçek sitelerle çalıştırıldı ve commit edildi (`59c2f10`). Push edilmedi.
 
 **Yapılanlar**
 - Tablolar: `digital_audits`, `digital_audit_targets` (migration `20261114_001`). Skorlama çalışması gerektirmez.
@@ -354,3 +354,40 @@ Dahil değil: sosyal medya otomasyonu, sıralama ve arama görünürlüğü, Pla
 - Hız ölçümü laboratuvar ölçümüdür; aynı site için ölçümler arasında 10-15 puan fark görüldü (89, 76, 74).
 - Tasarım yorumu, ürün sayfası kalite örneklemesi, dışa aktarım ve önceki denetimle karşılaştırma yok.
 - Denetimi iptal etme düğmesi yok; süren denetim bitene ya da kilit süresi (10 dk) dolana kadar yenisi başlatılamaz.
+
+## 12. Faz 2 durumu (15.11.2026)
+
+Araştırma ve fikir bölümü geliştirildi ve geliştirme ortamında pilot markayla uçtan uca çalıştırıldı. Push edilmedi.
+
+**Yapılanlar**
+- Tablo: `digital_research_reports` (migration `20261115_001`). Skorlama çalışması gerektirmez; varsa en yeni site denetimine bağlanır.
+- Görev: `digital_audit.research`. Adımlar: arama talebi (Google Ads aylık seri ve teklif aralığı kopyası) → sektör araştırması → hedef kitle araştırması → kaynak doğrulama → sentez. Her adımın sonucu bitince kaydedilir; workspace başına tek aktif araştırma veritabanı indeksiyle garanti edilir; süreli kilit dolunca okuma anında "kısmi" ya da "başarısız" kapatılır.
+- Uçlar: `POST/GET /api/v1/digital-audit/research`, `GET /research/{id}`, `PUT /research/{id}/claims`, `POST /research/{id}/briefs`, `GET /digital-audit/export?format=docx|pdf`.
+- Kaynak doğrulama kodla yapılır (`source_check.py`): aramanın döndürdüğü sayfalar ve PDF'ler indirilir, her rakam metinde aranır, bağlam cümlesi ve kaynak adresi saklanır.
+- Arayüz: "Dijital Denetim" sayfasında "Araştırma ve fikir" sekmesi (rakam tablosu ve bağlamı, segment kartları, kanal seçimi, briefler, Word/PDF indirme).
+- Testler: 47 backend, 9 frontend. Çift başlatma, işçi kesintisi, kısmi sonuç, geç kalan işçinin yazamaması, workspace izolasyonu, kaynaksız aramanın başarısız sayılması dahil.
+
+**Rapora girme kuralları**
+- Rakam: kaynak metninde bulunduysa girer. 4 haneden kısa rakamlar yalnız adaydır; analist bağlamı okuyup elle onaylarsa girer. Kaynakta bulunamayan rakam hiçbir koşulda girmez. Analist, bulunan bir rakamı da rapordan çıkarabilir.
+- İçinde doğrulanamayan rakam geçen anlatı maddesi rapora ve senteze girmez. Yasal kısıt maddeleri istisnadır: silinmez, "rakamı doğrulanamadı" notuyla kalır.
+- Hedef kitle ifadeleri yalnız kaynakta birebir geçiyorsa alıntı olarak gösterilir. Hedef kitle araştırmasından rakam çıkarılmaz (canlıda bunların tek kişinin ödediği tutarlar olduğu görüldü).
+- Segmentler, öneriler ve briefler "Hipotez" etiketi taşır. Bulgularda karşılığı olmayan rakam, üstünlük ya da garanti ifadesi kodla işaretlenir.
+- Sektörde reklam kısıtı bulunduysa her brief "uzman değerlendirmesi olmadan yayıma hazır sayılmaz" uyarısı taşır.
+
+**Canlı denemenin öğrettikleri (pilot marka, 5 çalıştırma)**
+- Aramalı çağrının isteminde çıktı biçimi, alan adı ya da şema olduğunda model arama yapmadan hafızadan yazdı (9 denemede 0 arama); sade araştırma isteminde 6 denemenin 6'sında arama yaptı. Bu yüzden araştırma iki çağrıdır: biçimsiz arama, ardından metni şemaya döken ayrı çağrı. Kaynak dönmeyen arama başarısız sayılır.
+- Sağlayıcı, uzun birebir alıntı istenince yanıtı bir kez boş döndürdü. Alıntı tek kısa cümleyle sınırlandı ve kesilen çağrı bir kez yeniden deneniyor.
+- 3 haneli bir rakam ("yaklaşık 250") kaynaktaki sayfa numarasıyla eşleşti. Kısa rakam eşiği bu yüzden 4 hane.
+- Son çalıştırma: 105 saniye, 2 aramalı ve 3 düz çağrı, 7 arama sorgusu, 25 kaynak okundu (2'si PDF). 21 rakamın 4'ü kaynakta bulundu, 12'si kısa rakam adayı, 4'ü bulunamadı. Hedef kitle ifadelerinin 7'de 6'sı birebir bulundu. Brief üretimi 15 saniye sürdü.
+- Aynı girdiyle çalıştırmalar arasında rakam sayısı ve kısıt maddesi sayısı değişiyor (10 ile 21 rakam, 1 ile 7 kısıt). Sonuç tekrarlanabilir değildir.
+
+**Bilinen sınırlar**
+- Otomatik kontrol yalnız rakamın kaynakta geçtiğini gösterir; doğru şey için geçtiğini analist bağlamdan onaylar. Yıl bağlamda görülmezse uyarı çıkar; coğrafya kontrol edilmez.
+- "4 milyon" gibi tek haneli ya da yazıyla büyütülmüş rakamlar denetlenemez ve rapora girmez.
+- Okunamayan kaynak (bot engeli, taranmış PDF) rakamın "bulunamadı" çıkmasına yol açar. Araştırma başına en fazla 25 kaynak ve 300 saniye.
+- Arama talebi, workspace'in en hacimli 20 kelimesinden hesaplanır; workspace'te kelime ya da Google Ads bağlantısı yoksa bölüm "veri yok" görünür. Teklif aralığı hesap para birimindedir.
+- Sektör ortalamaları, rakip fiyat karşılaştırması ve yorum temaları (3.11) bu sürümde yok.
+- Briefler mevcut reklam/sosyal üretim akışına aktarılmıyor; görsel ya da video üretimi yok.
+- Rapor dosyası her indirmede yeniden üretilir; saklanmaz. Kıyas tablosunda hücre ayrıntıları (not, değer) yer almaz.
+- Araştırmayı iptal etme düğmesi yok. Brief aşamasında kilit dolarsa araştırma "kısmi" görünür (bölümler kaybolmaz).
+- Hedef kitle alıntılarında üçüncü taraf işletme adı geçebilir (şikayet siteleri). İstem bunu yasaklıyor ama kodla denetlenmiyor; müşteriye gitmeden önce okunmalı.

@@ -210,3 +210,90 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* --- Araştırma ve fikir --- */
+.audit-section h3 {
+  font-size: 14px;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.research-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.research-list small {
+  color: var(--text-muted);
+}
+
+.research-list .audit-chip {
+  margin-left: 8px;
+}
+
+.research-quote {
+  margin-left: 6px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.research-actions,
+.research-channels {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.research-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.research-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.research-card {
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.research-card p {
+  margin: 0;
+}
+
+.research-card small {
+  color: var(--text-muted);
+}
+
+.research-brief-form {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.research-brief-form .btn {
+  margin-top: 12px;
+}
+
+.research-restriction {
+  font-weight: 600;
+}

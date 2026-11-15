@@ -89,6 +89,7 @@ class FetchResult:
     content_type: str  # yalnız medya türü, küçük harf (parametresiz)
     content_encoding: str  # küçük harf; çağıran fail-closed kararını verir
     text: str
+    content: bytes = b""  # ham govde (PDF gibi ikili icerik icin)
 
 
 def assert_ip_is_public(ip_str: str) -> None:
@@ -221,6 +222,7 @@ def safe_fetch(
                         content_type=content_type,
                         content_encoding=(resp.headers.get("content-encoding") or "").strip().lower(),
                         text=body.decode(encoding, errors="replace"),
+                        content=body,
                     )
             raise UnsafeUrlError("URL çok fazla yönlendirme içeriyor")
     except UnsafeUrlError:

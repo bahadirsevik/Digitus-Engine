@@ -2067,3 +2067,48 @@ class DigitalAuditTarget(Base):
 
     audit = relationship("DigitalAudit", back_populates="targets")
 
+
+class DigitalResearch(Base):
+    """
+    Kaynakli sektor/hedef kitle arastirmasi, segmentler ve reklam/kreatif briefler.
+    ScoringRun'dan BAGIMSIZDIR. Yasam dongusu: app/core/digital_audit/research_service.py
+
+    status: pending | running | completed | partial | failed
+    stage:  research (arastirma + sentez) | briefs (secilen segmentler icin brief)
+    """
+    __tablename__ = "digital_research_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    brand_profile_id = Column(
+        Integer, ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    # Sentezin dayandigi site denetimi (istege bagli)
+    audit_id = Column(Integer, ForeignKey("digital_audits.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    stage = Column(String(20), nullable=False, default="research", server_default="research")
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    inputs = Column(JSON, nullable=True)      # {sector, geography, focus}
+    # {demand, sector, audience, synthesis}: her biri {"status": ok|failed|unavailable, ...}
+    sections = Column(JSON, nullable=True)
+    # Kaydedilmis basarili bolum sayisi: bayat uzlastirmada kismi/basarisiz ayrimi
+    sections_done = Column(Integer, nullable=False, default=0, server_default="0")
+    briefs = Column(JSON, nullable=True)      # {status, selection, ad_ideas, creative_briefs}
+    # Analistin varsayilan karari tersine cevirdigi iddia kimlikleri:
+    # 'found' -> rapordan cikar, 'short' (kisa rakam) -> baglami okuyup rapora al
+    claim_overrides = Column(JSON, nullable=True)
+    usage = Column(JSON, nullable=True)       # cagri sayaclari
+    task_id = Column(String(155), nullable=True, unique=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_digital_research_active", "brand_profile_id",
+            unique=True, postgresql_where=text("status IN ('pending', 'running')"),
+        ),
+        Index("idx_digital_research_workspace", "brand_profile_id", "created_at"),
+    )
+

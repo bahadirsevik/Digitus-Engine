@@ -2187,4 +2187,212 @@ export const digitalAuditApi = {
     ),
 }
 
+// --- Dijital denetim Faz 2: araştırma, segmentler, briefler ---
+
+export interface ResearchItem {
+  text: string
+  date?: string
+  source_name?: string
+  /** false: içindeki rakam kaynakta bulunamadı; null/undefined: rakam yok */
+  numbers_ok?: boolean | null
+}
+
+export interface ResearchTheme {
+  theme: string
+  quote: string
+  source_name: string
+  numbers_ok?: boolean | null
+  quote_found: boolean
+}
+
+export interface ResearchClaim {
+  id: string
+  claim: string
+  value: string
+  unit: string
+  year: string
+  geography: string
+  source_name: string
+  check: {
+    status: 'found' | 'short' | 'not_found' | 'no_number'
+    source_url?: string
+    context?: string
+    year_in_context?: boolean | null
+  }
+}
+
+interface ResearchSectionBase {
+  status: 'ok' | 'failed' | 'unavailable'
+  error?: string
+  reason?: string
+}
+
+export interface SectorSection extends ResearchSectionBase {
+  verified?: boolean
+  definition?: ResearchItem[]
+  services?: ResearchItem[]
+  growth?: ResearchItem[]
+  developments?: ResearchItem[]
+  restrictions?: ResearchItem[]
+  directories?: ResearchItem[]
+  not_found?: string[]
+  claims?: ResearchClaim[]
+  sources?: { url: string; kind: string }[]
+}
+
+export interface AudienceSection extends ResearchSectionBase {
+  verified?: boolean
+  needs?: ResearchTheme[]
+  hesitations?: ResearchTheme[]
+  questions?: ResearchItem[]
+  trust?: ResearchItem[]
+  not_found?: string[]
+  question_keywords?: { keyword: string; monthly_volume: number }[]
+  sources?: { url: string; kind: string }[]
+}
+
+export interface DemandSection extends ResearchSectionBase {
+  keywords?: { keyword: string }[]
+  by_month?: { month: string; searches: number; index: number | null }[]
+  peak_months?: string[]
+  low_months?: string[]
+  bid_range?: { low_median: number; high_median: number; min: number; max: number } | null
+}
+
+export interface ResearchSegment {
+  name: string
+  need: string
+  stage: string
+  evidence: string
+  assumption: string
+  value_proposition: string
+  messages: string[]
+  warnings: string[]
+}
+
+export interface SynthesisSection extends ResearchSectionBase {
+  segments?: ResearchSegment[]
+  opportunities?: { text: string; evidence: string }[]
+  google_ads?: {
+    keyword_groups: { group: string; keywords: string[] }[]
+    negatives: string[]
+    note: string
+  }
+  meta_audiences?: {
+    segment: string
+    location: string
+    age_hypothesis: string
+    interests: string[]
+    note: string
+  }[]
+}
+
+export interface AdIdea {
+  segment: string
+  channel: string
+  insight: string
+  offer: string
+  message: string
+  cta: string
+  test_hypothesis: string
+  warnings: string[]
+  restriction_note: string | null
+}
+
+export interface CreativeBrief {
+  segment: string
+  channel: string
+  format: string
+  duration: string
+  hook: string
+  visual_direction: string
+  shot_list: string[]
+  copy: string
+  proof_needed: string[]
+  ab_variant: string
+  warnings: string[]
+  restriction_note: string | null
+}
+
+export interface ResearchBriefs {
+  status: 'pending' | 'ok' | 'failed'
+  error?: string
+  selection?: { segments: number[]; channels: string[] }
+  ad_ideas?: AdIdea[]
+  creative_briefs?: CreativeBrief[]
+}
+
+export interface DigitalResearchSummary {
+  id: number
+  status: AuditStatus
+  stage: 'research' | 'briefs'
+  progress: number
+  error_message: string | null
+  inputs: { sector?: string; geography?: string; focus?: string | null }
+  created_at: string
+  completed_at: string | null
+}
+
+export interface DigitalResearchDetail extends DigitalResearchSummary {
+  audit_id: number | null
+  sections: {
+    demand?: DemandSection
+    sector?: SectorSection
+    audience?: AudienceSection
+    synthesis?: SynthesisSection
+  }
+  briefs: ResearchBriefs | null
+  claim_overrides: string[]
+  usage: Record<string, number>
+  channels: Record<string, string>
+}
+
+export const digitalResearchApi = {
+  start: (brand_profile_id: number, body: { sector: string; geography: string; focus?: string }) =>
+    api.post<{ research_id: number; status: AuditStatus; reused: boolean }>(
+      '/digital-audit/research',
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  list: (brand_profile_id: number) =>
+    api.get<{ reports: DigitalResearchSummary[] }>('/digital-audit/research', {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  get: (reportId: number, brand_profile_id: number) =>
+    api.get<DigitalResearchDetail>(`/digital-audit/research/${reportId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  saveClaimOverrides: (reportId: number, brand_profile_id: number, overrides: string[]) =>
+    api.put<{ claim_overrides: string[] }>(
+      `/digital-audit/research/${reportId}/claims`,
+      { overrides },
+      { params: { brand_profile_id } }
+    ),
+
+  startBriefs: (
+    reportId: number,
+    brand_profile_id: number,
+    body: { segments: number[]; channels: string[] }
+  ) =>
+    api.post<{ research_id: number; status: AuditStatus }>(
+      `/digital-audit/research/${reportId}/briefs`,
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  exportReport: (
+    brand_profile_id: number,
+    params: { format: 'docx' | 'pdf'; audit_id?: number; research_id?: number }
+  ) =>
+    api.get('/digital-audit/export', {
+      params: { brand_profile_id, ...params },
+      responseType: 'blob',
+    }),
+}
+
 export default api

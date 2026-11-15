@@ -18,6 +18,7 @@ import {
   findingSummary,
   hostOf,
 } from './digitalAuditView'
+import DigitalResearch from './DigitalResearch'
 import './DigitalAudit.css'
 
 const POLL_MS = 3000
@@ -37,6 +38,7 @@ export default function DigitalAudit() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<'audit' | 'research'>('audit')
   // Workspace değişince uçuştaki eski yanıt yeni ekrana yazılmaz
   const scopeRef = useRef<number | undefined>(workspaceId)
   scopeRef.current = workspaceId
@@ -159,200 +161,235 @@ export default function DigitalAudit() {
         </div>
       </header>
 
-      {error && <ErrorBanner error={error} onDismiss={() => setError(null)} />}
-
-      <section className="glass-card audit-start">
-        <h2>Yeni denetim</h2>
-        <div className="audit-url-grid">
-          <label>
-            Marka sitesi
-            <input
-              className="input"
-              value={ownUrl}
-              onChange={(e) => setOwnUrl(e.target.value)}
-              placeholder="https://ornek.com"
-            />
-          </label>
-          {competitors.map((value, i) => (
-            <label key={i}>
-              Rakip {i + 1}
-              <input
-                className="input"
-                value={value}
-                onChange={(e) =>
-                  setCompetitors((cur) => cur.map((c, j) => (j === i ? e.target.value : c)))
-                }
-                placeholder="https://rakip.com (isteğe bağlı)"
-              />
-            </label>
-          ))}
-        </div>
-        <button className="btn btn-primary" onClick={start} disabled={starting || running}>
-          {starting || running ? (
-            <Loader2 size={18} className="animate-spin" />
-          ) : (
-            <Play size={18} />
-          )}
-          {running ? 'Denetim sürüyor' : 'Denetimi başlat'}
+      <div className="audit-history" role="tablist">
+        <button
+          role="tab"
+          aria-selected={tab === 'audit'}
+          className={`filter-btn ${tab === 'audit' ? 'active' : ''}`}
+          onClick={() => setTab('audit')}
+        >
+          Site denetimi
         </button>
-        <p className="audit-hint">
-          Site başına en fazla 10 sayfa ve 40 site içi bağlantı incelenir; bir marka ve üç rakip
-          yaklaşık 5-8 dakika sürer.
-        </p>
-      </section>
+        <button
+          role="tab"
+          aria-selected={tab === 'research'}
+          className={`filter-btn ${tab === 'research' ? 'active' : ''}`}
+          onClick={() => setTab('research')}
+        >
+          Araştırma ve fikir
+        </button>
+      </div>
 
-      {audits.length > 1 && (
-        <div className="audit-history">
-          {audits.map((a) => (
-            <button
-              key={a.id}
-              className={`filter-btn ${detail?.id === a.id ? 'active' : ''}`}
-              onClick={() => select(a.id)}
-            >
-              {new Date(a.created_at).toLocaleString('tr-TR')} · {AUDIT_STATUS_LABEL[a.status]}
-            </button>
-          ))}
-        </div>
+      {tab === 'research' && (
+        <DigitalResearch
+          workspaceId={workspaceId}
+          auditId={detail && !running ? detail.id : undefined}
+        />
       )}
-
-      {loading && !detail && <div className="loading-state">Yükleniyor...</div>}
-      {!loading && !detail && !error && (
-        <div className="empty-state">
-          <ClipboardCheck size={32} />
-          <p>Bu marka çalışmasında henüz denetim yok.</p>
-        </div>
-      )}
-
-      {detail && (
-        <>
-          <section className={`glass-card audit-status audit-status-${detail.status}`}>
-            <div className="audit-status-line">
-              {running && <Loader2 size={18} className="animate-spin" />}
-              <strong>{AUDIT_STATUS_LABEL[detail.status]}</strong>
-              {running && <span>%{detail.progress}</span>}
-              <span className="audit-date">
-                {new Date(detail.created_at).toLocaleString('tr-TR')}
-              </span>
-            </div>
-            {detail.error_message && <p className="audit-status-note">{detail.error_message}</p>}
-            <ul className="audit-targets">
-              {targets.map((t) => (
-                <li key={t.id}>
-                  <span className="audit-target-kind">{t.kind === 'own' ? 'Marka' : 'Rakip'}</span>
-                  <span className="audit-target-host">{hostOf(t.url)}</span>
-                  <span
-                    className={`audit-chip audit-chip-${t.status === 'completed' ? 'ok' : 'muted'}`}
-                  >
-                    {TARGET_STATUS_LABEL[t.status]}
-                  </span>
-                  {t.status === 'completed' && <span>{t.pages_checked} sayfa incelendi</span>}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {sections.map(({ section, rows }) => (
-            <section key={section} className="glass-card audit-section">
-              <h2>{SECTION_LABEL[section] || section}</h2>
-              <div className="audit-table-wrap">
-                <table className="audit-table">
-                  <thead>
-                    <tr>
-                      <th>Kontrol</th>
-                      {targets.map((t) => (
-                        <th key={t.id}>
-                          {hostOf(t.url)}
-                          <small>{t.kind === 'own' ? 'Marka' : 'Rakip'}</small>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.check}>
-                        <th scope="row">
-                          {row.label}
-                          {row.limits.length > 0 && (
-                            <details className="audit-limits">
-                              <summary>Sınırlar</summary>
-                              <ul>
-                                {row.limits.map((l) => (
-                                  <li key={l}>{l}</li>
-                                ))}
-                              </ul>
-                            </details>
-                          )}
-                        </th>
-                        {row.cells.map((f, i) => {
-                          const chip = findingChip(f)
-                          const summary = findingSummary(f)
-                          return (
-                            <td key={targets[i].id}>
-                              <span className={`audit-chip audit-chip-${chip.tone}`}>
-                                {chip.text}
-                              </span>
-                              {summary && <div className="audit-cell-summary">{summary}</div>}
-                              {f?.note && <div className="audit-cell-note">{f.note}</div>}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))}
-
-          <section className="glass-card audit-section">
-            <h2>Müşteriye sorulacaklar</h2>
-            <p className="audit-hint">
-              Dışarıdan görülemeyen maddeler. Cevaplar otomatik bulgulardan ayrı saklanır ve onları
-              değiştirmez.
-            </p>
-            <div className="audit-questions">
-              {detail.questions.map((q) => (
-                <div key={q.key} className="audit-question">
-                  <label htmlFor={`q-${q.key}`}>{q.label}</label>
-                  {q.options ? (
-                    <select
-                      id={`q-${q.key}`}
-                      className="input"
-                      value={answers[q.key]?.value || ''}
-                      onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
-                    >
-                      <option value="">Cevaplanmadı</option>
-                      {q.options.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      id={`q-${q.key}`}
-                      className="input"
-                      value={answers[q.key]?.value || ''}
-                      onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
-                    />
-                  )}
-                  <input
-                    className="input"
-                    aria-label={`${q.label} notu`}
-                    placeholder="Not (isteğe bağlı)"
-                    value={answers[q.key]?.note || ''}
-                    onChange={(e) => setAnswer(q.key, 'note', e.target.value)}
-                  />
-                </div>
-              ))}
-            </div>
-            <button className="btn btn-secondary" onClick={saveAnswers} disabled={saving}>
-              <Save size={18} />
-              {saved ? 'Kaydedildi' : 'Cevapları kaydet'}
-            </button>
-          </section>
-        </>
-      )}
+      {tab === 'audit' && renderAudit()}
     </div>
   )
+
+  function renderAudit() {
+    return (
+      <>
+        {error && <ErrorBanner error={error} onDismiss={() => setError(null)} />}
+
+        <section className="glass-card audit-start">
+          <h2>Yeni denetim</h2>
+          <div className="audit-url-grid">
+            <label>
+              Marka sitesi
+              <input
+                className="input"
+                value={ownUrl}
+                onChange={(e) => setOwnUrl(e.target.value)}
+                placeholder="https://ornek.com"
+              />
+            </label>
+            {competitors.map((value, i) => (
+              <label key={i}>
+                Rakip {i + 1}
+                <input
+                  className="input"
+                  value={value}
+                  onChange={(e) =>
+                    setCompetitors((cur) => cur.map((c, j) => (j === i ? e.target.value : c)))
+                  }
+                  placeholder="https://rakip.com (isteğe bağlı)"
+                />
+              </label>
+            ))}
+          </div>
+          <button className="btn btn-primary" onClick={start} disabled={starting || running}>
+            {starting || running ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Play size={18} />
+            )}
+            {running ? 'Denetim sürüyor' : 'Denetimi başlat'}
+          </button>
+          <p className="audit-hint">
+            Site başına en fazla 10 sayfa ve 40 site içi bağlantı incelenir; bir marka ve üç rakip
+            yaklaşık 5-8 dakika sürer.
+          </p>
+        </section>
+
+        {audits.length > 1 && (
+          <div className="audit-history">
+            {audits.map((a) => (
+              <button
+                key={a.id}
+                className={`filter-btn ${detail?.id === a.id ? 'active' : ''}`}
+                onClick={() => select(a.id)}
+              >
+                {new Date(a.created_at).toLocaleString('tr-TR')} · {AUDIT_STATUS_LABEL[a.status]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {loading && !detail && <div className="loading-state">Yükleniyor...</div>}
+        {!loading && !detail && !error && (
+          <div className="empty-state">
+            <ClipboardCheck size={32} />
+            <p>Bu marka çalışmasında henüz denetim yok.</p>
+          </div>
+        )}
+
+        {detail && (
+          <>
+            <section className={`glass-card audit-status audit-status-${detail.status}`}>
+              <div className="audit-status-line">
+                {running && <Loader2 size={18} className="animate-spin" />}
+                <strong>{AUDIT_STATUS_LABEL[detail.status]}</strong>
+                {running && <span>%{detail.progress}</span>}
+                <span className="audit-date">
+                  {new Date(detail.created_at).toLocaleString('tr-TR')}
+                </span>
+              </div>
+              {detail.error_message && <p className="audit-status-note">{detail.error_message}</p>}
+              <ul className="audit-targets">
+                {targets.map((t) => (
+                  <li key={t.id}>
+                    <span className="audit-target-kind">
+                      {t.kind === 'own' ? 'Marka' : 'Rakip'}
+                    </span>
+                    <span className="audit-target-host">{hostOf(t.url)}</span>
+                    <span
+                      className={`audit-chip audit-chip-${t.status === 'completed' ? 'ok' : 'muted'}`}
+                    >
+                      {TARGET_STATUS_LABEL[t.status]}
+                    </span>
+                    {t.status === 'completed' && <span>{t.pages_checked} sayfa incelendi</span>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {sections.map(({ section, rows }) => (
+              <section key={section} className="glass-card audit-section">
+                <h2>{SECTION_LABEL[section] || section}</h2>
+                <div className="audit-table-wrap">
+                  <table className="audit-table">
+                    <thead>
+                      <tr>
+                        <th>Kontrol</th>
+                        {targets.map((t) => (
+                          <th key={t.id}>
+                            {hostOf(t.url)}
+                            <small>{t.kind === 'own' ? 'Marka' : 'Rakip'}</small>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.check}>
+                          <th scope="row">
+                            {row.label}
+                            {row.limits.length > 0 && (
+                              <details className="audit-limits">
+                                <summary>Sınırlar</summary>
+                                <ul>
+                                  {row.limits.map((l) => (
+                                    <li key={l}>{l}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </th>
+                          {row.cells.map((f, i) => {
+                            const chip = findingChip(f)
+                            const summary = findingSummary(f)
+                            return (
+                              <td key={targets[i].id}>
+                                <span className={`audit-chip audit-chip-${chip.tone}`}>
+                                  {chip.text}
+                                </span>
+                                {summary && <div className="audit-cell-summary">{summary}</div>}
+                                {f?.note && <div className="audit-cell-note">{f.note}</div>}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
+
+            <section className="glass-card audit-section">
+              <h2>Müşteriye sorulacaklar</h2>
+              <p className="audit-hint">
+                Dışarıdan görülemeyen maddeler. Cevaplar otomatik bulgulardan ayrı saklanır ve
+                onları değiştirmez.
+              </p>
+              <div className="audit-questions">
+                {detail.questions.map((q) => (
+                  <div key={q.key} className="audit-question">
+                    <label htmlFor={`q-${q.key}`}>{q.label}</label>
+                    {q.options ? (
+                      <select
+                        id={`q-${q.key}`}
+                        className="input"
+                        value={answers[q.key]?.value || ''}
+                        onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
+                      >
+                        <option value="">Cevaplanmadı</option>
+                        {q.options.map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={`q-${q.key}`}
+                        className="input"
+                        value={answers[q.key]?.value || ''}
+                        onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
+                      />
+                    )}
+                    <input
+                      className="input"
+                      aria-label={`${q.label} notu`}
+                      placeholder="Not (isteğe bağlı)"
+                      value={answers[q.key]?.note || ''}
+                      onChange={(e) => setAnswer(q.key, 'note', e.target.value)}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button className="btn btn-secondary" onClick={saveAnswers} disabled={saving}>
+                <Save size={18} />
+                {saved ? 'Kaydedildi' : 'Cevapları kaydet'}
+              </button>
+            </section>
+          </>
+        )}
+      </>
+    )
+  }
 }
