@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ClipboardCheck, Loader2, Play, Save } from 'lucide-react'
+import { ClipboardCheck, Download, Loader2, Play, Save } from 'lucide-react'
 import {
   apiErrorMessage,
   digitalAuditApi,
+  digitalResearchApi,
+  downloadBlobResponse,
   type AuditAnswers,
   type DigitalAuditDetail,
   type DigitalAuditSummary,
@@ -140,6 +142,19 @@ export default function DigitalAudit() {
       setError(`Cevaplar kaydedilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const download = async (format: 'docx' | 'pdf') => {
+    if (!workspaceId || !detail) return
+    try {
+      const res = await digitalResearchApi.exportReport(workspaceId, {
+        format,
+        audit_id: detail.id,
+      })
+      downloadBlobResponse(res, `dijital-denetim.${format}`)
+    } catch (err) {
+      setError(`Rapor indirilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
   }
 
@@ -352,6 +367,22 @@ export default function DigitalAudit() {
                   </li>
                 ))}
               </ul>
+              {!running && (
+                <>
+                  <div className="research-actions">
+                    <button className="btn btn-secondary" onClick={() => download('docx')}>
+                      <Download size={18} /> Denetim raporu (Word)
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => download('pdf')}>
+                      <Download size={18} /> Denetim raporu (PDF)
+                    </button>
+                  </div>
+                  <p className="audit-hint">
+                    Yalnızca site denetimini içerir. Araştırma, segment ve fikirlerle birleşik rapor
+                    "Araştırma ve fikir" sekmesinden indirilir.
+                  </p>
+                </>
+              )}
             </section>
 
             {sections.map(({ section, rows }) => (

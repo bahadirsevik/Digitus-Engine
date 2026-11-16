@@ -3,13 +3,21 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import DigitalAudit from './DigitalAudit'
 import { buildSections, findingChip, findingSummary } from './digitalAuditView'
 import { useBrandStore } from '../stores/brandStore'
-import { digitalAuditApi, type AuditFinding, type DigitalAuditDetail } from '../services/api'
+import {
+  digitalAuditApi,
+  digitalResearchApi,
+  downloadBlobResponse,
+  type AuditFinding,
+  type DigitalAuditDetail,
+} from '../services/api'
 
 vi.mock('../services/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/api')>()
   return {
     ...actual,
     digitalAuditApi: { start: vi.fn(), list: vi.fn(), get: vi.fn(), saveAnswers: vi.fn() },
+    digitalResearchApi: { ...actual.digitalResearchApi, exportReport: vi.fn() },
+    downloadBlobResponse: vi.fn(),
   }
 })
 
@@ -149,6 +157,17 @@ describe('DigitalAudit sayfası', () => {
     expect(cells[1]).not.toHaveTextContent('Görülmedi')
     expect(screen.getByText('Site erişimi engelledi')).toBeInTheDocument()
     expect(api.get).toHaveBeenCalledWith(7, 3)
+  })
+
+  it('denetim raporunu seçili denetimle indirir', async () => {
+    api.list.mockReturnValue(ok({ audits: [DETAIL] }))
+    api.get.mockReturnValue(ok(DETAIL))
+    vi.mocked(digitalResearchApi.exportReport).mockReturnValue(ok(new Blob()))
+    render(<DigitalAudit />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Denetim raporu \(PDF\)/ }))
+    await waitFor(() => expect(downloadBlobResponse).toHaveBeenCalled())
+    expect(digitalResearchApi.exportReport).toHaveBeenCalledWith(3, { format: 'pdf', audit_id: 7 })
   })
 
   it('formu workspace bilgisiyle doldurur ve denetimi başlatır', async () => {
