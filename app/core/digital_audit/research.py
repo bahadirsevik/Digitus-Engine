@@ -279,6 +279,16 @@ def question_keywords(db, brand_profile_id: int) -> List[Dict]:
     return out[:MAX_QUESTION_KEYWORDS]
 
 
+def calendar_series(raw: List[Dict]) -> List[Dict]:
+    """Google Ads ham serisi -> takvim ayli, tarihe gore sirali seri.
+
+    Google Ads 'month' alani takvim ayi degil enum'dur: OCAK=2 ... ARALIK=13 (0/1 = bilinmiyor).
+    """
+    points = [{"year": p["year"], "month": p["month"] - 1, "searches": p["monthly_searches"]}
+              for p in raw or [] if 2 <= p.get("month", 0) <= 13]
+    return sorted(points, key=lambda p: (p["year"], p["month"]))
+
+
 def summarize_demand(keywords: List[Dict]) -> Dict:
     """Aylik serilerden takvim ayi toplamlari + teklif araligi. Saf fonksiyon."""
     by_month = [0] * 12
@@ -341,8 +351,7 @@ def collect_demand(db, workspace, ads_service=None) -> Dict:
     keywords = [
         {"keyword": row.keyword, "avg_monthly_searches": row.avg_monthly_searches,
          "bid_low": row.cpc_low or None, "bid_high": row.cpc_high or None,
-         "series": [{"year": p["year"], "month": p["month"], "searches": p["monthly_searches"]}
-                    for p in row.monthly_volumes_raw]}
+         "series": calendar_series(row.monthly_volumes_raw)}
         for row in rows if row.keyword.casefold() in wanted
     ]
     if not keywords:

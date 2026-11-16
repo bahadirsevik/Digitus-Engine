@@ -233,6 +233,20 @@ def test_demand_summary_finds_peak_and_low_months():
     assert summary["bid_range"] == {"low_median": 3.0, "high_median": 9.0, "min": 2.0, "max": 10.0}
 
 
+def test_google_ads_month_enum_becomes_calendar_month():
+    """Google Ads'te OCAK=2, ARALIK=13: Ocak ve Aralik korunur, toplam degismez, sira tarihe gore."""
+    raw = [{"year": 2026, "month": 2, "monthly_searches": 500}]  # Ocak 2026, sona ait ama basta gelmis
+    raw += [{"year": 2025, "month": m, "monthly_searches": 100} for m in range(3, 14)]  # Subat-Aralik 2025
+    raw += [{"year": 2025, "month": 1, "monthly_searches": 999}]  # UNKNOWN: atilir
+    series = research.calendar_series(raw)
+    assert [(p["year"], p["month"]) for p in series][:1] == [(2025, 2)] and series[-1] == {
+        "year": 2026, "month": 1, "searches": 500}
+    summary = research.summarize_demand([{"keyword": "a", "series": series}])
+    by_month = {m["month"]: m["searches"] for m in summary["by_month"]}
+    assert by_month["Ocak"] == 500 and by_month["Aralık"] == 100 and sum(by_month.values()) == 1600
+    assert summary["peak_months"] == ["Ocak"] and "Ocak" not in summary["low_months"]
+
+
 def test_demand_summary_without_series_is_empty():
     assert research.summarize_demand([{"keyword": "a", "series": []}])["by_month"] == []
 
