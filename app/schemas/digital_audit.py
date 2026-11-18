@@ -20,6 +20,8 @@ class StartAuditRequest(BaseModel):
 class AnswerItem(BaseModel):
     value: Optional[str] = Field(None, max_length=300)
     note: Optional[str] = Field(None, max_length=1000)
+    # Analist kaniti: source, checked_at (YYYY-AA-GG), verified_by, period, account
+    evidence: Optional[Dict[str, Optional[str]]] = None
 
 
 class AnswersRequest(BaseModel):

@@ -6,6 +6,8 @@ import {
   digitalResearchApi,
   downloadBlobResponse,
   type AuditAnswers,
+  type AuditEvidence,
+  type AuditQuestion,
   type DigitalAuditDetail,
   type DigitalAuditSummary,
 } from '../services/api'
@@ -28,6 +30,14 @@ const POLL_MS = 3000
 const MAX_COMPETITORS = 3
 const MAX_KEYWORDS = 10
 const isActive = (status?: string) => status === 'pending' || status === 'running'
+
+const EVIDENCE_FIELDS: [keyof AuditEvidence, string, string][] = [
+  ['source', 'Kaynak (ör. GA4 paneli, Search Console dışa aktarımı)', 'text'],
+  ['checked_at', 'Kontrol tarihi', 'date'],
+  ['verified_by', 'Doğrulayan kişi', 'text'],
+  ['period', 'Dönem (ör. son 28 gün)', 'text'],
+  ['account', 'Hesap / property (varsa)', 'text'],
+]
 
 export default function DigitalAudit() {
   const workspace = useBrandStore((s) => s.activeWorkspace)
@@ -160,6 +170,70 @@ export default function DigitalAudit() {
 
   const setAnswer = (key: string, field: 'value' | 'note', text: string) =>
     setAnswers((cur) => ({ ...cur, [key]: { ...cur[key], [field]: text } }))
+  const setEvidence = (key: string, field: keyof AuditEvidence, text: string) =>
+    setAnswers((cur) => ({
+      ...cur,
+      [key]: { ...cur[key], evidence: { ...cur[key]?.evidence, [field]: text } },
+    }))
+
+  const questionField = (q: AuditQuestion) => (
+    <div key={q.key} className="audit-question">
+      <label htmlFor={`q-${q.key}`}>
+        {q.label}
+        {q.group !== 'brief' && answers[q.key]?.value && (
+          <span className="audit-answer-tag">
+            {answers[q.key]?.evidence?.source ? 'Doğrulandı' : 'Beyan'}
+          </span>
+        )}
+      </label>
+      {q.options ? (
+        <select
+          id={`q-${q.key}`}
+          className="input"
+          value={answers[q.key]?.value || ''}
+          onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
+        >
+          <option value="">Cevaplanmadı</option>
+          {q.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          id={`q-${q.key}`}
+          className="input"
+          value={answers[q.key]?.value || ''}
+          onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
+        />
+      )}
+      <input
+        className="input"
+        aria-label={`${q.label} notu`}
+        placeholder="Not (isteğe bağlı)"
+        value={answers[q.key]?.note || ''}
+        onChange={(e) => setAnswer(q.key, 'note', e.target.value)}
+      />
+      {q.group !== 'brief' && (
+        <details className="audit-evidence" open={!!answers[q.key]?.evidence?.source}>
+          <summary>Analist kanıtı</summary>
+          {EVIDENCE_FIELDS.map(([field, label, type]) => (
+            <input
+              key={field}
+              className="input"
+              type={type}
+              aria-label={`${q.label} ${label}`}
+              title={label}
+              placeholder={label}
+              value={answers[q.key]?.evidence?.[field] || ''}
+              onChange={(e) => setEvidence(q.key, field, e.target.value)}
+            />
+          ))}
+        </details>
+      )}
+    </div>
+  )
 
   if (!workspaceId) {
     return (
@@ -447,46 +521,26 @@ export default function DigitalAudit() {
             )}
 
             <section className="glass-card audit-section">
+              {detail.questions.some((q) => q.group === 'brief') && (
+                <>
+                  <h2>Analist brifi</h2>
+                  <p className="audit-hint">
+                    Segment ve brief üretiminin bağlamı. Burada bir şey değişirse önceki segment ve
+                    briefler güncel sayılmaz; yeniden üretilmeleri gerekir.
+                  </p>
+                  <div className="audit-questions">
+                    {detail.questions.filter((q) => q.group === 'brief').map(questionField)}
+                  </div>
+                </>
+              )}
               <h2>Müşteriye sorulacaklar</h2>
               <p className="audit-hint">
                 Dışarıdan görülemeyen maddeler. Cevaplar otomatik bulgulardan ayrı saklanır ve
-                onları değiştirmez.
+                onları değiştirmez. Kanıt girilmeyen cevap raporda "Beyan" olarak, kaynağı, kontrol
+                tarihi ve doğrulayan kişi girilen cevap "Doğrulandı" olarak etiketlenir.
               </p>
               <div className="audit-questions">
-                {detail.questions.map((q) => (
-                  <div key={q.key} className="audit-question">
-                    <label htmlFor={`q-${q.key}`}>{q.label}</label>
-                    {q.options ? (
-                      <select
-                        id={`q-${q.key}`}
-                        className="input"
-                        value={answers[q.key]?.value || ''}
-                        onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
-                      >
-                        <option value="">Cevaplanmadı</option>
-                        {q.options.map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        id={`q-${q.key}`}
-                        className="input"
-                        value={answers[q.key]?.value || ''}
-                        onChange={(e) => setAnswer(q.key, 'value', e.target.value)}
-                      />
-                    )}
-                    <input
-                      className="input"
-                      aria-label={`${q.label} notu`}
-                      placeholder="Not (isteğe bağlı)"
-                      value={answers[q.key]?.note || ''}
-                      onChange={(e) => setAnswer(q.key, 'note', e.target.value)}
-                    />
-                  </div>
-                ))}
+                {detail.questions.filter((q) => q.group !== 'brief').map(questionField)}
               </div>
               <button className="btn btn-secondary" onClick={saveAnswers} disabled={saving}>
                 <Save size={18} />

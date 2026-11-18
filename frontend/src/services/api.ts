@@ -2140,9 +2140,23 @@ export interface AuditQuestion {
   key: string
   label: string
   options: string[] | null
+  /** brief: analist bağlamı · account: müşteriye sorulur, kanıtla doğrulanabilir */
+  group?: 'brief' | 'account'
 }
 
-export type AuditAnswers = Record<string, { value?: string | null; note?: string | null }>
+/** Analist kanıtı: ilk üçü birlikte zorunlu; dolu ise cevap "Doğrulandı", değilse "Beyan" */
+export interface AuditEvidence {
+  source?: string
+  checked_at?: string
+  verified_by?: string
+  period?: string
+  account?: string
+}
+
+export type AuditAnswers = Record<
+  string,
+  { value?: string | null; note?: string | null; evidence?: AuditEvidence }
+>
 
 export interface DigitalAuditSummary {
   id: number

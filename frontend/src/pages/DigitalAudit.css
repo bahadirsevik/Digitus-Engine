@@ -211,6 +211,26 @@
   gap: 6px;
 }
 
+.audit-answer-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.audit-evidence summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.audit-evidence .input {
+  margin-top: 6px;
+  width: 100%;
+}
+
 /* --- Araştırma ve fikir --- */
 .audit-section h3 {
   font-size: 14px;

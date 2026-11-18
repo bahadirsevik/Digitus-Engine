@@ -7,7 +7,7 @@ gec kalan worker yazamaz.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -27,9 +27,19 @@ LEASE_SECONDS = 600
 STALE_MESSAGE = "Denetim zamanında tamamlanmadı (sunucu yanıt vermeyi bıraktı). O ana kadar toplanan sonuçlar korundu."
 TARGET_DONE = ("completed", "blocked")
 
-# Disaridan gorulemeyen maddeler: musteriye sorulur. Otomatik bulgulardan ayri saklanir.
+# Disaridan gorulemeyen maddeler. Otomatik bulgulardan ayri saklanir.
+# group "brief": analistin doldurdugu baglam (sentezin girdisi).
+# group "account": musteriye sorulur; analist kanit girerse [Dogrulandi], girmezse [Beyan] kalir.
 _YES_NO = ["Evet", "Hayır", "Bilinmiyor"]
 QUESTIONS: List[Dict] = [
+    {"key": "business_model", "label": "İş modeli nedir?",
+     "options": ["E-ticaret", "Talep (lead) toplama", "Yerel hizmet / mağaza", "B2B satış", "Diğer"]},
+    {"key": "main_conversion", "label": "Ana dönüşüm hedefi nedir? (satış, form, telefon...)", "options": None},
+    {"key": "ad_channels", "label": "Şu an reklam verilen kanallar hangileri?", "options": None},
+    {"key": "main_social", "label": "Ana sosyal medya kanalı hangisi?",
+     "options": ["Instagram", "Facebook", "YouTube", "LinkedIn", "TikTok", "X", "Yok"]},
+    {"key": "competitor_rationale", "label": "Rakipler neye göre seçildi?", "options": None},
+    {"key": "accessible_accounts", "label": "Analistin erişebildiği müşteri hesapları hangileri?", "options": None},
     {"key": "search_console", "label": "Google Search Console bağlı mı?", "options": _YES_NO},
     {"key": "conversion_tracking", "label": "Dönüşüm takibi (form, arama, satış) tanımlı mı?", "options": _YES_NO},
     {"key": "remarketing", "label": "Remarketing yapılıyor mu?", "options": _YES_NO},
@@ -39,7 +49,12 @@ QUESTIONS: List[Dict] = [
     {"key": "domain_owner", "label": "Alan adı ve hosting hesabı kimde?", "options": None},
     {"key": "gbp_claimed", "label": "Google İşletme Profili sahiplenilmiş mi?", "options": _YES_NO},
 ]
+for _i, _q in enumerate(QUESTIONS):
+    _q["group"] = "brief" if _i < 6 else "account"
 _QUESTION_KEYS = {q["key"] for q in QUESTIONS}
+# Analist kaniti: ilk ucu zorunlu; donem ve hesap/property varsa yazilir.
+EVIDENCE_FIELDS = ("source", "checked_at", "verified_by", "period", "account")
+_EVIDENCE_REQUIRED = EVIDENCE_FIELDS[:3]
 
 
 class AuditInputError(ValueError):
@@ -256,7 +271,10 @@ def run_audit(db: Session, audit_id: int, task_id: str) -> str:
 
 
 def save_answers(db: Session, audit: DigitalAudit, answers: Dict[str, Dict]) -> None:
-    """Soru formu cevaplari. Otomatik bulgulara DOKUNMAZ; ayri alanda saklanir."""
+    """Soru formu cevaplari. Otomatik bulgulara DOKUNMAZ; ayri alanda saklanir.
+
+    Kanit (evidence) yalniz TAM girilirse kabul edilir: yarim kanit, beyani dogrulanmis
+    gibi gostermesin diye reddedilir. Kanitli cevap [Dogrulandi], kanitsiz [Beyan]dir."""
     unknown = set(answers) - _QUESTION_KEYS
     if unknown:
         raise AuditInputError(f"Bilinmeyen soru: {sorted(unknown)[0]}")
@@ -264,8 +282,19 @@ def save_answers(db: Session, audit: DigitalAudit, answers: Dict[str, Dict]) -> 
     for key, item in answers.items():
         value = ((item or {}).get("value") or "").strip()[:300]
         note = ((item or {}).get("note") or "").strip()[:1000]
+        evidence = {f: str(((item or {}).get("evidence") or {}).get(f) or "").strip()[:200] for f in EVIDENCE_FIELDS}
+        evidence = {f: text for f, text in evidence.items() if text}
+        if evidence:
+            if not value or any(f not in evidence for f in _EVIDENCE_REQUIRED):
+                raise AuditInputError("Kanıt için cevap, kaynak, kontrol tarihi ve doğrulayan kişi birlikte girilmeli.")
+            try:
+                checked = date.fromisoformat(evidence["checked_at"])
+            except ValueError:
+                raise AuditInputError("Kontrol tarihi YYYY-AA-GG biçiminde olmalı.")
+            if checked > _now().date():
+                raise AuditInputError("Kontrol tarihi gelecekte olamaz.")
         if value or note:
-            cleaned[key] = {"value": value or None, "note": note or None}
+            cleaned[key] = {"value": value or None, "note": note or None, **({"evidence": evidence} if evidence else {})}
     audit.answers = cleaned
     db.commit()
 

@@ -242,3 +242,27 @@ def test_answers_are_stored_apart_from_findings(client, db_session, make_workspa
     assert body["answers"]["crm"]["note"] == "HubSpot"
     assert body["targets"][0]["findings"] == [FINDING]  # otomatik bulgu degismedi
     assert client.put(url, json={"answers": {"olmayan_soru": {"value": "x"}}}).status_code == 400
+
+
+def test_evidence_must_be_complete_to_count_as_verified(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    audit_id = start(client, ws).json()["audit_id"]
+    url = f"/api/v1/digital-audit/audits/{audit_id}/answers?brand_profile_id={ws.id}"
+
+    def put(evidence, value="Evet"):
+        return client.put(url, json={"answers": {"search_console": {"value": value, "evidence": evidence}}})
+
+    full = {"source": "Search Console paneli", "checked_at": "2026-11-17", "verified_by": "Analist A",
+            "period": "son 28 gün", "account": "sc-domain:marka.test"}
+    # Yarim kanit beyani dogrulanmis gibi gosteremez
+    assert put({"source": "Search Console paneli"}).status_code == 400
+    assert put({**full, "checked_at": "17.11.2026"}).status_code == 400
+    assert put({**full, "checked_at": "2999-01-01"}).status_code == 400
+    assert put(full, value="").status_code == 400
+    assert db_session.get(DigitalAudit, audit_id).answers is None
+    assert put(full).json()["answers"]["search_console"]["evidence"] == full
+    # Bos kanit alanlari beyan olarak kalir
+    saved = put({"source": " ", "period": ""}).json()["answers"]["search_console"]
+    assert saved == {"value": "Evet", "note": None}
+    groups = {q["key"]: q["group"] for q in get(client, audit_id, ws).json()["questions"]}
+    assert groups["business_model"] == "brief" and groups["search_console"] == "account"

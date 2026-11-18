@@ -423,3 +423,42 @@ def test_other_workspace_cannot_reach_report(client, db_session, make_workspace,
     assert client.get(f"/api/v1/digital-audit/research?{other}").json() == {"reports": []}
     assert client.get("/api/v1/digital-audit/research?brand_profile_id=999999").status_code == 404
     assert start(client, ws_b).json()["reused"] is False  # A'nin arastirmasi B'yi engellemez
+
+
+def test_changed_brief_or_evidence_makes_synthesis_stale(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    audit = DigitalAudit(brand_profile_id=ws.id, status="completed",
+                         answers={"business_model": {"value": "E-ticaret", "note": None},
+                                  "crm": {"value": "Evet", "note": None}})
+    db_session.add(audit)
+    db_session.commit()
+    report_id = start(client, ws).json()["research_id"]
+    ai = FakeAI()
+    assert run(db_session, dispatched, ai) == "completed"
+    url = _urls(report_id, ws)
+    assert get(client, report_id, ws).json()["synthesis_stale"] is False
+    # Brif, beyan ve dogrulanmis veri modele AYRI etiketlerle gider
+    prompt = ai.prompts["audit_synthesis"]
+    assert '"analist_brifi": {"İş modeli nedir?": {"cevap": "E-ticaret"}}' in prompt
+    assert '"musteri_beyani": {"CRM ya da talep takip yöntemi var mı?": {"cevap": "Evet"}}' in prompt
+    assert "dogrulanmis_hesap_verisi\"" not in prompt
+
+    answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
+    evidence = {"source": "HubSpot paneli", "checked_at": "2026-11-17", "verified_by": "Analist A",
+                "account": "hub-123"}
+    body = {"business_model": {"value": "E-ticaret"}, "crm": {"value": "Evet", "evidence": evidence}}
+    assert client.put(answers, json={"answers": body}).status_code == 200
+    stale = get(client, report_id, ws).json()
+    assert stale["synthesis_stale"] is True
+    assert "Acil hasta" not in _blocks(db_session, ws, report_id)
+    assert client.post(url["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 409
+
+    assert client.post(url["synthesis"]).status_code == 202
+    ai = FakeAI()
+    assert run(db_session, dispatched, ai) == "completed"
+    assert get(client, report_id, ws).json()["synthesis_stale"] is False
+    prompt = ai.prompts["audit_synthesis"]
+    assert '"dogrulanmis_hesap_verisi": {"CRM ya da talep takip yöntemi var mı?"' in prompt
+    assert "HubSpot paneli" in prompt
+    # Dogrulayan kisi ve hesap bilgisi yapay zekaya gitmez
+    assert "Analist A" not in prompt and "hub-123" not in prompt

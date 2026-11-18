@@ -19,9 +19,13 @@ Block = Tuple  # ("h1"|"h2"|"p", text) | ("bullets", [text]) | ("table", [header
 _ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _SECTION = {"site": "Web sitesi", "seo": "SEO", "tracking": "Ölçümleme", "contact": "İletişim kanalları",
             "ecommerce": "E-ticaret", "speed": "Hız"}
-LEGEND = ("[Gözlem] otomatik ölçüm · [Beyan] müşteri cevabı · [Kaynak] kaynakta doğrulanan bilgi · "
+LEGEND = ("[Gözlem] otomatik ölçüm · [Beyan] müşteri cevabı, doğrulanmadı · "
+          "[Doğrulandı] analistin kaynak göstererek doğruladığı hesap verisi · [Kaynak] kaynakta doğrulanan bilgi · "
           "[Hipotez] bulgulardan türetilen, doğrulanması gereken yorum")
-STALE_NOTE = ("Rapora alınan rakamlar bu bölüm üretildikten sonra değişti; bölüm güncel olmadığı için "
+_EVIDENCE = (("source", "kaynak"), ("checked_at", "kontrol tarihi"), ("verified_by", "doğrulayan"),
+             ("period", "dönem"), ("account", "hesap"))
+STALE_NOTE = ("Rapora alınan rakamlar ya da brif/beyan bilgileri bu bölüm üretildikten sonra değişti; "
+              "bölüm güncel olmadığı için "
               "rapora alınmadı. Yeniden üretilmesi gerekir.")
 
 
@@ -250,11 +254,25 @@ def _audit_blocks(audit) -> List[Block]:
                              "takipçi ve etkileşim sayıları bu denetimde ölçülmedi. Bağlantı görülmemesi hesabın "
                              "olmadığı anlamına gelmez.")]
     answers = audit.answers or {}
-    declared = [f"{q['label']} {answers[q['key']].get('value') or ''} "
-                f"{('— ' + answers[q['key']]['note']) if answers[q['key']].get('note') else ''}".strip()
-                for q in QUESTIONS if q["key"] in answers]
-    if declared:
-        blocks += [("h2", "Müşteri beyanları [Beyan]"), ("bullets", declared)]
+    groups: Dict[str, List[str]] = {"brief": [], "account": [], "verified": []}
+    for q in QUESTIONS:
+        a = answers.get(q["key"])
+        if not a:
+            continue
+        text = f"{q['label']} {a.get('value') or ''} {('— ' + a['note']) if a.get('note') else ''}".strip()
+        ev = a.get("evidence")
+        if ev:
+            text += " (" + "; ".join(f"{name}: {ev[f]}" for f, name in _EVIDENCE if ev.get(f)) + ")"
+        groups["verified" if ev else q["group"]].append(text)
+    if groups["brief"]:
+        blocks += [("h2", "Analist brifi"), ("bullets", groups["brief"])]
+    if groups["verified"]:
+        blocks += [("h2", "Doğrulanmış hesap verisi [Doğrulandı]"), ("bullets", groups["verified"]),
+                   ("p", "Analistin belirtilen kaynakta, belirtilen tarihte kontrol ettiği bilgilerdir; "
+                         "sistem bu hesaplara bağlanıp otomatik ölçüm yapmadı.")]
+    if groups["account"]:
+        blocks += [("h2", "Müşteri beyanları [Beyan]"), ("bullets", groups["account"]),
+                   ("p", "Müşterinin cevabıdır; hesap üzerinden doğrulanmadı.")]
     return blocks
 
 

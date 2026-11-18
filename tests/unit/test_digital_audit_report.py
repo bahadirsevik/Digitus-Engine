@@ -114,6 +114,27 @@ def test_speed_table_prints_only_collected_measurements():
     assert _table(blocks, "Gerçek kullanıcı verisi (mobil, kategori)")[1] == "Bu site için veri yok"
 
 
+def test_brief_declaration_and_verified_data_are_labelled_apart():
+    audit = _audit()
+    audit.answers = {
+        "business_model": {"value": "E-ticaret", "note": None},
+        "crm": {"value": "Evet", "note": "HubSpot"},
+        "search_console": {"value": "Evet", "note": None, "evidence": {
+            "source": "Search Console paneli", "checked_at": "2026-11-17", "verified_by": "Analist A",
+            "period": "son 28 gün"}},
+    }
+    blocks = report_doc.build_blocks(WORKSPACE, audit, None)
+
+    def after(heading):
+        return blocks[blocks.index(("h2", heading)) + 1][1]
+
+    assert after("Analist brifi") == ["İş modeli nedir? E-ticaret"]
+    assert after("Müşteri beyanları [Beyan]") == ["CRM ya da talep takip yöntemi var mı? Evet — HubSpot"]
+    assert after("Doğrulanmış hesap verisi [Doğrulandı]") == [
+        "Google Search Console bağlı mı? Evet (kaynak: Search Console paneli; kontrol tarihi: 2026-11-17; "
+        "doğrulayan: Analist A; dönem: son 28 gün)"]
+
+
 @pytest.mark.parametrize("fmt", ["docx", "pdf"])
 def test_audit_report_renders(fmt):
     content, _ = report_doc.render(WORKSPACE, _audit(), None, fmt)

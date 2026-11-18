@@ -202,4 +202,34 @@ describe('DigitalAudit sayfası', () => {
       expect(api.saveAnswers).toHaveBeenCalledWith(7, 3, { crm: { value: 'Evet' } })
     )
   })
+
+  it('brifi ayrı gösterir; kanıt girilen cevabı Doğrulandı, girilmeyeni Beyan etiketler', async () => {
+    const detail = {
+      ...DETAIL,
+      questions: [
+        { key: 'business_model', label: 'İş modeli nedir?', options: null, group: 'brief' },
+        { key: 'crm', label: 'CRM var mı?', options: ['Evet', 'Hayır'], group: 'account' },
+      ],
+      answers: { crm: { value: 'Evet', note: null } },
+    }
+    api.list.mockReturnValue(ok({ audits: [detail] }))
+    api.get.mockReturnValue(ok(detail))
+    api.saveAnswers.mockReturnValue(ok({ answers: detail.answers }))
+    render(<DigitalAudit />)
+
+    expect(await screen.findByRole('heading', { name: 'Analist brifi' })).toBeInTheDocument()
+    expect(screen.getByText('Beyan')).toBeInTheDocument()
+    // Brif sorusunda kanıt alanı yok
+    expect(screen.queryByLabelText(/İş modeli nedir\? Kaynak/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/CRM var mı\? Kaynak/), {
+      target: { value: 'HubSpot paneli' },
+    })
+    expect(screen.getByText('Doğrulandı')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Cevapları kaydet/ }))
+    await waitFor(() =>
+      expect(api.saveAnswers).toHaveBeenCalledWith(7, 3, {
+        crm: { value: 'Evet', note: null, evidence: { source: 'HubSpot paneli' } },
+      })
+    )
+  })
 })

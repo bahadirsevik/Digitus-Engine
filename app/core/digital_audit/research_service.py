@@ -116,7 +116,7 @@ def request_briefs(db: Session, report: DigitalResearch, segments: List[int], ch
     if not channels or any(c not in research.CHANNELS for c in channels):
         raise ResearchInputError("Geçerli en az bir kanal seçin.")
     if research.synthesis_stale(report):
-        raise ResearchStateError("Rakam kararları değişti; brief üretmeden önce segmentleri yenileyin.")
+        raise ResearchStateError("Rakam kararları ya da brif/beyan bilgileri değişti; brief üretmeden önce segmentleri yenileyin.")
     _requeue(db, report, "briefs",
              {"status": "pending", "selection": {"segments": segments, "channels": channels}})
 
@@ -215,10 +215,12 @@ def run_research(db: Session, report_id: int, task_id: str, ai, ads_service=None
             # degistirirse sonuc okuma aninda bayat gorunur (research.synthesis_stale).
             overrides = list(report.claim_overrides or [])
             used = research.claim_ids(sections.get("sector"), overrides)
+            answers_sha = research.answers_sha(audit.answers if audit else None)
             facts = research.build_facts(workspace, audit, sections, overrides)
             try:
                 if report.stage == "synthesis":
-                    sections["synthesis"] = {**research.synthesize(ai, facts, usage), "claim_ids": used}
+                    sections["synthesis"] = {**research.synthesize(ai, facts, usage), "claim_ids": used,
+                                             "answers_sha": answers_sha}
                     extra = {}
                 else:
                     selection = (report.briefs or {}).get("selection") or {}
@@ -308,10 +310,12 @@ def _run_research_steps(db, workspace, audit, inputs, sections, usage, ai, ads_s
             return False
 
     if raws:  # arastirma yoksa sentezin dayanagi yok
+        answers_sha = research.answers_sha(audit.answers if audit else None)
         facts = research.build_facts(workspace, audit, sections)
         synthesis = attempt("synthesis", lambda: research.synthesize(ai, facts, usage))
         if synthesis:
-            sections["synthesis"] = {**synthesis, "claim_ids": research.claim_ids(sections.get("sector"))}
+            sections["synthesis"] = {**synthesis, "claim_ids": research.claim_ids(sections.get("sector")),
+                                     "answers_sha": answers_sha}
     else:
         sections["synthesis"] = {"status": "failed", "error": "Araştırma sonuç vermediği için sentez yapılmadı."}
     return checkpoint(95)
