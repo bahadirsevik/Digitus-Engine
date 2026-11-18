@@ -17,9 +17,6 @@ from app.core.digital_audit.service import QUESTIONS
 Block = Tuple  # ("h1"|"h2"|"p", text) | ("bullets", [text]) | ("table", [header], [[cell]])
 
 _ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-_STATE = {"observed": "Gözlendi", "not_observed": "Gözlenmedi", "unknown": "Bilinmiyor",
-          "blocked": "Engellendi", "error": "Hata"}
-_ASSESSMENT = {"ok": "iyi", "warning": "uyarı", "problem": "sorun"}
 _SECTION = {"site": "Web sitesi", "seo": "SEO", "tracking": "Ölçümleme", "contact": "İletişim kanalları",
             "ecommerce": "E-ticaret", "speed": "Hız"}
 LEGEND = ("[Gözlem] otomatik ölçüm · [Beyan] müşteri cevabı · [Kaynak] kaynakta doğrulanan bilgi · "
@@ -28,30 +25,221 @@ STALE_NOTE = ("Rapora alınan rakamlar bu bölüm üretildikten sonra değişti;
               "rapora alınmadı. Yeniden üretilmesi gerekir.")
 
 
+_SECTION_ORDER = ("site", "seo", "tracking", "contact", "ecommerce")
+_TARGET_STATUS = {"pending": "bekliyor", "completed": "denetlendi", "blocked": "site erişimi engelledi",
+                  "failed": "denetlenemedi"}
+_PAGE_TYPE = {"iletisim": "İletişim", "hakkimizda": "Hakkımızda", "hizmet": "Hizmetler", "blog": "Blog",
+              "kvkk": "KVKK", "randevu": "Randevu", "fiyat": "Fiyat", "sss": "SSS"}
+_SOCIAL = {"instagram": "Instagram", "facebook": "Facebook", "youtube": "YouTube", "tiktok": "TikTok",
+           "linkedin": "LinkedIn", "x": "X"}
+# Siteye ozel kapsam notlari: bolum sinirlarinda tekrarlanmaz, site satirinda bir kez yazilir.
+_PER_SITE_LIMIT = re.compile(r"^(\d+ sayfa incelendi\.|Ana sayfanın içeriği JavaScript|Tarama bütçesi doldu"
+                             r"|Bu site için gerçek kullanıcı hız verisi yok)")  # sonuncusu hiz tablosunda site site yazar
+# Siteye gore degisen sayi hucrede zaten var; sinir cumlesi bolumde bir kez yazilsin.
+_LINK_COUNT = re.compile(r"^\d+ site içi bağlantı denetlendi; e")
+# Okunamayan hedefte her kontrole kopyalanan genel not: hucrede tekrarlanmaz.
+_GENERIC_NOTE = ("Sayfa içeriği okunamadığı", "Site açılamadığı")
+_SCORE_ROWS = (("performance", "Performans (mobil)"), ("seo", "SEO teknik kontrolü (mobil)"),
+               ("accessibility", "Erişilebilirlik (mobil)"), ("best-practices", "En iyi uygulamalar (mobil)"))
+_LAB_ROWS = (("largest-contentful-paint", "En büyük öğenin yüklenmesi, LCP (mobil)"),
+             ("cumulative-layout-shift", "Düzen kayması, CLS (mobil)"),
+             ("total-blocking-time", "Engelleme süresi, TBT (mobil)"))
+_FIELD = {"LARGEST_CONTENTFUL_PAINT_MS": "LCP", "CUMULATIVE_LAYOUT_SHIFT_SCORE": "CLS",
+          "INTERACTION_TO_NEXT_PAINT": "INP", "FIRST_CONTENTFUL_PAINT_MS": "FCP"}
+_FIELD_CATEGORY = {"FAST": "iyi", "AVERAGE": "orta", "SLOW": "zayıf"}
+_OUT_OF_SCOPE = "Kapsam dışı (rakipte ölçülmez)"
+
+
 def _host(url: str) -> str:
     return re.sub(r"^https?://(www\.)?", "", url or "").strip("/")
 
 
+def _status(f: Optional[Dict]) -> str:
+    """Ekrandaki etiketle ayni sozluk: olcum durumu ile degerlendirme karismaz."""
+    if not f:
+        return "Ölçülmedi"
+    if f["state"] != "observed":
+        return {"blocked": "Engellendi", "unknown": "Bilinmiyor", "error": "Hata"}.get(f["state"], "Görülmedi")
+    return {"ok": "İyi", "warning": "Uyarı", "problem": "Sorun"}.get(f.get("assessment") or "", "Görüldü")
+
+
+def _counts(parts, pages: int) -> str:
+    shown = [f"{n} {label}" for label, n in parts if n]
+    return f"{', '.join(shown) or 'eksik yok'} (incelenen {pages} sayfada)"
+
+
+def _summary(f: Dict, pages: int) -> str:
+    """Bulgunun saklanan degerinden kisa ozet. Toplanmayan bilgi URETILMEZ: deger yoksa bos doner."""
+    v = f.get("value")
+    if not v:
+        return ""
+    check = f["check"]
+    if check == "site.reachable":
+        return v.get("final_url") or (f"HTTP {v['http_status']}" if v.get("http_status") else "")
+    if check == "site.ssl":
+        return f"bitiş {v['expires']} ({v['days_left']} gün)" if v.get("expires") else ""
+    if check == "site.domain":
+        return " · ".join(filter(None, [v.get("expiration") and f"bitiş {v['expiration']}",
+                                        v.get("registration") and f"kayıt {v['registration']}", v.get("registrar")]))
+    if check in ("site.speed_mobile", "site.speed_desktop"):
+        score = (v.get("scores") or {}).get("performance")
+        return f"performans {score}/100" if score is not None else ""
+    if check == "site.mobile_viewport":
+        missing = v.get("pages_without_viewport") or []
+        return f"{len(missing)} sayfada ayar yok" if missing else ""
+    if check == "site.structure":
+        return ", ".join(_PAGE_TYPE.get(t, t) for t in v.get("page_types") or {})
+    if check == "site.cta":
+        return ", ".join(filter(None, [v.get("phone") and "telefon", v.get("whatsapp") and "WhatsApp",
+                                       v.get("forms") and "form"]))
+    if check == "site.broken_links":
+        return f"{len(v.get('broken') or [])} kırık / {v.get('checked')} bağlantı"
+    if check == "seo.titles":
+        return _counts([("eksik", v.get("missing")), ("tekrar", v.get("duplicate")), ("uzun", v.get("too_long"))], pages)
+    if check == "seo.meta_descriptions":
+        return _counts([("eksik", v.get("missing")), ("tekrar", v.get("duplicate"))], pages)
+    if check == "seo.h1":
+        return _counts([("eksik", v.get("missing")), ("birden fazla", v.get("multiple"))], pages)
+    if check == "seo.noindex":
+        closed = len(v.get("noindex_pages") or [])
+        return f"{closed} sayfa aramaya kapalı" if closed else f"incelenen {pages} sayfada kapalı sayfa yok"
+    if check == "seo.structured_data":
+        return ", ".join((v.get("types") or [])[:4])
+    if check == "seo.image_alt":
+        return f"{v.get('missing_alt')} / {v.get('total')} görselde alt metni eksik"
+    if check == "seo.blog":
+        return (f"en yeni yazı {v['newest_date']}, sayfada {v.get('dated_items')} tarihli yazı"
+                if v.get("newest_date") else "")
+    if check == "seo.sitemap":
+        return f"{v['urls']}{'+' if v.get('capped') else ''} adres" if v.get("urls") else ""
+    if check in ("tracking.gtm", "tracking.ga4", "tracking.google_ads"):
+        return ", ".join(v.get("ids") or [])
+    if check == "tracking.other_pixels":
+        return ", ".join(v.get("found") or [])
+    if check == "tracking.cookie_banner":
+        return ", ".join(v.get("tools") or [])
+    if check == "tracking.privacy_page":
+        return _host(v.get("url") or "")
+    if check == "contact.phone":
+        return ", ".join(link.replace("tel:", "") for link in v.get("links") or [])
+    if check == "contact.email":
+        return ", ".join((v.get("emails") or [])[:2])
+    if check == "contact.forms":
+        return ", ".join(filter(None, [v.get("contact_forms") and f"{v['contact_forms']} iletişim formu",
+                                       v.get("newsletter_form") and "abonelik formu"]))
+    if check == "contact.social_links":
+        return ", ".join(_SOCIAL.get(name, name) for name in v.get("accounts") or {})
+    if check == "ecommerce.platform":
+        return ", ".join(v.get("platforms") or [])
+    return ""
+
+
+def _cell(f: Optional[Dict], check: str, target) -> str:
+    if not f:
+        # Rakiplerde masaustu hiz bilerek olculmez: "olculmedi" degil kapsam disi.
+        return _OUT_OF_SCOPE if check == "site.speed_desktop" and target.kind != "own" else "Ölçülmedi"
+    note = f.get("note") or ""
+    # "Görülmedi · ... görülmedi." tekrari yazilmaz
+    if note.startswith(_GENERIC_NOTE) or (f["state"] == "not_observed" and note.endswith("görülmedi.")):
+        note = ""
+    return " · ".join(filter(None, [_status(f), _summary(f, target.pages_checked or 0), note]))
+
+
+def _speed_blocks(targets, found) -> List[Block]:
+    """Lighthouse skorlari ve laboratuvar olcumleri. Saha verisinin yalniz KATEGORISI saklidir."""
+    mobile = [by_check.get("site.speed_mobile") for by_check in found]
+    if not any(f and f["state"] == "observed" for f in mobile):
+        return []
+
+    def pick(f, getter) -> str:
+        if not f:
+            return "Ölçülmedi"
+        if f["state"] != "observed":
+            return _status(f)
+        value = getter(f.get("value") or {})
+        return "Ölçülmedi" if value in (None, "") else str(value)
+
+    def score(key):
+        return lambda v: None if (v.get("scores") or {}).get(key) is None else f"{v['scores'][key]}/100"
+
+    def field(v):
+        seen = [f"{_FIELD[m]} {_FIELD_CATEGORY.get(c, c)}" for m, c in (v.get("field") or {}).items() if m in _FIELD]
+        return ", ".join(seen) or "Bu site için veri yok"
+
+    rows = [[label] + [pick(f, score(key)) for f in mobile] for key, label in _SCORE_ROWS]
+    rows += [[label] + [pick(f, lambda v, k=key: (v.get("lab") or {}).get(k)) for f in mobile] for key, label in _LAB_ROWS]
+    rows.append(["Gerçek kullanıcı verisi (mobil, kategori)"] + [pick(f, field) for f in mobile])
+    desktop = [by_check.get("site.speed_desktop") for by_check in found]
+    rows.append(["Performans (masaüstü)"] + [
+        _OUT_OF_SCOPE if not f and t.kind != "own" else pick(f, score("performance")) for f, t in zip(desktop, targets)])
+    return [("h2", "Hız ve Lighthouse skorları"),
+            ("table", ["Ölçüm"] + [_host(t.url) for t in targets], rows),
+            ("p", "Skorlar ana sayfanın Lighthouse laboratuvar ölçümüdür (0-100) ve ölçümden ölçüme birkaç puan değişir. "
+                  "SEO skoru sayfa kodunun teknik kontrolüdür; arama sıralamasını göstermez. Gerçek kullanıcı verisinin "
+                  "yalnızca kategorisi gösterilir; sayısal değerler bu denetimde toplanmadı.")]
+
+
 def _audit_blocks(audit) -> List[Block]:
+    from app.core.digital_audit import runner
+
     blocks: List[Block] = [("h1", "Site denetimi [Gözlem]")]
     targets = list(audit.targets)
-    blocks.append(("p", "Denetlenen siteler: " + ", ".join(
-        f"{_host(t.url)} ({'marka' if t.kind == 'own' else 'rakip'})" for t in targets)))
+    found = [{f["check"]: f for f in t.findings or []} for t in targets]
+    measured = audit.completed_at or audit.created_at
+    blocks.append(("p", f"Denetim tarihi: {measured.strftime('%d.%m.%Y') if measured else '-'}. Site başına en fazla "
+                        f"{runner.MAX_PAGES} sayfa ve {runner.MAX_LINK_CHECKS} site içi bağlantı incelenir; bulgular bu "
+                        "örneklem içindir, sitenin tamamı için değildir."))
+    scope = []
+    for t, by_check in zip(targets, found):
+        extra = list(dict.fromkeys(limit for f in by_check.values() for limit in f.get("limits") or []
+                                   if _PER_SITE_LIMIT.match(limit) and not limit[0].isdigit()))
+        scope.append(f"{_host(t.url)} ({'marka' if t.kind == 'own' else 'rakip'}): {_TARGET_STATUS.get(t.status, t.status)}, "
+                     f"{t.pages_checked or 0} sayfa incelendi" + "".join(f". {e.rstrip('.')}" for e in extra))
+    blocks += [("h2", "Denetlenen siteler ve kapsam"), ("bullets", scope)]
+    if any(t.status != "completed" for t in targets):
+        blocks.append(("p", "Okunamayan sitede kontroller “Engellendi” ya da “Bilinmiyor” döner; bu, öğenin sitede "
+                            "olmadığı anlamına gelmez."))
+    blocks.append(("p", "Durum sözlüğü: İyi / Uyarı / Sorun değerlendirmedir. Görüldü: bulundu, değerlendirme yapılmadı. "
+                        "Görülmedi: incelenen sayfalarda bulunamadı. Bilinmiyor: okunamadı ya da ölçülemedi. "
+                        "Kapsam dışı: bu site için bilerek ölçülmedi."))
+
     order: Dict[str, List[str]] = {}
     labels: Dict[str, str] = {}
-    cells: Dict[Tuple[int, str], str] = {}
-    for index, target in enumerate(targets):
-        for f in target.findings or []:
-            order.setdefault(f["section"], [])
-            if f["check"] not in order[f["section"]]:
-                order[f["section"]].append(f["check"])
+    for by_check in found:
+        for f in by_check.values():
+            checks = order.setdefault(f["section"], [])
+            if f["check"] not in checks:
+                checks.append(f["check"])
             labels[f["check"]] = f["label"]
-            assessment = _ASSESSMENT.get(f.get("assessment") or "")
-            cells[(index, f["check"])] = _STATE.get(f["state"], f["state"]) + (f" ({assessment})" if assessment else "")
-    for section, checks in order.items():
+    for section in sorted(order, key=lambda s: _SECTION_ORDER.index(s) if s in _SECTION_ORDER else len(_SECTION_ORDER)):
+        checks = order[section]
         blocks.append(("h2", _SECTION.get(section, section)))
         blocks.append(("table", ["Kontrol"] + [_host(t.url) for t in targets],
-                       [[labels[c]] + [cells.get((i, c), "Ölçülmedi") for i in range(len(targets))] for c in checks]))
+                       [[labels[c]] + [_cell(by_check.get(c), c, t) for by_check, t in zip(found, targets)]
+                        for c in checks]))
+        limits: Dict[str, List[str]] = {}
+        for c in checks:
+            for by_check in found:
+                for limit in (by_check.get(c) or {}).get("limits") or []:
+                    limit = _LINK_COUNT.sub("E", limit)
+                    if not _PER_SITE_LIMIT.match(limit) and labels[c] not in limits.setdefault(limit, []):
+                        limits[limit].append(labels[c])
+        if limits:
+            blocks += [("p", "Bu bölümün sınırları:"),
+                       ("bullets", [f"{', '.join(names)}: {limit}" for limit, names in limits.items()])]
+        if section == "site":
+            blocks += _speed_blocks(targets, found)
+        if section == "contact":
+            social = []
+            for t, by_check in zip(targets, found):
+                f = by_check.get("contact.social_links")
+                accounts = ((f or {}).get("value") or {}).get("accounts") or {}
+                social.append(f"{_host(t.url)}: " + (", ".join(f"{_SOCIAL.get(n, n)} {u}" for n, u in accounts.items())
+                                                      or _status(f).lower()))
+            blocks += [("h2", "Sitede bağlantısı verilen sosyal hesaplar"), ("bullets", social),
+                       ("p", "Yalnızca siteden bağlantı verilen hesaplardır. Hesabın markaya ait olduğu doğrulanmadı; "
+                             "takipçi ve etkileşim sayıları bu denetimde ölçülmedi. Bağlantı görülmemesi hesabın "
+                             "olmadığı anlamına gelmez.")]
     answers = audit.answers or {}
     declared = [f"{q['label']} {answers[q['key']].get('value') or ''} "
                 f"{('— ' + answers[q['key']]['note']) if answers[q['key']].get('note') else ''}".strip()
