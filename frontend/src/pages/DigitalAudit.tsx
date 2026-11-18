@@ -182,7 +182,7 @@ export default function DigitalAudit() {
         {q.label}
         {q.group !== 'brief' && answers[q.key]?.value && (
           <span className="audit-answer-tag">
-            {answers[q.key]?.evidence?.source ? 'Doğrulandı' : 'Beyan'}
+            {answers[q.key]?.evidence?.source ? 'Analist doğruladı' : 'Beyan'}
           </span>
         )}
       </label>
@@ -537,7 +537,8 @@ export default function DigitalAudit() {
               <p className="audit-hint">
                 Dışarıdan görülemeyen maddeler. Cevaplar otomatik bulgulardan ayrı saklanır ve
                 onları değiştirmez. Kanıt girilmeyen cevap raporda "Beyan" olarak, kaynağı, kontrol
-                tarihi ve doğrulayan kişi girilen cevap "Doğrulandı" olarak etiketlenir.
+                tarihi ve doğrulayan kişi girilen cevap "Analist doğruladı" olarak etiketlenir;
+                sistem kaynağı kendisi kontrol etmez.
               </p>
               <div className="audit-questions">
                 {detail.questions.filter((q) => q.group !== 'brief').map(questionField)}

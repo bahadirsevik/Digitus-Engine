@@ -462,3 +462,41 @@ def test_changed_brief_or_evidence_makes_synthesis_stale(client, db_session, mak
     assert "HubSpot paneli" in prompt
     # Dogrulayan kisi ve hesap bilgisi yapay zekaya gitmez
     assert "Analist A" not in prompt and "hub-123" not in prompt
+
+
+def test_output_without_fingerprint_needs_refresh(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    db_session.add(DigitalAudit(brand_profile_id=ws.id, status="completed"))
+    db_session.commit()
+    report_id = completed_report(client, db_session, ws, dispatched)
+    report = db_session.get(DigitalResearch, report_id)
+    old = dict(report.sections)
+    old["synthesis"] = {k: v for k, v in old["synthesis"].items() if k != "answers_sha"}  # eski kayit
+    report.sections = old
+    db_session.commit()
+    assert get(client, report_id, ws).json()["synthesis_stale"] is True
+    assert client.post(_urls(report_id, ws)["synthesis"]).status_code == 202
+    ai = FakeAI()
+    assert run(db_session, dispatched, ai) == "completed"
+    assert ai.grounded_count == 0  # arastirma tekrarlanmaz
+    assert get(client, report_id, ws).json()["synthesis_stale"] is False
+
+
+def test_brief_made_with_other_answers_stays_stale_after_revert(client, db_session, make_workspace, dispatched):
+    ws = make_workspace("Marka")
+    brief_a = {"business_model": {"value": "E-ticaret", "note": None}}
+    audit = DigitalAudit(brand_profile_id=ws.id, status="completed", answers=brief_a)
+    db_session.add(audit)
+    db_session.commit()
+    report_id = completed_report(client, db_session, ws, dispatched)
+    url = _urls(report_id, ws)
+    answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
+    assert client.post(url["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    # Brief kuyruktayken brif B olur, worker B ile uretir
+    assert client.put(answers, json={"answers": {"business_model": {"value": "B2B satış"}}}).status_code == 200
+    assert run(db_session, dispatched) == "completed"
+    # Brif A'ya doner: sentez yeniden guncel, B ile uretilmis brief degil
+    assert client.put(answers, json={"answers": brief_a}).status_code == 200
+    body = get(client, report_id, ws).json()
+    assert body["synthesis_stale"] is False and body["briefs_stale"] is True
+    assert "Dişiniz mi ağrıyor?" not in _blocks(db_session, ws, report_id)

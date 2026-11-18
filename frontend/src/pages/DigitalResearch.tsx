@@ -481,9 +481,10 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
                 <div className="research-actions">
                   {detail.synthesis_stale && (
                     <p className="audit-status-note">
-                      Rapora alınan rakamlar ya da denetimdeki brif/beyan bilgileri değişti. Bu
-                      segmentler eski bilgilerle üretildi; rapora girmez ve brief üretilemez.
-                      Kararlarınızı bitirince segmentleri yenileyin (mevcut briefler silinir).
+                      Rapora alınan rakamlar ya da denetimdeki brif/beyan bilgileri değişti ya da bu
+                      segmentlerin hangi bilgilerle üretildiği doğrulanamadı. Segmentler rapora
+                      girmez ve brief üretilemez; araştırmayı tekrarlamak gerekmez. Kararlarınızı
+                      bitirince segmentleri yenileyin (mevcut briefler silinir).
                     </p>
                   )}
                   <button
@@ -594,8 +595,8 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
               <SectionFailure section={briefs} />
               {detail.briefs_stale && (
                 <p className="audit-status-note">
-                  Bu briefler eski bilgilerle üretildi; rapora girmez. Segmentleri yenileyip briefi
-                  yeniden üretin.
+                  Bu brieflerin güncelliği doğrulanamadı; rapora girmez. Briefi yeniden üretin
+                  (segmentler de yenileme istiyorsa önce onları yenileyin).
                 </p>
               )}
               {[...(briefs.ad_ideas || []), ...(briefs.creative_briefs || [])].some(

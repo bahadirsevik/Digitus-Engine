@@ -24,9 +24,9 @@ LEGEND = ("[Gözlem] otomatik ölçüm · [Beyan] müşteri cevabı, doğrulanma
           "[Hipotez] bulgulardan türetilen, doğrulanması gereken yorum")
 _EVIDENCE = (("source", "kaynak"), ("checked_at", "kontrol tarihi"), ("verified_by", "doğrulayan"),
              ("period", "dönem"), ("account", "hesap"))
-STALE_NOTE = ("Rapora alınan rakamlar ya da brif/beyan bilgileri bu bölüm üretildikten sonra değişti; "
-              "bölüm güncel olmadığı için "
-              "rapora alınmadı. Yeniden üretilmesi gerekir.")
+STALE_NOTE = ("Rapora alınan rakamlar ya da brif/beyan bilgileri bu bölüm üretildikten sonra değişti "
+              "ya da bölümün hangi bilgilerle üretildiği doğrulanamadı; bölüm güncel olmadığı için rapora alınmadı. "
+              "Yeniden üretilmesi gerekir.")
 
 
 _SECTION_ORDER = ("site", "seo", "tracking", "contact", "ecommerce")

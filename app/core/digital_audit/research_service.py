@@ -226,7 +226,8 @@ def run_research(db: Session, report_id: int, task_id: str, ai, ads_service=None
                     selection = (report.briefs or {}).get("selection") or {}
                     chosen = [sections["synthesis"]["segments"][i] for i in selection.get("segments", [])]
                     briefs = research.generate_briefs(ai, facts, chosen, selection.get("channels", []), usage)
-                    extra = {"briefs": {**briefs, "selection": selection, "claim_ids": used}}
+                    extra = {"briefs": {**briefs, "selection": selection, "claim_ids": used,
+                                        "answers_sha": answers_sha}}
             except SoftTimeLimitExceeded:
                 raise
             except Exception as exc:

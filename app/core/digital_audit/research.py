@@ -288,15 +288,24 @@ def synthesis_stale(report) -> bool:
         used = claim_ids(sections.get("sector"))
     if used != claim_ids(sections.get("sector"), report.claim_overrides):
         return True
-    # shortcut: parmak izi saklanmamis eski sentez brif degisikligini goremez; bir kez yenilenince gorur.
-    made_with, current = synthesis.get("answers_sha"), _current_answers_sha(report)
-    return made_with is not None and current is not None and made_with != current
+    return _answers_changed(synthesis, report)
+
+
+def _answers_changed(output: Dict, report) -> bool:
+    """Cikti SU ANKI brif/beyan/kanitla mi uretildi? Parmak izi saklanmamis eski cikti hangi
+    brifle uretildigi bilinmedigi icin guncel SAYILMAZ (yenileme gerekir, arastirma tekrarlanmaz).
+    Bagli denetim yoksa karsilastirilacak brif de yoktur."""
+    current = _current_answers_sha(report)
+    return current is not None and output.get("answers_sha") != current
 
 
 def briefs_stale(report) -> bool:
+    """Brief kendi parmak izini tasir: sentez A brifiyle guncelken B ile uretilmis brief,
+    brif A'ya donunce guncel gorunmesin."""
     briefs = report.briefs or {}
     current = claim_ids((report.sections or {}).get("sector"), report.claim_overrides)
-    return briefs.get("status") == "ok" and (synthesis_stale(report) or briefs.get("claim_ids") != current)
+    return briefs.get("status") == "ok" and (
+        synthesis_stale(report) or briefs.get("claim_ids") != current or _answers_changed(briefs, report))
 
 
 # --- arama talebi (Google Ads aylik seri kopyasi) --------------------------

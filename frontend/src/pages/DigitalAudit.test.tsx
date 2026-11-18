@@ -224,7 +224,7 @@ describe('DigitalAudit sayfası', () => {
     fireEvent.change(screen.getByLabelText(/CRM var mı\? Kaynak/), {
       target: { value: 'HubSpot paneli' },
     })
-    expect(screen.getByText('Doğrulandı')).toBeInTheDocument()
+    expect(screen.getByText('Analist doğruladı')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Cevapları kaydet/ }))
     await waitFor(() =>
       expect(api.saveAnswers).toHaveBeenCalledWith(7, 3, {
