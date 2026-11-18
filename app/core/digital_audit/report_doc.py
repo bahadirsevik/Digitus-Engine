@@ -68,6 +68,14 @@ def _counts(parts, pages: int) -> str:
     return f"{', '.join(shown) or 'eksik yok'} (incelenen {pages} sayfada)"
 
 
+def _page_count(v: Dict, key: str) -> str:
+    """Saklanan liste en fazla 5 ornek adrestir; toplam ayri alandadir. Eski kayitta toplam yoksa tavan 'en az' diye yazilir."""
+    sample = len(v.get(key) or [])
+    if v.get("count") is not None:
+        return str(v["count"])
+    return f"en az {sample}" if sample >= 5 else str(sample)
+
+
 def _summary(f: Dict, pages: int) -> str:
     """Bulgunun saklanan degerinden kisa ozet. Toplanmayan bilgi URETILMEZ: deger yoksa bos doner."""
     v = f.get("value")
@@ -85,8 +93,7 @@ def _summary(f: Dict, pages: int) -> str:
         score = (v.get("scores") or {}).get("performance")
         return f"performans {score}/100" if score is not None else ""
     if check == "site.mobile_viewport":
-        missing = v.get("pages_without_viewport") or []
-        return f"{len(missing)} sayfada ayar yok" if missing else ""
+        return f"{_page_count(v, 'pages_without_viewport')} sayfada ayar yok" if v.get("pages_without_viewport") else ""
     if check == "site.structure":
         return ", ".join(_PAGE_TYPE.get(t, t) for t in v.get("page_types") or {})
     if check == "site.cta":
@@ -101,14 +108,16 @@ def _summary(f: Dict, pages: int) -> str:
     if check == "seo.h1":
         return _counts([("eksik", v.get("missing")), ("birden fazla", v.get("multiple"))], pages)
     if check == "seo.noindex":
-        closed = len(v.get("noindex_pages") or [])
-        return f"{closed} sayfa aramaya kapalı" if closed else f"incelenen {pages} sayfada kapalı sayfa yok"
+        if v.get("noindex_pages"):
+            return f"{_page_count(v, 'noindex_pages')} sayfa aramaya kapalı"
+        return f"incelenen {pages} sayfada kapalı sayfa yok"
     if check == "seo.structured_data":
         return ", ".join((v.get("types") or [])[:4])
     if check == "seo.image_alt":
         return f"{v.get('missing_alt')} / {v.get('total')} görselde alt metni eksik"
     if check == "seo.blog":
-        return (f"en yeni yazı {v['newest_date']}, sayfada {v.get('dated_items')} tarihli yazı"
+        # dated_items farkli tarih sayisidir, yazi adedi degil (ayni gun 8 yazi = 1)
+        return (f"en yeni yazı {v['newest_date']}, sayfada okunan farklı tarih sayısı {v.get('dated_items')}"
                 if v.get("newest_date") else "")
     if check == "seo.sitemap":
         return f"{v['urls']}{'+' if v.get('capped') else ''} adres" if v.get("urls") else ""

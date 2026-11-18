@@ -127,8 +127,12 @@ export function findingSummary(f: AuditFinding | undefined): string {
         ['eksik', v.missing],
         ['birden fazla', v.multiple],
       ])
-    case 'seo.noindex':
-      return list(v.noindex_pages).length ? `${list(v.noindex_pages).length} sayfa kapalı` : ''
+    case 'seo.noindex': {
+      // Liste en fazla 5 örnek adres; toplam `count`ta. Eski kayıtta tavan "en az" diye yazılır.
+      const sample = list(v.noindex_pages).length
+      if (!sample) return ''
+      return `${v.count ?? (sample >= 5 ? `en az ${sample}` : sample)} sayfa kapalı`
+    }
     case 'seo.structured_data':
       return list(v.types).slice(0, 4).join(', ')
     case 'seo.image_alt':

@@ -66,9 +66,24 @@ def test_cells_carry_stored_values_with_scope():
     assert _table(blocks, "Alan adı kaydı")[1] == "Görüldü · bitiş 2027-03-01 · kayıt 2015-03-01 · Kayıt AŞ"
     assert _table(blocks, "Sayfa başlıkları (title)")[1:] == ["Uyarı · 1 eksik, 2 tekrar (incelenen 10 sayfada)", "Engellendi"]
     assert _table(blocks, "Arama motorlarına kapalı sayfa (noindex)")[1] == "İyi · incelenen 10 sayfada kapalı sayfa yok"
-    assert _table(blocks, "Blog ve güncellik")[1] == "Görüldü · en yeni yazı 2026-10-28, sayfada 8 tarihli yazı"
+    assert _table(blocks, "Blog ve güncellik")[1] == "Görüldü · en yeni yazı 2026-10-28, sayfada okunan farklı tarih sayısı 8"
     assert "Instagram https://instagram.com/marka, Facebook https://facebook.com/marka" in text
     assert "Gözlendi (iyi)" not in text
+
+
+def test_sample_url_list_is_not_printed_as_total():
+    urls = [f"https://marka.test/{i}" for i in range(5)]
+
+    def summary(check, key, **extra):
+        return report_doc._summary(finding("seo", check, "x", "observed", "warning", value={key: urls, **extra}), 10)
+
+    # Yeni kayit: toplam ayri saklanir
+    assert summary("seo.noindex", "noindex_pages", count=10) == "10 sayfa aramaya kapalı"
+    assert summary("site.mobile_viewport", "pages_without_viewport", count=10) == "10 sayfada ayar yok"
+    # Eski kayit: 5'lik ornek tavani kesin sayi diye yazilmaz
+    assert summary("seo.noindex", "noindex_pages") == "en az 5 sayfa aramaya kapalı"
+    assert report_doc._summary(finding("seo", "seo.noindex", "x", "observed", "warning",
+                                       value={"noindex_pages": urls[:2]}), 10) == "2 sayfa aramaya kapalı"
 
 
 def test_unknown_not_seen_and_out_of_scope_stay_distinct():

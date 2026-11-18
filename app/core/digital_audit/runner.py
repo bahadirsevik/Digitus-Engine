@@ -182,7 +182,7 @@ def _on_page_findings(pages: List[Dict], links_result: Dict, robots_present, sit
     no_viewport = [s["url"] for s in sig if not s["viewport"]]
     put("site.mobile_viewport", "observed" if not no_viewport else absent,
         "ok" if not no_viewport else (None if thin else "warning"),
-        value={"pages_without_viewport": no_viewport[:5]},
+        value={"pages_without_viewport": no_viewport[:5], "count": len(no_viewport)},
         limits=["Yalnızca sayfa kodundaki ayara bakar; menü ve formların telefonda kullanılabildiğini kanıtlamaz."])
     types = {}
     for p in pages[1:]:
@@ -233,7 +233,7 @@ def _on_page_findings(pages: List[Dict], links_result: Dict, robots_present, sit
         value=h_val)
     noindex = [s["url"] for s in sig if s["noindex"]]
     put("seo.noindex", "observed", "problem" if home["noindex"] else ("warning" if noindex else "ok"),
-        value={"noindex_pages": noindex[:5]})
+        value={"noindex_pages": noindex[:5], "count": len(noindex)})
     ld = union("ld_types")
     put("seo.structured_data", "observed" if ld else absent, "info" if ld else None, value={"types": ld[:15]})
     img_total = sum(s["img_total"] for s in sig)
