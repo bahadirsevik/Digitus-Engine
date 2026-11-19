@@ -16,6 +16,9 @@ vi.mock('../services/api', async (importOriginal) => {
       startBriefs: vi.fn(),
       refreshSynthesis: vi.fn(),
       exportReport: vi.fn(),
+      startStrategy: vi.fn(),
+      saveStrategy: vi.fn(),
+      approveStrategy: vi.fn(),
     },
   }
 })

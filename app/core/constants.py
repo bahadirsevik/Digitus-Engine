@@ -238,6 +238,7 @@ AI_STAGES = (
     "pairwise_judge",
     # Dijital denetim arastirma ve fikir asamalari (app/core/digital_audit/research.py)
     "audit_sector_research", "audit_audience_research", "audit_synthesis", "audit_briefs",
+    "audit_strategy",
 )
 # Prompt/config surumu — run manifest'ine yazilir (plan C)
 # v2.1 Faz D (23.07): SEO strategy_fit sözleşmesi + ADS/SOCIAL v2_1 blokları

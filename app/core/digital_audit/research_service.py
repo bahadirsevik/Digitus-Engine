@@ -14,7 +14,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.digital_audit import research
+from app.core.digital_audit import research, strategy
 from app.database.models import BrandProfile, DigitalAudit, DigitalResearch
 
 ACTIVE = ("pending", "running")
@@ -130,6 +130,61 @@ def request_synthesis(db: Session, report: DigitalResearch) -> None:
     _requeue(db, report, "synthesis", None)
 
 
+def request_strategy(db: Session, report: DigitalResearch) -> None:
+    """Karar odakli rapor taslagini kuyruga hazirlar (ucretli tek cagri; acik kullanici eylemi).
+    Suren is varken ikinci istek 409 alir: cift tiklama iki cagri uretmez."""
+    synthesis = (report.sections or {}).get("synthesis") or {}
+    if synthesis.get("status") != "ok":
+        raise ResearchInputError("Strateji için önce segmentler üretilmiş olmalı.")
+    if research.synthesis_stale(report):
+        raise ResearchStateError("Segmentler güncel değil; strateji üretmeden önce segmentleri yenileyin.")
+    _requeue(db, report, "strategy", report.briefs)
+
+
+def _write_strategy(db: Session, report: DigitalResearch, new_strategy: Dict) -> None:
+    """Analist yazimi: yalniz is surmuyorken (worker'in sections yazimiyla carpismaz)."""
+    sections = {**(report.sections or {}), "strategy": new_strategy}
+    written = db.execute(
+        update(DigitalResearch)
+        .where(DigitalResearch.id == report.id, DigitalResearch.status.in_(FINAL))
+        .values(sections=sections).execution_options(synchronize_session=False)
+    ).rowcount
+    db.commit()
+    if not written:
+        raise ResearchStateError("Bu marka çalışmasında süren bir araştırma var.")
+    db.refresh(report)
+
+
+def _editable_strategy(report: DigitalResearch, version: int) -> Dict:
+    current = (report.sections or {}).get("strategy") or {}
+    if current.get("status") != "ok":
+        raise ResearchInputError("Düzeltilecek strateji taslağı yok.")
+    if strategy.state(report) == "stale":
+        raise ResearchStateError("Strateji güncel değil; önce yeniden üretin.")
+    if current.get("version") != version:
+        raise ResearchStateError("Strateji bu arada yenilendi; sayfayı yenileyip tekrar deneyin.")
+    return current
+
+
+def save_strategy_edit(db: Session, report: DigitalResearch, version: int, content: Dict) -> None:
+    """Analist duzeltmesi. Dayanaksiz madde reddedilir; duzeltme onceki onayi dusurur."""
+    current = _editable_strategy(report, version)
+    try:
+        edited = strategy.normalize(content, current["catalogue"], current["ad_base_status"], strict=True)
+    except strategy.StrategyInputError as exc:
+        raise ResearchInputError(str(exc))
+    _write_strategy(db, report, {**current, "edited": edited, "approval": None})
+
+
+def approve_strategy(db: Session, report: DigitalResearch, version: int, approved_by: str) -> None:
+    """Analist incelenen surumu isaretler. Onay icerik ozetine baglidir: sonraki duzeltme,
+    yenileme ya da girdi degisikligi onayi gecersiz kilar."""
+    current = _editable_strategy(report, version)
+    _write_strategy(db, report, {**current, "approval": {
+        "approved_by": approved_by.strip()[:120], "approved_at": _now().isoformat(),
+        "version": version, "content_sha": strategy.content_sha(current)}})
+
+
 def _requeue(db: Session, report: DigitalResearch, stage: str, briefs: Optional[Dict]) -> None:
     try:
         claimed = db.execute(
@@ -210,7 +265,20 @@ def run_research(db: Session, report_id: int, task_id: str, ai, ads_service=None
                      usage=dict(usage), progress=progress, **extra)
 
     try:
-        if report.stage in ("synthesis", "briefs"):
+        if report.stage == "strategy":
+            try:
+                sections["strategy"] = strategy.generate(ai, workspace, audit, report, usage)
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as exc:
+                logger.exception(f"strateji üretimi başarısız (research={report_id})")
+                previous = sections.get("strategy") or {}
+                # Onceki gecerli cikti BOZULMAZ; hata yaninda gosterilir.
+                sections["strategy"] = ({**previous, "last_error": _failed(exc)["error"]}
+                                        if previous.get("status") == "ok" else _failed(exc))
+            if not checkpoint(95):
+                return "superseded"
+        elif report.stage in ("synthesis", "briefs"):
             # Kullanilan kararlar ciktiyla birlikte saklanir: analist uretim surerken karar
             # degistirirse sonuc okuma aninda bayat gorunur (research.synthesis_stale).
             overrides = list(report.claim_overrides or [])
@@ -350,6 +418,7 @@ def serialize(report: DigitalResearch, detail: bool = False) -> Dict:
             audit_id=report.audit_id, sections=report.sections or {}, briefs=report.briefs,
             claim_overrides=report.claim_overrides or [], usage=report.usage or {},
             synthesis_stale=research.synthesis_stale(report), briefs_stale=research.briefs_stale(report),
+            strategy_state=strategy.state(report),
             channels=research.CHANNELS,
         )
     return data

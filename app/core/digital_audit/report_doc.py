@@ -363,7 +363,7 @@ def _texts(items, field: str = "text") -> List[str]:
     return [i[field] for i in research.usable(items)]
 
 
-def _research_blocks(report) -> List[Block]:
+def _research_blocks(report, briefs: bool = True) -> List[Block]:
     sections = report.sections or {}
     overrides = report.claim_overrides or []
     inputs = report.inputs or {}
@@ -449,8 +449,8 @@ def _research_blocks(report) -> List[Block]:
             f"{m['segment']}: {m['location']}; yaş hipotezi {m['age_hypothesis']}; ilgi alanları (serbest metin, "
             f"platformda doğrulanmadı): {', '.join(m['interests'])}" for m in synthesis.get("meta_audiences") or []])
 
-    briefs = report.briefs or {}
-    if research.briefs_stale(report):
+    briefs = (report.briefs or {}) if briefs else {}  # detayli analizde uzun briefler yer almaz
+    if briefs and research.briefs_stale(report):
         blocks += [("h1", "Reklam ve kreatif briefler [Hipotez]"), ("p", STALE_NOTE)]
     elif briefs.get("status") == "ok":
         blocks.append(("h1", "Reklam ve kreatif briefler [Hipotez]"))
@@ -479,7 +479,20 @@ def _research_blocks(report) -> List[Block]:
     return blocks
 
 
-def build_blocks(workspace, audit=None, report=None) -> List[Block]:
+LIMIT_BLOCKS: List[Block] = [("h1", "Sınırlar"), ("bullets", [
+    "Bot engelli ya da JavaScript ile çizilen sitelerde kontroller “Bilinmiyor” döner; bu, özelliğin olmadığı anlamına gelmez.",
+    "Rakip trafiği, backlink ve hesap içi veriler (GA4, reklam hesabı) bu raporda yoktur.",
+    "Rakamlar yalnız kaynak metninde bulunduysa rapora alınır; bağlamın doğruluğunu analist kontrol eder.",
+    "Segmentler, öneriler ve briefler hipotezdir; ölçülmüş demografi ya da sonuç garantisi değildir.",
+])]
+
+
+def build_blocks(workspace, audit=None, report=None, view: Optional[str] = None) -> List[Block]:
+    if view:  # karar odakli uc belgeden biri (report_views); eski birlesik rapor asagida aynen durur
+        from app.core.digital_audit import report_views
+
+        return [(kind, *[_clean(part) for part in rest])
+                for kind, *rest in report_views.build(workspace, audit, report, view)]
     stamp = (report or audit).created_at
     blocks: List[Block] = [
         ("title", f"Dijital Varlık Analizi: {workspace.name or _host(workspace.company_url)}"),
@@ -491,12 +504,7 @@ def build_blocks(workspace, audit=None, report=None) -> List[Block]:
         blocks += _visibility_blocks(audit)
     if report is not None:
         blocks += _research_blocks(report)
-    blocks += [("h1", "Sınırlar"), ("bullets", [
-        "Bot engelli ya da JavaScript ile çizilen sitelerde kontroller “Bilinmiyor” döner; bu, özelliğin olmadığı anlamına gelmez.",
-        "Rakip trafiği, backlink ve hesap içi veriler (GA4, reklam hesabı) bu raporda yoktur.",
-        "Rakamlar yalnız kaynak metninde bulunduysa rapora alınır; bağlamın doğruluğunu analist kontrol eder.",
-        "Segmentler, öneriler ve briefler hipotezdir; ölçülmüş demografi ya da sonuç garantisi değildir.",
-    ])]
+    blocks += LIMIT_BLOCKS
     return [(kind, *[_clean(part) for part in rest]) for kind, *rest in blocks]
 
 
@@ -531,6 +539,20 @@ def render_docx(blocks: List[Block]) -> bytes:
             for row in rows:
                 for cell, text in zip(table.add_row().cells, row):
                     cell.text = text
+    # Alt bilgi: sayfa numarasi (Word alani; dosya acilinca hesaplanir)
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    footer = doc.sections[0].footer.paragraphs[0]
+    footer.add_run("Sayfa ")
+    run = footer.add_run()
+    for tag, char_type in (("w:fldChar", "begin"), ("w:instrText", None), ("w:fldChar", "end")):
+        element = OxmlElement(tag)
+        if char_type:
+            element.set(qn("w:fldCharType"), char_type)
+        else:
+            element.text = "PAGE"
+        run._r.append(element)
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
@@ -573,9 +595,14 @@ def render_pdf(blocks: List[Block]) -> bytes:
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]))
             story += [table, Spacer(1, 6)]
+    def page_number(canvas, doc):
+        canvas.setFont(fonts.font_name, 8)
+        canvas.drawRightString(A4[0] - 1.5 * cm, 0.8 * cm, f"Sayfa {doc.page}")
+
     buffer = io.BytesIO()
     SimpleDocTemplate(buffer, pagesize=A4, leftMargin=1.5 * cm, rightMargin=1.5 * cm,
-                      topMargin=1.5 * cm, bottomMargin=1.5 * cm).build(story)
+                      topMargin=1.5 * cm, bottomMargin=1.5 * cm).build(
+        story, onFirstPage=page_number, onLaterPages=page_number)
     return buffer.getvalue()
 
 
@@ -585,9 +612,9 @@ RENDERERS = {
 }
 
 
-def render(workspace, audit, report, fmt: str) -> Tuple[bytes, str]:
+def render(workspace, audit, report, fmt: str, view: Optional[str] = None) -> Tuple[bytes, str]:
     renderer, media_type = RENDERERS[fmt]
-    return renderer(build_blocks(workspace, audit, report)), media_type
+    return renderer(build_blocks(workspace, audit, report, view)), media_type
 
 
 def filename(workspace, fmt: str, stamp: Optional[str] = None) -> str:

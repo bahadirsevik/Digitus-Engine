@@ -2428,10 +2428,44 @@ export interface ResearchBriefs {
   creative_briefs?: CreativeBrief[]
 }
 
+/** Karar odaklı rapor maddesi: her madde en az bir dayanağa (refs) bağlıdır */
+export interface StrategyItem {
+  refs: string[]
+  warnings?: string[]
+  options?: string[]
+  held_action?: StrategyItem
+  [field: string]: string | string[] | StrategyItem | undefined
+}
+
+export interface StrategyContent {
+  summary: StrategyItem[]
+  section_notes: StrategyItem[]
+  competition: StrategyItem[]
+  opportunities: StrategyItem[]
+  decisions: StrategyItem[]
+  actions: StrategyItem[]
+  swot: Record<string, StrategyItem[]>
+  dropped?: number
+}
+
+export interface StrategySection {
+  status: 'ok' | 'failed'
+  error?: string
+  last_error?: string
+  version: number
+  generated_at: string
+  catalogue: { id: string; kind: string; text: string }[]
+  gaps: string[]
+  ad_base_status: string
+  draft: StrategyContent
+  edited: StrategyContent | null
+  approval: { approved_by: string; approved_at: string; version: number } | null
+}
+
 export interface DigitalResearchSummary {
   id: number
   status: AuditStatus
-  stage: 'research' | 'synthesis' | 'briefs'
+  stage: 'research' | 'synthesis' | 'briefs' | 'strategy'
   progress: number
   error_message: string | null
   inputs: { sector?: string; geography?: string; focus?: string | null }
@@ -2446,7 +2480,10 @@ export interface DigitalResearchDetail extends DigitalResearchSummary {
     sector?: SectorSection
     audience?: AudienceSection
     synthesis?: SynthesisSection
+    strategy?: StrategySection
   }
+  /** none | failed | stale | draft | approved: onay yalnız incelenen sürüm için geçerlidir */
+  strategy_state?: 'none' | 'failed' | 'stale' | 'draft' | 'approved'
   briefs: ResearchBriefs | null
   claim_overrides: string[]
   /** Rakam kararları üretimden sonra değişti: bölüm rapora girmez, yenilenmesi gerekir */
@@ -2501,9 +2538,45 @@ export const digitalResearchApi = {
       { params: { brand_profile_id } }
     ),
 
+  startStrategy: (reportId: number, brand_profile_id: number) =>
+    api.post<{ research_id: number; status: AuditStatus }>(
+      `/digital-audit/research/${reportId}/strategy`,
+      null,
+      { params: { brand_profile_id } }
+    ),
+
+  saveStrategy: (
+    reportId: number,
+    brand_profile_id: number,
+    version: number,
+    content: StrategyContent
+  ) =>
+    api.put<DigitalResearchDetail>(
+      `/digital-audit/research/${reportId}/strategy`,
+      { version, content },
+      { params: { brand_profile_id } }
+    ),
+
+  approveStrategy: (
+    reportId: number,
+    brand_profile_id: number,
+    version: number,
+    approved_by: string
+  ) =>
+    api.post<DigitalResearchDetail>(
+      `/digital-audit/research/${reportId}/strategy/approve`,
+      { version, approved_by },
+      { params: { brand_profile_id } }
+    ),
+
   exportReport: (
     brand_profile_id: number,
-    params: { format: 'docx' | 'pdf'; audit_id?: number; research_id?: number }
+    params: {
+      format: 'docx' | 'pdf'
+      audit_id?: number
+      research_id?: number
+      view?: 'executive' | 'detail' | 'implementation'
+    }
   ) =>
     api.get('/digital-audit/export', {
       params: { brand_profile_id, ...params },

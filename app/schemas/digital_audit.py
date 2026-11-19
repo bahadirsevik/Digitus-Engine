@@ -41,3 +41,14 @@ class ClaimOverridesRequest(BaseModel):
 class BriefsRequest(BaseModel):
     segments: List[int] = Field(..., min_length=1, max_length=4)
     channels: List[str] = Field(..., min_length=1, max_length=5)
+
+
+class StrategyEditRequest(BaseModel):
+    """Analist duzeltmesi: tum icerik (ozet, yorum, SWOT, karar, aksiyon) tek govdede."""
+    version: int
+    content: Dict
+
+
+class StrategyApproveRequest(BaseModel):
+    version: int
+    approved_by: str = Field(..., min_length=2, max_length=120)

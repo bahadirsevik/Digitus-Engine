@@ -14,6 +14,8 @@ from app.schemas.digital_audit import (
     AnswersRequest,
     BriefsRequest,
     ClaimOverridesRequest,
+    StrategyApproveRequest,
+    StrategyEditRequest,
     StartAuditRequest,
     StartResearchRequest,
 )
@@ -222,21 +224,69 @@ def start_briefs(
     return {"research_id": report.id, "status": report.status}
 
 
+def _strategy_call(fn):
+    try:
+        fn()
+    except research_service.ResearchInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except research_service.ResearchStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.post("/research/{report_id}/strategy", status_code=202)
+def start_strategy(report_id: int, brand_profile_id: int = Query(...), db: Session = Depends(get_db)):
+    """Karar odakli rapor taslagi (ozet, yorum, SWOT, karar noktalari, 90 gunluk plan). Ucretli tek cagri."""
+    report = _get_research(db, report_id, brand_profile_id)
+    _strategy_call(lambda: research_service.request_strategy(db, report))
+    _dispatch_research(db, report)
+    return {"research_id": report.id, "status": report.status}
+
+
+@router.put("/research/{report_id}/strategy")
+def edit_strategy(report_id: int, request: StrategyEditRequest, brand_profile_id: int = Query(...),
+                  db: Session = Depends(get_db)):
+    """Analist duzeltmesi. Onceki onay duser."""
+    report = _get_research(db, report_id, brand_profile_id)
+    _strategy_call(lambda: research_service.save_strategy_edit(db, report, request.version, request.content))
+    return research_service.serialize(report, detail=True)
+
+
+@router.post("/research/{report_id}/strategy/approve")
+def approve_strategy(report_id: int, request: StrategyApproveRequest, brand_profile_id: int = Query(...),
+                     db: Session = Depends(get_db)):
+    """Analist incelenen surumu isaretler."""
+    report = _get_research(db, report_id, brand_profile_id)
+    _strategy_call(lambda: research_service.approve_strategy(db, report, request.version, request.approved_by))
+    return research_service.serialize(report, detail=True)
+
+
 @router.get("/export")
 def export_report(
     brand_profile_id: int = Query(...),
     format: str = Query("docx", pattern="^(docx|pdf)$"),
     audit_id: Optional[int] = Query(None),
     research_id: Optional[int] = Query(None),
+    view: Optional[str] = Query(None, pattern="^(executive|detail|implementation)$"),
     db: Session = Depends(get_db),
 ):
-    """Bagimsiz rapor dosyasi (site denetimi ve/veya arastirma). Skorlama calismasi gerektirmez."""
+    """Bagimsiz rapor dosyasi (site denetimi ve/veya arastirma). Skorlama calismasi gerektirmez.
+
+    view verilirse karar odakli uc belgeden biri uretilir. Dosya yapay zekayi CAGIRMAZ; kayitli
+    icerigi yazar. Bu gorunumler arastirmanin KENDI denetimine dayanir: baska denetimle birlestirilmez.
+    """
     workspace = verify_workspace(db, brand_profile_id)
     if audit_id is None and research_id is None:
         raise HTTPException(status_code=400, detail="Rapor için bir denetim ya da araştırma seçin.")
-    audit = _get_audit(db, audit_id, brand_profile_id) if audit_id is not None else None
     report = _get_research(db, research_id, brand_profile_id) if research_id is not None else None
-    content, media_type = report_doc.render(workspace, audit, report, format)
+    if view:
+        if report is None:
+            raise HTTPException(status_code=400, detail="Bu belge için bir araştırma seçin.")
+        if audit_id is not None and audit_id != report.audit_id:
+            raise HTTPException(status_code=409, detail="Bu araştırma başka bir denetime dayanıyor; "
+                                                        "seçilen denetimle birleştirilemez.")
+        audit_id = report.audit_id
+    audit = _get_audit(db, audit_id, brand_profile_id) if audit_id is not None else None
+    content, media_type = report_doc.render(workspace, audit, report, format, view)
     return Response(
         content=content, media_type=media_type,
         headers={"Content-Disposition": content_disposition(report_doc.filename(workspace, format))},

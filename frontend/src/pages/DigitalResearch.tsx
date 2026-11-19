@@ -12,6 +12,7 @@ import {
 } from '../services/api'
 import ErrorBanner from '../components/ErrorBanner'
 import { AUDIT_STATUS_LABEL } from './digitalAuditView'
+import DigitalStrategy from './DigitalStrategy'
 import {
   claimChip,
   claimDecidable,
@@ -344,11 +345,13 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
             <div className="audit-status-line">
               {running && <Loader2 size={18} className="animate-spin" />}
               <strong>
-                {running && detail.stage === 'briefs'
-                  ? 'Briefler üretiliyor'
-                  : running && detail.stage === 'synthesis'
-                    ? 'Segmentler yenileniyor'
-                    : AUDIT_STATUS_LABEL[detail.status]}
+                {running && detail.stage === 'strategy'
+                  ? 'Strateji taslağı üretiliyor'
+                  : running && detail.stage === 'briefs'
+                    ? 'Briefler üretiliyor'
+                    : running && detail.stage === 'synthesis'
+                      ? 'Segmentler yenileniyor'
+                      : AUDIT_STATUS_LABEL[detail.status]}
               </strong>
               {running && <span>%{detail.progress}</span>}
               <span>
@@ -670,6 +673,16 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
               </div>
             </section>
           )}
+
+          <DigitalStrategy
+            detail={detail}
+            workspaceId={workspaceId}
+            running={running}
+            busy={busy}
+            guarded={guarded}
+            onDetail={setDetail}
+            reload={() => loadDetail(detail.id, workspaceId)}
+          />
         </>
       )}
     </>

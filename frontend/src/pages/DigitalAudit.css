@@ -317,3 +317,30 @@
 .research-restriction {
   font-weight: 600;
 }
+
+/* --- Karar odaklı rapor --- */
+.strategy-group {
+  margin: 16px 0;
+}
+
+.strategy-item {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.strategy-meta,
+.strategy-held {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.strategy-downloads {
+  display: inline-flex;
+  gap: 6px;
+}

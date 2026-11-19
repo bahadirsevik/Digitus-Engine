@@ -500,3 +500,228 @@ def test_brief_made_with_other_answers_stays_stale_after_revert(client, db_sessi
     body = get(client, report_id, ws).json()
     assert body["synthesis_stale"] is False and body["briefs_stale"] is True
     assert "Dişiniz mi ağrıyor?" not in _blocks(db_session, ws, report_id)
+
+
+# --- karar odakli rapor (strateji) -------------------------------------------
+
+def _finding(check, label, assessment, state="observed", value=None):
+    return {"section": check.split(".")[0], "check": check, "label": label, "state": state,
+            "assessment": assessment, "value": value, "note": None, "source": None, "limits": []}
+
+
+def _ref(cat, kind):
+    return next(c["id"] for c in cat if c["kind"].startswith(kind))
+
+
+def _strategy_payload(cat):
+    own, rival, seg = _ref(cat, "Ölçüm (marka"), _ref(cat, "Rakip gözlemi"), _ref(cat, "Hipotez")
+    return {
+        "summary": [{"finding": "Sayfa başlıkları eksik", "meaning": "Aramada görünürlük kaybı", "refs": [own]},
+                    {"finding": "Uydurma bulgu", "meaning": "dayanaksız", "refs": ["B999"]}],
+        "section_notes": [{"section": "seo", "finding": "Başlık eksiği var", "impact": "Tıklama düşer",
+                           "action": "Başlıkları tamamla", "refs": [own]}],
+        "competition": [{"text": "Rakipte başlıklar tam", "refs": [own, rival]}],
+        "swot": {"strengths": [], "weaknesses": [{"text": "Başlıklar eksik", "refs": [own]}],
+                 "opportunities": [{"text": "Acil hasta segmenti", "refs": [seg]}], "threats": []},
+        "opportunities": [{"text": "Soru içerikleri", "type": "içerik", "contribution": "Organik talep",
+                           "priority_reason": "Düşük maliyet", "refs": [seg]}],
+        "decisions": [{"question": "Blog açılsın mı?", "options": ["Evet", "Hayır"], "needed_info": "Kaynak planı",
+                       "owner_role": "Müşteri", "refs": [seg]}],
+        "actions": [
+            {"period": "0-30", "action": "Sayfa başlıklarını tamamla", "priority": "P1", "priority_reason": "Temel",
+             "dependency": "", "owner_role": "SEO uzmanı", "effort": "1-2 gün", "kpi": "Eksik başlık sayısı",
+             "contribution": "Görünürlük", "channel": "", "publication": "", "refs": [own]},
+            {"period": "30-60", "action": "Acil hasta için arama reklamı aç", "priority": "P2",
+             "priority_reason": "Talep var", "dependency": "", "owner_role": "Reklam uzmanı", "effort": "3 gün",
+             "kpi": "Form sayısı", "contribution": "Talep", "channel": "google_search", "publication": "sponsorlu",
+             "refs": [seg]},
+            {"period": "0-30", "action": "Dayanaksız aksiyon", "priority": "P1", "priority_reason": "", "dependency": "",
+             "owner_role": "", "effort": "", "kpi": "", "contribution": "", "channel": "", "publication": "", "refs": []},
+        ],
+    }
+
+
+def strategy_ready(client, db, ws, dispatched, monkeypatch, answers=None):
+    from app.core.digital_audit import strategy
+
+    audit = DigitalAudit(brand_profile_id=ws.id, status="completed", answers=answers or {
+        "business_model": {"value": "Yerel hizmet / mağaza", "note": None},
+        "main_conversion": {"value": "Randevu formu", "note": None}})
+    audit.targets = [
+        DigitalAuditTarget(position=0, kind="own", url="https://marka.test", status="completed", pages_checked=10,
+                           findings=[_finding("seo.titles", "Sayfa başlıkları", "warning", value={"missing": 3})]),
+        DigitalAuditTarget(position=1, kind="competitor", url="https://rakip.test", status="completed", pages_checked=10,
+                           findings=[_finding("seo.titles", "Sayfa başlıkları", "ok", value={"missing": 0})])]
+    db.add(audit)
+    db.commit()
+    report_id = completed_report(client, db, ws, dispatched)
+    cat = strategy.catalogue(ws, audit, db.get(DigitalResearch, report_id))
+    monkeypatch.setitem(PAYLOADS, "audit_strategy", _strategy_payload(cat))
+    url = f"/api/v1/digital-audit/research/{report_id}/strategy?brand_profile_id={ws.id}"
+    assert client.post(url).status_code == 202
+    assert client.post(url).status_code == 409  # cift tiklama ikinci ucretli gorevi acmaz
+    ai = FakeAI()
+    assert run(db, dispatched, ai) == "completed"
+    return audit, report_id, url, ai
+
+
+def _view_text(db, ws, report_id, view):
+    from app.core.digital_audit import report_doc
+
+    db.expire_all()
+    report = db.get(DigitalResearch, report_id)
+    audit = db.get(DigitalAudit, report.audit_id) if report.audit_id else None
+    return repr(report_doc.build_blocks(ws, audit, report, view))
+
+
+def test_strategy_keeps_only_grounded_items_and_holds_restricted_ads(client, db_session, make_workspace,
+                                                                      dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, ai = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    body = get(client, report_id, ws).json()
+    record = body["sections"]["strategy"]
+    draft = record["draft"]
+    assert body["strategy_state"] == "draft" and record["version"] == 1 and record["approval"] is None
+    assert len(dispatched) == 2  # arastirma + tek strateji gorevi
+    # Dayanagi olmayan / gecersiz referansli madde atilir
+    assert [s["finding"] for s in draft["summary"]] == ["Sayfa başlıkları eksik"]
+    assert draft["dropped"] == 2
+    ids = {c["id"] for c in record["catalogue"]}
+    for items in [draft[k] for k in ("summary", "section_notes", "competition", "opportunities", "decisions", "actions")]:
+        assert all(item["refs"] and set(item["refs"]) <= ids for item in items)
+    # Kaynakta bulunmayan rakam modele gitmez; bulunan gider; brif baglami gider
+    prompt = ai.prompts["audit_strategy"]
+    assert "3,2 milyar" not in prompt and "45.000" in prompt and "Randevu formu" in prompt
+    # Kisit bulunan sektorde ucretli reklam plana GIRMEZ, karar noktasi olur
+    assert [a["action"] for a in draft["actions"]] == ["Sayfa başlıklarını tamamla"]
+    held = [d for d in draft["decisions"] if d.get("held_action")]
+    assert len(held) == 1 and held[0]["ad_status"] == "koşullu" and "Google Arama Ağı" in held[0]["question"]
+    text = _view_text(db_session, ws, report_id, "executive")
+    assert "TASLAK: analist onayı yok" in text and "Ücretli reklam (Google Arama Ağı) başlatılsın mı?" in text
+    assert "Uydurma bulgu" not in text and "Yeterli kanıt yok; madde üretilmedi." in text  # bos SWOT kutusu doldurulmaz
+    assert "Kreatif brief" not in _view_text(db_session, ws, report_id, "detail")
+    assert "Başlıkları tamamla" in _view_text(db_session, ws, report_id, "detail")  # bolum yorumu
+
+
+def test_analyst_edits_approves_and_can_clear_a_held_ad(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    draft = get(client, report_id, ws).json()["sections"]["strategy"]["draft"]
+    approve = url.replace("/strategy?", "/strategy/approve?")
+
+    edited = json.loads(json.dumps(draft))
+    edited["actions"][0]["owner_role"] = "Ajans SEO ekibi"
+    assert client.put(url, json={"version": 2, "content": edited}).status_code == 409  # surum uyusmuyor
+    res = client.put(url, json={"version": 1, "content": edited})
+    assert res.status_code == 200 and res.json()["strategy_state"] == "draft"
+    assert res.json()["sections"]["strategy"]["edited"]["actions"][0]["owner_role"] == "Ajans SEO ekibi"
+    # Dayanaksiz madde analistten de kabul edilmez
+    bad = json.loads(json.dumps(edited))
+    bad["actions"][0]["refs"] = []
+    assert client.put(url, json={"version": 1, "content": bad}).status_code == 400
+
+    res = client.post(approve, json={"version": 1, "approved_by": "Analist A"})
+    assert res.status_code == 200 and res.json()["strategy_state"] == "approved"
+    assert "Analist onaylı (Analist A" in _view_text(db_session, ws, report_id, "executive")
+    # Onaydan sonraki duzeltme onayi dusurur
+    held = next(d for d in edited["decisions"] if d.get("held_action"))
+    edited["decisions"].remove(held)
+    edited["actions"].append({**held["held_action"], "ad_status": "önerilebilir", "ad_basis": "Baro görüşü 12.11.2026"})
+    res = client.put(url, json={"version": 1, "content": edited}).json()
+    assert res["strategy_state"] == "draft" and res["sections"]["strategy"]["approval"] is None
+    actions = res["sections"]["strategy"]["edited"]["actions"]
+    assert actions[-1]["ad_basis"] == "Baro görüşü 12.11.2026" and not any(
+        d.get("held_action") for d in res["sections"]["strategy"]["edited"]["decisions"])
+    # Dayanak yazilmadan plana alinamaz: yeniden karar noktasina doner
+    edited["actions"][-1]["ad_basis"] = ""
+    res = client.put(url, json={"version": 1, "content": edited}).json()["sections"]["strategy"]["edited"]
+    assert len(res["actions"]) == 1 and any(d.get("held_action") for d in res["decisions"])
+
+
+def test_changed_inputs_drop_strategy_and_approval(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    assert client.post(approve, json={"version": 1, "approved_by": "Analist A"}).json()["strategy_state"] == "approved"
+
+    answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
+    assert client.put(answers, json={"answers": {"business_model": {"value": "E-ticaret"},
+                                                 "main_conversion": {"value": "Online satış"}}}).status_code == 200
+    assert get(client, report_id, ws).json()["strategy_state"] == "stale"
+    text = _view_text(db_session, ws, report_id, "executive")
+    assert "GÜNCEL DEĞİL" in text and "Sayfa başlıkları eksik" not in text and "Analist onaylı" not in text
+    assert client.post(approve, json={"version": 1, "approved_by": "Analist A"}).status_code == 409
+    assert client.put(url, json={"version": 1, "content": {}}).status_code == 409
+
+    # Segmentler yenilenir, strateji yeniden uretilir: yeni brif modele gider, eski onay tasinmaz
+    assert client.post(_urls(report_id, ws)["synthesis"]).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    assert client.post(url).status_code == 202
+    ai = FakeAI()
+    assert run(db_session, dispatched, ai) == "completed"
+    body = get(client, report_id, ws).json()
+    assert body["strategy_state"] == "draft" and body["sections"]["strategy"]["version"] == 2
+    assert "Online satış" in ai.prompts["audit_strategy"] and "Randevu formu" not in ai.prompts["audit_strategy"]
+
+
+def test_input_changed_during_generation_leaves_strategy_stale(client, db_session, make_workspace, dispatched,
+                                                               monkeypatch):
+    from app.core.digital_audit import strategy
+
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    real = strategy.generate
+
+    def slow(ai, workspace, audit_row, report, usage):
+        out = real(ai, workspace, audit_row, report, usage)
+        answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
+        assert client.put(answers, json={"answers": {"business_model": {"value": "B2B satış"}}}).status_code == 200
+        return out
+
+    monkeypatch.setattr(strategy, "generate", slow)
+    assert client.post(url).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    assert get(client, report_id, ws).json()["strategy_state"] == "stale"
+
+
+def test_failed_regeneration_keeps_previous_strategy(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    assert client.post(url).status_code == 202
+    run(db_session, dispatched, FakeAI(fail_on={"audit_strategy"}))
+    record = get(client, report_id, ws).json()["sections"]["strategy"]
+    assert record["status"] == "ok" and record["version"] == 1 and record["last_error"]
+    assert record["draft"]["summary"][0]["finding"] == "Sayfa başlıkları eksik"
+
+
+def test_strategy_views_share_context_and_respect_isolation(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws, other = make_workspace("Marka"), make_workspace("Diger")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    base = f"/api/v1/digital-audit/export?brand_profile_id={ws.id}&research_id={report_id}"
+    for view in ("executive", "detail", "implementation"):
+        assert client.get(f"{base}&view={view}&format=docx").content.startswith(b"PK")
+        assert client.get(f"{base}&view={view}&format=pdf").content.startswith(b"%PDF")
+        assert f"v1" in _view_text(db_session, ws, report_id, view)  # ucu ayni strateji surumu
+    # Kisitli sektorde reklam fikri "yayina hazir degil" basligina gider; yalniz uyari eklenmez
+    text = _view_text(db_session, ws, report_id, "implementation")
+    assert "Karar bekleyen reklam fikirleri (yayına hazır değil)" in text and "Uygulanabilir reklam fikirleri" not in text
+    assert "Öneri durumu: koşullu" in text
+    # Baska denetimle sessizce birlestirilmez
+    newer = DigitalAudit(brand_profile_id=ws.id, status="completed")
+    db_session.add(newer)
+    db_session.commit()
+    assert client.get(f"{base}&view=executive&audit_id={newer.id}").status_code == 409
+    assert client.get(f"/api/v1/digital-audit/export?brand_profile_id={ws.id}&audit_id={audit.id}&view=executive").status_code == 400
+    # Bayat brief uygulama belgesine girmez
+    answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
+    client.put(answers, json={"answers": {"business_model": {"value": "E-ticaret"}}})
+    assert "Dişiniz mi ağrıyor?" not in _view_text(db_session, ws, report_id, "implementation")
+    # Baska calisma strateji uretemez, duzeltemez, onaylayamaz, indiremez
+    foreign = url.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}")
+    assert client.post(foreign).status_code == 404
+    assert client.put(foreign, json={"version": 1, "content": {}}).status_code == 404
+    assert client.post(foreign.replace("/strategy?", "/strategy/approve?"),
+                       json={"version": 1, "approved_by": "X Y"}).status_code == 404
+    assert client.get(base.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}") + "&view=executive").status_code == 404
