@@ -8,6 +8,7 @@ import {
   type DigitalResearchSummary,
   type ResearchClaim,
   type ResearchItem,
+  type RestrictionVerification,
   type ResearchTheme,
 } from '../services/api'
 import ErrorBanner from '../components/ErrorBanner'
@@ -70,6 +71,52 @@ function ThemeList({ title, items }: { title: string; items?: ResearchTheme[] })
         ))}
       </ul>
     </>
+  )
+}
+
+const VERIFICATION_FIELDS: [keyof RestrictionVerification, string, string][] = [
+  ['primary_source_url', 'Birincil kaynak adresi (Resmî Gazete, ilgili kurum)', 'url'],
+  ['regulation_date', 'Mevzuat tarihi', 'date'],
+  ['verified_by', 'Teyit eden', 'text'],
+  ['verified_at', 'Teyit tarihi', 'date'],
+]
+
+function RestrictionCheck(props: {
+  index: number
+  item: ResearchItem
+  disabled: boolean
+  onSave: (body: Partial<RestrictionVerification>) => void
+}) {
+  const { index, item, disabled, onSave } = props
+  const [form, setForm] = useState<Partial<RestrictionVerification>>(item.verification || {})
+  const saved = item.verification
+  return (
+    <details className="audit-evidence">
+      <summary>
+        Kısıt {index + 1}:{' '}
+        <span className={`audit-chip ${saved ? 'audit-chip-ok' : 'audit-chip-muted'}`}>
+          {saved
+            ? `Teyit edildi (${saved.verified_by}, ${saved.verified_at})`
+            : 'Birincil kaynaktan teyit edilmedi'}
+        </span>{' '}
+        {item.text.slice(0, 90)}
+      </summary>
+      {VERIFICATION_FIELDS.map(([field, label, type]) => (
+        <input
+          key={field}
+          className="input"
+          type={type}
+          aria-label={`Kısıt ${index + 1} ${label}`}
+          title={label}
+          placeholder={label}
+          value={form[field] || ''}
+          onChange={(e) => setForm((cur) => ({ ...cur, [field]: e.target.value }))}
+        />
+      ))}
+      <button className="btn btn-secondary" disabled={disabled} onClick={() => onSave(form)}>
+        Teyidi kaydet
+      </button>
+    </details>
   )
 }
 
@@ -399,7 +446,32 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
               <ItemList title="Güncel gelişmeler" items={sec.developments} />
               <ItemList title="Yasal ve reklam kısıtları" items={sec.restrictions} />
               {sec.restrictions && sec.restrictions.length > 0 && (
-                <p className="audit-hint">Tarihli bir özettir; hukuki görüş değildir.</p>
+                <>
+                  <p className="audit-hint">
+                    Tarihli bir özettir; hukuki görüş değildir. Aşağıda her kısıt için birincil
+                    kaynak teyidi kaydedilir. Teyidi analist yapar; sistem kaynağı kendisi kontrol
+                    etmez. Dört alan birlikte girilmeden kısıt "teyit edildi" görünmez.
+                  </p>
+                  {sec.restrictions.map((item, index) => (
+                    <RestrictionCheck
+                      key={`${detail.id}-${index}-${item.verification?.verified_at || ''}`}
+                      index={index}
+                      item={item}
+                      disabled={busy || running}
+                      onSave={(body) =>
+                        guarded('Teyit kaydedilemedi', async () => {
+                          const res = await digitalResearchApi.saveRestrictionVerification(
+                            detail.id,
+                            workspaceId,
+                            index,
+                            body
+                          )
+                          setDetail(res.data)
+                        })
+                      }
+                    />
+                  ))}
+                </>
               )}
               <ItemList title="Sektörel platform ve dizinler" items={sec.directories} />
               <ItemList

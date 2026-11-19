@@ -377,7 +377,26 @@ def _texts(items, field: str = "text") -> List[str]:
     return [i[field] for i in research.usable(items)]
 
 
-def _research_blocks(report, briefs: bool = True) -> List[Block]:
+# Pazar tablosuna girmemesi gereken mevzuat referanslari (kanun / Resmi Gazete numarasi pazar verisi degildir)
+_LAW = re.compile(r"resm[iî] gazete|kanun|yönetmelik|tüzük|tebliğ|genelge", re.IGNORECASE)
+
+
+def verification_text(restriction: Dict) -> str:
+    """Kisitin birincil kaynak teyidi. Analist DORT alani da girmedikce 'teyit edildi' YAZILMAZ."""
+    v = restriction.get("verification") or {}
+    if not v:
+        return "Birincil kaynaktan teyit edilmedi"
+    return (f"Teyit edildi: {v['primary_source_url']} (mevzuat tarihi {v['regulation_date']}; "
+            f"teyit eden {v['verified_by']}, {v['verified_at']})")
+
+
+def brand_tokens(workspace) -> List[str]:
+    profile = workspace.profile_data if isinstance(getattr(workspace, "profile_data", None), dict) else {}
+    raw = [workspace.name, _host(workspace.company_url).split("/")[0], profile.get("company_name")]
+    return [t.casefold() for t in raw if t and len(t) >= 5]
+
+
+def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -> List[Block]:
     sections = report.sections or {}
     overrides = report.claim_overrides or []
     inputs = report.inputs or {}
@@ -389,7 +408,9 @@ def _research_blocks(report, briefs: bool = True) -> List[Block]:
         blocks += _bullets("Tanım ve alt kategoriler", _texts(sector.get("definition")))
         blocks += _bullets("Başlıca ürün ve hizmetler", _texts(sector.get("services")))
         blocks += _bullets("Büyüme yönü", _texts(sector.get("growth")))
-        claims = research.verified_claims(sector, overrides)
+        accepted = research.verified_claims(sector, overrides)
+        laws = [c for c in accepted if _LAW.search(f"{c['claim']} {c['value']} {c['unit']}")]
+        claims = [c for c in accepted if c not in laws]
         if claims:
             blocks.append(("h2", "Kaynakta geçen rakamlar [Kaynak]"))
             blocks.append(("table", ["Bilgi", "Değer", "Yıl / coğrafya", "Kaynak"],
@@ -400,12 +421,20 @@ def _research_blocks(report, briefs: bool = True) -> List[Block]:
         blocks += _bullets("Güncel gelişmeler", [
             f"{d['text']} ({d['date'] or 'tarih yok'}; {d['source_name'] or 'kaynak adı yok'})"
             for d in research.usable(sector.get("developments"))])
-        restrictions = [f"{r['text']} ({r['source_name'] or 'kaynak adı yok'})"
-                        + (" [içindeki rakam kaynakta doğrulanamadı]" if r.get("numbers_ok") is False else "")
-                        for r in sector.get("restrictions") or []]
+        restrictions = sector.get("restrictions") or []
         if restrictions:
-            blocks += [("h2", "Yasal ve reklam kısıtları"), ("bullets", restrictions),
-                       ("p", "Bu bölüm tarihli bir özettir; hukuki görüş değildir.")]
+            confirmed = sum(1 for r in restrictions if r.get("verification"))
+            blocks += [("h2", "Yasal ve reklam kısıtları"),
+                       ("table", ["Kısıt", "Araştırmadaki kaynak", "Birincil kaynak teyidi"], [
+                           [r["text"] + (" [içindeki rakam kaynakta doğrulanamadı]" if r.get("numbers_ok") is False else ""),
+                            r.get("source_name") or "kaynak adı yok", verification_text(r)] for r in restrictions]),
+                       ("p", f"{len(restrictions)} kısıttan {confirmed} tanesi birincil kaynaktan (Resmî Gazete, ilgili kurum) "
+                             "teyit edildi. Teyit edilmeyenler araştırmada okunan kaynaklara dayanır ve güncel yürürlükleri "
+                             "doğrulanmamıştır. Bu bölüm tarihli bir özettir; hukuki görüş değildir.")]
+        if laws:
+            blocks += [("h2", "Mevzuat referansları [Kaynak]"), ("bullets", [
+                f"{c['claim']}: {c['value']} {c['unit']}".strip() + f" ({c['check'].get('source_url', '')})" for c in laws]),
+                ("p", "Bu satırlar pazar verisi değildir; kaynak metninde geçen mevzuat numaralarıdır.")]
         blocks += _bullets("Sektörel platform ve dizinler", _texts(sector.get("directories")))
         blocks += _bullets("Veri bulunamayan başlıklar", sector.get("not_found") or [])
 
@@ -428,8 +457,17 @@ def _research_blocks(report, briefs: bool = True) -> List[Block]:
         blocks.append(("h1", "Hedef kitle analizi"))
 
         def themed(items) -> List[str]:
-            return [i["theme"] + (f" — “{i['quote']}” ({i['source_name']})" if i.get("quote_found") else "")
-                    for i in research.usable(items)]
+            out = []
+            for i in research.usable(items):
+                text = f"{i['theme']} {i.get('quote') or ''} {i.get('source_name') or ''}".casefold()
+                scope = "[Marka hakkında]" if any(t in text for t in brand) else "[Sektör geneli]"
+                quote = re.split(r"(?<=[.!?])\s", (i.get("quote") or "").strip())[0]  # en fazla bir cumle
+                out.append(f"{scope} {i['theme']}" + (f" — “{quote}” ({i['source_name']})" if i.get("quote_found") else ""))
+            return out
+
+        blocks.append(("p", "Kapsam etiketi: [Sektör geneli] başka işletmelerin müşterilerinden derlenen içgörüdür ve bu "
+                            "markaya ait bir şikâyet ya da görüş değildir. [Marka hakkında] yalnız kaynakta marka adı "
+                            "geçtiğinde kullanılır."))
 
         blocks += _bullets("İhtiyaç ve problemler", themed(audience.get("needs")))
         blocks += _bullets("Tereddüt ve şikayetler", themed(audience.get("hesitations")))
@@ -448,7 +486,11 @@ def _research_blocks(report, briefs: bool = True) -> List[Block]:
         blocks.append(("h1", "Olası segmentler [Hipotez]"))
         for s in synthesis["segments"]:
             blocks.append(("h2", f"{s['name']} ({s['stage']})"))
-            blocks.append(("bullets", [f"İhtiyaç: {s['need']}", f"Dayandığı bulgu: {s['evidence']}",
+            measured = [q["keyword"] for q in audience.get("question_keywords") or []
+                        if q["keyword"].casefold() in (s.get("evidence") or "").casefold()]
+            basis = (f"[Gözlem] arama hacmi ölçümü ({', '.join(measured)}) + [Hipotez] yorum" if measured
+                     else "[Hipotez] sektör kaynaklarından türetilmiş yorum; müşteri verisiyle doğrulanmadı")
+            blocks.append(("bullets", [f"İhtiyaç: {s['need']}", f"Dayandığı bulgu: {s['evidence']}", f"Dayanak türü: {basis}",
                                        f"Doğrulanacak varsayım: {s['assumption']}",
                                        f"Değer teklifi: {s['value_proposition']}",
                                        *[f"Mesaj: {m}" for m in s["messages"]],
@@ -526,7 +568,7 @@ def build_blocks(workspace, audit=None, report=None, view: Optional[str] = None)
         blocks += _audit_blocks(audit)
         blocks += _visibility_blocks(audit)
     if report is not None:
-        blocks += _research_blocks(report)
+        blocks += _research_blocks(report, brand=tuple(brand_tokens(workspace)))
     blocks += LIMIT_BLOCKS
     return [(kind, *[_clean(part) for part in rest]) for kind, *rest in blocks]
 

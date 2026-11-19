@@ -6,7 +6,7 @@ bitince KAYDEDILIR; worker olurse o ana kadarki bolumler 'partial' olarak korunu
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -158,6 +158,51 @@ def _locked_strategy(db: Session, report: DigitalResearch, version: int, revisio
     if current.get("version") != version or int(current.get("revision") or 0) != revision:
         raise ResearchStateError("Strateji bu arada değişti; sayfayı yenileyip güncel metni inceleyin.")
     return current
+
+
+VERIFICATION_FIELDS = ("primary_source_url", "regulation_date", "verified_by", "verified_at")
+
+
+def save_restriction_verification(db: Session, report: DigitalResearch, index: int, data: Dict) -> None:
+    """Bir reklam kisitinin BIRINCIL KAYNAK teyidi (analist girer). Dort alan birlikte zorunludur: yarim kayit
+    kisiti 'teyit edildi' gostermesin. Tum alanlar bossa teyit kaldirilir. Sistem kaynagi kendisi kontrol etmez;
+    teyidi yapan analisttir ve adi kayda gecer."""
+    values = {f: str(data.get(f) or "").strip()[:500] for f in VERIFICATION_FIELDS}
+    if any(values.values()):
+        if not all(values.values()):
+            raise ResearchInputError("Teyit için birincil kaynak adresi, mevzuat tarihi, teyit eden ve teyit tarihi birlikte girilmeli.")
+        if not values["primary_source_url"].lower().startswith(("http://", "https://")):
+            raise ResearchInputError("Birincil kaynak adresi http:// ya da https:// ile başlamalı.")
+        try:
+            date.fromisoformat(values["regulation_date"])
+            verified = date.fromisoformat(values["verified_at"])
+        except ValueError:
+            raise ResearchInputError("Tarihler YYYY-AA-GG biçiminde olmalı.")
+        if verified > _now().date():
+            raise ResearchInputError("Teyit tarihi gelecekte olamaz.")
+        if len(values["verified_by"]) < 2:
+            raise ResearchInputError("Teyit edenin adı yazılmalı.")
+    db.rollback()
+    row = (db.query(DigitalResearch).filter(DigitalResearch.id == report.id)
+           .with_for_update().populate_existing().one())
+    if row.status not in FINAL:
+        db.rollback()
+        raise ResearchStateError("Bu marka çalışmasında süren bir araştırma var.")
+    sections = dict(row.sections or {})
+    sector = dict(sections.get("sector") or {})
+    restrictions = [dict(r) for r in sector.get("restrictions") or []]
+    if not 0 <= index < len(restrictions):
+        db.rollback()
+        raise ResearchInputError("Kısıt bulunamadı.")
+    if any(values.values()):
+        restrictions[index]["verification"] = values
+    else:
+        restrictions[index].pop("verification", None)
+    sector["restrictions"] = restrictions
+    sections["sector"] = sector
+    report.sections = sections
+    db.commit()
+    db.refresh(report)
 
 
 def _write_strategy(db: Session, report: DigitalResearch, new_strategy: Dict) -> None:

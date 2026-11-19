@@ -2301,6 +2301,15 @@ export interface ResearchItem {
   source_name?: string
   /** false: içindeki rakam kaynakta bulunamadı; null/undefined: rakam yok */
   numbers_ok?: boolean | null
+  /** Reklam kısıtının birincil kaynak teyidi; analist dört alanı da girmedikçe yoktur */
+  verification?: RestrictionVerification
+}
+
+export interface RestrictionVerification {
+  primary_source_url: string
+  regulation_date: string
+  verified_by: string
+  verified_at: string
 }
 
 export interface ResearchTheme {
@@ -2446,6 +2455,8 @@ export interface StrategyContent {
   actions: StrategyItem[]
   swot: Record<string, StrategyItem[]>
   dropped?: number
+  /** Yorumu olmayan bölümler ve nedeni */
+  note_gaps?: { section: string; reason: string }[]
 }
 
 export interface StrategySection {
@@ -2536,6 +2547,18 @@ export const digitalResearchApi = {
   ) =>
     api.post<{ research_id: number; status: AuditStatus }>(
       `/digital-audit/research/${reportId}/briefs`,
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  saveRestrictionVerification: (
+    reportId: number,
+    brand_profile_id: number,
+    index: number,
+    body: Partial<RestrictionVerification>
+  ) =>
+    api.put<DigitalResearchDetail>(
+      `/digital-audit/research/${reportId}/restrictions/${index}/verification`,
       body,
       { params: { brand_profile_id } }
     ),

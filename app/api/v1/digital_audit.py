@@ -14,6 +14,7 @@ from app.schemas.digital_audit import (
     AnswersRequest,
     BriefsRequest,
     ClaimOverridesRequest,
+    RestrictionVerificationRequest,
     StrategyApproveRequest,
     StrategyEditRequest,
     StartAuditRequest,
@@ -222,6 +223,15 @@ def start_briefs(
         raise HTTPException(status_code=409, detail=str(exc))
     _dispatch_research(db, report)
     return {"research_id": report.id, "status": report.status}
+
+
+@router.put("/research/{report_id}/restrictions/{index}/verification")
+def put_restriction_verification(report_id: int, index: int, request: RestrictionVerificationRequest,
+                                 brand_profile_id: int = Query(...), db: Session = Depends(get_db)):
+    """Analistin bir reklam kisitini birincil kaynaktan teyit ettigini kaydeder (ya da teyidi kaldirir)."""
+    report = _get_research(db, report_id, brand_profile_id)
+    _strategy_call(lambda: research_service.save_restriction_verification(db, report, index, request.model_dump()))
+    return research_service.serialize(report, detail=True)
 
 
 def _strategy_call(fn):

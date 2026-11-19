@@ -54,3 +54,11 @@ class StrategyApproveRequest(BaseModel):
     version: int
     revision: int  # onaylanan, analistin ekranda gordugu revizyondur
     approved_by: str = Field(..., min_length=2, max_length=120)
+
+
+class RestrictionVerificationRequest(BaseModel):
+    """Reklam kisitinin birincil kaynak teyidi; dordu birlikte dolu ya da dordu bos (teyidi kaldirir)."""
+    primary_source_url: Optional[str] = Field(None, max_length=500)
+    regulation_date: Optional[str] = Field(None, max_length=10)
+    verified_by: Optional[str] = Field(None, max_length=120)
+    verified_at: Optional[str] = Field(None, max_length=10)

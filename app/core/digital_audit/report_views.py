@@ -21,7 +21,8 @@ NO_STRATEGY = ("Strateji taslağı henüz üretilmedi. Özet, SWOT, karar noktal
 _ANCHORS = {"site": ("h2", "Web sitesi"), "seo": ("h2", "SEO"), "tracking": ("h2", "Ölçümleme"),
             "contact": ("h2", "İletişim kanalları"), "ecommerce": ("h2", "E-ticaret"),
             "visibility": ("h1", "Arama görünürlüğü"), "sector": ("h1", "Sektör analizi"),
-            "audience": ("h1", "Hedef kitle analizi")}
+            "audience": ("h1", "Hedef kitle analizi"), "youtube": ("h1", "YouTube"), "reputation": ("h2", "Arama: "),
+            "demand": ("h1", "Arama talebi"), "segments": ("h1", "Olası segmentler")}  # 'competitors': ayri bolum yok
 _AD_CHECK = {
     "önerilebilir": "Araştırmada reklam kısıtı bulunmadı. Bu, hukuki uygunluk onayı değildir.",
     "koşullu": "Sektörde reklam/tanıtım kısıtı bulundu; uygunluk değerlendirmesi yapılmadan yayımlanmaz.",
@@ -132,6 +133,23 @@ def _context(audit) -> List[Block]:
     return blocks
 
 
+def _regulation_box(audit, report) -> List[Block]:
+    """'Marka icin ne anlama geliyor' kutusu. Markanin mevcut faaliyeti bilinmiyorsa bu ACIKCA yazilir."""
+    restrictions = ((report.sections or {}).get("sector") or {}).get("restrictions") or []
+    if not restrictions:
+        return []
+    confirmed = sum(1 for r in restrictions if r.get("verification"))
+    channels = (((audit.answers or {}) if audit is not None else {}).get("ad_channels") or {}).get("value")
+    return [("h1", "Mevzuat: marka için ne anlama geliyor"), ("bullets", [
+        f"Sektörde {len(restrictions)} reklam/tanıtım kısıtı bulundu; {confirmed} tanesi birincil kaynaktan teyit edildi, "
+        f"{len(restrictions) - confirmed} tanesi teyit bekliyor (detaylı analiz, 'Yasal ve reklam kısıtları').",
+        (f"Analist brifine göre reklam verilen kanallar: {channels}. Bu kanallardaki yayınların kısıtlarla uyumu ayrıca "
+         "incelenmelidir; inceleme bu raporda yapılmadı." if channels else
+         "Markanın yayındaki reklam ve içerikleri bilinmiyor; mevcut faaliyetin kısıtlarla uyumu değerlendirilmedi."),
+        "Ücretli reklam önerileri uygunluk kararı verilmeden plana alınmaz; karar noktalarında yer alır.",
+        "Uyumsuzluk şüphesinde hukuk uzmanına danışılmalıdır. Bu bölüm hukuki görüş değildir."])]
+
+
 def _plan(actions: List[Dict]) -> List[Block]:
     blocks: List[Block] = [("h1", "90 günlük aksiyon planı")]
     for period in strategy.PERIODS:
@@ -175,8 +193,9 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
                     [[o["text"], o["type"], o["contribution"], o["priority_reason"], _refs(o)] for o in c["opportunities"]])]
     first = sorted((a for a in c["actions"] if a["period"] == "0-30"), key=lambda a: a["priority"])[:5]
     blocks += report_doc._bullets("İlk yapılacaklar (0-30 gün)", [f"{a['priority']}: {a['action']}" for a in first])
-    if c["decisions"]:
-        blocks += report_doc._bullets("Karar bekleyen konular", [f"K{i}: {d['question']}" for i, d in enumerate(c["decisions"], 1)])
+    # Ozet listesi ile karar tablosu AYNI listeyi kullanir (briefte bekleyen reklam kararlari dahil)
+    decisions = c["decisions"] + strategy.brief_ad_decisions(report, record, state)
+    blocks += report_doc._bullets("Karar bekleyen konular", [f"K{i}: {d['question']}" for i, d in enumerate(decisions, 1)])
 
     blocks += _context(audit)
 
@@ -198,11 +217,22 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
         blocks.append(("bullets", [f"{i['text']} ({_refs(i)})" for i in items]) if items
                       else ("p", "Yeterli kanıt yok; madde üretilmedi."))
 
+    blocks += _regulation_box(audit, report)
+
     blocks.append(("h1", "Karar noktaları"))
-    if c["decisions"]:
+    # Uygulama belgesinde bekleyen her sponsorlu reklam fikrinin burada bir karsiligi olur
+    if decisions:
         blocks.append(("table", ["No", "Karar sorusu", "Seçenekler", "Beklenen bilgi", "Karar sahibi (rol)", "Dayanak"],
                        [[f"K{i}", d["question"], "; ".join(d.get("options") or []), d["needed_info"], d["owner_role"], _refs(d)]
-                        for i, d in enumerate(c["decisions"], 1)]))
+                        for i, d in enumerate(decisions, 1)]))
+        ads = [d for d in decisions if d.get("held_action") or d.get("derived")]
+        if ads:
+            organic = sum(1 for a in c["actions"] if a.get("publication") != "sponsorlu")
+            blocks += [("h2", "Ücretli reklam: iki senaryo"), ("bullets", [
+                "Uygunluk onaylanırsa (izinli senaryo): bekleyen reklam önerileri test olarak başlatılır; ölçüm planı "
+                "uygulama belgesindedir. Onay, analistin kaydettiği dayanakla verilir.",
+                f"Onaylanmazsa ya da karar verilene kadar (izinsiz senaryo): ücretli yayın yapılmaz; çalışma 90 günlük "
+                f"plandaki {organic} organik ve teknik aksiyonla yürür."])]
     else:
         blocks.append(("p", "Dayanağı olan karar noktası üretilmedi."))
     blocks.append(("p", "Seçenekler öneridir; kararı analist ya da müşteri verir. Kısıt bulunan ya da uygunluğu "
@@ -215,28 +245,55 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
     return blocks + _appendix(record, used)
 
 
-def _detail(audit, report, record: Dict, state: str) -> List[Block]:
+def _ad_readiness(audit, report) -> List[Block]:
+    """Reklam hazirligi: hesap erisimi yokken eldeki gozlemlerin TEK baslikta toplanmasi. Performans degildir."""
+    own = next((t for t in audit.targets if t.kind == "own"), None) if audit is not None else None
+    found = {f["check"]: f for f in (own.findings if own else None) or []}
+    rows = [[label, report_doc._cell(found.get(check), check, own)] for check, label in (
+        ("tracking.gtm", "Etiket yöneticisi"), ("tracking.ga4", "Ziyaret ölçümü (GA4)"),
+        ("tracking.google_ads", "Google Ads etiketi"), ("tracking.meta_pixel", "Meta Pixel"),
+        ("site.cta", "Açılış sayfasında iletişim yolu"), ("contact.forms", "Form"),
+        ("site.speed_mobile", "Mobil açılış hızı")) if own is not None]
+    status = strategy.ad_base_status(report.sections or {})
+    rows += [["Dönüşüm olayları", "Bilinmiyor: hesap ya da Tag Assistant kanıtı yok"],
+             ["Reklam performansı (harcama, sonuç, maliyet)", "Hesap erişimi yok; değerlendirilmedi"],
+             ["Ücretli reklamın uygunluk durumu", f"{status}: {_AD_CHECK[status]}"]]
+    return [("h1", "Reklam hazırlığı [Gözlem]"), ("table", ["Konu", "Durum"], rows),
+            ("p", "Etiket satırları yalnız sayfa kodunda görüleni gösterir; etiketin çalıştığını ve verinin hesaba "
+                  "kaydedildiğini kanıtlamaz. Bu tablo reklam performansı değildir.")]
+
+
+def _detail(workspace, audit, report, record: Dict, state: str) -> List[Block]:
     blocks: List[Block] = []
     if audit is not None:
         blocks += report_doc._audit_blocks(audit) + report_doc._visibility_blocks(audit)
-    blocks += report_doc._research_blocks(report, briefs=False)
+    blocks += _ad_readiness(audit, report)
+    blocks += report_doc._research_blocks(report, briefs=False, brand=tuple(report_doc.brand_tokens(workspace)))
     if state not in ("draft", "approved"):
         note = report_doc.STALE_NOTE if state == "stale" else NO_STRATEGY
         return [("h1", "Bölüm yorumları"), ("p", note)] + blocks
-    notes = [n for n in strategy.content(record)["section_notes"]
-             if n["section"] != "ecommerce" or report_doc.is_ecommerce(audit)]
+    current = strategy.content(record)
+    shop = report_doc.is_ecommerce(audit)
+    notes = [n for n in current["section_notes"] if n["section"] != "ecommerce" or shop]
+    # Yorumu olmayan bolum sessizce gecilmez: nedeniyle birlikte yerine yazilir (bu not yorum sartini karsilamaz)
+    missing = current.get("note_gaps")
+    if missing is None:  # bu alan gelmeden once uretilmis kayit
+        missing = strategy.note_gaps(notes, record.get("catalogue") or [])
+    missing = [g for g in missing if g["section"] != "ecommerce" or shop]
     leftovers = []
-    for note in notes:
-        level, prefix = _ANCHORS[note["section"]]
-        start = next((i for i, b in enumerate(blocks) if b[0] == level and b[1].startswith(prefix)), None)
-        if start is None:
-            leftovers.append(note)
+    for key, block in [(n["section"], _note(n)) for n in notes] + [
+            (g["section"], ("p", f"Bölüm yorumu yok ({strategy.SECTIONS[g['section']]}): {g['reason']}.")) for g in missing]:
+        level, prefix = _ANCHORS.get(key, (None, None))
+        matches = [i for i, b in enumerate(blocks) if b[0] == level and b[1].startswith(prefix)] if level else []
+        if not matches:
+            leftovers.append(block)
             continue
+        start = matches[-1]  # ayni baslik birden cok kez gecerse (itibar aramalari) sonuncunun sonuna
         stops = ("h1",) if level == "h1" else ("h1", "h2")
         end = next((i for i in range(start + 1, len(blocks)) if blocks[i][0] in stops), len(blocks))
-        blocks[end:end] = [_note(note)]
+        blocks[end:end] = [block]
     if leftovers:
-        blocks += [("h1", "Diğer bölüm yorumları"), *[_note(n) for n in leftovers]]
+        blocks += [("h1", "Diğer bölüm yorumları"), *leftovers]
     return blocks + _appendix(record, _used(notes))
 
 
@@ -260,7 +317,8 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
     # Analistin dayanak yazarak plana aldigi ucretli kanallar
     current = strategy.content(record) if state in ("draft", "approved") else {}
     cleared = {CHANNELS.get(a["channel"]) for a in current.get("actions") or [] if a.get("publication") == "sponsorlu"}
-    decided = any(d.get("held_action") for d in current.get("decisions") or [])
+    decided = (any(d.get("held_action") for d in current.get("decisions") or [])
+               or bool(strategy.brief_ad_decisions(report, record, state)))
     selection = briefs.get("selection") or {}
     segments = (sections.get("synthesis") or {}).get("segments") or []
     blocks += report_doc._bullets("Seçilen segmentler", [segments[i]["name"] for i in selection.get("segments", []) if i < len(segments)])
@@ -291,8 +349,8 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
                    ("p", "Aşağıdaki fikirler ücretli yayın gerektirir ve uygunlukları onaylanmamıştır. Analist ya da "
                          "müşteri kararı verilmeden uygulanmaz. " + (
                              "İlgili karar yönetici raporunun karar noktalarındadır." if decided else
-                             "Strateji taslağı ücretli reklam önermediği için yönetici raporunda bu fikirlere ait "
-                             "ayrı bir karar noktası yoktur; uygulanmak istenirse önce bu karar verilmelidir."))]
+                             "Güncel bir strateji taslağı olmadığı için yönetici raporunda bu fikirlere ait karar "
+                             "noktası yoktur; uygulanmak istenirse önce bu karar verilmelidir."))]
         for idea in held:
             blocks += idea_block(idea)
     if briefs["creative_briefs"]:
@@ -335,6 +393,6 @@ def build(workspace, audit, report, view: str) -> List[Block]:
         record = _without_ecommerce(record)
     state = strategy.state(report)
     body = {"executive": lambda: _executive(audit, report, record, state),
-            "detail": lambda: _detail(audit, report, record, state),
+            "detail": lambda: _detail(workspace, audit, report, record, state),
             "implementation": lambda: _implementation(workspace, report, record, state)}[view]()
     return _cover(workspace, audit, report, view, record, state) + body + report_doc.LIMIT_BLOCKS

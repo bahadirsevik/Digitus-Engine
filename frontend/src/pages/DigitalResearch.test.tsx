@@ -17,6 +17,7 @@ vi.mock('../services/api', async (importOriginal) => {
       refreshSynthesis: vi.fn(),
       exportReport: vi.fn(),
       startStrategy: vi.fn(),
+      saveRestrictionVerification: vi.fn(),
       saveStrategy: vi.fn(),
       approveStrategy: vi.fn(),
     },
@@ -164,6 +165,42 @@ describe('DigitalResearch', () => {
     fireEvent.click(await screen.findByLabelText('Diş hekimi sayısı rapora girsin'))
     await waitFor(() => expect(api.saveClaimOverrides).toHaveBeenCalledWith(3, 1, ['sector:0']))
     expect(await screen.findByText('Rapordan çıkarıldı')).toBeInTheDocument()
+  })
+
+  it('mevzuat kısıtı analist kaydı olmadan teyit edildi görünmez; teyit dört alanla kaydedilir', async () => {
+    const verified = {
+      primary_source_url: 'https://www.resmigazete.gov.tr/x',
+      regulation_date: '2025-11-05',
+      verified_by: 'Analist A',
+      verified_at: '2026-11-18',
+    }
+    api.saveRestrictionVerification.mockReturnValue(
+      ok({
+        ...DETAIL,
+        sections: {
+          ...DETAIL.sections,
+          sector: {
+            ...DETAIL.sections.sector!,
+            restrictions: [{ ...DETAIL.sections.sector!.restrictions![0], verification: verified }],
+          },
+        },
+      })
+    )
+    render(<DigitalResearch workspaceId={1} />)
+    expect(await screen.findByText('Birincil kaynaktan teyit edilmedi')).toBeInTheDocument()
+    for (const [label, value] of [
+      ['Kısıt 1 Birincil kaynak adresi (Resmî Gazete, ilgili kurum)', verified.primary_source_url],
+      ['Kısıt 1 Mevzuat tarihi', verified.regulation_date],
+      ['Kısıt 1 Teyit eden', verified.verified_by],
+      ['Kısıt 1 Teyit tarihi', verified.verified_at],
+    ]) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Teyidi kaydet' }))
+    await waitFor(() =>
+      expect(api.saveRestrictionVerification).toHaveBeenCalledWith(3, 1, 0, verified)
+    )
+    expect(await screen.findByText('Teyit edildi (Analist A, 2026-11-18)')).toBeInTheDocument()
   })
 
   it('rakam kararı değişince brief formunu kapatır ve segmentleri yeniletir', async () => {

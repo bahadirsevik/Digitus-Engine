@@ -938,3 +938,134 @@ def test_open_gaps_follow_current_scope_without_regenerating(client, db_session,
     assert any("taslak üretiminde kullanılmadı" in g for g in gaps)  # uretime ozgu not korunur
     text = _view_text(db_session, ws, report_id, "executive")
     assert "hesap sorusu" not in text and "Arama görünürlüğü ölçülmedi." in text
+
+
+# --- G1-G4: bolum yorumu zorunlulugu, reklam karari, kapsam etiketi, mevzuat teyidi ----------------
+
+def test_every_section_with_data_needs_a_note_and_gaps_are_shown(client, db_session, make_workspace, dispatched,
+                                                                 monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, ai = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    # Model, verisi olan her bolum icin yorum yazmak zorunda oldugunu ve hangileri oldugunu bilir
+    prompt = ai.prompts["audit_strategy"]
+    assert "YORUMU ZORUNLU BÖLÜMLER: seo, competitors, sector, audience, segments" in prompt
+    draft = get(client, report_id, ws).json()["sections"]["strategy"]["draft"]
+    gaps = {g["section"]: g["reason"] for g in draft["note_gaps"]}
+    # Sahte yanit yalniz SEO yorumu yazdi: verisi olan diger bolumler acikca eksik gorunur
+    assert "seo" not in gaps and gaps["sector"] == gaps["audience"] == gaps["competitors"] == "veri var, yorum üretilmedi"
+    assert gaps["youtube"] == gaps["site"] == "bu bölüm için ölçülmüş veri yok" and "ecommerce" not in gaps
+    text = _view_text(db_session, ws, report_id, "detail")
+    assert "Bölüm yorumu yok (Sektör): veri var, yorum üretilmedi." in text
+    assert "Bölüm yorumu yok (YouTube): bu bölüm için ölçülmüş veri yok." in text
+    # Yeni bolumler icin yorum kabul edilir ve yerine yazilir
+    edited = json.loads(json.dumps(draft))
+    seg = next(c["id"] for c in get(client, report_id, ws).json()["sections"]["strategy"]["catalogue"]
+               if c.get("section") == "segments")
+    edited["section_notes"].append({"section": "segments", "finding": "Acil hasta segmenti öne çıkıyor",
+                                    "impact": "Mesaj önceliği", "action": "Segmenti görüşmeyle doğrula", "refs": [seg]})
+    res = client.put(url, json={"version": 1, "revision": 0, "content": edited}).json()
+    assert "segments" not in {g["section"] for g in res["sections"]["strategy"]["edited"]["note_gaps"]}
+    assert "Segmenti görüşmeyle doğrula" in _view_text(db_session, ws, report_id, "detail")
+
+
+def test_catalogue_adds_youtube_reputation_and_demand_rows_at_the_end():
+    from types import SimpleNamespace
+
+    from app.core.digital_audit import strategy
+
+    visibility = {"sites": ["marka.test"], "serp": {"status": "ok", "keywords": [], "reputation": [
+        {"query": "Marka şikayet", "results": [{"title": "Genel şikayet sayfası", "position": 1, "domain": "x.test"}]}]},
+        "youtube": {"channels": {"marka.test": {"status": "ok", "title": "Marka", "subscribers": 1, "video_count": 11,
+                                                "last_upload": "2026-10-22", "recent_sample": 11, "recent_avg_views": 268}}}}
+    audit = SimpleNamespace(answers={}, visibility=visibility, targets=[SimpleNamespace(
+        url="https://marka.test", kind="own", pages_checked=10,
+        findings=[_finding("seo.titles", "Sayfa başlıkları", "ok", value={"missing": 0})])])
+    report = SimpleNamespace(claim_overrides=[], sections={"demand": {"status": "ok", "keywords": [{"keyword": "a"}], "by_month": [
+        {"month": "Ocak", "searches": 300, "index": 1.1}, {"month": "Ekim", "searches": 200, "index": 0.9}]}})
+    cat = strategy.catalogue(SimpleNamespace(name="Marka", company_url="https://marka.test"), audit, report)
+    assert [(c["id"], c["section"]) for c in cat] == [("B1", "seo"), ("B2", "youtube"), ("B3", "reputation"), ("B4", "demand")]
+    assert "abone 1, 11 video" in cat[1]["text"] and "içerikleri okunmadı" in cat[2]["text"]
+    assert "en yüksek Ocak (300), en düşük Ekim (200)" in cat[3]["text"]
+
+
+def test_pending_ad_ideas_get_a_decision_point_and_two_scenarios(client, db_session, make_workspace, dispatched,
+                                                                monkeypatch):
+    briefs = json.loads(json.dumps(BRIEFS))
+    briefs["ad_ideas"].append({**briefs["ad_ideas"][0], "channel": "Instagram / Facebook", "message": "Sosyal reklam"})
+    monkeypatch.setitem(PAYLOADS, "audit_briefs", briefs)
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    before = _view_text(db_session, ws, report_id, "executive")
+    assert "Ücretli reklam (Instagram / Facebook)" not in before
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta", "google_search"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    assert get(client, report_id, ws).json()["strategy_state"] == "draft"  # brief uretimi stratejiyi bayatlatmaz
+    text = _view_text(db_session, ws, report_id, "executive")
+    # Briefteki bekleyen kanal icin karar eklenir; stratejinin zaten beklettigi kanal (Google Arama Agi) tekrarlanmaz
+    assert "Ücretli reklam (Instagram / Facebook) başlatılsın mı? Uygulama belgesinde bu kanal için 1 reklam fikri" in text
+    # Her karar iki yerde gecer (ozet listesi + karar tablosu), ayni numarayla; fazladan kopya yok
+    assert text.count("Ücretli reklam (Google Arama Ağı) başlatılsın mı?") == 2
+    assert text.count("Ücretli reklam (Instagram / Facebook) başlatılsın mı?") == 2
+    assert "Ücretli reklam: iki senaryo" in text and "izinli senaryo" in text and "izinsiz senaryo" in text
+    assert "İlgili karar yönetici raporunun karar noktalarındadır." in _view_text(db_session, ws, report_id, "implementation")
+    detail = _view_text(db_session, ws, report_id, "detail")
+    assert "Reklam hazırlığı [Gözlem]" in detail and "Hesap erişimi yok; değerlendirilmedi" in detail
+
+
+def test_audience_insights_carry_scope_and_segments_their_basis(client, db_session, make_workspace, dispatched,
+                                                                monkeypatch):
+    audience = {**AUDIENCE, "needs": AUDIENCE["needs"] + [
+        {"theme": "Marka kliniğinde bekleme süresi", "quote": "Randevu almak çok zor", "source_name": "Forum"}]}
+    monkeypatch.setitem(PAYLOADS, "audit_audience_research", audience)
+    ws = make_workspace("Marka")
+    report_id = completed_report(client, db_session, ws, dispatched)
+    text = _blocks(db_session, ws, report_id)
+    assert "[Sektör geneli] Randevu bulma" in text and "[Marka hakkında] Marka kliniğinde bekleme süresi" in text
+    assert "başka işletmelerin müşterilerinden derlenen içgörüdür" in text
+    assert "Dayanak türü: [Hipotez] sektör kaynaklarından türetilmiş yorum; müşteri verisiyle doğrulanmadı" in text
+
+
+def test_regulation_is_never_marked_verified_without_a_complete_analyst_record(client, db_session, make_workspace,
+                                                                             dispatched, monkeypatch):
+    import sys
+
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "SOURCE_TEXT", SOURCE_TEXT + " Bu alanda 1219 sayılı Kanun yürürlüktedir.")
+    sector = {**SECTOR, "claims": SECTOR["claims"] + [
+        {"claim": "Kanun numarası", "value": "1219", "unit": "sayılı Kanun", "year": "", "geography": "Türkiye",
+         "source_name": "Mevzuat"}]}
+    monkeypatch.setitem(PAYLOADS, "audit_sector_research", sector)
+    ws, other = make_workspace("Marka"), make_workspace("Diger")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    put = f"/api/v1/digital-audit/research/{report_id}/restrictions/0/verification?brand_profile_id={ws.id}"
+    text = _blocks(db_session, ws, report_id)
+    # Varsayilan: teyit yok. Kanun numarasi pazar tablosunda degil, mevzuat referanslarinda
+    assert "Birincil kaynaktan teyit edilmedi" in text and "1 kısıttan 0 tanesi birincil kaynaktan" in text
+    assert "Teyit edildi" not in text
+    assert "Mevzuat referansları [Kaynak]" in text and "Kanun numarası: 1219 sayılı Kanun" in text
+    table = next(b for b in __import__("app.core.digital_audit.report_doc", fromlist=["x"]).build_blocks(
+        ws, None, db_session.get(DigitalResearch, report_id)) if b[0] == "table" and b[1][0] == "Bilgi")
+    assert [row[0] for row in table[2]] == ["Diş hekimi sayısı"]
+    box = _view_text(db_session, ws, report_id, "executive")
+    assert "Mevzuat: marka için ne anlama geliyor" in box and "0 tanesi birincil kaynaktan teyit edildi, 1 tanesi teyit bekliyor" in box
+    assert "Markanın yayındaki reklam ve içerikleri bilinmiyor" in box
+
+    full = {"primary_source_url": "https://www.resmigazete.gov.tr/eskiler/2025/x.htm", "regulation_date": "2025-11-05",
+            "verified_by": "Analist A", "verified_at": "2026-11-18"}
+    for bad in ({"primary_source_url": full["primary_source_url"]},            # yarim kayit
+                {**full, "primary_source_url": "resmigazete.gov.tr"},         # adres degil
+                {**full, "regulation_date": "05.11.2025"}, {**full, "verified_at": "2999-01-01"}):
+        assert client.put(put, json=bad).status_code == 400
+    assert "Teyit edildi" not in _blocks(db_session, ws, report_id)
+    assert client.put(put.replace("/0/", "/7/"), json=full).status_code == 400
+    assert client.put(put.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}"), json=full).status_code == 404
+
+    res = client.put(put, json=full)
+    assert res.status_code == 200 and res.json()["sections"]["sector"]["restrictions"][0]["verification"] == full
+    assert res.json()["strategy_state"] == "draft"  # teyit kaydi stratejiyi bayatlatmaz
+    text = _blocks(db_session, ws, report_id)
+    assert "Teyit edildi: https://www.resmigazete.gov.tr/eskiler/2025/x.htm (mevzuat tarihi 2025-11-05; teyit eden Analist A, 2026-11-18)" in text
+    assert "1 kısıttan 1 tanesi birincil kaynaktan" in text
+    # Bos kayit teyidi kaldirir
+    assert client.put(put, json={}).status_code == 200
+    assert "Teyit edildi" not in _blocks(db_session, ws, report_id)

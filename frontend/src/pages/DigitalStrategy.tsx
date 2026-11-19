@@ -276,6 +276,13 @@ export default function DigitalStrategy(props: Props) {
               Dayanağı olmadığı için taslağa alınmayan madde: {content.dropped}.
             </p>
           )}
+          {(content.note_gaps || []).length > 0 && (
+            <p className="audit-status-note">
+              Yorumu olmayan bölümler:{' '}
+              {(content.note_gaps || []).map((g) => `${g.section} (${g.reason})`).join('; ')}.
+              Verisi olan bölümlerde yorum zorunludur; eksikler detaylı analizde açıkça görünür.
+            </p>
+          )}
           {GROUPS.map(([path, title, fields]) => {
             const items = listAt(content, path)
             return (
