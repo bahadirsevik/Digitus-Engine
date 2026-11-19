@@ -1364,3 +1364,43 @@ def test_sector_meanings_content_plan_and_kpi_table(client, db_session, make_wor
     kpi = next(b for b in blocks if b[0] == "table" and b[1][0] == "Gösterge / test hipotezi")
     assert ["Eksik başlık sayısı", "Sayfa başlıklarını tamamla", "0-30 gün", "ölçülmedi"] in kpi[2]
     assert all(row[3] == "ölçülmedi" for row in kpi[2])  # baslangic degeri uydurulmaz
+
+
+def test_content_plan_does_not_depend_on_briefs_and_prints_the_real_publication_type(client, db_session, make_workspace,
+                                                                                     dispatched, monkeypatch):
+    from app.core.digital_audit import report_doc
+
+    def tables(view="implementation"):
+        db_session.expire_all()
+        report = db_session.get(DigitalResearch, report_id)
+        blocks = report_doc.build_blocks(ws, db_session.get(DigitalAudit, report.audit_id), report, view)
+        return {b[1][0]: b[2] for b in blocks if b[0] == "table"}, repr(blocks)
+
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    record = get(client, report_id, ws).json()["sections"]["strategy"]
+    edited = json.loads(json.dumps(record["draft"]))
+    held = next(d for d in edited["decisions"] if d.get("held_action"))
+    edited["decisions"].remove(held)
+    # Analist dayanak yazarak sponsorlu aksiyonu plana alir; ayrica organik bir icerik aksiyonu ekler
+    edited["actions"].append({**held["held_action"], "ad_status": "önerilebilir", "ad_basis": "Hukuk görüşü 12.11.2026"})
+    edited["actions"].append({**edited["actions"][0], "action": "Blog yazısı yayımla", "kind": "içerik",
+                              "channel": "website", "publication": "organik", "kpi": "Blog ziyareti"})
+    assert client.put(url, json={"version": 1, "revision": 0, "content": edited}).status_code == 200
+
+    found, text = tables()
+    # Brief HIC uretilmedi: plan ve KPI yine belgede; yalniz brief satirlari yok
+    assert "Seçilmiş segmentler için brief üretilmedi." in text
+    plan = {row[1]: row for row in found["Dönem"]}
+    assert plan["Blog yazısı yayımla"][2:4] == ["Web sitesi / blog", "organik"]
+    # Sponsorlu aksiyon "organik" diye yazilmaz; uygunluk durumu stratejideki kararla ayni
+    paid = plan["Acil hasta için arama reklamı aç"]
+    assert paid[3] == "sponsorlu (öneri durumu: önerilebilir; analist dayanağı: Hukuk görüşü 12.11.2026)"
+    assert not any("Dişiniz mi ağrıyor?" in row[1] for row in found["Dönem"])
+    assert ["Blog ziyareti", "Blog yazısı yayımla", "0-30 gün", "ölçülmedi"] in found["Gösterge / test hipotezi"]
+
+    # Brief uretilince brief satirlari eklenir; strateji satirlari yerinde kalir
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    found, _ = tables()
+    assert any("Dişiniz mi ağrıyor?" in row[1] for row in found["Dönem"]) and "Blog yazısı yayımla" in {r[1] for r in found["Dönem"]}

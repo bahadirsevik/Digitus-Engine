@@ -354,13 +354,15 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
     blocks: List[Block] = [("h1", "Reklam ve kreatif briefler [Hipotez]"), ("p", (
         "Bu belgede üretilmiş içerik ya da gerçek kampanya performansı yoktur. Briefler, test edilecek önerilerdir; "
         "görsel ya da video üretilmemiştir."))]
+    # Guncel stratejinin icerik plani ve KPI'lari brief uretimine BAGLI DEGILDIR: brief yoksa ya da bayatsa
+    # yalniz brieften gelen satirlar eksik kalir.
+    current = strategy.content(record) if state in ("draft", "approved") else {}
     if research.synthesis_stale(report) or research.briefs_stale(report):
-        return blocks + [("p", report_doc.STALE_NOTE)]
+        return blocks + [("p", report_doc.STALE_NOTE)] + _content_plan(current, {})
     if briefs.get("status") != "ok":
-        return blocks + [("p", "Seçilmiş segmentler için brief üretilmedi.")]
+        return blocks + [("p", "Seçilmiş segmentler için brief üretilmedi.")] + _content_plan(current, {})
     base = strategy.ad_base_status(sections)
     # Analistin dayanak yazarak plana aldigi ucretli kanallar
-    current = strategy.content(record) if state in ("draft", "approved") else {}
     cleared = {CHANNELS.get(a["channel"]) for a in current.get("actions") or [] if a.get("publication") == "sponsorlu"}
     decided = (any(d.get("held_action") for d in current.get("decisions") or [])
                or bool(strategy.brief_ad_decisions(report, record, state)))
@@ -426,9 +428,17 @@ def _content_plan(current: Dict, briefs: Dict) -> List[Block]:
     briefleri plan olarak, tum aksiyonlarin KPI'larini tek tabloda toplar. Baslangic degeri uydurulmaz."""
     actions = current.get("actions") or []
     blocks: List[Block] = [("h1", "İçerik planı")]
+    def publication(a) -> str:
+        # Yayin turu aksiyonun GERCEK degeridir; sponsorlu ise uygunluk durumu stratejideki kararla ayni yazilir
+        if a.get("publication") == "sponsorlu":
+            basis = f"; analist dayanağı: {a['ad_basis']}" if a.get("ad_basis") else ""
+            return f"sponsorlu (öneri durumu: {a.get('ad_status') or 'değerlendirilmedi'}{basis})"
+        return a.get("publication") or "belirtilmedi"
+
     rows = [[f"{a['period']} gün", a["action"], strategy.STRATEGY_CHANNELS.get(a.get("channel"), "belirtilmedi"),
-             "organik", a["owner_role"] or "belirtilmedi"]
-            for a in sorted(actions, key=lambda a: a["period"]) if a.get("kind") == "içerik"]
+             publication(a), a["owner_role"] or "belirtilmedi"]
+            for a in sorted(actions, key=lambda a: a["period"])
+            if a.get("kind") in ("içerik", "reklam") or a.get("publication") == "sponsorlu"]
     rows += [["Karara bağlı" if b.get("restriction_note") else "Planlanacak",
               f"{b['format']} · {b['hook']}", b["channel"], "belirtilmedi (kreatif brief)", "İçerik ekibi"]
              for b in briefs.get("creative_briefs") or []]
