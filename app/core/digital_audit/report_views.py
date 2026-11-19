@@ -223,7 +223,8 @@ def _detail(audit, report, record: Dict, state: str) -> List[Block]:
     if state not in ("draft", "approved"):
         note = report_doc.STALE_NOTE if state == "stale" else NO_STRATEGY
         return [("h1", "Bölüm yorumları"), ("p", note)] + blocks
-    notes = strategy.content(record)["section_notes"]
+    notes = [n for n in strategy.content(record)["section_notes"]
+             if n["section"] != "ecommerce" or report_doc.is_ecommerce(audit)]
     leftovers = []
     for note in notes:
         level, prefix = _ANCHORS[note["section"]]

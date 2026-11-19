@@ -152,6 +152,10 @@ def catalogue(workspace, audit, report) -> List[Dict]:
 
 def model_catalogue(full: List[Dict]) -> List[Dict]:
     """Modele gonderilen en fazla MAX_CATALOGUE satir; kisit, brif, rakam ve segment once korunur."""
+    # E-ticaret sitesi degilse e-ticaret satirlari modele GITMEZ (tam listede kalir: parmak izi degismez)
+    shop = any((c.get("check") == "ecommerce.platform" and c["kind"] == "Ölçüm (marka sitesi)" and c.get("state") == "gözlendi")
+               or (c["kind"] == "Analist brifi" and "İş modeli" in c["text"] and "E-ticaret" in c["text"]) for c in full)
+    full = [c for c in full if shop or not str(c.get("check") or "").startswith("ecommerce.")]
     keep = [c for c in full if c["kind"] in _KEEP_KINDS]
     rest = [c for c in full if c["kind"] not in _KEEP_KINDS][:max(MAX_CATALOGUE - len(keep), 0)]
     chosen = {c["id"] for c in keep + rest}
@@ -180,9 +184,6 @@ def gaps(audit, report) -> List[str]:
         missing = [q["label"] for q in QUESTIONS if q["group"] == "brief" and q["key"] not in answers]
         if missing:
             out.append("Analist brifinde boş sorular: " + " ".join(missing))
-        unanswered = sum(1 for q in QUESTIONS if q["group"] == "account" and q["key"] not in answers)
-        if unanswered:
-            out.append(f"Müşteriye sorulacak {unanswered} hesap sorusu cevaplanmadı.")
         social = (answers.get("main_social") or {}).get("value")
         if social and social != "Yok":
             out.append(f"Ana sosyal kanalın ({social}) takipçi ve etkileşim verisi yok; müşteri hesabından alınmalı.")

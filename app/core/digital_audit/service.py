@@ -319,5 +319,7 @@ def serialize(audit: DigitalAudit, detail: bool = False) -> Dict:
         data["scope"] = audit.scope or {}
         data["visibility"] = audit.visibility
         data["answers"] = audit.answers or {}
-        data["questions"] = QUESTIONS
+        # Musteriden elle bilgi istenmez: hesap sorulari (WhatsApp Business var mi vb.) ekrana gitmez.
+        # Onceden girilmis cevaplar kayitta durur; analist brifi (istege bagli) sorulmaya devam eder.
+        data["questions"] = [q for q in QUESTIONS if q["group"] == "brief"]
     return data

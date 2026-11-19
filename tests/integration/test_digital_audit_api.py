@@ -265,4 +265,18 @@ def test_evidence_must_be_complete_to_count_as_verified(client, db_session, make
     saved = put({"source": " ", "period": ""}).json()["answers"]["search_console"]
     assert saved == {"value": "Evet", "note": None}
     groups = {q["key"]: q["group"] for q in get(client, audit_id, ws).json()["questions"]}
-    assert groups["business_model"] == "brief" and groups["search_console"] == "account"
+    # Musteriden elle bilgi istenmez: hesap sorulari ekrana gonderilmez
+    assert groups == {q: "brief" for q in groups} and "business_model" in groups and "search_console" not in groups
+
+
+def test_pitch_deck_export_needs_only_an_audit(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws, other = make_workspace("Marka"), make_workspace("Diger")
+    audit_id = start(client, ws).json()["audit_id"]
+    monkeypatch.setattr(runner, "run_target", lambda url, own: OK_RESULT)
+    service.run_audit(db_session, audit_id, dispatched[0]["task_id"])
+    base = "/api/v1/digital-audit/export?view=pitch"
+    res = client.get(f"{base}&brand_profile_id={ws.id}&audit_id={audit_id}&format=pdf")
+    assert res.status_code == 200 and res.content.startswith(b"%PDF") and "attachment" in res.headers["content-disposition"]
+    assert client.get(f"{base}&brand_profile_id={ws.id}&audit_id={audit_id}&format=docx").status_code == 400
+    assert client.get(f"{base}&brand_profile_id={ws.id}&format=pdf").status_code == 400
+    assert client.get(f"{base}&brand_profile_id={other.id}&audit_id={audit_id}&format=pdf").status_code == 404

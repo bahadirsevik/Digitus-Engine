@@ -135,6 +135,52 @@ def test_brief_declaration_and_verified_data_are_labelled_apart():
         "doğrulayan: Analist A; dönem: son 28 gün)"]
 
 
+def test_ecommerce_section_is_hidden_unless_the_brand_site_is_a_shop():
+    def audit_with(state):
+        audit = _audit()
+        audit.targets[0].findings.append(
+            finding("ecommerce", "ecommerce.platform", "E-ticaret altyapısı", state, "info",
+                    value={"platforms": ["Shopify"]} if state == "observed" else None))
+        audit.targets[1].findings.append(finding("ecommerce", "ecommerce.platform", "E-ticaret altyapısı", "observed", "info",
+                                                 value={"platforms": ["WooCommerce"]}))
+        return audit
+
+    hidden = repr(report_doc.build_blocks(WORKSPACE, audit_with("not_observed"), None))
+    assert "E-ticaret" not in hidden and "WooCommerce" not in hidden  # rakipte olsa bile bolum cikmaz
+    assert "Shopify" in repr(report_doc.build_blocks(WORKSPACE, audit_with("observed"), None))
+    brief = audit_with("not_observed")
+    brief.answers = {"business_model": {"value": "E-ticaret", "note": None}}
+    assert ("h2", "E-ticaret") in report_doc.build_blocks(WORKSPACE, brief, None)
+
+
+def test_pitch_deck_is_plain_urgent_first_and_ends_with_the_plan():
+    from app.core.digital_audit import pitch_deck
+
+    audit = _audit()
+    audit.targets[0].findings += [
+        finding("site", "site.broken_links2", "x", "observed", "ok"),
+        finding("seo", "seo.noindex_home", "x", "unknown"),
+        finding("tracking", "tracking.meta_pixel", "Meta Pixel izi", "not_observed"),
+        finding("ecommerce", "ecommerce.platform", "E-ticaret altyapısı", "not_observed", "info"),
+        finding("site", "site.ssl", "SSL sertifikası", "observed", "problem", value={"expires": "2026-11-01", "days_left": -15}),
+    ]
+    data = pitch_deck.build(audit)
+    titles = [i["title"] for i in data["urgent"]]
+    # Sorun once, uyari sonra, "gorulmedi" en sonda; sade dil
+    assert titles[0] == "Güvenlik sertifikası (SSL)" and titles[-1].startswith("Ziyaretçi ölçümü (Google Analytics)")
+    assert "Telefonda açılış hızı iyileştirilebilir" in titles  # 79/100 "yavas" diye yazilmaz
+    ga4 = data["urgent"][-1]
+    assert "görülmedi" in ga4["seen"] and "kontrol ediyor, eksikse" in ga4["fix"]  # kesin yokluk iddiasi yok
+    text = repr(data)
+    assert "E-ticaret" not in text and "Meta Pixel" not in text  # magaza degil; reklam pikseli eksik sayilmaz
+    assert data["unmeasured"] == 2 and data["counts"]["urgent"] == 1  # olculemeyen eksik sayilmaz
+    assert "Kırık bağlantı yok" in data["good"]
+    # Son bolum her zaman 90 gunluk plan; ilk adim acil duzeltmelerin karsiligi
+    assert [p[0] for p in data["plan"]] == ["İlk 30 gün", "30-60 gün", "60-90 gün"]
+    assert data["plan"][0][2] == [i["fix"] for i in data["urgent"]]
+    assert pitch_deck.render(WORKSPACE, audit).startswith(b"%PDF")
+
+
 @pytest.mark.parametrize("fmt", ["docx", "pdf"])
 def test_audit_report_renders(fmt):
     content, _ = report_doc.render(WORKSPACE, _audit(), None, fmt)

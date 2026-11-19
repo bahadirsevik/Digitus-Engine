@@ -268,7 +268,7 @@ def export_report(
     format: str = Query("docx", pattern="^(docx|pdf)$"),
     audit_id: Optional[int] = Query(None),
     research_id: Optional[int] = Query(None),
-    view: Optional[str] = Query(None, pattern="^(executive|detail|implementation)$"),
+    view: Optional[str] = Query(None, pattern="^(executive|detail|implementation|pitch)$"),
     db: Session = Depends(get_db),
 ):
     """Bagimsiz rapor dosyasi (site denetimi ve/veya arastirma). Skorlama calismasi gerektirmez.
@@ -280,6 +280,14 @@ def export_report(
     if audit_id is None and research_id is None:
         raise HTTPException(status_code=400, detail="Rapor için bir denetim ya da araştırma seçin.")
     report = _get_research(db, research_id, brand_profile_id) if research_id is not None else None
+    if view == "pitch":
+        # Musteri sunumu yalniz site denetiminden uretilir (yapay zeka ve arastirma gerekmez); 16:9 PDF.
+        if audit_id is None or format != "pdf":
+            raise HTTPException(status_code=400, detail="Müşteri sunumu için bir denetim seçin; biçim PDF olmalı.")
+        audit = _get_audit(db, audit_id, brand_profile_id)
+        content, media_type = report_doc.render(workspace, audit, None, "pdf", "pitch")
+        return Response(content=content, media_type=media_type, headers={"Content-Disposition": content_disposition(
+            f"dijital-on-inceleme-{workspace.name or 'sunum'}.pdf")})
     if view:
         if report is None:
             raise HTTPException(status_code=400, detail="Bu belge için bir araştırma seçin.")

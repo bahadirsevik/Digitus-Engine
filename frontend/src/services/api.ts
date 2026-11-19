@@ -2579,7 +2579,7 @@ export const digitalResearchApi = {
       format: 'docx' | 'pdf'
       audit_id?: number
       research_id?: number
-      view?: 'executive' | 'detail' | 'implementation'
+      view?: 'executive' | 'detail' | 'implementation' | 'pitch'
     }
   ) =>
     api.get('/digital-audit/export', {

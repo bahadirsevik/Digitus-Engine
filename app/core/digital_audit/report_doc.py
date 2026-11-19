@@ -54,6 +54,18 @@ _FIELD_CATEGORY = {"FAST": "iyi", "AVERAGE": "orta", "SLOW": "zayıf"}
 _OUT_OF_SCOPE = "Kapsam dışı (rakipte ölçülmez)"
 
 
+def is_ecommerce(audit) -> bool:
+    """Marka sitesinde e-ticaret altyapisi goruldu mu (ya da brifte is modeli e-ticaret mi)?
+    Degilse e-ticaret bolumu raporda HIC gosterilmez: "yok" satiri musteriye bir sey soylemez."""
+    if audit is None:
+        return False
+    if ((audit.answers or {}).get("business_model") or {}).get("value") == "E-ticaret":
+        return True
+    own = next((t for t in audit.targets if t.kind == "own"), None)
+    return any(f["check"] == "ecommerce.platform" and f["state"] == "observed"
+               for f in (own.findings if own else None) or [])
+
+
 def _host(url: str) -> str:
     return re.sub(r"^https?://(www\.)?", "", url or "").strip("/")
 
@@ -225,6 +237,8 @@ def _audit_blocks(audit) -> List[Block]:
                 checks.append(f["check"])
             labels[f["check"]] = f["label"]
     for section in sorted(order, key=lambda s: _SECTION_ORDER.index(s) if s in _SECTION_ORDER else len(_SECTION_ORDER)):
+        if section == "ecommerce" and not is_ecommerce(audit):
+            continue
         checks = order[section]
         blocks.append(("h2", _SECTION.get(section, section)))
         blocks.append(("table", ["Kontrol"] + [_host(t.url) for t in targets],
@@ -613,6 +627,10 @@ RENDERERS = {
 
 
 def render(workspace, audit, report, fmt: str, view: Optional[str] = None) -> Tuple[bytes, str]:
+    if view == "pitch":  # musteri toplantisi sunumu: yalniz denetimden, 16:9 PDF
+        from app.core.digital_audit import pitch_deck
+
+        return pitch_deck.render(workspace, audit), RENDERERS["pdf"][1]
     renderer, media_type = RENDERERS[fmt]
     return renderer(build_blocks(workspace, audit, report, view)), media_type
 

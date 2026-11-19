@@ -155,14 +155,15 @@ export default function DigitalAudit() {
     }
   }
 
-  const download = async (format: 'docx' | 'pdf') => {
+  const download = async (format: 'docx' | 'pdf', view?: 'pitch') => {
     if (!workspaceId || !detail) return
     try {
       const res = await digitalResearchApi.exportReport(workspaceId, {
         format,
         audit_id: detail.id,
+        ...(view ? { view } : {}),
       })
-      downloadBlobResponse(res, `dijital-denetim.${format}`)
+      downloadBlobResponse(res, `${view ? 'musteri-sunumu' : 'dijital-denetim'}.${format}`)
     } catch (err) {
       setError(`Rapor indirilemedi: ${apiErrorMessage(err, 'bilinmeyen hata')}`)
     }
@@ -450,10 +451,14 @@ export default function DigitalAudit() {
                     <button className="btn btn-secondary" onClick={() => download('pdf')}>
                       <Download size={18} /> Denetim raporu (PDF)
                     </button>
+                    <button className="btn btn-primary" onClick={() => download('pdf', 'pitch')}>
+                      <Download size={18} /> Müşteri sunumu (PDF)
+                    </button>
                   </div>
                   <p className="audit-hint">
-                    Yalnızca site denetimini içerir. Araştırma, segment ve fikirlerle birleşik rapor
-                    "Araştırma ve fikir" sekmesinden indirilir.
+                    Müşteri sunumu, toplantıda gösterilecek kısa özettir: öncelikle düzeltilecekler
+                    ve 90 günlük plan. Denetim raporu yalnızca site denetimini içerir. Araştırma,
+                    segment ve fikirlerle birleşik rapor "Araştırma ve fikir" sekmesinden indirilir.
                   </p>
                 </>
               )}
@@ -533,16 +538,20 @@ export default function DigitalAudit() {
                   </div>
                 </>
               )}
-              <h2>Müşteriye sorulacaklar</h2>
-              <p className="audit-hint">
-                Dışarıdan görülemeyen maddeler. Cevaplar otomatik bulgulardan ayrı saklanır ve
-                onları değiştirmez. Kanıt girilmeyen cevap raporda "Beyan" olarak, kaynağı, kontrol
-                tarihi ve doğrulayan kişi girilen cevap "Analist doğruladı" olarak etiketlenir;
-                sistem kaynağı kendisi kontrol etmez.
-              </p>
-              <div className="audit-questions">
-                {detail.questions.filter((q) => q.group !== 'brief').map(questionField)}
-              </div>
+              {detail.questions.some((q) => q.group !== 'brief') && (
+                <>
+                  <h2>Müşteriye sorulacaklar</h2>
+                  <p className="audit-hint">
+                    Dışarıdan görülemeyen maddeler. Cevaplar otomatik bulgulardan ayrı saklanır ve
+                    onları değiştirmez. Kanıt girilmeyen cevap raporda "Beyan" olarak, kaynağı,
+                    kontrol tarihi ve doğrulayan kişi girilen cevap "Analist doğruladı" olarak
+                    etiketlenir; sistem kaynağı kendisi kontrol etmez.
+                  </p>
+                  <div className="audit-questions">
+                    {detail.questions.filter((q) => q.group !== 'brief').map(questionField)}
+                  </div>
+                </>
+              )}
               <button className="btn btn-secondary" onClick={saveAnswers} disabled={saving}>
                 <Save size={18} />
                 {saved ? 'Kaydedildi' : 'Cevapları kaydet'}
