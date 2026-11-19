@@ -219,6 +219,17 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
     })
   }
 
+  const reviewClaim = (claim: ResearchClaim, source_type: string, note: string) =>
+    detail &&
+    guarded('Kaynak türü kaydedilemedi', async () => {
+      const res = await digitalResearchApi.saveClaimReview(detail.id, workspaceId, {
+        claim_id: claim.id,
+        source_type,
+        note,
+      })
+      setDetail(res.data)
+    })
+
   const refreshSynthesis = () =>
     detail &&
     guarded('Segmentler yenilenemedi', async () => {
@@ -264,6 +275,7 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
               <th>Yıl / coğrafya</th>
               <th>Kaynak kontrolü</th>
               <th>Raporda</th>
+              <th>Kaynak türü ve not (analist)</th>
             </tr>
           </thead>
           <tbody>
@@ -306,6 +318,34 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
                     ) : (
                       'Girmez'
                     )}
+                  </td>
+                  <td>
+                    <select
+                      className="input"
+                      aria-label={`${claim.claim} kaynak türü`}
+                      value={claim.source_type || ''}
+                      disabled={busy || running}
+                      onChange={(e) => reviewClaim(claim, e.target.value, claim.analyst_note || '')}
+                    >
+                      <option value="">Belirlenmedi</option>
+                      {['resmî', 'birincil', 'ikincil', 'tahmini'].map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      key={`${claim.id}-${claim.analyst_note || ''}`}
+                      className="input"
+                      aria-label={`${claim.claim} analist notu`}
+                      placeholder="Analist notu (ör. çelişen değerin açıklaması)"
+                      defaultValue={claim.analyst_note || ''}
+                      disabled={busy || running}
+                      onBlur={(e) =>
+                        e.target.value !== (claim.analyst_note || '') &&
+                        reviewClaim(claim, claim.source_type || '', e.target.value)
+                      }
+                    />
                   </td>
                 </tr>
               )

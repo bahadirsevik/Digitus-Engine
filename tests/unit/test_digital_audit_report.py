@@ -62,7 +62,9 @@ def test_cells_carry_stored_values_with_scope():
     text = repr(blocks)
     assert "Denetim tarihi: 16.11.2026" in text
     assert "marka.test (marka): denetlendi, 10 sayfa incelendi" in text
-    assert "rakip.test/tr (rakip): site erişimi engelledi, 0 sayfa incelendi" in text
+    # Rakip tek yazimla (alan adi) gecer; denetlenen alt adres kapsam satirinda bir kez yazilir
+    assert "rakip.test (rakip; denetlenen adres rakip.test/tr): site erişimi engelledi, 0 sayfa incelendi" in text
+    assert all("rakip.test/tr" not in cell for b in blocks if b[0] == "table" for cell in b[1])
     assert _table(blocks, "Alan adı kaydı")[1] == "Görüldü · bitiş 2027-03-01 · kayıt 2015-03-01 · Kayıt AŞ"
     assert _table(blocks, "Sayfa başlıkları (title)")[1:] == ["Uyarı · 1 eksik, 2 tekrar (incelenen 10 sayfada)", "Engellendi"]
     assert _table(blocks, "Arama motorlarına kapalı sayfa (noindex)")[1] == "İyi · incelenen 10 sayfada kapalı sayfa yok"
@@ -95,7 +97,7 @@ def test_unknown_not_seen_and_out_of_scope_stay_distinct():
     assert _table(blocks, "Açılış hızı (masaüstü)")[1:] == [
         "Bilinmiyor · Hız ölçümü alınamadı (timeout).", "Kapsam dışı (rakipte ölçülmez)"]
     assert _table(blocks, "Performans (masaüstü)")[1:] == ["Bilinmiyor", "Kapsam dışı (rakipte ölçülmez)"]
-    assert "rakip.test/tr: engellendi" in text
+    assert "rakip.test: engellendi" in text
     # Bolum siniri bolumun altinda; siteye ozel kapsam cumlesi sinir listesinde tekrarlanmaz
     assert f"GA4 izi: {TRACKER_LIMIT}" in text
     assert f": {SCOPE}" not in text
@@ -161,6 +163,21 @@ def _pitch(findings, status="completed", visibility=None):
         SimpleNamespace(url="https://www.marka.test/", kind="own", status=status, pages_checked=10, findings=findings)])
     assert pitch_deck.render(WORKSPACE, audit).startswith(b"%PDF")
     return pitch_deck.build(audit)
+
+
+def test_reputation_results_are_labelled_by_relevance():
+    audit = _audit()
+    audit.visibility = {"sites": ["marka.test"], "serp": {"status": "ok", "keywords": [], "brand": {
+        "query": "Marka Klinik", "own_position": 1, "knowledge_panel": False, "other_ads": []}, "reputation": [
+        {"query": "Marka Klinik şikayet", "results": [
+            {"position": 1, "title": "Marka Klinik şikayetleri", "domain": "sikayet.test", "shown": ""},
+            {"position": 2, "title": "Genel diş kliniği şikayetleri", "domain": "forum.test", "shown": ""},
+            {"position": 3, "title": "İletişim", "domain": "marka.test", "shown": ""}]}]}}
+    text = repr(report_doc.build_blocks(WORKSPACE, audit, None))
+    assert "1. [Başlıkta marka adı geçiyor] Marka Klinik şikayetleri" in text
+    assert "2. [İlgisi doğrulanmadı] Genel diş kliniği şikayetleri" in text  # markaya atfedilmez
+    assert "3. [Markanın kendi sitesi] İletişim" in text
+    assert "“İlgisi doğrulanmadı” işaretli sonuçlar marka hakkında bulgu sayılmaz" in text
 
 
 def test_pitch_deck_keeps_urgent_and_improvement_apart():

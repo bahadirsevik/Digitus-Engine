@@ -14,6 +14,7 @@ from app.schemas.digital_audit import (
     AnswersRequest,
     BriefsRequest,
     ClaimOverridesRequest,
+    ClaimReviewRequest,
     RestrictionVerificationRequest,
     StrategyApproveRequest,
     StrategyEditRequest,
@@ -223,6 +224,16 @@ def start_briefs(
         raise HTTPException(status_code=409, detail=str(exc))
     _dispatch_research(db, report)
     return {"research_id": report.id, "status": report.status}
+
+
+@router.put("/research/{report_id}/claim-review")
+def put_claim_review(report_id: int, request: ClaimReviewRequest, brand_profile_id: int = Query(...),
+                     db: Session = Depends(get_db)):
+    """Analist bir rakamin kaynak turunu ve notunu kaydeder (celisen degerlerin aciklamasi dahil)."""
+    report = _get_research(db, report_id, brand_profile_id)
+    _strategy_call(lambda: research_service.save_claim_review(
+        db, report, request.claim_id, request.source_type or "", request.note or ""))
+    return research_service.serialize(report, detail=True)
 
 
 @router.put("/research/{report_id}/restrictions/{index}/verification")

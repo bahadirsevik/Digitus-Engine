@@ -63,3 +63,10 @@ class RestrictionVerificationRequest(BaseModel):
     regulation_date: Optional[str] = Field(None, max_length=10)
     verified_by: Optional[str] = Field(None, max_length=120)
     verified_at: Optional[str] = Field(None, max_length=10)
+
+
+class ClaimReviewRequest(BaseModel):
+    """Analistin bir rakam icin belirledigi kaynak turu ve notu."""
+    claim_id: str = Field(..., min_length=1, max_length=40)
+    source_type: Optional[str] = Field(None, max_length=20)
+    note: Optional[str] = Field(None, max_length=300)

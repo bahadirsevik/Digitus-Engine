@@ -1172,3 +1172,110 @@ def test_regenerated_brief_text_drops_the_approval_even_with_the_same_decisions(
     # Belgede incelenmemis metin var: onay duser
     assert get(client, report_id, ws).json()["strategy_state"] == "draft"
     assert "TASLAK: analist onayı yok" in _view_text(db_session, ws, report_id, "implementation")
+
+
+# --- G7 ve sonrasi: kaynak duzeni, gruplu eksikler, SEO aksiyon tablosu, kapak, uyum listesi ---------
+
+def test_source_type_is_never_guessed_and_conflicting_numbers_are_flagged(client, db_session, make_workspace,
+                                                                         dispatched, monkeypatch):
+    import sys
+
+    assert research.source_type("https://www.saglik.gov.tr/x") == "resmî (alan adına göre)"
+    assert research.source_type("https://ajans-blogu.com/x") == research.source_type("https://oda.org.tr/x") == "belirlenmedi"
+    monkeypatch.setattr(sys.modules[__name__], "SOURCE_TEXT",
+                        SOURCE_TEXT + " Başka bir kaynağa göre 2023 yılında 51 000 diş hekimi vardı.")
+    sector = {**SECTOR, "claims": SECTOR["claims"] + [
+        {"claim": "Toplam diş hekimi sayısı", "value": "51.000", "unit": "kişi", "year": "2023", "geography": "Türkiye",
+         "source_name": "Blog"}]}
+    monkeypatch.setitem(PAYLOADS, "audit_sector_research", sector)
+    ws, other = make_workspace("Marka"), make_workspace("Diger")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    review = f"/api/v1/digital-audit/research/{report_id}/claim-review?brand_profile_id={ws.id}"
+    text = _blocks(db_session, ws, report_id)
+    assert "2 rakamın kaynak türü belirlenmedi" in text
+    assert "Aynı konuda farklı değerler" in text and "Farkın nedeni açıklanmadı; analist açıklaması bekliyor." in text
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
+
+    assert client.put(review, json={"claim_id": "sector:0", "source_type": "çok güvenilir"}).status_code == 400
+    assert client.put(review, json={"claim_id": "sector:99", "source_type": "ikincil"}).status_code == 400
+    assert client.put(review.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}"),
+                      json={"claim_id": "sector:0", "source_type": "ikincil"}).status_code == 404
+    res = client.put(review, json={"claim_id": "sector:0", "source_type": "birincil",
+                                   "note": "Meslek odası verisi; diğer kaynak tahmin içeriyor."})
+    assert res.status_code == 200 and res.json()["strategy_state"] == "draft"  # belgeye yeni icerik girdi: onay dustu
+    text = _blocks(db_session, ws, report_id)
+    assert "1 rakamın kaynak türü belirlenmedi" in text and "birincil" in text
+    assert "Açıklama: Meslek odası verisi; diğer kaynak tahmin içeriyor." in text and "analist açıklaması bekliyor" not in text
+    # Kaynak listesi artik duz adres degil: ad, adres, tur, kontrol tarihi, bolum
+    report = db_session.get(DigitalResearch, report_id)
+    from app.core.digital_audit import report_doc
+
+    table = next(b for b in report_doc.build_blocks(ws, None, report) if b[0] == "table" and b[1][0] == "Kaynak")
+    assert table[1] == ["Kaynak", "Adres", "Tür", "Kontrol tarihi", "Kullanıldığı bölüm"]
+    assert table[2][0][0] == "kaynak.test" and "belirlenmedi; HTML" in table[2][0][2] and table[2][0][4] in ("Sektör", "Hedef kitle")
+
+
+def test_documents_have_cover_contents_grouped_gaps_and_seo_actions(client, db_session, make_workspace, dispatched,
+                                                                   monkeypatch):
+    from app.core.digital_audit import report_doc
+
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    db_session.expire_all()
+    report = db_session.get(DigitalResearch, report_id)
+    audit = db_session.get(DigitalAudit, report.audit_id)
+
+    blocks = report_doc.build_blocks(ws, audit, report, "executive")
+    kinds = [b[0] for b in blocks]
+    # Kapak sayfasi: kunye + icindekiler, ardindan sayfa sonu; ana bolumler numarali ve icindekilerle ayni
+    cut = kinds.index("pagebreak")
+    assert ("h2", "İçindekiler") in blocks[:cut] and not any(k == "h1" for k in kinds[:cut])
+    contents = blocks[cut - 1][1]
+    assert contents[0] == "1. Yönetici özeti" and contents == [b[1] for b in blocks if b[0] == "h1"]
+    cover = next(b for b in blocks if b[0] == "table" and b[1][0] == "Künye")
+    assert ["Hazırlayan", "Digitus"] in cover[2] and ["İnceleyen analist", "Henüz incelenmedi"] in cover[2]
+    # Eksikler uc grupta, sorumlu rol ve etkilenen bolumle
+    gaps = next(b for b in blocks if b[0] == "table" and b[1][0] == "Grup")
+    assert gaps[1] == ["Grup", "Eksik / istenecek", "Sorumlu (rol)", "Etkilenen bölüm"]
+    groups = [row[0] for row in gaps[2]]
+    assert groups == sorted(groups, key=["Müşteriden istenecek", "Hesap erişimiyle çekilecek", "Ajans tarafında doğrulanacak"].index)
+    assert any("1 mevzuat kısıtı birincil kaynaktan teyit edilmedi." in row[1] for row in gaps[2])
+    assert any(row[0] == "Hesap erişimiyle çekilecek" and "bu analize alınmadı" in row[1] for row in gaps[2])
+    # Firsatlarda oncelik sutunu; rekabet bolumu sonuc cumlesi yoksa bunu soyler
+    opportunities = next(b for b in blocks if b[0] == "table" and b[1][0] == "Fırsat")
+    assert opportunities[1][2] == "Öncelik" and opportunities[2][0][2] == "belirtilmedi"
+    assert "Sonuç cümlesi: bu taslakta üretilmedi." in repr(blocks)
+
+    detail = report_doc.build_blocks(ws, audit, report, "detail")
+    seo = next(b for b in detail if b[0] == "table" and b[1][0] == "Kontrol (marka sitesi)")
+    assert seo[1] == ["Kontrol (marka sitesi)", "Durum", "Bulgu", "Etki", "Önerilen aksiyon"]
+    assert seo[2] == [["Sayfa başlıkları", "Uyarı", "3 eksik (incelenen 10 sayfada)",
+                       "Google'da görünen ilk satır budur; eksikse sayfa aramada zayıf kalır.",
+                       "Her sayfaya kendine özgü, açıklayıcı bir başlık yazıyoruz."]]
+    for fmt, magic in (("docx", b"PK"), ("pdf", b"%PDF")):  # sayfa sonu iki bicimde de cizilir
+        assert report_doc.render(ws, audit, report, fmt, "executive")[0].startswith(magic)
+    # Her briefte dort maddelik uyum listesi
+    text = repr(report_doc.build_blocks(ws, audit, report, "implementation"))
+    for item in ("Uyum 1/4, vaat ve garanti: otomatik taramada işaretlenmedi; analist okuması gerekir",
+                 "Uyum 2/4, üstünlük iddiası:", "Uyum 3/4, sektör kuralları:", "Uyum 4/4, yayın türü: sponsorlu"):
+        assert item in text
+
+
+def test_strategy_accepts_opportunity_priority_and_competition_conclusion(client, db_session, make_workspace,
+                                                                          dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    record = get(client, report_id, ws).json()["sections"]["strategy"]
+    own = next(c["id"] for c in record["catalogue"] if c["kind"].startswith("Ölçüm (marka"))
+    rival = next(c["id"] for c in record["catalogue"] if c["kind"] == "Rakip gözlemi")
+    edited = json.loads(json.dumps(record["draft"]))
+    edited["opportunities"][0]["priority"] = "p2"
+    edited["competition_conclusion"] = [{"text": "Rakipte başlık eksiği yok; marka bu açığı kapatmalı", "refs": [own, rival]},
+                                        {"text": "İkinci sonuç", "refs": [own]}]
+    res = client.put(url, json={"version": 1, "revision": 0, "content": edited}).json()["sections"]["strategy"]["edited"]
+    assert res["opportunities"][0]["priority"] == "P2" and len(res["competition_conclusion"]) == 1  # tek sonuc cumlesi
+    text = _view_text(db_session, ws, report_id, "executive")
+    assert "Sonuç (rakiplerin boşlukları ve markanın yararlanma yolu) [Hipotez]: Rakipte başlık eksiği yok" in text

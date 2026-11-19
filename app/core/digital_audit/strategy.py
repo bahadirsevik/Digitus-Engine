@@ -62,7 +62,8 @@ LISTS: Dict[str, Tuple[Tuple[str, ...], int]] = {
     "summary": (("finding", "meaning"), 4),
     "section_notes": (("section", "finding", "impact", "action"), len(SECTIONS)),
     "competition": (("text",), 4),
-    "opportunities": (("text", "type", "contribution", "priority_reason"), 5),
+    "competition_conclusion": (("text",), 1),
+    "opportunities": (("text", "type", "priority", "contribution", "priority_reason"), 5),
     "decisions": (("question", "needed_info", "owner_role"), 10),
     "actions": (("period", "action", "priority", "priority_reason", "dependency", "owner_role", "effort",
                  "kpi", "contribution", "kind", "channel", "publication"), 12),
@@ -72,8 +73,9 @@ SCHEMA = _obj(
     summary=_arr(_obj(finding=_S, meaning=_S, refs=_REFS)),
     section_notes=_arr(_obj(section=_S, finding=_S, impact=_S, action=_S, refs=_REFS)),
     competition=_arr(_obj(text=_S, refs=_REFS)),
+    competition_conclusion=_arr(_obj(text=_S, refs=_REFS)),
     swot=_obj(**{key: _arr(_obj(text=_S, refs=_REFS)) for key in SWOT}),
-    opportunities=_arr(_obj(text=_S, type=_S, contribution=_S, priority_reason=_S, refs=_REFS)),
+    opportunities=_arr(_obj(text=_S, type=_S, priority=_S, contribution=_S, priority_reason=_S, refs=_REFS)),
     decisions=_arr(_obj(question=_S, options=_arr(_S), needed_info=_S, owner_role=_S, refs=_REFS)),
     actions=_arr(_obj(period=_S, action=_S, priority=_S, priority_reason=_S, dependency=_S, owner_role=_S,
                       effort=_S, kpi=_S, contribution=_S, kind=_S, channel=_S, publication=_S, refs=_REFS)),
@@ -109,8 +111,8 @@ def catalogue(workspace, audit, report) -> List[Dict]:
                 if f.get("state") in research._CHECK_STATE:
                     # Hucre metni tek basina yetmez: durum, degerlendirme ve SINIR birlikte gider
                     # ("gorulmedi" + sinir, kesin yokluk degildir).
-                    add(kind, f"{report_doc._host(target.url)}: {f['label']}: {report_doc._cell(f, f['check'], target)}",
-                        site=report_doc._host(target.url), check=f["check"], state=research._CHECK_STATE[f["state"]],
+                    add(kind, f"{report_doc._site(target.url)}: {f['label']}: {report_doc._cell(f, f['check'], target)}",
+                        site=report_doc._site(target.url), check=f["check"], state=research._CHECK_STATE[f["state"]],
                         section=f["section"] if own_target else "competitors",
                         assessment=research._CHECK_RESULT.get(f.get("assessment") or "", "değerlendirilmedi"),
                         limits=[limit for limit in f.get("limits") or []
@@ -217,37 +219,54 @@ def model_catalogue(full: List[Dict], shop: bool = True) -> List[Dict]:
     return [c for c in full if c["id"] in chosen]
 
 
-def gaps(audit, report) -> List[str]:
-    """Kodun gordugu acik eksikler: olculemeyen alan basari/basarisizlik diye sunulmaz."""
-    out: List[str] = []
+GAP_GROUPS = ("Müşteriden istenecek", "Hesap erişimiyle çekilecek", "Ajans tarafında doğrulanacak")
+
+
+def gap_rows(audit, report) -> List[Dict]:
+    """Kodun gordugu acik eksikler: grup, eksik, sorumlu ROL ve etkilenen bolum. Olculemeyen alan
+    basari/basarisizlik diye sunulmaz."""
+    client, account, agency = GAP_GROUPS
+    out: List[Dict] = []
+
+    def add(group: str, text: str, section: str, owner: str = "Analist") -> None:
+        out.append({"group": group, "text": text, "owner": owner, "section": section})
+
     sections = report.sections or {}
     if audit is None:
-        out.append("Bu araştırmaya bağlı site denetimi yok; site, SEO ve ölçümleme bulguları kullanılamadı.")
+        add(agency, "Bu araştırmaya bağlı site denetimi yok; site, SEO ve ölçümleme bulguları kullanılamadı.", "Site denetimi")
     else:
         for t in audit.targets:
             if t.status != "completed":
-                out.append(f"{report_doc._host(t.url)}: site okunamadı ({report_doc._TARGET_STATUS.get(t.status, t.status)}); "
-                           "bu sitede eksiklik olduğu anlamına gelmez.")
+                add(agency, f"{report_doc._site(t.url)}: site okunamadı ({report_doc._TARGET_STATUS.get(t.status, t.status)}); "
+                            "bu sitede eksiklik olduğu anlamına gelmez.", "Site denetimi")
         own = next((t for t in audit.targets if t.kind == "own"), None)
         unmeasured = [f["label"] for f in (own.findings if own else None) or []
                       if f.get("state") not in research._CHECK_STATE]
         if unmeasured:
-            out.append("Marka sitesinde ölçülemeyen kontroller: " + ", ".join(unmeasured[:12]))
+            add(agency, "Marka sitesinde ölçülemeyen kontroller: " + ", ".join(unmeasured[:12]), "Site denetimi")
         if ((audit.visibility or {}).get("serp") or {}).get("status") != "ok":
-            out.append("Arama görünürlüğü ölçülmedi.")
+            add(agency, "Arama görünürlüğü ölçülmedi.", "Arama görünürlüğü")
         answers = audit.answers or {}
         missing = [q["label"] for q in QUESTIONS if q["group"] == "brief" and q["key"] not in answers]
         if missing:
-            out.append("Analist brifinde boş sorular: " + " ".join(missing))
+            add(client, "Analist brifinde boş sorular: " + " ".join(missing), "Marka bağlamı ve ekosistem", "Müşteri temsilcisi")
         social = (answers.get("main_social") or {}).get("value")
         if social and social != "Yok":
-            out.append(f"Ana sosyal kanalın ({social}) takipçi ve etkileşim verisi yok; müşteri hesabından alınmalı.")
+            add(account, f"Ana sosyal kanalın ({social}) takipçi ve etkileşim verisi alınmadı.", "Sosyal medya")
     for name, label in (("sector", "Sektör araştırması"), ("audience", "Hedef kitle araştırması")):
         if (sections.get(name) or {}).get("status") != "ok":
-            out.append(f"{label} sonuç vermedi.")
-    out.append("Hesap içi veriler (GA4, Search Console, reklam hesabı) sisteme bağlı değil; yalnız analistin "
-               "girdiği kanıt kadar bilinir.")
+            add(agency, f"{label} sonuç vermedi.", label)
+    restrictions = (sections.get("sector") or {}).get("restrictions") or []
+    unverified = sum(1 for r in restrictions if not r.get("verification"))
+    if unverified:
+        add(agency, f"{unverified} mevzuat kısıtı birincil kaynaktan teyit edilmedi.", "Sektör / mevzuat")
+    add(account, "GA4, Search Console ve reklam hesabı verileri bu analize alınmadı; dönüşüm ve performans değerlendirilmedi.",
+        "Ölçümleme, SEO, reklam")
     return out
+
+
+def gaps(audit, report) -> List[str]:
+    return [g["text"] for g in gap_rows(audit, report)]
 
 
 ad_base_status = research.ad_base_status  # tek karar: research.ad_base_status
@@ -349,6 +368,8 @@ def normalize(raw: Dict, cat: List[Dict], base_status: str, strict: bool) -> Dic
             reject(f"Bilinmeyen bölüm: {note['section']}")
     content["section_notes"] = notes
     content["note_gaps"] = note_gaps(notes, cat)
+    for opportunity in content["opportunities"]:
+        opportunity["priority"] = opportunity["priority"].upper()[:2] if opportunity["priority"].upper()[:2] in PRIORITIES else ""
 
     for decision in content["decisions"]:
         source = decision["_raw"]
@@ -455,9 +476,12 @@ _RULES = (
     "uygulanabilir aksiyon. 'reputation' satırlarında içerik okunmamıştır: marka hakkında olumlu ya da olumsuz "
     "hüküm verme, yalnız incelenmesi gerektiğini yaz.\n"
     "competition: yalnız hem markada hem rakipte ölçülmüş, karşılaştırılabilir gözlemler.\n"
+    "competition_conclusion: TEK madde; 'rakiplerin hangi boşlukları var ve marka bunlardan nasıl yararlanabilir' "
+    "sorusunun, yalnız competition'daki gözlemlere dayanan cevabı. Dayanak yoksa boş bırak.\n"
     "swot: strengths, weaknesses, opportunities, threats.\n"
-    "opportunities: type = teknik | içerik | konumlandırma | reklam | ölçümleme; contribution = beklenen katkı "
-    "(rakamsız); priority_reason = neden öncelikli.\n"
+    "opportunities: type = teknik | içerik | konumlandırma | reklam | ölçümleme; priority = P1 | P2 | P3 | P4; "
+    "contribution = beklenen katkı (rakamsız); priority_reason = neden öncelikli. Dayanağı varsa en az bir teknik, bir "
+    "içerik ve bir konumlandırma fırsatı yaz; dayanağı olmayan türü doldurmak için fırsat üretme.\n"
     "decisions: analistin ya da müşterinin vermesi gereken kararlar. question, options (2-4 seçenek), "
     "needed_info = karar için beklenen bilgi, owner_role = karar sahibi ROL (kişi adı değil). Sen karar verme.\n"
     "actions: 90 günlük plan. period = 0-30 | 30-60 | 60-90; priority = P1 | P2 | P3 | P4; priority_reason; "
@@ -542,5 +566,7 @@ def review_sha(report, record: Dict) -> str:
     # yeniden uretilen brief karar sorularini degistirmez ama metni degistirir.
     printed = ({k: briefs.get(k) for k in ("selection", "ad_ideas", "creative_briefs")}
                if briefs.get("status") == "ok" and not research.briefs_stale(report) else None)
+    claims = ((report.sections or {}).get("sector") or {}).get("claims") or []
     return _sha([content(record), [r.get("verification") for r in restrictions],
+                 [[c.get("source_type"), c.get("analyst_note")] for c in claims],
                  [d["question"] for d in brief_ad_decisions(report, record, "draft")], printed])

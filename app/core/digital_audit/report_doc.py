@@ -70,6 +70,11 @@ def _host(url: str) -> str:
     return re.sub(r"^https?://(www\.)?", "", url or "").strip("/")
 
 
+def _site(url: str) -> str:
+    """Denetlenen sitenin TEK yazimi: alan adi. Ayni rakip bir tabloda 'site.com/tr', digerinde 'site.com' yazilmaz."""
+    return _host(url).split("/")[0]
+
+
 def _status(f: Optional[Dict]) -> str:
     """Ekrandaki etiketle ayni sozluk: olcum durumu ile degerlendirme karismaz."""
     if not f:
@@ -198,7 +203,7 @@ def _speed_blocks(targets, found) -> List[Block]:
     rows.append(["Performans (masaüstü)"] + [
         _OUT_OF_SCOPE if not f and t.kind != "own" else pick(f, score("performance")) for f, t in zip(desktop, targets)])
     return [("h2", "Hız ve Lighthouse skorları"),
-            ("table", ["Ölçüm"] + [_host(t.url) for t in targets], rows),
+            ("table", ["Ölçüm"] + [_site(t.url) for t in targets], rows),
             ("p", "Skorlar ana sayfanın Lighthouse laboratuvar ölçümüdür (0-100) ve ölçümden ölçüme birkaç puan değişir. "
                   "SEO skoru sayfa kodunun teknik kontrolüdür; arama sıralamasını göstermez. Gerçek kullanıcı verisinin "
                   "yalnızca kategorisi gösterilir; sayısal değerler bu denetimde toplanmadı.")]
@@ -218,7 +223,8 @@ def _audit_blocks(audit) -> List[Block]:
     for t, by_check in zip(targets, found):
         extra = list(dict.fromkeys(limit for f in by_check.values() for limit in f.get("limits") or []
                                    if _PER_SITE_LIMIT.match(limit) and not limit[0].isdigit()))
-        scope.append(f"{_host(t.url)} ({'marka' if t.kind == 'own' else 'rakip'}): {_TARGET_STATUS.get(t.status, t.status)}, "
+        address = f"; denetlenen adres {_host(t.url)}" if _host(t.url) != _site(t.url) else ""
+        scope.append(f"{_site(t.url)} ({'marka' if t.kind == 'own' else 'rakip'}{address}): {_TARGET_STATUS.get(t.status, t.status)}, "
                      f"{t.pages_checked or 0} sayfa incelendi" + "".join(f". {e.rstrip('.')}" for e in extra))
     blocks += [("h2", "Denetlenen siteler ve kapsam"), ("bullets", scope)]
     if any(t.status != "completed" for t in targets):
@@ -241,7 +247,7 @@ def _audit_blocks(audit) -> List[Block]:
             continue
         checks = order[section]
         blocks.append(("h2", _SECTION.get(section, section)))
-        blocks.append(("table", ["Kontrol"] + [_host(t.url) for t in targets],
+        blocks.append(("table", ["Kontrol"] + [_site(t.url) for t in targets],
                        [[labels[c]] + [_cell(by_check.get(c), c, t) for by_check, t in zip(found, targets)]
                         for c in checks]))
         limits: Dict[str, List[str]] = {}
@@ -261,7 +267,7 @@ def _audit_blocks(audit) -> List[Block]:
             for t, by_check in zip(targets, found):
                 f = by_check.get("contact.social_links")
                 accounts = ((f or {}).get("value") or {}).get("accounts") or {}
-                social.append(f"{_host(t.url)}: " + (", ".join(f"{_SOCIAL.get(n, n)} {u}" for n, u in accounts.items())
+                social.append(f"{_site(t.url)}: " + (", ".join(f"{_SOCIAL.get(n, n)} {u}" for n, u in accounts.items())
                                                       or _status(f).lower()))
             blocks += [("h2", "Sitede bağlantısı verilen sosyal hesaplar"), ("bullets", social),
                        ("p", "Yalnızca siteden bağlantı verilen hesaplardır. Hesabın markaya ait olduğu doğrulanmadı; "
@@ -339,12 +345,21 @@ def _visibility_blocks(audit) -> List[Block]:
                 f"Marka sitesinin sırası: {brand['own_position'] or 'ilk 10 sonuçta ' + _unseen(brand.get('unresolved'))}",
                 f"Bilgi paneli: {'görüldü' if brand['knowledge_panel'] else 'görülmedi'}",
                 "Marka adında reklamı görülen başka siteler: " + (_ads(brand["other_ads"], brand.get("ads_unresolved")) or "görülmedi")])]
+        name = ((serp.get("brand") or {}).get("query") or "").casefold()
+        own_site = (sites or [""])[0]
+
+        def relevance(r) -> str:  # yalniz basliktan ve alan adindan soylenebilen; icerik okunmadi
+            if own_site and own_site in (r.get("domain") or ""):
+                return "[Markanın kendi sitesi]"
+            return "[Başlıkta marka adı geçiyor]" if name and name in (r.get("title") or "").casefold() else "[İlgisi doğrulanmadı]"
+
         for entry in serp.get("reputation") or []:
             if entry.get("results"):
                 blocks += [("h2", f"Arama: {entry['query']}"), ("bullets", [
-                    f"{r['position']}. {r['title']} ({r['domain'] or r['shown']})" for r in entry["results"]])]
+                    f"{r['position']}. {relevance(r)} {r['title']} ({r['domain'] or r['shown']})" for r in entry["results"]])]
         if serp.get("reputation"):
-            blocks.append(("p", "İlk sonuç sayfasında çıkan başlıklardır; tüm internetin sayımı değildir ve içerikleri okunmamıştır."))
+            blocks.append(("p", "İlk sonuç sayfasında çıkan başlıklardır; tüm internetin sayımı değildir ve içerikleri okunmamıştır. "
+                                "“İlgisi doğrulanmadı” işaretli sonuçlar marka hakkında bulgu sayılmaz."))
 
     channels = (data.get("youtube") or {}).get("channels") or {}
     found = {site: c for site, c in channels.items() if c.get("status") == "ok"}
@@ -409,10 +424,24 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
         laws = [c for c in accepted if _LAW.search(f"{c['claim']} {c['value']} {c['unit']}")]
         claims = [c for c in accepted if c not in laws]
         if claims:
+            def kind_of(c) -> str:  # analist belirlediyse o; yoksa yalniz alan adindan kesin soylenebilen
+                return c.get("source_type") or research.source_type(c["check"].get("source_url", ""))
+
             blocks.append(("h2", "Kaynakta geçen rakamlar [Kaynak]"))
-            blocks.append(("table", ["Bilgi", "Değer", "Yıl / coğrafya", "Kaynak"],
+            blocks.append(("table", ["Bilgi", "Değer", "Yıl / coğrafya", "Kaynak", "Kaynak türü"],
                            [[c["claim"], f"{c['value']} {c['unit']}".strip(), f"{c['year']} / {c['geography']}",
-                             c["check"].get("source_url", "")] for c in claims]))
+                             c["check"].get("source_url", ""), kind_of(c)] for c in claims]))
+            unset = sum(1 for c in claims if kind_of(c) == "belirlenmedi")
+            if unset:
+                blocks.append(("p", f"{unset} rakamın kaynak türü belirlenmedi (resmî / birincil / ikincil / tahmini ayrımını "
+                                    "analist yapar; sistem yayıncı türünü tahmin etmez)."))
+            blocks += _bullets("Analist notları", [f"{c['claim']}: {c['analyst_note']}" for c in claims if c.get("analyst_note")])
+            blocks += _bullets("Aynı konuda farklı değerler", [
+                f"{a['claim']}: {a['value']} {a['unit']} ({a['year'] or 'yıl yok'}) ↔ {b['claim']}: {b['value']} {b['unit']} "
+                f"({b['year'] or 'yıl yok'}). " + ("Açıklama: " + " / ".join(filter(None, [a.get("analyst_note"), b.get("analyst_note")]))
+                                                   if a.get("analyst_note") or b.get("analyst_note")
+                                                   else "Farkın nedeni açıklanmadı; analist açıklaması bekliyor.")
+                for a, b in research.claim_conflicts(claims)])
         else:
             blocks += [("h2", "Rakamlar"), ("p", "Kaynakta doğrulanan rakam bulunamadı; rapora rakam alınmadı.")]
         blocks += _bullets("Güncel gelişmeler", [
@@ -443,6 +472,12 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
         if demand.get("by_month"):
             blocks.append(("table", ["Ay", "Toplam arama", "Ortalamaya oran"],
                            [[m["month"], str(m["searches"]), str(m["index"])] for m in demand["by_month"]]))
+        months = demand.get("by_month") or []
+        if months:
+            high, low = max(months, key=lambda m: m["searches"]), min(months, key=lambda m: m["searches"])
+            blocks.append(("p", f"En yüksek ay {high['month']} ({high['searches']} arama), en düşük ay {low['month']} "
+                                f"({low['searches']} arama). Fark arama ilgisini gösterir; satış ya da talep tahmini değildir."))
+        blocks += _bullets("Ölçülen kelimeler", [", ".join(k["keyword"] for k in demand.get("keywords") or [])])
         bids = demand.get("bid_range")
         if bids:
             blocks.append(("p", f"Sayfa başı teklif aralığı (hesap para birimi): ortanca {bids['low_median']} - "
@@ -538,10 +573,20 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
                                        f"A/B varyantı: {brief['ab_variant']}",
                                        *[f"Uyarı, kanıtı olmayan iddia: {w}" for w in brief["warnings"]]]))
 
-    urls = list(dict.fromkeys(
-        s["url"] for name in ("sector", "audience") for s in (sections.get(name) or {}).get("sources") or []
-        if s["kind"] != "unreadable"))
-    blocks += _bullets("Araştırmada okunan kaynaklar", urls)
+    used: Dict[str, Dict] = {}
+    for name, label in (("sector", "Sektör"), ("audience", "Hedef kitle")):
+        for s in (sections.get(name) or {}).get("sources") or []:
+            if s["kind"] != "unreadable":
+                used.setdefault(s["url"], {"kind": s["kind"], "sections": []})["sections"].append(label)
+    if used:
+        checked = getattr(report, "completed_at", None) or report.created_at
+        blocks += [("h2", "Araştırmada okunan kaynaklar"),
+                   ("table", ["Kaynak", "Adres", "Tür", "Kontrol tarihi", "Kullanıldığı bölüm"], [
+                       [_site(url), url, f"{research.source_type(url)}; {info['kind'].upper()}",
+                        checked.strftime("%d.%m.%Y") if checked else "-", ", ".join(info["sections"])]
+                       for url, info in used.items()]),
+                   ("p", "Tür sütunu yalnız alan adından kesin söylenebileni gösterir; “belirlenmedi” olanların yayıncı "
+                         "türünü analist belirler. Kontrol tarihi, kaynağın okunduğu araştırma tarihidir.")]
     return blocks
 
 
@@ -593,6 +638,8 @@ def render_docx(blocks: List[Block]) -> bytes:
             doc.add_heading(rest[0], level=1 if kind == "h1" else 2)
         elif kind == "p":
             doc.add_paragraph(rest[0])
+        elif kind == "pagebreak":
+            doc.add_page_break()
         elif kind == "bullets":
             for item in rest[0]:
                 doc.add_paragraph(item, style="List Bullet")
@@ -629,7 +676,7 @@ def render_pdf(blocks: List[Block]) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import cm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
     from app.exporters.pdf_exporter import PdfExporter
     from app.exporters.safe_text import safe_paragraph_text as safe
@@ -649,6 +696,8 @@ def render_pdf(blocks: List[Block]) -> bytes:
     for kind, *rest in blocks:
         if kind in ("title", "h1", "h2", "p"):
             story.append(Paragraph(safe(rest[0]), styles[kind]))
+        elif kind == "pagebreak":
+            story.append(PageBreak())
         elif kind == "bullets":
             story += [Paragraph("• " + safe(item), styles["p"]) for item in rest[0]]
         elif kind == "table":

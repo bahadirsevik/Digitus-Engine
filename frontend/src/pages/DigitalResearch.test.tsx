@@ -18,6 +18,7 @@ vi.mock('../services/api', async (importOriginal) => {
       exportReport: vi.fn(),
       startStrategy: vi.fn(),
       saveRestrictionVerification: vi.fn(),
+      saveClaimReview: vi.fn(),
       saveStrategy: vi.fn(),
       approveStrategy: vi.fn(),
     },
@@ -165,6 +166,21 @@ describe('DigitalResearch', () => {
     fireEvent.click(await screen.findByLabelText('Diş hekimi sayısı rapora girsin'))
     await waitFor(() => expect(api.saveClaimOverrides).toHaveBeenCalledWith(3, 1, ['sector:0']))
     expect(await screen.findByText('Rapordan çıkarıldı')).toBeInTheDocument()
+  })
+
+  it('rakamın kaynak türünü analist seçer; sistem tahmin etmez', async () => {
+    api.saveClaimReview.mockReturnValue(ok(DETAIL))
+    render(<DigitalResearch workspaceId={1} />)
+    const select = await screen.findByLabelText('Diş hekimi sayısı kaynak türü')
+    expect(select).toHaveValue('')
+    fireEvent.change(select, { target: { value: 'birincil' } })
+    await waitFor(() =>
+      expect(api.saveClaimReview).toHaveBeenCalledWith(3, 1, {
+        claim_id: 'sector:0',
+        source_type: 'birincil',
+        note: '',
+      })
+    )
   })
 
   it('mevzuat kısıtı analist kaydı olmadan teyit edildi görünmez; teyit dört alanla kaydedilir', async () => {

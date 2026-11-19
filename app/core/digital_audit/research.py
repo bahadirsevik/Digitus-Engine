@@ -592,6 +592,33 @@ _SYNTH_RULES = (
 )
 
 
+SOURCE_TYPES = ("resmî", "birincil", "ikincil", "tahmini")
+
+
+def source_type(url: str) -> str:
+    """Kaynagin turu. Yalniz alan adindan KESIN soylenebilen yazilir (devlet alan adi = resmi); gerisi
+    'belirlenmedi' kalir ve analist belirler. Yayinci turu tahmin edilmez."""
+    host = re.sub(r"^https?://(www\.)?", "", url or "").split("/")[0].casefold()
+    return "resmî (alan adına göre)" if host.endswith(".gov.tr") else "belirlenmedi"
+
+
+def claim_conflicts(claims: List[Dict]) -> List[tuple]:
+    """Ayni konuda (ayni cografya ve birim, konu sozcuklerinin cogu ortak) FARKLI deger tasiyan rakam ciftleri.
+    Yalniz isaretler: hangisinin dogru oldugunu ya da farkin nedenini kod bilemez; analist aciklar."""
+    def words(c):
+        return {w for w in re.findall(r"\w+", c["claim"].casefold()) if len(w) > 3}
+
+    pairs = []
+    for i, a in enumerate(claims):
+        for b in claims[i + 1:]:
+            if (a["geography"].casefold() == b["geography"].casefold() and a["unit"].casefold() == b["unit"].casefold()
+                    and a["value"] != b["value"]):
+                wa, wb = words(a), words(b)
+                if wa and wb and len(wa & wb) / min(len(wa), len(wb)) >= 0.6:
+                    pairs.append((a, b))
+    return pairs
+
+
 def ad_base_status(sections: Dict) -> str:
     """Ucretli reklamin varsayilan durumu: önerilebilir | koşullu | değerlendirilmedi.
     Bilinmeyen izin DEGILDIR. Butun ciktilar (strateji, uygulama belgesi, detayli analiz, eski

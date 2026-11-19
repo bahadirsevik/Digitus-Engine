@@ -10,7 +10,7 @@ import re
 
 from typing import Dict, List
 
-from app.core.digital_audit import report_doc, research, strategy
+from app.core.digital_audit import pitch_deck, report_doc, research, strategy
 from app.core.digital_audit.report_doc import Block
 from app.core.digital_audit.research import CHANNELS
 from app.core.digital_audit.service import QUESTIONS
@@ -81,6 +81,8 @@ def _cover(workspace, audit, report, view: str, record: Dict, state: str) -> Lis
                    f"coğrafya: {inputs.get('geography', '-')}"],
         ["Strateji sürümü", f"v{record['version']}" if record.get("version") else "-"],
         ["Durum", status],
+        ["Hazırlayan", "Digitus"],
+        ["İnceleyen analist", approval.get("approved_by") if state == "approved" else "Henüz incelenmedi"],
     ]
     return [("title", f"{VIEW_TITLE[view]}: {workspace.name or report_doc._host(workspace.company_url)}"),
             ("p", "[Logo alanı: onaylı logo ve renk paleti tanımlandığında buraya eklenecek]"),
@@ -189,8 +191,9 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
     blocks += _scores(audit)
     if c["opportunities"]:
         blocks += [("h2", "Fırsatlar [Hipotez]"),
-                   ("table", ["Fırsat", "Tür", "Beklenen katkı", "Öncelik gerekçesi", "Dayanak"],
-                    [[o["text"], o["type"], o["contribution"], o["priority_reason"], _refs(o)] for o in c["opportunities"]])]
+                   ("table", ["Fırsat", "Tür", "Öncelik", "Beklenen katkı", "Öncelik gerekçesi", "Dayanak"],
+                    [[o["text"], o["type"], o.get("priority") or "belirtilmedi", o["contribution"], o["priority_reason"], _refs(o)]
+                     for o in sorted(c["opportunities"], key=lambda o: o.get("priority") or "P9")])]
     first = sorted((a for a in c["actions"] if a["period"] == "0-30"), key=lambda a: a["priority"])[:5]
     blocks += report_doc._bullets("İlk yapılacaklar (0-30 gün)", [f"{a['priority']}: {a['action']}" for a in first])
     # Ozet listesi ile karar tablosu AYNI listeyi kullanir (briefte bekleyen reklam kararlari dahil)
@@ -207,6 +210,9 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
         blocks.append(("table", ["Karşılaştırılabilir gözlem", "Dayanak"], [[i["text"], _refs(i)] for i in c["competition"]]))
     else:
         blocks.append(("p", "Hem markada hem rakipte ölçülmüş, karşılaştırılabilir gözlem yok."))
+    conclusion = (c.get("competition_conclusion") or [None])[0]
+    blocks.append(("p", f"Sonuç (rakiplerin boşlukları ve markanın yararlanma yolu) [Hipotez]: {conclusion['text']} ({_refs(conclusion)})"
+                   if conclusion else "Sonuç cümlesi: bu taslakta üretilmedi."))
     blocks.append(("p", "Yalnız incelenen sayfa örneklemine dayanır. Rakipte okunamayan sayfa ya da kanal eksiklik "
                         "sayılmaz; kapsamlı rakip konumlandırması bu raporun kapsamında değildir."))
 
@@ -239,8 +245,15 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
                         "değerlendirilmemiş ücretli reklam önerileri plana alınmaz, burada karar olarak yer alır."))
 
     blocks += _plan(c["actions"])
-    blocks += [("h1", "Açık eksikler ve veri ihtiyaçları"), ("bullets", strategy.live_gaps(report, record))]
-    used = _used(c["summary"] + c["opportunities"] + c["competition"] + c["decisions"] + c["actions"]
+    rows = strategy.gap_rows(audit, report) + [
+        {"group": strategy.GAP_GROUPS[2], "text": g, "owner": "Analist", "section": "Strateji taslağı"}
+        for g in record.get("gaps") or [] if "taslak üretiminde kullanılmadı" in g]
+    blocks += [("h1", "Açık eksikler ve veri ihtiyaçları"),
+               ("table", ["Grup", "Eksik / istenecek", "Sorumlu (rol)", "Etkilenen bölüm"],
+                [[g["group"], g["text"], g["owner"], g["section"]]
+                 for group in strategy.GAP_GROUPS for g in rows if g["group"] == group])]
+    used = _used(c["summary"] + c["opportunities"] + c["competition"] + (c.get("competition_conclusion") or [])
+                 + c["decisions"] + c["actions"]
                  + [i for items in c["swot"].values() for i in items])
     return blocks + _appendix(record, used)
 
@@ -263,10 +276,32 @@ def _ad_readiness(audit, report) -> List[Block]:
                   "kaydedildiğini kanıtlamaz. Bu tablo reklam performansı değildir.")]
 
 
+def _seo_actions(audit) -> List[Block]:
+    """Marka sitesi icin bulgu bazinda SEO tablosu. Kodla, olcumden uretilir (yapay zeka yok); 'Iyi' kontrol girmez,
+    'gorulmedi' kesin yokluk diye yazilmaz."""
+    own = next((t for t in audit.targets if t.kind == "own"), None)
+    rows = []
+    for f in (own.findings if own else None) or []:
+        check = f["check"]
+        if f["section"] != "seo" or check not in pitch_deck.PLAIN or f["state"] not in ("observed", "not_observed"):
+            continue
+        absent = f["state"] == "not_observed" and check in pitch_deck._ABSENT_MATTERS
+        if f.get("assessment") not in ("problem", "warning") and not absent:
+            continue
+        _, why, fix = pitch_deck.PLAIN[check]
+        rows.append([f["label"], report_doc._status(f),
+                     report_doc._summary(f, own.pages_checked or 0) or "Sayfa kodunda görülmedi.", why, fix])
+    return [("table", ["Kontrol (marka sitesi)", "Durum", "Bulgu", "Etki", "Önerilen aksiyon"], rows)] if rows else []
+
+
 def _detail(workspace, audit, report, record: Dict, state: str) -> List[Block]:
     blocks: List[Block] = []
     if audit is not None:
         blocks += report_doc._audit_blocks(audit) + report_doc._visibility_blocks(audit)
+        seo = next((i for i, b in enumerate(blocks) if b[0] == "h2" and b[1] == "SEO"), None)
+        if seo is not None:  # SEO bolumunun sonuna (sinir notlarindan sonra)
+            end = next((i for i in range(seo + 1, len(blocks)) if blocks[i][0] in ("h1", "h2")), len(blocks))
+            blocks[end:end] = _seo_actions(audit)
     blocks += _ad_readiness(audit, report)
     blocks += report_doc._research_blocks(report, briefs=False, brand=tuple(report_doc.brand_tokens(workspace)))
     if state not in ("draft", "approved"):
@@ -330,10 +365,18 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
     def status_of(channel: str) -> str:
         return "önerilebilir" if base == "önerilebilir" or channel in cleared else base
 
+    def checklist(item: Dict, status: str, publication: str) -> List[str]:
+        """Dort maddelik uyum listesi. Otomatik tarama analist okumasinin yerini tutmaz; bunu soyler."""
+        flagged = "; ".join(item["warnings"])
+        scan = f"otomatik taramada işaretlendi ({flagged}); düzeltilmeden yayımlanmaz" if flagged else (
+            "otomatik taramada işaretlenmedi; analist okuması gerekir")
+        return [f"Uyum 1/4, vaat ve garanti: {scan}", f"Uyum 2/4, üstünlük iddiası: {scan}",
+                f"Uyum 3/4, sektör kuralları: {_AD_CHECK[status]}", f"Uyum 4/4, yayın türü: {publication}"]
+
     def idea_block(idea: Dict) -> List[Block]:
         status = status_of(idea["channel"])
         return [("h2", f"Reklam fikri: {idea['segment']} · {idea['channel']}"), ("bullets", [
-            "Yayın türü: sponsorlu", f"Öneri durumu: {status}", f"Uyum kontrolü: {_AD_CHECK[status]}",
+            f"Öneri durumu: {status}", *checklist(idea, status, "sponsorlu"),
             f"İçgörü: {idea['insight']}", f"Teklif: {idea['offer']}", f"Mesaj: {idea['message']}", f"Çağrı: {idea['cta']}",
             f"Ölçüm planı (test hipotezi): {idea['test_hypothesis']}",
             *[f"Uyarı, kanıtı olmayan iddia: {w}" for w in idea["warnings"]]])]
@@ -358,8 +401,8 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
     for brief in briefs["creative_briefs"]:
         status = status_of(brief["channel"])
         blocks += [("h2", f"Kreatif brief: {brief['segment']} · {brief['channel']}"), ("bullets", [
-            "Yayın türü: belirtilmedi (organik yayımlanabilir; sponsorlu kullanım aşağıdaki duruma tabidir)",
-            f"Sponsorlu kullanım için öneri durumu: {status}", f"Uyum kontrolü: {_AD_CHECK[status]}",
+            f"Sponsorlu kullanım için öneri durumu: {status}",
+            *checklist(brief, status, "belirtilmedi (organik yayımlanabilir; sponsorlu kullanım yukarıdaki duruma tabidir)"),
             f"Biçim: {brief['format']}; süre: {brief['duration']}", f"Açılış: {brief['hook']}",
             f"Görsel yön: {brief['visual_direction']}", f"Çekim listesi: {'; '.join(brief['shot_list'])}",
             f"Metin: {brief['copy']}", f"Gereken gerçek kanıt: {'; '.join(brief['proof_needed'])}",
@@ -395,4 +438,12 @@ def build(workspace, audit, report, view: str) -> List[Block]:
     body = {"executive": lambda: _executive(audit, report, record, state),
             "detail": lambda: _detail(workspace, audit, report, record, state),
             "implementation": lambda: _implementation(workspace, report, record, state)}[view]()
-    return _cover(workspace, audit, report, view, record, state) + body + report_doc.LIMIT_BLOCKS
+    body += report_doc.LIMIT_BLOCKS
+    titles, numbered = [], []
+    for block in body:  # numaralama en sonda: bolum yerlestirme kurallari basliklarin ham haline bakar
+        if block[0] == "h1":
+            titles.append(f"{len(titles) + 1}. {block[1]}")
+            block = ("h1", titles[-1])
+        numbered.append(block)
+    return (_cover(workspace, audit, report, view, record, state)
+            + [("h2", "İçindekiler"), ("bullets", titles), ("pagebreak",)] + numbered)

@@ -163,9 +163,9 @@ def build(audit) -> Dict:
         f = next((x for x in t.findings or [] if x["check"] == "site.speed_mobile" and x["state"] == "observed"), None)
         score = (((f or {}).get("value") or {}).get("scores") or {}).get("performance")
         if score is not None:
-            speed.append({"site": report_doc._host(t.url), "own": t.kind == "own", "score": int(score)})
+            speed.append({"site": report_doc._site(t.url), "own": t.kind == "own", "score": int(score)})
     measured = audit.completed_at or audit.created_at
-    return {"host": report_doc._host(own.url) if own else "", "date": measured.strftime("%d.%m.%Y") if measured else "-",
+    return {"host": report_doc._site(own.url) if own else "", "date": measured.strftime("%d.%m.%Y") if measured else "-",
             "pages": pages, "urgent": urgent, "priority": priority, "good": good[:12], "plan": plan, "speed": speed,
             "counts": {"urgent": len(urgent), "improve": len(priority), "good": len(good)},
             "unmeasured": unmeasured, "limited": limited,

@@ -160,6 +160,37 @@ def _locked_strategy(db: Session, report: DigitalResearch, version: int, revisio
     return current
 
 
+def save_claim_review(db: Session, report: DigitalResearch, claim_id: str, source_type: str, note: str) -> None:
+    """Analistin bir rakam icin belirledigi kaynak turu ve notu (or. celisen degerin aciklamasi). Rakami, kaynak
+    kontrolunu ya da rapora girme kararini DEGISTIRMEZ. Belgeye basildigi icin onceki onay duser (review_sha)."""
+    source_type, note = (source_type or "").strip(), (note or "").strip()[:300]
+    if source_type and source_type not in research.SOURCE_TYPES:
+        raise ResearchInputError("Kaynak türü resmî, birincil, ikincil ya da tahmini olmalı.")
+    db.rollback()
+    row = (db.query(DigitalResearch).filter(DigitalResearch.id == report.id)
+           .with_for_update().populate_existing().one())
+    if row.status not in FINAL:
+        db.rollback()
+        raise ResearchStateError("Bu marka çalışmasında süren bir araştırma var.")
+    sections = dict(row.sections or {})
+    sector = dict(sections.get("sector") or {})
+    claims = [dict(c) for c in sector.get("claims") or []]
+    target = next((c for c in claims if c["id"] == claim_id), None)
+    if target is None:
+        db.rollback()
+        raise ResearchInputError("Rakam bulunamadı.")
+    for key, value in (("source_type", source_type), ("analyst_note", note)):
+        if value:
+            target[key] = value
+        else:
+            target.pop(key, None)
+    sector["claims"] = claims
+    sections["sector"] = sector
+    report.sections = sections
+    db.commit()
+    db.refresh(report)
+
+
 VERIFICATION_FIELDS = ("primary_source_url", "regulation_date", "verified_by", "verified_at")
 
 

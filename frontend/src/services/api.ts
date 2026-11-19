@@ -2328,6 +2328,9 @@ export interface ResearchClaim {
   year: string
   geography: string
   source_name: string
+  /** Analistin belirlediği kaynak türü ve notu (yoksa tür "belirlenmedi") */
+  source_type?: string
+  analyst_note?: string
   check: {
     status: 'found' | 'short' | 'not_found' | 'no_number'
     source_url?: string
@@ -2450,6 +2453,7 @@ export interface StrategyContent {
   summary: StrategyItem[]
   section_notes: StrategyItem[]
   competition: StrategyItem[]
+  competition_conclusion?: StrategyItem[]
   opportunities: StrategyItem[]
   decisions: StrategyItem[]
   actions: StrategyItem[]
@@ -2552,6 +2556,15 @@ export const digitalResearchApi = {
       body,
       { params: { brand_profile_id } }
     ),
+
+  saveClaimReview: (
+    reportId: number,
+    brand_profile_id: number,
+    body: { claim_id: string; source_type?: string; note?: string }
+  ) =>
+    api.put<DigitalResearchDetail>(`/digital-audit/research/${reportId}/claim-review`, body, {
+      params: { brand_profile_id },
+    }),
 
   saveRestrictionVerification: (
     reportId: number,

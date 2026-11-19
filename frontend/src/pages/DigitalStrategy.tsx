@@ -47,6 +47,11 @@ const GROUPS: [string, string, Field[]][] = [
     ],
   ],
   ['competition', 'Rekabet özeti', [['text', 'Karşılaştırılabilir gözlem']]],
+  [
+    'competition_conclusion',
+    'Rekabet sonucu',
+    [['text', 'Rakiplerin boşlukları ve markanın yararlanma yolu']],
+  ],
   ['swot.strengths', 'SWOT: güçlü yönler', [['text', 'Madde']]],
   ['swot.weaknesses', 'SWOT: zayıf yönler', [['text', 'Madde']]],
   ['swot.opportunities', 'SWOT: fırsatlar', [['text', 'Madde']]],
@@ -57,6 +62,7 @@ const GROUPS: [string, string, Field[]][] = [
     [
       ['text', 'Fırsat'],
       ['type', 'Tür'],
+      ['priority', 'Öncelik', ['', 'P1', 'P2', 'P3', 'P4']],
       ['contribution', 'Beklenen katkı'],
       ['priority_reason', 'Öncelik gerekçesi'],
     ],
