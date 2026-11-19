@@ -5,6 +5,9 @@ Guncelligini kaybetmis strateji, segment ya da brief hicbir gorunume girmez.
 """
 from __future__ import annotations
 
+import json
+import re
+
 from typing import Dict, List
 
 from app.core.digital_audit import report_doc, research, strategy
@@ -25,6 +28,28 @@ _AD_CHECK = {
     "değerlendirilmedi": "Reklam kısıtı araştırması sonuç vermedi; uygunluk değerlendirilmedi.",
     "önerilmez": "Analist kararıyla önerilmiyor.",
 }
+
+
+# Brief metninde gecen kisi unvani (Uzm. Dr. Ad Soyad): tescil belgesi gorulmeden dogrulanmis sayilmaz
+_TITLE = re.compile(r"(?:Prof\.|Doç\.|Uzm\.|Op\.|Dt\.|Dr\.)(?:\s*(?:Dr\.|Dt\.))*\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]+(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]+)?")
+
+
+def _brand_claims(workspace, briefs: Dict) -> List[Block]:
+    """Brieflerdeki marka olgulari nereden geliyor, ne dogrulanmadi. [Hipotez] etiketi bunlari dogrulamaz."""
+    profile = workspace.profile_data if isinstance(workspace.profile_data, dict) else {}
+    profile_text = json.dumps(profile, ensure_ascii=False)
+    text = json.dumps([briefs.get("ad_ideas"), briefs.get("creative_briefs")], ensure_ascii=False)
+    titles = list(dict.fromkeys(_TITLE.findall(text)))
+    items = [f"Unvan “{t}”: " + ("markanın sitesinden okunan profilde geçiyor; " if t in profile_text
+                                 else "kaynağı bulunamadı; ")
+             + "uzmanlık/unvan tescil belgesi görülmeden yayımlanmaz." for t in titles]
+    items.append("Hizmet anlatımı ve vaat içeren ifadeler (yaklaşım, seans biçimi, uygulanan tedavi, kullanılan "
+                 "malzeme) müşteriyle tek tek teyit edilmeden yayımlanmaz.")
+    return [("h2", "Yayın öncesi teyit edilecek marka ifadeleri"),
+            ("p", "Brieflerdeki marka adı, unvan ve hizmet anlatımı markanın kendi sitesinden okunan profilden gelir; "
+                  "markanın kendi beyanıdır ve bağımsız olarak doğrulanmamıştır. [Hipotez] etiketi bu olguları "
+                  "doğrulamaz; yalnız önerinin test edilecek bir fikir olduğunu söyler."),
+            ("bullets", items)]
 
 
 def _date(value) -> str:
@@ -112,7 +137,9 @@ def _plan(actions: List[Dict]) -> List[Block]:
     for period in strategy.PERIODS:
         rows = [[f"{strategy.ACTION_KINDS.get(a.get('kind'), 'Tür yok')}: {a['action']}",
                  f"{a['priority']}: {a['priority_reason']}",
-                 "; ".join(filter(None, [a["owner_role"], a["effort"] and f"iş yükü {a['effort']}",
+                 "; ".join(filter(None, [a["owner_role"], a.get("channel") and
+                                         f"yer: {strategy.STRATEGY_CHANNELS.get(a['channel'], a['channel'])}",
+                                         a["effort"] and f"iş yükü {a['effort']}",
                                          a["dependency"] and f"bağımlılık: {a['dependency']}"])),
                  "; ".join(filter(None, [a["kpi"] and f"KPI: {a['kpi']}", a["contribution"],
                                          a.get("ad_basis") and f"reklam dayanağı (analist): {a['ad_basis']}"])),
@@ -218,7 +245,7 @@ def _note(note: Dict) -> Block:
              ["Dayanak", _refs(note)]])
 
 
-def _implementation(report, record: Dict, state: str) -> List[Block]:
+def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
     sections = report.sections or {}
     briefs = report.briefs or {}
     blocks: List[Block] = [("h1", "Reklam ve kreatif briefler [Hipotez]"), ("p", (
@@ -230,14 +257,16 @@ def _implementation(report, record: Dict, state: str) -> List[Block]:
         return blocks + [("p", "Seçilmiş segmentler için brief üretilmedi.")]
     base = strategy.ad_base_status(sections)
     # Analistin dayanak yazarak plana aldigi ucretli kanallar
-    cleared = {CHANNELS.get(a["channel"]) for a in (strategy.content(record).get("actions") or [])
-               if state in ("draft", "approved") and a.get("publication") == "sponsorlu"}
+    current = strategy.content(record) if state in ("draft", "approved") else {}
+    cleared = {CHANNELS.get(a["channel"]) for a in current.get("actions") or [] if a.get("publication") == "sponsorlu"}
+    decided = any(d.get("held_action") for d in current.get("decisions") or [])
     selection = briefs.get("selection") or {}
     segments = (sections.get("synthesis") or {}).get("segments") or []
     blocks += report_doc._bullets("Seçilen segmentler", [segments[i]["name"] for i in selection.get("segments", []) if i < len(segments)])
     restrictions = [r["text"] for r in (sections.get("sector") or {}).get("restrictions") or []]
     if restrictions:
         blocks += report_doc._bullets("Bilinen reklam/tanıtım kısıtları", restrictions)
+    blocks += _brand_claims(workspace, briefs)
 
     def status_of(channel: str) -> str:
         return "önerilebilir" if base == "önerilebilir" or channel in cleared else base
@@ -259,7 +288,10 @@ def _implementation(report, record: Dict, state: str) -> List[Block]:
     if held:
         blocks += [("h1", "Karar bekleyen reklam fikirleri (yayına hazır değil)"),
                    ("p", "Aşağıdaki fikirler ücretli yayın gerektirir ve uygunlukları onaylanmamıştır. Analist ya da "
-                         "müşteri kararı verilmeden uygulanmaz; ilgili karar yönetici raporunun karar noktalarındadır.")]
+                         "müşteri kararı verilmeden uygulanmaz. " + (
+                             "İlgili karar yönetici raporunun karar noktalarındadır." if decided else
+                             "Strateji taslağı ücretli reklam önermediği için yönetici raporunda bu fikirlere ait "
+                             "ayrı bir karar noktası yoktur; uygulanmak istenirse önce bu karar verilmelidir."))]
         for idea in held:
             blocks += idea_block(idea)
     if briefs["creative_briefs"]:
@@ -282,5 +314,5 @@ def build(workspace, audit, report, view: str) -> List[Block]:
     state = strategy.state(report)
     body = {"executive": lambda: _executive(audit, report, record, state),
             "detail": lambda: _detail(audit, report, record, state),
-            "implementation": lambda: _implementation(report, record, state)}[view]()
+            "implementation": lambda: _implementation(workspace, report, record, state)}[view]()
     return _cover(workspace, audit, report, view, record, state) + body + report_doc.LIMIT_BLOCKS

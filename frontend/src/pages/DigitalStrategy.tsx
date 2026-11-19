@@ -76,6 +76,7 @@ const GROUPS: [string, string, Field[]][] = [
     [
       ['action', 'Aksiyon'],
       ['kind', 'Tür', ['teknik', 'ölçümleme', 'seo', 'içerik', 'reklam']],
+      ['channel', 'Yer', ['', 'website', 'meta', 'youtube', 'tiktok', 'linkedin', 'google_search']],
       ['period', 'Dönem (gün)', ['0-30', '30-60', '60-90']],
       ['priority', 'Öncelik', ['P1', 'P2', 'P3', 'P4']],
       ['priority_reason', 'Öncelik gerekçesi'],
@@ -86,6 +87,16 @@ const GROUPS: [string, string, Field[]][] = [
     ],
   ],
 ]
+
+const CHANNEL_LABEL: Record<string, string> = {
+  '': 'yok',
+  website: 'Web sitesi / blog',
+  meta: 'Instagram / Facebook',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  linkedin: 'LinkedIn',
+  google_search: 'Google Arama Ağı (reklam)',
+}
 
 const VIEWS: ['executive' | 'detail' | 'implementation', string][] = [
   ['executive', 'Yönetici raporu'],
@@ -286,7 +297,7 @@ export default function DigitalStrategy(props: Props) {
                         >
                           {options.map((o) => (
                             <option key={o} value={o}>
-                              {label}: {o}
+                              {label}: {CHANNEL_LABEL[o] ?? o}
                             </option>
                           ))}
                         </select>
@@ -295,7 +306,10 @@ export default function DigitalStrategy(props: Props) {
                         <textarea
                           key={field}
                           className="input strategy-text"
-                          rows={3}
+                          rows={Math.min(
+                            10,
+                            Math.max(2, Math.ceil(String(item[field] || '').length / 26))
+                          )}
                           aria-label={`${title} ${index + 1} ${label}`}
                           title={label}
                           placeholder={label}

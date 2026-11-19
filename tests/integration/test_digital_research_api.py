@@ -707,6 +707,9 @@ def test_strategy_views_share_context_and_respect_isolation(client, db_session, 
     # Kisitli sektorde reklam fikri "yayina hazir degil" basligina gider; yalniz uyari eklenmez
     text = _view_text(db_session, ws, report_id, "implementation")
     assert "Karar bekleyen reklam fikirleri (yayına hazır değil)" in text and "Uygulanabilir reklam fikirleri" not in text
+    # Gonderme yalniz karsiligi varsa yapilir; marka olgulari "hipotez" etiketiyle dogrulanmis sayilmaz
+    assert "İlgili karar yönetici raporunun karar noktalarındadır." in text
+    assert "Yayın öncesi teyit edilecek marka ifadeleri" in text and "[Hipotez] etiketi bu olguları" in text
     assert "Öneri durumu: koşullu" in text
     # Baska denetimle sessizce birlestirilmez
     newer = DigitalAudit(brand_profile_id=ws.id, status="completed")
@@ -777,6 +780,11 @@ def test_paid_ads_are_held_but_organic_work_is_not_turned_into_an_ad_question():
     assert _plan("önerilebilir", kind="reklam", channel="meta")[0][0]["ad_status"] == "önerilebilir"
     # Tur zorunlu
     assert _plan("koşullu", kind="")[0] == []
+    # Blog / web sitesi stratejiye ozgu bir yerdir; SEO isinde de not uretmeden kalir, reklam agi sayilmaz
+    for kind in ("içerik", "seo", "teknik"):
+        kept, held = _plan("koşullu", kind=kind, channel="website")
+        assert held == [] and kept[0]["channel"] == "website" and kept[0]["class_note"] == ""
+    assert "website" not in research.CHANNELS  # reklam brieflerinin kanal sozlesmesi degismedi
 
 
 def test_references_must_actually_support_the_claim():
@@ -794,6 +802,10 @@ def test_references_must_actually_support_the_claim():
     absent, _ = swot("weaknesses", "Hiçbir web analitik verisi toplanamamaktadır", ["B3"])
     assert any("kesin yokluk değildir" in w and "Etiket yöneticisinin" in w for w in absent[0]["warnings"])
     assert swot("weaknesses", "Sayfa kodunda GA4 izi görülmedi; GTM yapılandırması kontrol edilmeli", ["B3"])[0][0]["warnings"] == []
+    # Kosullu cumle yokluk iddiasi degildir (pilotta yanlis alarm vermisti); kesin iddia yine yakalanir
+    assert swot("weaknesses", "Veri toplama altyapısı doğrulanmadan pazarlama performansı izlenemez.", ["B3"])[0][0]["warnings"] == []
+    assert swot("weaknesses", "Altyapı doğrulanmadan karar verilmemeli. Kullanıcı hareketleri takip edilememektedir.",
+                ["B3"])[0][0]["warnings"]
     # Metinde adi gecen sitenin dayanagi yoksa madde atilir (analistten gelirse reddedilir)
     text = "Mobil hızda marka.test 79/100 ile rakip.test (32/100) sitesinden yüksektir"
     assert swot("strengths", text, ["B5"]) == ([], 1)
