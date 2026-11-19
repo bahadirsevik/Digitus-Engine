@@ -1194,7 +1194,8 @@ def test_source_type_is_never_guessed_and_conflicting_numbers_are_flagged(client
     review = f"/api/v1/digital-audit/research/{report_id}/claim-review?brand_profile_id={ws.id}"
     text = _blocks(db_session, ws, report_id)
     assert "2 rakamın kaynak türü belirlenmedi" in text
-    assert "Aynı konuda farklı değerler" in text and "Farkın nedeni açıklanmadı; analist açıklaması bekliyor." in text
+    assert "Karşılaştırılacak değerler (tanım, yıl ya da kapsam farklı olabilir)" in text
+    assert "Aynı şeyi ölçüp ölçmedikleri doğrulanmadı" in text
     assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
 
     assert client.put(review, json={"claim_id": "sector:0", "source_type": "çok güvenilir"}).status_code == 400

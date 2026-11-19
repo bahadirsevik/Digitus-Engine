@@ -437,11 +437,12 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
                 blocks.append(("p", f"{unset} rakamın kaynak türü belirlenmedi (resmî / birincil / ikincil / tahmini ayrımını "
                                     "analist yapar; sistem yayıncı türünü tahmin etmez)."))
             blocks += _bullets("Analist notları", [f"{c['claim']}: {c['analyst_note']}" for c in claims if c.get("analyst_note")])
-            blocks += _bullets("Aynı konuda farklı değerler", [
+            blocks += _bullets("Karşılaştırılacak değerler (tanım, yıl ya da kapsam farklı olabilir)", [
                 f"{a['claim']}: {a['value']} {a['unit']} ({a['year'] or 'yıl yok'}) ↔ {b['claim']}: {b['value']} {b['unit']} "
                 f"({b['year'] or 'yıl yok'}). " + ("Açıklama: " + " / ".join(filter(None, [a.get("analyst_note"), b.get("analyst_note")]))
                                                    if a.get("analyst_note") or b.get("analyst_note")
-                                                   else "Farkın nedeni açıklanmadı; analist açıklaması bekliyor.")
+                                                   else "Aynı şeyi ölçüp ölçmedikleri doğrulanmadı; analist açıklamasına kadar "
+                                                        "hiçbiri kesin değer olarak kullanılmaz.")
                 for a, b in research.claim_conflicts(claims)])
         else:
             blocks += [("h2", "Rakamlar"), ("p", "Kaynakta doğrulanan rakam bulunamadı; rapora rakam alınmadı.")]

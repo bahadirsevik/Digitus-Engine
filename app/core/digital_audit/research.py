@@ -650,7 +650,8 @@ def synthesize(ai, facts: Dict, usage: Dict) -> Dict:
         "aramalardan; yoksa boş), hesitation = segmentin tereddüdü (BULGULAR'daki tereddütlerden; yoksa boş), "
         "validation_method = varsayımın nasıl doğrulanacağı (form sorusu | CRM kaydı | müşteri görüşmesi | GA4 verisi). opportunities: bulguya bağlı, denenebilir fırsat ve farklılaşma "
         "hipotezleri. google_ads: kelime grupları ve negatif kelimeler. meta_audiences: ilgi alanları serbest "
-        "metin önerisidir.\n\nBULGULAR:\n" + facts_text,
+        "metin önerisidir. harita_kutusu yalnız o aramada harita kutusunun görülüp görülmediğidir: harita SIRASI "
+        "ölçülmedi; markanın harita sonuçlarındaki yeri hakkında cümle kurma.\n\nBULGULAR:\n" + facts_text,
         max_tokens=9000, response_schema=SYNTHESIS_SCHEMA,
     ))
     segments = []
