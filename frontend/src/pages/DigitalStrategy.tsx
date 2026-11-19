@@ -75,6 +75,7 @@ const GROUPS: [string, string, Field[]][] = [
     '90 günlük aksiyon planı',
     [
       ['action', 'Aksiyon'],
+      ['kind', 'Tür', ['teknik', 'ölçümleme', 'seo', 'içerik', 'reklam']],
       ['period', 'Dönem (gün)', ['0-30', '30-60', '60-90']],
       ['priority', 'Öncelik', ['P1', 'P2', 'P3', 'P4']],
       ['priority_reason', 'Öncelik gerekçesi'],
@@ -130,6 +131,10 @@ export default function DigitalStrategy(props: Props) {
   }, [stamp])
 
   const synthesisReady = detail.sections.synthesis?.status === 'ok' && !detail.synthesis_stale
+  const warned = content
+    ? GROUPS.flatMap(([path]) => listAt(content, path)).filter((i) => (i.warnings || []).length > 0)
+        .length
+    : 0
   const editable = !!content && !!record && (state === 'draft' || state === 'approved') && !running
   const refText = (id: string) => record?.catalogue.find((c) => c.id === id)
 
@@ -286,9 +291,11 @@ export default function DigitalStrategy(props: Props) {
                           ))}
                         </select>
                       ) : (
-                        <input
+                        // Çok satırlı: analist onayladığı cümlenin tamamını görür
+                        <textarea
                           key={field}
-                          className="input"
+                          className="input strategy-text"
+                          rows={3}
                           aria-label={`${title} ${index + 1} ${label}`}
                           title={label}
                           placeholder={label}
@@ -307,6 +314,11 @@ export default function DigitalStrategy(props: Props) {
                           {id} · {refText(id)?.kind}
                         </span>
                       ))}
+                      {item.class_note && (
+                        <span className="audit-chip audit-chip-neutral">
+                          Sınıflandırma notu: {String(item.class_note)}
+                        </span>
+                      )}
                       {item.publication === 'sponsorlu' && (
                         <span className="audit-chip audit-chip-warning">
                           Sponsorlu · {String(item.ad_status || '')}
@@ -378,11 +390,17 @@ export default function DigitalStrategy(props: Props) {
             <button
               className="btn btn-secondary"
               onClick={approve}
-              disabled={busy || dirty || approver.trim().length < 2}
+              disabled={busy || dirty || warned > 0 || approver.trim().length < 2}
             >
               <CheckCircle2 size={18} /> İncelendi olarak işaretle
             </button>
           </div>
+          {warned > 0 && (
+            <p className="audit-status-note">
+              Uyarısı duran {warned} madde var. Metni düzeltin ya da maddeyi çıkarın; uyarılar
+              kapanmadan taslak incelendi olarak işaretlenemez.
+            </p>
+          )}
           <p className="audit-hint">
             İşaret yalnız bu sürümün incelendiğini gösterir; kontrol listesindeki bütün maddelerin
             tamamlandığı anlamına gelmez.

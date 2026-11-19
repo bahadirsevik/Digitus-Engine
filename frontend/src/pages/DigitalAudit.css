@@ -331,6 +331,13 @@
   border-top: 1px solid rgba(128, 128, 128, 0.2);
 }
 
+.strategy-text {
+  resize: vertical;
+  min-height: 64px;
+  font: inherit;
+  line-height: 1.35;
+}
+
 .strategy-meta,
 .strategy-held {
   grid-column: 1 / -1;

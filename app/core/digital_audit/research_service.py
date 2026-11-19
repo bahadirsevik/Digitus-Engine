@@ -185,6 +185,9 @@ def approve_strategy(db: Session, report: DigitalResearch, version: int, revisio
     yenileme ya da girdi degisikligi onayi gecersiz kilar."""
     try:
         current = _locked_strategy(db, report, version, revision)
+        waiting = strategy.open_warnings(strategy.content(current))
+        if waiting:
+            raise ResearchInputError(f"Uyarısı duran {waiting} madde var; düzeltin ya da çıkarın, sonra işaretleyin.")
     except Exception:
         db.rollback()
         raise

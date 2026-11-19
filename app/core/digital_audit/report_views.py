@@ -110,7 +110,8 @@ def _context(audit) -> List[Block]:
 def _plan(actions: List[Dict]) -> List[Block]:
     blocks: List[Block] = [("h1", "90 günlük aksiyon planı")]
     for period in strategy.PERIODS:
-        rows = [[a["action"], f"{a['priority']}: {a['priority_reason']}",
+        rows = [[f"{strategy.ACTION_KINDS.get(a.get('kind'), 'Tür yok')}: {a['action']}",
+                 f"{a['priority']}: {a['priority_reason']}",
                  "; ".join(filter(None, [a["owner_role"], a["effort"] and f"iş yükü {a['effort']}",
                                          a["dependency"] and f"bağımlılık: {a['dependency']}"])),
                  "; ".join(filter(None, [a["kpi"] and f"KPI: {a['kpi']}", a["contribution"],

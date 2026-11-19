@@ -163,6 +163,22 @@ describe('DigitalStrategy', () => {
     })
   })
 
+  it('uyarısı duran madde varken onay kapalıdır; sınıflandırma notu görünür', () => {
+    const warnedContent: StrategyContent = {
+      ...CONTENT,
+      summary: [{ ...CONTENT.summary[0], warnings: ['Dayanak “görülmedi” ölçümüdür'] }],
+      actions: [{ ...CONTENT.actions[0], kind: 'seo', class_note: 'Kanal kaldırıldı.' }],
+    }
+    const d = detail()
+    d.sections.strategy!.draft = warnedContent
+    show(d)
+    fireEvent.change(screen.getByLabelText('İnceleyen analist'), { target: { value: 'Analist A' } })
+    expect(screen.getByRole('button', { name: /İncelendi olarak işaretle/ })).toBeDisabled()
+    expect(screen.getByText(/Uyarısı duran 1 madde var/)).toBeInTheDocument()
+    expect(screen.getByText(/Sınıflandırma notu: Kanal kaldırıldı/)).toBeInTheDocument()
+    expect(screen.getByLabelText('90 günlük aksiyon planı 1 Tür')).toHaveValue('seo')
+  })
+
   it('güncel olmayan taslağı düzeltmeye açmaz; belge araştırmanın kendi denetimiyle indirilir', async () => {
     api.exportReport.mockReturnValue(ok(new Blob()))
     show(detail({ strategy_state: 'stale' }))

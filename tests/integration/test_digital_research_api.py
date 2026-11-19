@@ -530,13 +530,13 @@ def _strategy_payload(cat):
         "actions": [
             {"period": "0-30", "action": "Sayfa başlıklarını tamamla", "priority": "P1", "priority_reason": "Temel",
              "dependency": "", "owner_role": "SEO uzmanı", "effort": "1-2 gün", "kpi": "Eksik başlık sayısı",
-             "contribution": "Görünürlük", "channel": "", "publication": "", "refs": [own]},
+             "contribution": "Görünürlük", "kind": "seo", "channel": "google_search", "publication": "", "refs": [own]},
             {"period": "30-60", "action": "Acil hasta için arama reklamı aç", "priority": "P2",
              "priority_reason": "Talep var", "dependency": "", "owner_role": "Reklam uzmanı", "effort": "3 gün",
-             "kpi": "Form sayısı", "contribution": "Talep", "channel": "google_search", "publication": "sponsorlu",
+             "kpi": "Form sayısı", "contribution": "Talep", "kind": "reklam", "channel": "google_search", "publication": "sponsorlu",
              "refs": [seg]},
             {"period": "0-30", "action": "Dayanaksız aksiyon", "priority": "P1", "priority_reason": "", "dependency": "",
-             "owner_role": "", "effort": "", "kpi": "", "contribution": "", "channel": "", "publication": "", "refs": []},
+             "owner_role": "", "effort": "", "kpi": "", "contribution": "", "kind": "teknik", "channel": "", "publication": "", "refs": []},
         ],
     }
 
@@ -727,29 +727,105 @@ def test_strategy_views_share_context_and_respect_isolation(client, db_session, 
     assert client.get(base.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}") + "&view=executive").status_code == 404
 
 
-def test_paid_action_is_held_even_when_publication_is_blank_or_contradictory():
+CAT = [
+    {"id": "B1", "kind": "Ölçüm (marka sitesi)", "text": "marka.test: Görsel alt metinleri: İyi · 11 / 64 görselde alt metni eksik",
+     "site": "marka.test", "state": "gözlendi", "assessment": "iyi", "limits": []},
+    {"id": "B2", "kind": "Dış kaynak (reklam kısıtı)", "text": "Ücretli öne çıkarma yasak"},
+    {"id": "B3", "kind": "Ölçüm (marka sitesi)", "text": "marka.test: GA4 izi: Görülmedi", "site": "marka.test",
+     "state": "gözlenmedi", "assessment": "değerlendirilmedi", "limits": ["Etiket yöneticisinin içinden yüklenen izler görülmez."]},
+    {"id": "B4", "kind": "Rakip gözlemi", "text": "rakip.test/tr: Açılış hızı (mobil): Sorun · performans 32/100",
+     "site": "rakip.test/tr", "state": "gözlendi", "assessment": "sorun", "limits": []},
+    {"id": "B5", "kind": "Ölçüm (marka sitesi)", "text": "marka.test: Açılış hızı (mobil): Uyarı · performans 79/100",
+     "site": "marka.test", "state": "gözlendi", "assessment": "uyarı", "limits": []},
+]
+
+
+def _plan(base, strict=False, **fields):
     from app.core.digital_audit import strategy
 
-    cat = [{"id": "B1", "kind": "Ölçüm (marka sitesi)", "text": "x"},
-           {"id": "B2", "kind": "Dış kaynak (reklam kısıtı)", "text": "Ücretli öne çıkarma yasak"}]
+    action = {"period": "0-30", "priority": "P1", "refs": ["B1"], "action": "İçerik paylaş", "kind": "içerik",
+              "channel": "", "publication": "", **fields}
+    out = strategy.normalize({"actions": [action]}, CAT, base, strict=strict)
+    return out["actions"], [d for d in out["decisions"] if d.get("held_action")]
 
-    def plan(base, **fields):
-        action = {"period": "0-30", "priority": "P1", "refs": ["B1"], "action": "İçerik paylaş", "channel": "",
-                  "publication": "", **fields}
-        out = strategy.normalize({"actions": [action]}, cat, base, strict=False)
-        return [a["action"] for a in out["actions"]], [d for d in out["decisions"] if d.get("held_action")]
 
-    for fields in ({"action": "Google Ads kampanyası başlat"},                      # yayin turu ve kanal bos
-                   {"channel": "google_search", "publication": "organik"},           # celiskili etiket
-                   {"channel": "meta"},                                              # kanal var, yayin turu yok
-                   {"action": "Remarketing listesi kur", "publication": "organik"},
-                   {"channel": "meta", "publication": "sponsorlu"}):
-        kept, held = plan("koşullu", **fields)
+def test_paid_ads_are_held_but_organic_work_is_not_turned_into_an_ad_question():
+    # Tur "reklam" ise ya da etiket/metin acikca ucretli reklami anlatiyorsa: bekletilir
+    for fields in ({"kind": "reklam", "channel": "meta"},
+                   {"kind": "reklam"},                                               # kanal ve yayin turu bos
+                   {"kind": "seo", "action": "Google Ads kampanyası başlat"},        # tur etiketiyle asilamaz
+                   {"kind": "içerik", "action": "Remarketing listesi kur", "publication": "organik"},
+                   {"kind": "içerik", "channel": "meta", "publication": "sponsorlu"}):
+        kept, held = _plan("koşullu", **fields)
         assert kept == [] and len(held) == 1 and held[0]["refs"] == ["B1", "B2"], fields
-        assert plan("değerlendirilmedi", **fields)[0] == []
-    # Organik yayin ve kisit bulunmayan sektor planda kalir
-    assert plan("koşullu", channel="meta", publication="organik")[0] == ["İçerik paylaş"]
-    assert plan("önerilebilir", action="Google Ads kampanyası başlat")[0] == ["Google Ads kampanyası başlat"]
+        assert _plan("değerlendirilmedi", **fields)[0] == []
+    # Celiski analiste ACIKCA yazilir; reklam turundeki soru ayridir
+    assert "Sınıflandırma çelişkili (tür “SEO”, ama metin ücretli reklamdan söz ediyor)" in _plan(
+        "koşullu", kind="seo", action="Google Ads kampanyası başlat")[1][0]["question"]
+    assert _plan("koşullu", kind="reklam", channel="meta")[1][0]["question"].startswith("Ücretli reklam (Instagram / Facebook)")
+    # Pilotta gorulen hata: SEO/icerik isine "Google Arama Agi" yazilmisti. Reklam sorusu OLMAZ;
+    # yanlis kanal kaldirilir ve bu analiste soylenir.
+    for kind, text in (("seo", "'ataköy diş hekimi' aramaları için hizmet sayfalarını yerel SEO kriterlerine göre optimize etmek"),
+                       ("teknik", "Eksik 1 meta açıklamasını ve 11 görsel alt metnini tamamlamak"),
+                       ("içerik", "Dentofobiye yönelik mevzuata uygun bilgilendirici içerikler hazırlayıp blogda yayımlamak")):
+        kept, held = _plan("koşullu", kind=kind, action=text, channel="google_search", publication="sponsorlu" if False else "")
+        assert held == [] and kept[0]["channel"] == "" and "kanal kaldırıldı" in kept[0]["class_note"], kind
+        assert kept[0]["publication"] == ("organik" if kind == "içerik" else "")
+    # Organik sosyal icerik kanaliyla planda kalir; kisit yoksa reklam da kalir
+    kept, held = _plan("koşullu", channel="meta", publication="organik")
+    assert held == [] and kept[0]["channel"] == "meta" and kept[0]["class_note"] == ""
+    assert _plan("önerilebilir", kind="reklam", channel="meta")[0][0]["ad_status"] == "önerilebilir"
+    # Tur zorunlu
+    assert _plan("koşullu", kind="")[0] == []
+
+
+def test_references_must_actually_support_the_claim():
+    from app.core.digital_audit import strategy
+
+    def swot(key, text, refs):
+        out = strategy.normalize({"swot": {key: [{"text": text, "refs": refs}]}}, CAT, "koşullu", strict=False)
+        return out["swot"][key], out["dropped"]
+
+    # "Iyi" kontrol zayif yon diye sunulamaz (uyari); firsat olarak yazilabilir
+    weak, _ = swot("weaknesses", "11 görselde alt metin eksikliğinin bulunması", ["B1"])
+    assert "değerlendirmesi “İyi”" in weak[0]["warnings"][0]
+    assert swot("opportunities", "Genel durum iyi; örneklemde iyileştirilebilecek 11 görsel var", ["B1"])[0][0]["warnings"] == []
+    # "Gorulmedi" + sinir, kesin yokluk gibi yazilamaz
+    absent, _ = swot("weaknesses", "Hiçbir web analitik verisi toplanamamaktadır", ["B3"])
+    assert any("kesin yokluk değildir" in w and "Etiket yöneticisinin" in w for w in absent[0]["warnings"])
+    assert swot("weaknesses", "Sayfa kodunda GA4 izi görülmedi; GTM yapılandırması kontrol edilmeli", ["B3"])[0][0]["warnings"] == []
+    # Metinde adi gecen sitenin dayanagi yoksa madde atilir (analistten gelirse reddedilir)
+    text = "Mobil hızda marka.test 79/100 ile rakip.test (32/100) sitesinden yüksektir"
+    assert swot("strengths", text, ["B5"]) == ([], 1)
+    kept, dropped = swot("strengths", text, ["B5", "B4"])
+    assert dropped == 0 and kept[0]["warnings"] == []  # gosterilen dayanakta gecen skor uyari uretmez
+    with pytest.raises(strategy.StrategyInputError):
+        strategy.normalize({"swot": {"strengths": [{"text": text, "refs": ["B5"]}]}}, CAT, "koşullu", strict=True)
+    # Arama sirasi satiri birden cok siteyi tasir: o satir iki sitenin de dayanagidir
+    serp = CAT + [{"id": "B6", "kind": "Ölçüm (arama görünürlüğü)", "text": "“diş” araması: marka.test 3; rakip.test 7",
+                   "sites": ["marka.test", "rakip.test"]}]
+    out = strategy.normalize({"competition": [{"text": "marka.test ve rakip.test aynı aramada görüldü", "refs": ["B6"]}]},
+                             serp, "koşullu", strict=False)
+    assert len(out["competition"]) == 1 and out["dropped"] == 0
+    # "Iyi" kontrolun sayisi, baska bir uyarili dayanagin yaninda da zayif yon diye tasinamaz
+    mixed, _ = swot("weaknesses", "Mobil hız 79/100 ve 11 görselde alt metin eksikliği", ["B5", "B1"])
+    assert any("değerlendirmesi “İyi”" in w for w in mixed[0]["warnings"])
+
+
+def test_draft_with_open_warnings_cannot_be_approved(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    draft = get(client, report_id, ws).json()["sections"]["strategy"]["draft"]
+    assert draft["actions"][0]["kind"] == "seo" and "kanal kaldırıldı" in draft["actions"][0]["class_note"]
+    bad = json.loads(json.dumps(draft))
+    bad["summary"][0]["meaning"] = "Dönüşüm %40 artar"  # dayanakta olmayan rakam
+    res = client.put(url, json={"version": 1, "revision": 0, "content": bad})
+    assert res.status_code == 200 and res.json()["sections"]["strategy"]["edited"]["summary"][0]["warnings"]
+    assert client.post(approve, json={"version": 1, "revision": 1, "approved_by": "Analist A"}).status_code == 400
+    assert client.put(url, json={"version": 1, "revision": 1, "content": draft}).status_code == 200
+    assert client.post(approve, json={"version": 1, "revision": 2, "approved_by": "Analist A"}).json()[
+        "strategy_state"] == "approved"
 
 
 def test_analyst_cannot_approve_text_changed_by_someone_else(client, db_session, make_workspace, dispatched,
