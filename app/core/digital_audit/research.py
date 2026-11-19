@@ -561,6 +561,16 @@ _SYNTH_RULES = (
 )
 
 
+def ad_base_status(sections: Dict) -> str:
+    """Ucretli reklamin varsayilan durumu: önerilebilir | koşullu | değerlendirilmedi.
+    Bilinmeyen izin DEGILDIR. Butun ciktilar (strateji, uygulama belgesi, detayli analiz, eski
+    birlesik rapor) reklam onerisini AYNI karara gore yayimlar."""
+    sector = sections.get("sector") or {}
+    if sector.get("status") != "ok":
+        return "değerlendirilmedi"
+    return "koşullu" if sector.get("restrictions") else "önerilebilir"
+
+
 def _claim_warnings(texts: List[str], facts_text: str) -> List[str]:
     from app.generators.ads.validators import find_ungrounded_claims
 

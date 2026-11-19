@@ -456,12 +456,21 @@ def _research_blocks(report, briefs: bool = True) -> List[Block]:
         blocks += _bullets("Fırsat ve farklılaşma [Hipotez]",
                            [f"{o['text']} (dayanak: {o['evidence']})" for o in synthesis.get("opportunities") or []])
         ads = synthesis.get("google_ads") or {}
-        blocks += _bullets("Google Ads önerisi [Hipotez]",
-                           [f"{g['group']}: {', '.join(g['keywords'])}" for g in ads.get("keyword_groups") or []]
-                           + ([f"Negatif kelimeler: {', '.join(ads['negatives'])}"] if ads.get("negatives") else []))
-        blocks += _bullets("Meta hedef kitle önerisi [Hipotez]", [
-            f"{m['segment']}: {m['location']}; yaş hipotezi {m['age_hypothesis']}; ilgi alanları (serbest metin, "
-            f"platformda doğrulanmadı): {', '.join(m['interests'])}" for m in synthesis.get("meta_audiences") or []])
+        paid = (_bullets("Google Ads önerisi [Hipotez]",
+                         [f"{g['group']}: {', '.join(g['keywords'])}" for g in ads.get("keyword_groups") or []]
+                         + ([f"Negatif kelimeler: {', '.join(ads['negatives'])}"] if ads.get("negatives") else []))
+                + _bullets("Meta hedef kitle önerisi [Hipotez]", [
+                    f"{m['segment']}: {m['location']}; yaş hipotezi {m['age_hypothesis']}; ilgi alanları (serbest metin, "
+                    f"platformda doğrulanmadı): {', '.join(m['interests'])}" for m in synthesis.get("meta_audiences") or []]))
+        # Ucretli reklam onerisi, strateji ve uygulama belgesiyle AYNI kurala tabidir: kisit bulunan ya da
+        # degerlendirilmemis sektorde kosulsuz yayimlanmaz (yalniz uyari eklemek yetmez).
+        status = research.ad_base_status(sections)
+        if paid and status != "önerilebilir":
+            paid = [("h2", "Ücretli reklam önerileri"), ("p", (
+                "Sektörde reklam/tanıtım kısıtı bulundu" if status == "koşullu"
+                else "Sektörün reklam kısıtı araştırması sonuç vermedi") + "; uygunluk kararı verilmeden Google Ads ve "
+                "Meta hedefleme önerileri bu raporda yayımlanmaz. Konu, karar noktası olarak ele alınır.")]
+        blocks += paid
 
     briefs = (report.briefs or {}) if briefs else {}  # detayli analizde uzun briefler yer almaz
     if briefs and research.briefs_stale(report):

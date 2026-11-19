@@ -899,3 +899,23 @@ def test_ecommerce_rows_reach_no_model_unless_the_site_is_a_shop(client, db_sess
     assert "E-ticaret" not in json.dumps(research.audit_facts(audit), ensure_ascii=False)  # segment sentezi yolu
     audit.answers = {**audit.answers, "business_model": {"value": "E-ticaret", "note": None}}
     assert "E-ticaret altyapısı" in json.dumps(research.audit_facts(audit), ensure_ascii=False)
+
+
+def test_paid_ad_suggestions_are_withheld_in_every_document_when_the_sector_is_restricted(
+        client, db_session, make_workspace, dispatched, monkeypatch):
+    synthesis = {**SYNTHESIS, "google_ads": {"keyword_groups": [{"group": "Acil", "keywords": ["acil diş hekimi"]}],
+                                             "negatives": ["ücretsiz"], "note": ""},
+                 "meta_audiences": [{"segment": "Acil hasta", "location": "İstanbul", "age_hypothesis": "25-45",
+                                     "interests": ["diş sağlığı"], "note": ""}]}
+    monkeypatch.setitem(PAYLOADS, "audit_synthesis", synthesis)
+    ws = make_workspace("Marka")
+    report_id = completed_report(client, db_session, ws, dispatched)  # SECTOR'da reklam kisiti var
+    for text in (_blocks(db_session, ws, report_id), _view_text(db_session, ws, report_id, "detail")):
+        assert "Google Ads önerisi" not in text and "acil diş hekimi" not in text
+        assert "Meta hedef kitle önerisi" not in text and "25-45" not in text
+        assert "uygunluk kararı verilmeden Google Ads ve Meta hedefleme önerileri bu raporda yayımlanmaz" in text
+    # Kisit bulunmayan sektorde oneriler eskisi gibi yayimlanir
+    monkeypatch.setitem(PAYLOADS, "audit_sector_research", {**SECTOR, "restrictions": []})
+    other = make_workspace("Diger")
+    free_id = completed_report(client, db_session, other, dispatched)
+    assert "Google Ads önerisi [Hipotez]" in _blocks(db_session, other, free_id)

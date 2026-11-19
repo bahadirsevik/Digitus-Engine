@@ -193,12 +193,7 @@ def gaps(audit, report) -> List[str]:
     return out
 
 
-def ad_base_status(sections: Dict) -> str:
-    """Ucretli reklamin varsayilan durumu. Bilinmeyen izin DEGILDIR."""
-    sector = sections.get("sector") or {}
-    if sector.get("status") != "ok":
-        return "değerlendirilmedi"
-    return "koşullu" if sector.get("restrictions") else "önerilebilir"
+ad_base_status = research.ad_base_status  # tek karar: research.ad_base_status
 
 
 # --- normalizasyon (AI ciktisi ve analist duzeltmesi ayni kapidan gecer) -----
