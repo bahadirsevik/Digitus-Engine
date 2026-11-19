@@ -349,7 +349,8 @@ def _visibility_blocks(audit) -> List[Block]:
         own_site = (sites or [""])[0]
 
         def relevance(r) -> str:  # yalniz basliktan ve alan adindan soylenebilen; icerik okunmadi
-            if own_site and own_site in (r.get("domain") or ""):
+            domain = (r.get("domain") or "").casefold().removeprefix("www.")
+            if own_site and (domain == own_site or domain.endswith("." + own_site)):  # tam ad ya da gercek alt alan adi
                 return "[Markanın kendi sitesi]"
             return "[Başlıkta marka adı geçiyor]" if name and name in (r.get("title") or "").casefold() else "[İlgisi doğrulanmadı]"
 
@@ -526,8 +527,10 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
                         if q["keyword"].casefold() in (s.get("evidence") or "").casefold()]
             basis = (f"[Gözlem] arama hacmi ölçümü ({', '.join(measured)}) + [Hipotez] yorum" if measured
                      else "[Hipotez] sektör kaynaklarından türetilmiş yorum; müşteri verisiyle doğrulanmadı")
-            blocks.append(("bullets", [f"İhtiyaç: {s['need']}", f"Dayandığı bulgu: {s['evidence']}", f"Dayanak türü: {basis}",
+            blocks.append(("bullets", [f"İhtiyaç: {s['need']}", f"Arama niyeti: {s.get('search_intent') or 'belirtilmedi'}", f"Tereddüt: {s.get('hesitation') or 'belirtilmedi'}",
+                                       f"Dayandığı bulgu: {s['evidence']}", f"Dayanak türü: {basis}",
                                        f"Doğrulanacak varsayım: {s['assumption']}",
+                                       f"Doğrulama yöntemi: {s.get('validation_method') or 'belirtilmedi'}",
                                        f"Değer teklifi: {s['value_proposition']}",
                                        *[f"Mesaj: {m}" for m in s["messages"]],
                                        *[f"Uyarı, kanıtı olmayan iddia: {w}" for w in s.get("warnings") or []]]))
@@ -577,16 +580,25 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
     for name, label in (("sector", "Sektör"), ("audience", "Hedef kitle")):
         for s in (sections.get(name) or {}).get("sources") or []:
             if s["kind"] != "unreadable":
-                used.setdefault(s["url"], {"kind": s["kind"], "sections": []})["sections"].append(label)
+                entry = used.setdefault(s["url"], {"kind": s["kind"], "sections": [], "read": None})
+                entry["sections"].append(label)
+                entry["read"] = entry["read"] or (sections.get(name) or {}).get("sources_checked_at")
     if used:
-        checked = getattr(report, "completed_at", None) or report.created_at
+        started = report.created_at.strftime("%d.%m.%Y") if report.created_at else "-"
+
+        def read_on(info) -> str:
+            # Okuma tarihi saklanmamis eski kayitta sonraki uretimin tarihi KULLANILMAZ; bilinmedigi soylenir
+            if info["read"]:
+                return ".".join(reversed(info["read"].split("-")))
+            return f"kaydedilmemiş (araştırma başlangıcı {started})"
         blocks += [("h2", "Araştırmada okunan kaynaklar"),
                    ("table", ["Kaynak", "Adres", "Tür", "Kontrol tarihi", "Kullanıldığı bölüm"], [
                        [_site(url), url, f"{research.source_type(url)}; {info['kind'].upper()}",
-                        checked.strftime("%d.%m.%Y") if checked else "-", ", ".join(info["sections"])]
+                        read_on(info), ", ".join(info["sections"])]
                        for url, info in used.items()]),
                    ("p", "Tür sütunu yalnız alan adından kesin söylenebileni gösterir; “belirlenmedi” olanların yayıncı "
-                         "türünü analist belirler. Kontrol tarihi, kaynağın okunduğu araştırma tarihidir.")]
+                         "türünü analist belirler. Kontrol tarihi kaynağın okunduğu gündür; sonradan yapılan brief ya da strateji "
+                         "üretimi kaynağı yeniden okumaz ve bu tarihi değiştirmez.")]
     return blocks
 
 

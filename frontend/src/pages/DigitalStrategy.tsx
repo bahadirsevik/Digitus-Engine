@@ -52,6 +52,14 @@ const GROUPS: [string, string, Field[]][] = [
     'Rekabet sonucu',
     [['text', 'Rakiplerin boşlukları ve markanın yararlanma yolu']],
   ],
+  [
+    'sector_meanings',
+    'Sektör: marka için anlamı',
+    [
+      ['topic', 'Alt bölüm', ['services', 'numbers', 'developments', 'platforms']],
+      ['text', 'Marka için anlamı'],
+    ],
+  ],
   ['swot.strengths', 'SWOT: güçlü yönler', [['text', 'Madde']]],
   ['swot.weaknesses', 'SWOT: zayıf yönler', [['text', 'Madde']]],
   ['swot.opportunities', 'SWOT: fırsatlar', [['text', 'Madde']]],

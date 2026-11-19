@@ -315,6 +315,16 @@ def _detail(workspace, audit, report, record: Dict, state: str) -> List[Block]:
     if missing is None:  # bu alan gelmeden once uretilmis kayit
         missing = strategy.note_gaps(notes, record.get("catalogue") or [])
     missing = [g for g in missing if g["section"] != "ecommerce" or shop]
+    # Sektor alt bolumlerinin sonuna "Marka icin anlami" (47). Verisi olup yorumu olmayan alt bolum acikca yazilir.
+    meanings = {m["topic"]: m for m in current.get("sector_meanings") or []}
+    for topic, heading in strategy.SECTOR_TOPICS.items():
+        start = next((i for i, b in enumerate(blocks) if b[0] == "h2" and b[1].startswith(heading)), None)
+        if start is None:
+            continue
+        end = next((i for i in range(start + 1, len(blocks)) if blocks[i][0] in ("h1", "h2")), len(blocks))
+        m = meanings.get(topic)
+        blocks[end:end] = [("p", f"Marka için anlamı [Hipotez]: {m['text']} ({_refs(m)})" if m
+                            else "Marka için anlamı: bu taslakta üretilmedi.")]
     leftovers = []
     for key, block in [(n["section"], _note(n)) for n in notes] + [
             (g["section"], ("p", f"Bölüm yorumu yok ({strategy.SECTIONS[g['section']]}): {g['reason']}.")) for g in missing]:
@@ -329,7 +339,7 @@ def _detail(workspace, audit, report, record: Dict, state: str) -> List[Block]:
         blocks[end:end] = [block]
     if leftovers:
         blocks += [("h1", "Diğer bölüm yorumları"), *leftovers]
-    return blocks + _appendix(record, _used(notes))
+    return blocks + _appendix(record, _used(notes + list(meanings.values())))
 
 
 def _note(note: Dict) -> Block:
@@ -408,6 +418,31 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
             f"Metin: {brief['copy']}", f"Gereken gerçek kanıt: {'; '.join(brief['proof_needed'])}",
             f"Ölçüm planı (A/B varyantı): {brief['ab_variant']}",
             *[f"Uyarı, kanıtı olmayan iddia: {w}" for w in brief["warnings"]]])]
+    return blocks + _content_plan(current, briefs)
+
+
+def _content_plan(current: Dict, briefs: Dict) -> List[Block]:
+    """Icerik plani ve KPI tablosu: yeni icerik URETMEZ; guncel stratejideki icerik aksiyonlarini ve kreatif
+    briefleri plan olarak, tum aksiyonlarin KPI'larini tek tabloda toplar. Baslangic degeri uydurulmaz."""
+    actions = current.get("actions") or []
+    blocks: List[Block] = [("h1", "İçerik planı")]
+    rows = [[f"{a['period']} gün", a["action"], strategy.STRATEGY_CHANNELS.get(a.get("channel"), "belirtilmedi"),
+             "organik", a["owner_role"] or "belirtilmedi"]
+            for a in sorted(actions, key=lambda a: a["period"]) if a.get("kind") == "içerik"]
+    rows += [["Karara bağlı" if b.get("restriction_note") else "Planlanacak",
+              f"{b['format']} · {b['hook']}", b["channel"], "belirtilmedi (kreatif brief)", "İçerik ekibi"]
+             for b in briefs.get("creative_briefs") or []]
+    blocks.append(("table", ["Dönem", "İçerik", "Yer", "Yayın türü", "Sorumlu (rol)"], rows) if rows
+                  else ("p", "Güncel stratejide içerik aksiyonu ve kreatif brief yok; içerik planı oluşturulamadı."))
+    blocks.append(("p", "Yayın tarihleri ve konu takvimi bu belgede yoktur; plan, stratejideki içerik aksiyonları ile "
+                        "kreatif brieflerin dökümüdür."))
+    blocks.append(("h1", "KPI tablosu"))
+    kpis = [[a["kpi"], a["action"], f"{a['period']} gün", "ölçülmedi"] for a in actions if a.get("kpi")]
+    kpis += [[i["test_hypothesis"], f"Reklam fikri: {i['segment']} · {i['channel']}", "Karara bağlı", "ölçülmedi"]
+             for i in briefs.get("ad_ideas") or []]
+    blocks.append(("table", ["Gösterge / test hipotezi", "İlgili iş", "Dönem", "Başlangıç değeri"], kpis) if kpis
+                  else ("p", "Güncel stratejide KPI tanımlı aksiyon yok."))
+    blocks.append(("p", "Başlangıç değerleri ölçülmediği için hedef değer verilmedi; ilk adım başlangıç ölçümüdür."))
     return blocks
 
 

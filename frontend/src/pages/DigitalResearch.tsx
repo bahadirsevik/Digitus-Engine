@@ -628,7 +628,14 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
                       <b>Dayandığı bulgu:</b> {s.evidence}
                     </p>
                     <p>
+                      <b>Arama niyeti:</b> {s.search_intent || 'belirtilmedi'} · <b>Tereddüt:</b>{' '}
+                      {s.hesitation || 'belirtilmedi'}
+                    </p>
+                    <p>
                       <b>Doğrulanacak varsayım:</b> {s.assumption}
+                    </p>
+                    <p>
+                      <b>Doğrulama yöntemi:</b> {s.validation_method || 'belirtilmedi'}
                     </p>
                     <p>
                       <b>Değer teklifi:</b> {s.value_proposition}

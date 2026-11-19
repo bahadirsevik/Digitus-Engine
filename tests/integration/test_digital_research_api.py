@@ -1279,3 +1279,88 @@ def test_strategy_accepts_opportunity_priority_and_competition_conclusion(client
     assert res["opportunities"][0]["priority"] == "P2" and len(res["competition_conclusion"]) == 1  # tek sonuc cumlesi
     text = _view_text(db_session, ws, report_id, "executive")
     assert "Sonuç (rakiplerin boşlukları ve markanın yararlanma yolu) [Hipotez]: Rakipte başlık eksiği yok" in text
+
+
+def test_source_read_date_does_not_move_when_later_stages_run(client, db_session, make_workspace, dispatched, monkeypatch):
+    from app.core.digital_audit import report_doc
+
+    def source_dates(report_id, ws):
+        db_session.expire_all()
+        table = next(b for b in report_doc.build_blocks(ws, None, db_session.get(DigitalResearch, report_id))
+                     if b[0] == "table" and b[1][0] == "Kaynak")
+        return {row[3] for row in table[2]}
+
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    report = db_session.get(DigitalResearch, report_id)
+    # Okuma tarihi bolumle birlikte saklanir
+    assert report.sections["sector"]["sources_checked_at"] == datetime.now(timezone.utc).date().isoformat()
+    sections = {**report.sections}
+    for name in ("sector", "audience"):
+        sections[name] = {**sections[name], "sources_checked_at": "2026-11-01"}  # kaynaklar 1 Kasim'da okundu
+    report.sections = sections
+    report.completed_at = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    db_session.commit()
+    # Sonradan brief uretilir: kaydin tamamlanma tarihi degisir, kaynaklar YENIDEN OKUNMAZ
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    assert db_session.get(DigitalResearch, report_id).completed_at.date() != datetime(2026, 11, 1).date()
+    assert source_dates(report_id, ws) == {"01.11.2026"}
+    # Okuma tarihi saklanmamis eski kayit: sonraki uretimin tarihi kullanilmaz, bilinmedigi yazilir
+    report = db_session.get(DigitalResearch, report_id)
+    report.sections = {**report.sections, **{n: {k: v for k, v in report.sections[n].items() if k != "sources_checked_at"}
+                                             for n in ("sector", "audience")}}
+    db_session.commit()
+    (label,) = source_dates(report_id, ws)
+    assert label.startswith("kaydedilmemiş (araştırma başlangıcı ")
+
+
+def test_segments_carry_intent_hesitation_and_validation_method(client, db_session, make_workspace, dispatched,
+                                                               monkeypatch):
+    ws = make_workspace("Marka")
+    report_id = completed_report(client, db_session, ws, dispatched)
+    text = _blocks(db_session, ws, report_id)  # eski semayla uretilmis segment: alan bos, uydurulmaz
+    assert "Arama niyeti: belirtilmedi" in text and "Doğrulama yöntemi: belirtilmedi" in text
+    synthesis = json.loads(json.dumps(SYNTHESIS))
+    synthesis["segments"][0].update(search_intent="acil diş hekimi araması", hesitation="Randevu bulamama",
+                                    validation_method="müşteri görüşmesi")
+    monkeypatch.setitem(PAYLOADS, "audit_synthesis", synthesis)
+    ai = FakeAI()
+    assert client.post(_urls(report_id, ws)["synthesis"]).status_code == 202
+    assert run(db_session, dispatched, ai) == "completed"
+    assert "validation_method" in ai.prompts["audit_synthesis"]
+    text = _blocks(db_session, ws, report_id)
+    assert "Arama niyeti: acil diş hekimi araması" in text and "Tereddüt: Randevu bulamama" in text
+    assert "Doğrulama yöntemi: müşteri görüşmesi" in text
+
+
+def test_sector_meanings_content_plan_and_kpi_table(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    record = get(client, report_id, ws).json()["sections"]["strategy"]
+    number = next(c["id"] for c in record["catalogue"] if c["kind"] == "Dış kaynak (rakam)")
+    assert any(c["kind"] == "Dış kaynak (sektör hizmetleri)" for c in record["catalogue"])  # alt bolumun dayanagi
+    detail = _view_text(db_session, ws, report_id, "detail")
+    assert detail.count("Marka için anlamı: bu taslakta üretilmedi.") >= 2  # verisi olan alt bolumde eksik gorunur
+    edited = json.loads(json.dumps(record["draft"]))
+    meaning = {"topic": "numbers", "text": "Hekim sayısı yüksek; yerel görünürlük ayrıştırıcı olur", "refs": [number]}
+    for bad in ([{**meaning, "topic": "olmayan"}], [meaning, meaning], [{**meaning, "refs": []}]):
+        assert client.put(url, json={"version": 1, "revision": 0, "content": {**edited, "sector_meanings": bad}}).status_code == 400
+    edited["sector_meanings"] = [meaning]
+    assert client.put(url, json={"version": 1, "revision": 0, "content": edited}).status_code == 200
+    detail = _view_text(db_session, ws, report_id, "detail")
+    assert "Marka için anlamı [Hipotez]: Hekim sayısı yüksek; yerel görünürlük ayrıştırıcı olur" in detail
+
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    from app.core.digital_audit import report_doc
+
+    db_session.expire_all()
+    report = db_session.get(DigitalResearch, report_id)
+    blocks = report_doc.build_blocks(ws, db_session.get(DigitalAudit, report.audit_id), report, "implementation")
+    plan = next(b for b in blocks if b[0] == "table" and b[1][0] == "Dönem")
+    assert plan[1] == ["Dönem", "İçerik", "Yer", "Yayın türü", "Sorumlu (rol)"]
+    assert any("Dişiniz mi ağrıyor?" in row[1] and row[0] == "Karara bağlı" for row in plan[2])  # kisitli sektorde brief
+    kpi = next(b for b in blocks if b[0] == "table" and b[1][0] == "Gösterge / test hipotezi")
+    assert ["Eksik başlık sayısı", "Sayfa başlıklarını tamamla", "0-30 gün", "ölçülmedi"] in kpi[2]
+    assert all(row[3] == "ölçülmedi" for row in kpi[2])  # baslangic degeri uydurulmaz

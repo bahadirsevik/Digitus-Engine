@@ -2381,6 +2381,9 @@ export interface ResearchSegment {
   name: string
   need: string
   stage: string
+  search_intent?: string
+  hesitation?: string
+  validation_method?: string
   evidence: string
   assumption: string
   value_proposition: string
@@ -2454,6 +2457,7 @@ export interface StrategyContent {
   section_notes: StrategyItem[]
   competition: StrategyItem[]
   competition_conclusion?: StrategyItem[]
+  sector_meanings?: StrategyItem[]
   opportunities: StrategyItem[]
   decisions: StrategyItem[]
   actions: StrategyItem[]

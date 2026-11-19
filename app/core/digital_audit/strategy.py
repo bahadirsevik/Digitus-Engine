@@ -33,6 +33,9 @@ SECTIONS = {"site": "Web sitesi", "seo": "SEO", "tracking": "Ölçümleme", "con
             "ecommerce": "E-ticaret", "visibility": "Arama görünürlüğü", "youtube": "YouTube",
             "reputation": "İtibar aramaları", "competitors": "Rakipler", "sector": "Sektör",
             "demand": "Arama talebi", "audience": "Hedef kitle", "segments": "Segmentler"}
+# Sektor alt bolumleri: her birinin sonunda "Marka icin anlami" (anahtar -> detayli analizdeki alt baslik)
+SECTOR_TOPICS = {"services": "Başlıca ürün ve hizmetler", "numbers": "Kaynakta geçen rakamlar",
+                 "developments": "Güncel gelişmeler", "platforms": "Sektörel platform ve dizinler"}
 SWOT = {"strengths": "Güçlü yönler", "weaknesses": "Zayıf yönler", "opportunities": "Fırsatlar", "threats": "Tehditler"}
 AD_STATUSES = ("önerilebilir", "koşullu", "değerlendirilmedi", "önerilmez")
 # Aksiyon TURU ile yayin kanali ayridir: SEO/teknik/olcumleme isi bir reklam kanali secilmis diye
@@ -63,6 +66,7 @@ LISTS: Dict[str, Tuple[Tuple[str, ...], int]] = {
     "section_notes": (("section", "finding", "impact", "action"), len(SECTIONS)),
     "competition": (("text",), 4),
     "competition_conclusion": (("text",), 1),
+    "sector_meanings": (("topic", "text"), len(SECTOR_TOPICS)),
     "opportunities": (("text", "type", "priority", "contribution", "priority_reason"), 5),
     "decisions": (("question", "needed_info", "owner_role"), 10),
     "actions": (("period", "action", "priority", "priority_reason", "dependency", "owner_role", "effort",
@@ -74,6 +78,7 @@ SCHEMA = _obj(
     section_notes=_arr(_obj(section=_S, finding=_S, impact=_S, action=_S, refs=_REFS)),
     competition=_arr(_obj(text=_S, refs=_REFS)),
     competition_conclusion=_arr(_obj(text=_S, refs=_REFS)),
+    sector_meanings=_arr(_obj(topic=_S, text=_S, refs=_REFS)),
     swot=_obj(**{key: _arr(_obj(text=_S, refs=_REFS)) for key in SWOT}),
     opportunities=_arr(_obj(text=_S, type=_S, priority=_S, contribution=_S, priority_reason=_S, refs=_REFS)),
     decisions=_arr(_obj(question=_S, options=_arr(_S), needed_info=_S, owner_role=_S, refs=_REFS)),
@@ -167,6 +172,10 @@ def catalogue(workspace, audit, report) -> List[Dict]:
             add("Ölçüm (itibar araması)", f"“{entry['query']}” aramasının ilk sayfasında {len(entry['results'])} sonuç listelendi; "
                 "içerikleri okunmadı, markayla ilgisi doğrulanmadı. İlk başlıklar: "
                 + "; ".join(r["title"] for r in entry["results"][:3]), section="reputation")
+    for text in research._texts(sector.get("services")):
+        add("Dış kaynak (sektör hizmetleri)", text, section="sector")
+    for text in research._texts(sector.get("directories")):
+        add("Dış kaynak (sektör platformu)", text, section="sector")
     months = demand.get("by_month") or []
     if demand.get("status") == "ok" and months:
         high, low = max(months, key=lambda m: m["searches"]), min(months, key=lambda m: m["searches"])
@@ -344,7 +353,7 @@ def normalize(raw: Dict, cat: List[Dict], base_status: str, strict: bool) -> Dic
             if not item["refs"]:
                 reject(f"{label}: her maddenin en az bir geçerli dayanağı olmalı.")
                 continue
-            texts = [item[k] for k in fields if k not in ("section", "period", "priority", "kind", "channel", "publication")]
+            texts = [item[k] for k in fields if k not in ("section", "topic", "period", "priority", "kind", "channel", "publication")]
             named = {s for s in sites if s in " ".join(texts)}
             missing = named - set().union(*(domains(rows[r]) for r in item["refs"]))
             if missing:
@@ -368,6 +377,14 @@ def normalize(raw: Dict, cat: List[Dict], base_status: str, strict: bool) -> Dic
             reject(f"Bilinmeyen bölüm: {note['section']}")
     content["section_notes"] = notes
     content["note_gaps"] = note_gaps(notes, cat)
+    meanings, seen_topics = [], set()
+    for meaning in content["sector_meanings"]:
+        if meaning["topic"] not in SECTOR_TOPICS or meaning["topic"] in seen_topics or not meaning["text"]:
+            reject(f"Bilinmeyen ya da tekrarlanan sektör alt bölümü: {meaning['topic']}")
+            continue
+        seen_topics.add(meaning["topic"])
+        meanings.append(meaning)
+    content["sector_meanings"] = meanings
     for opportunity in content["opportunities"]:
         opportunity["priority"] = opportunity["priority"].upper()[:2] if opportunity["priority"].upper()[:2] in PRIORITIES else ""
 
@@ -476,6 +493,9 @@ _RULES = (
     "uygulanabilir aksiyon. 'reputation' satırlarında içerik okunmamıştır: marka hakkında olumlu ya da olumsuz "
     "hüküm verme, yalnız incelenmesi gerektiğini yaz.\n"
     "competition: yalnız hem markada hem rakipte ölçülmüş, karşılaştırılabilir gözlemler.\n"
+    f"sector_meanings: sektör alt bölümlerinin 'marka için anlamı'; alt bölüm başına en fazla bir madde, 1-2 cümle. "
+    f"topic şunlardan biri: {', '.join(SECTOR_TOPICS)} (services = talep gören ürün ve hizmetler, numbers = rakamlar, "
+    "developments = gelişmeler, platforms = platform ve dizinler). Dayanağı olmayan alt bölüm için yazma.\n"
     "competition_conclusion: TEK madde; 'rakiplerin hangi boşlukları var ve marka bunlardan nasıl yararlanabilir' "
     "sorusunun, yalnız competition'daki gözlemlere dayanan cevabı. Dayanak yoksa boş bırak.\n"
     "swot: strengths, weaknesses, opportunities, threats.\n"

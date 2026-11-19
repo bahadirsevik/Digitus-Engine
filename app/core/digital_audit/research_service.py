@@ -460,14 +460,18 @@ def _run_research_steps(db, workspace, audit, inputs, sections, usage, ai, ads_s
         sections.pop("sources", None)  # ayri bolum degil; hata olursa iddialar "bulunamadi" kalir
         sources = sources or []
         usage["sources_fetched"] = len(sources)
+        # Kaynaklarin OKUNDUGU tarih bolumle birlikte saklanir: sonraki brief/strateji uretimi bu tarihi degistirmez
+        read_on = _now().date().isoformat()
         if sector_raw:
             wanted = set(sector_raw["urls"])
             sections["sector"] = {
-                **research.build_sector(sector_raw, [s for s in sources if s["url"] in wanted]), "verified": True}
+                **research.build_sector(sector_raw, [s for s in sources if s["url"] in wanted]), "verified": True,
+                "sources_checked_at": read_on}
         if audience_raw:
             wanted = set(audience_raw["urls"])
             sections["audience"] = {**research.build_audience(
-                audience_raw, [s for s in sources if s["url"] in wanted], questions), "verified": True}
+                audience_raw, [s for s in sources if s["url"] in wanted], questions), "verified": True,
+                "sources_checked_at": read_on}
         if not checkpoint(80):
             return False
 

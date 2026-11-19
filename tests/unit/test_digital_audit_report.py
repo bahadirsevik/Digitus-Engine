@@ -172,11 +172,16 @@ def test_reputation_results_are_labelled_by_relevance():
         {"query": "Marka Klinik şikayet", "results": [
             {"position": 1, "title": "Marka Klinik şikayetleri", "domain": "sikayet.test", "shown": ""},
             {"position": 2, "title": "Genel diş kliniği şikayetleri", "domain": "forum.test", "shown": ""},
-            {"position": 3, "title": "İletişim", "domain": "marka.test", "shown": ""}]}]}}
+            {"position": 3, "title": "İletişim", "domain": "marka.test", "shown": ""},
+            {"position": 4, "title": "Randevu", "domain": "blog.marka.test", "shown": ""},
+            {"position": 5, "title": "Tanıtım", "domain": "marka.test.evil.test", "shown": ""},
+            {"position": 6, "title": "Sayfa", "domain": "sahtemarka.test", "shown": ""}]}]}}
     text = repr(report_doc.build_blocks(WORKSPACE, audit, None))
     assert "1. [Başlıkta marka adı geçiyor] Marka Klinik şikayetleri" in text
     assert "2. [İlgisi doğrulanmadı] Genel diş kliniği şikayetleri" in text  # markaya atfedilmez
-    assert "3. [Markanın kendi sitesi] İletişim" in text
+    assert "3. [Markanın kendi sitesi] İletişim" in text and "4. [Markanın kendi sitesi] Randevu" in text  # gercek alt alan adi
+    # Icinde marka alan adi GECEN baska alan adlari markaya ait sayilmaz
+    assert "5. [İlgisi doğrulanmadı] Tanıtım" in text and "6. [İlgisi doğrulanmadı] Sayfa" in text
     assert "“İlgisi doğrulanmadı” işaretli sonuçlar marka hakkında bulgu sayılmaz" in text
 
 

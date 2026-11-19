@@ -77,8 +77,8 @@ AUDIENCE_SCHEMA = _obj(
     trust=_arr(_S), not_found=_arr(_S),
 )
 SYNTHESIS_SCHEMA = _obj(
-    segments=_arr(_obj(name=_S, need=_S, stage=_S, evidence=_S, assumption=_S,
-                       value_proposition=_S, messages=_arr(_S))),
+    segments=_arr(_obj(name=_S, need=_S, stage=_S, search_intent=_S, hesitation=_S, evidence=_S, assumption=_S,
+                       validation_method=_S, value_proposition=_S, messages=_arr(_S))),
     opportunities=_arr(_obj(text=_S, evidence=_S)),
     google_ads=_obj(keyword_groups=_arr(_obj(group=_S, keywords=_arr(_S))), negatives=_arr(_S), note=_S),
     meta_audiences=_arr(_obj(segment=_S, location=_S, age_hypothesis=_S, interests=_arr(_S), note=_S)),
@@ -646,7 +646,9 @@ def synthesize(ai, facts: Dict, usage: Dict) -> Dict:
     parsed = _parse(scoped_ai(ai, "audit_synthesis").complete_json(
         "Sen bir dijital pazarlama stratejistisin. BULGULAR'a dayanarak çıktı üret.\n" + _SYNTH_RULES +
         f"segments: en fazla {MAX_SEGMENTS} segment; ihtiyaç ve satın alma aşaması (stage: farkındalık | "
-        "değerlendirme | karar) temelli. opportunities: bulguya bağlı, denenebilir fırsat ve farklılaşma "
+        "değerlendirme | karar) temelli. search_intent = bu segmentin arama niyeti (BULGULAR'daki sorulardan ya da "
+        "aramalardan; yoksa boş), hesitation = segmentin tereddüdü (BULGULAR'daki tereddütlerden; yoksa boş), "
+        "validation_method = varsayımın nasıl doğrulanacağı (form sorusu | CRM kaydı | müşteri görüşmesi | GA4 verisi). opportunities: bulguya bağlı, denenebilir fırsat ve farklılaşma "
         "hipotezleri. google_ads: kelime grupları ve negatif kelimeler. meta_audiences: ilgi alanları serbest "
         "metin önerisidir.\n\nBULGULAR:\n" + facts_text,
         max_tokens=9000, response_schema=SYNTHESIS_SCHEMA,
@@ -655,7 +657,8 @@ def synthesize(ai, facts: Dict, usage: Dict) -> Dict:
     for item in (parsed.get("segments") or [])[:MAX_SEGMENTS]:
         if not isinstance(item, dict) or not _text(item.get("name")):
             continue
-        segment = {k: _text(item.get(k)) for k in ("name", "need", "stage", "evidence", "assumption", "value_proposition")}
+        segment = {k: _text(item.get(k)) for k in ("name", "need", "stage", "search_intent", "hesitation", "evidence",
+                                                    "assumption", "validation_method", "value_proposition")}
         segment["messages"] = [_text(m) for m in item.get("messages") or [] if _text(m)][:4]
         segment["warnings"] = _claim_warnings([segment["value_proposition"], *segment["messages"]], facts_text)
         segments.append(segment)
