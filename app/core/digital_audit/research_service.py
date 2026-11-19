@@ -141,48 +141,56 @@ def request_strategy(db: Session, report: DigitalResearch) -> None:
     _requeue(db, report, "strategy", report.briefs)
 
 
-def _write_strategy(db: Session, report: DigitalResearch, new_strategy: Dict) -> None:
-    """Analist yazimi: yalniz is surmuyorken (worker'in sections yazimiyla carpismaz)."""
-    sections = {**(report.sections or {}), "strategy": new_strategy}
-    written = db.execute(
-        update(DigitalResearch)
-        .where(DigitalResearch.id == report.id, DigitalResearch.status.in_(FINAL))
-        .values(sections=sections).execution_options(synchronize_session=False)
-    ).rowcount
-    db.commit()
-    if not written:
+def _locked_strategy(db: Session, report: DigitalResearch, version: int, revision: int) -> Dict:
+    """Satiri KILITLER ve istegin gordugu surum + icerik revizyonunu veritabaninda dogrular.
+    Iki analist ayni taslagi actiysa, biri duzeltince digerinin eski ekrandan kaydi/onayi 409 alir:
+    kimse gormedigi metni onaylayamaz. Cagiran ayni transaction'da yazar ve commit eder."""
+    db.rollback()  # okuma transaction'ini kapat: kilit en guncel satiri gorsun
+    row = (db.query(DigitalResearch).filter(DigitalResearch.id == report.id)
+           .with_for_update().populate_existing().one())
+    if row.status not in FINAL:
         raise ResearchStateError("Bu marka çalışmasında süren bir araştırma var.")
-    db.refresh(report)
-
-
-def _editable_strategy(report: DigitalResearch, version: int) -> Dict:
-    current = (report.sections or {}).get("strategy") or {}
+    current = (row.sections or {}).get("strategy") or {}
     if current.get("status") != "ok":
         raise ResearchInputError("Düzeltilecek strateji taslağı yok.")
-    if strategy.state(report) == "stale":
+    if strategy.state(row) == "stale":
         raise ResearchStateError("Strateji güncel değil; önce yeniden üretin.")
-    if current.get("version") != version:
-        raise ResearchStateError("Strateji bu arada yenilendi; sayfayı yenileyip tekrar deneyin.")
+    if current.get("version") != version or int(current.get("revision") or 0) != revision:
+        raise ResearchStateError("Strateji bu arada değişti; sayfayı yenileyip güncel metni inceleyin.")
     return current
 
 
-def save_strategy_edit(db: Session, report: DigitalResearch, version: int, content: Dict) -> None:
-    """Analist duzeltmesi. Dayanaksiz madde reddedilir; duzeltme onceki onayi dusurur."""
-    current = _editable_strategy(report, version)
+def _write_strategy(db: Session, report: DigitalResearch, new_strategy: Dict) -> None:
+    report.sections = {**(report.sections or {}), "strategy": new_strategy}
+    db.commit()
+    db.refresh(report)
+
+
+def save_strategy_edit(db: Session, report: DigitalResearch, version: int, revision: int, content: Dict) -> None:
+    """Analist duzeltmesi. Dayanaksiz madde reddedilir; duzeltme revizyonu artirir ve onayi dusurur."""
     try:
+        current = _locked_strategy(db, report, version, revision)
         edited = strategy.normalize(content, current["catalogue"], current["ad_base_status"], strict=True)
     except strategy.StrategyInputError as exc:
+        db.rollback()
         raise ResearchInputError(str(exc))
-    _write_strategy(db, report, {**current, "edited": edited, "approval": None})
+    except Exception:
+        db.rollback()
+        raise
+    _write_strategy(db, report, {**current, "edited": edited, "approval": None, "revision": revision + 1})
 
 
-def approve_strategy(db: Session, report: DigitalResearch, version: int, approved_by: str) -> None:
-    """Analist incelenen surumu isaretler. Onay icerik ozetine baglidir: sonraki duzeltme,
+def approve_strategy(db: Session, report: DigitalResearch, version: int, revision: int, approved_by: str) -> None:
+    """Analist EKRANDA GORDUGU revizyonu isaretler. Onay icerik ozetine baglidir: sonraki duzeltme,
     yenileme ya da girdi degisikligi onayi gecersiz kilar."""
-    current = _editable_strategy(report, version)
+    try:
+        current = _locked_strategy(db, report, version, revision)
+    except Exception:
+        db.rollback()
+        raise
     _write_strategy(db, report, {**current, "approval": {
         "approved_by": approved_by.strip()[:120], "approved_at": _now().isoformat(),
-        "version": version, "content_sha": strategy.content_sha(current)}})
+        "version": version, "revision": revision, "content_sha": strategy.content_sha(current)}})
 
 
 def _requeue(db: Session, report: DigitalResearch, stage: str, briefs: Optional[Dict]) -> None:

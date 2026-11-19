@@ -247,7 +247,8 @@ def edit_strategy(report_id: int, request: StrategyEditRequest, brand_profile_id
                   db: Session = Depends(get_db)):
     """Analist duzeltmesi. Onceki onay duser."""
     report = _get_research(db, report_id, brand_profile_id)
-    _strategy_call(lambda: research_service.save_strategy_edit(db, report, request.version, request.content))
+    _strategy_call(lambda: research_service.save_strategy_edit(
+        db, report, request.version, request.revision, request.content))
     return research_service.serialize(report, detail=True)
 
 
@@ -256,7 +257,8 @@ def approve_strategy(report_id: int, request: StrategyApproveRequest, brand_prof
                      db: Session = Depends(get_db)):
     """Analist incelenen surumu isaretler."""
     report = _get_research(db, report_id, brand_profile_id)
-    _strategy_call(lambda: research_service.approve_strategy(db, report, request.version, request.approved_by))
+    _strategy_call(lambda: research_service.approve_strategy(
+        db, report, request.version, request.revision, request.approved_by))
     return research_service.serialize(report, detail=True)
 
 

@@ -180,6 +180,7 @@ export default function DigitalStrategy(props: Props) {
         detail.id,
         workspaceId,
         record.version,
+        record.revision,
         content
       )
       onDetail(res.data)
@@ -191,6 +192,7 @@ export default function DigitalStrategy(props: Props) {
         detail.id,
         workspaceId,
         record.version,
+        record.revision,
         approver.trim()
       )
       onDetail(res.data)

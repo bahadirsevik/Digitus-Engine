@@ -2453,6 +2453,8 @@ export interface StrategySection {
   error?: string
   last_error?: string
   version: number
+  /** İçerik revizyonu: her düzeltmede artar; kaydetme ve onay ekranda görülen revizyonla yapılır */
+  revision: number
   generated_at: string
   catalogue: { id: string; kind: string; text: string }[]
   gaps: string[]
@@ -2549,11 +2551,12 @@ export const digitalResearchApi = {
     reportId: number,
     brand_profile_id: number,
     version: number,
+    revision: number,
     content: StrategyContent
   ) =>
     api.put<DigitalResearchDetail>(
       `/digital-audit/research/${reportId}/strategy`,
-      { version, content },
+      { version, revision, content },
       { params: { brand_profile_id } }
     ),
 
@@ -2561,11 +2564,12 @@ export const digitalResearchApi = {
     reportId: number,
     brand_profile_id: number,
     version: number,
+    revision: number,
     approved_by: string
   ) =>
     api.post<DigitalResearchDetail>(
       `/digital-audit/research/${reportId}/strategy/approve`,
-      { version, approved_by },
+      { version, revision, approved_by },
       { params: { brand_profile_id } }
     ),
 

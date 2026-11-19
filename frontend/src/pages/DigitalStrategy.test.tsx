@@ -81,6 +81,7 @@ function detail(over: Partial<DigitalResearchDetail> = {}): DigitalResearchDetai
       strategy: {
         status: 'ok',
         version: 2,
+        revision: 5,
         generated_at: '2026-11-19T10:05:00Z',
         catalogue: [
           { id: 'B1', kind: 'Ölçüm (marka sitesi)', text: 'Sayfa başlıkları: Uyarı' },
@@ -137,8 +138,8 @@ describe('DigitalStrategy', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Düzeltmeleri kaydet/ }))
     await waitFor(() => expect(api.saveStrategy).toHaveBeenCalled())
-    const [id, ws, version, content] = api.saveStrategy.mock.calls[0]
-    expect([id, ws, version]).toEqual([3, 1, 2])
+    const [id, ws, version, revision, content] = api.saveStrategy.mock.calls[0]
+    expect([id, ws, version, revision]).toEqual([3, 1, 2, 5])
     expect(content.actions[0].owner_role).toBe('Ajans SEO ekibi')
   })
 
@@ -153,7 +154,7 @@ describe('DigitalStrategy', () => {
     fireEvent.click(release)
     fireEvent.click(screen.getByRole('button', { name: /Düzeltmeleri kaydet/ }))
     await waitFor(() => expect(api.saveStrategy).toHaveBeenCalled())
-    const content = api.saveStrategy.mock.calls[0][3]
+    const content = api.saveStrategy.mock.calls[0][4]
     expect(content.decisions).toHaveLength(0)
     expect(content.actions[1]).toMatchObject({
       action: 'Arama reklamı aç',

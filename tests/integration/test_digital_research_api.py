@@ -611,30 +611,30 @@ def test_analyst_edits_approves_and_can_clear_a_held_ad(client, db_session, make
 
     edited = json.loads(json.dumps(draft))
     edited["actions"][0]["owner_role"] = "Ajans SEO ekibi"
-    assert client.put(url, json={"version": 2, "content": edited}).status_code == 409  # surum uyusmuyor
-    res = client.put(url, json={"version": 1, "content": edited})
+    assert client.put(url, json={"version": 2, "revision": 0, "content": edited}).status_code == 409  # surum uyusmuyor
+    res = client.put(url, json={"version": 1, "revision": 0, "content": edited})
     assert res.status_code == 200 and res.json()["strategy_state"] == "draft"
     assert res.json()["sections"]["strategy"]["edited"]["actions"][0]["owner_role"] == "Ajans SEO ekibi"
     # Dayanaksiz madde analistten de kabul edilmez
     bad = json.loads(json.dumps(edited))
     bad["actions"][0]["refs"] = []
-    assert client.put(url, json={"version": 1, "content": bad}).status_code == 400
+    assert client.put(url, json={"version": 1, "revision": 1, "content": bad}).status_code == 400
 
-    res = client.post(approve, json={"version": 1, "approved_by": "Analist A"})
+    res = client.post(approve, json={"version": 1, "revision": 1, "approved_by": "Analist A"})
     assert res.status_code == 200 and res.json()["strategy_state"] == "approved"
     assert "Analist onaylı (Analist A" in _view_text(db_session, ws, report_id, "executive")
     # Onaydan sonraki duzeltme onayi dusurur
     held = next(d for d in edited["decisions"] if d.get("held_action"))
     edited["decisions"].remove(held)
     edited["actions"].append({**held["held_action"], "ad_status": "önerilebilir", "ad_basis": "Baro görüşü 12.11.2026"})
-    res = client.put(url, json={"version": 1, "content": edited}).json()
+    res = client.put(url, json={"version": 1, "revision": 1, "content": edited}).json()
     assert res["strategy_state"] == "draft" and res["sections"]["strategy"]["approval"] is None
     actions = res["sections"]["strategy"]["edited"]["actions"]
     assert actions[-1]["ad_basis"] == "Baro görüşü 12.11.2026" and not any(
         d.get("held_action") for d in res["sections"]["strategy"]["edited"]["decisions"])
     # Dayanak yazilmadan plana alinamaz: yeniden karar noktasina doner
     edited["actions"][-1]["ad_basis"] = ""
-    res = client.put(url, json={"version": 1, "content": edited}).json()["sections"]["strategy"]["edited"]
+    res = client.put(url, json={"version": 1, "revision": 2, "content": edited}).json()["sections"]["strategy"]["edited"]
     assert len(res["actions"]) == 1 and any(d.get("held_action") for d in res["decisions"])
 
 
@@ -642,7 +642,7 @@ def test_changed_inputs_drop_strategy_and_approval(client, db_session, make_work
     ws = make_workspace("Marka")
     audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
     approve = url.replace("/strategy?", "/strategy/approve?")
-    assert client.post(approve, json={"version": 1, "approved_by": "Analist A"}).json()["strategy_state"] == "approved"
+    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).json()["strategy_state"] == "approved"
 
     answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
     assert client.put(answers, json={"answers": {"business_model": {"value": "E-ticaret"},
@@ -650,8 +650,8 @@ def test_changed_inputs_drop_strategy_and_approval(client, db_session, make_work
     assert get(client, report_id, ws).json()["strategy_state"] == "stale"
     text = _view_text(db_session, ws, report_id, "executive")
     assert "GÜNCEL DEĞİL" in text and "Sayfa başlıkları eksik" not in text and "Analist onaylı" not in text
-    assert client.post(approve, json={"version": 1, "approved_by": "Analist A"}).status_code == 409
-    assert client.put(url, json={"version": 1, "content": {}}).status_code == 409
+    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).status_code == 409
+    assert client.put(url, json={"version": 1, "revision": 0, "content": {}}).status_code == 409
 
     # Segmentler yenilenir, strateji yeniden uretilir: yeni brif modele gider, eski onay tasinmaz
     assert client.post(_urls(report_id, ws)["synthesis"]).status_code == 202
@@ -721,7 +721,75 @@ def test_strategy_views_share_context_and_respect_isolation(client, db_session, 
     # Baska calisma strateji uretemez, duzeltemez, onaylayamaz, indiremez
     foreign = url.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}")
     assert client.post(foreign).status_code == 404
-    assert client.put(foreign, json={"version": 1, "content": {}}).status_code == 404
+    assert client.put(foreign, json={"version": 1, "revision": 0, "content": {}}).status_code == 404
     assert client.post(foreign.replace("/strategy?", "/strategy/approve?"),
-                       json={"version": 1, "approved_by": "X Y"}).status_code == 404
+                       json={"version": 1, "revision": 0, "approved_by": "X Y"}).status_code == 404
     assert client.get(base.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}") + "&view=executive").status_code == 404
+
+
+def test_paid_action_is_held_even_when_publication_is_blank_or_contradictory():
+    from app.core.digital_audit import strategy
+
+    cat = [{"id": "B1", "kind": "Ölçüm (marka sitesi)", "text": "x"},
+           {"id": "B2", "kind": "Dış kaynak (reklam kısıtı)", "text": "Ücretli öne çıkarma yasak"}]
+
+    def plan(base, **fields):
+        action = {"period": "0-30", "priority": "P1", "refs": ["B1"], "action": "İçerik paylaş", "channel": "",
+                  "publication": "", **fields}
+        out = strategy.normalize({"actions": [action]}, cat, base, strict=False)
+        return [a["action"] for a in out["actions"]], [d for d in out["decisions"] if d.get("held_action")]
+
+    for fields in ({"action": "Google Ads kampanyası başlat"},                      # yayin turu ve kanal bos
+                   {"channel": "google_search", "publication": "organik"},           # celiskili etiket
+                   {"channel": "meta"},                                              # kanal var, yayin turu yok
+                   {"action": "Remarketing listesi kur", "publication": "organik"},
+                   {"channel": "meta", "publication": "sponsorlu"}):
+        kept, held = plan("koşullu", **fields)
+        assert kept == [] and len(held) == 1 and held[0]["refs"] == ["B1", "B2"], fields
+        assert plan("değerlendirilmedi", **fields)[0] == []
+    # Organik yayin ve kisit bulunmayan sektor planda kalir
+    assert plan("koşullu", channel="meta", publication="organik")[0] == ["İçerik paylaş"]
+    assert plan("önerilebilir", action="Google Ads kampanyası başlat")[0] == ["Google Ads kampanyası başlat"]
+
+
+def test_analyst_cannot_approve_text_changed_by_someone_else(client, db_session, make_workspace, dispatched,
+                                                             monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    seen_by_b = get(client, report_id, ws).json()["sections"]["strategy"]
+    edited = json.loads(json.dumps(seen_by_b["draft"]))
+    edited["summary"][0]["meaning"] = "A'nın yeni metni"
+    assert client.put(url, json={"version": 1, "revision": 0, "content": edited}).status_code == 200
+    # B eski ekranindan: ne onaylayabilir ne A'nin metnini ezebilir
+    assert client.post(approve, json={"version": 1, "revision": seen_by_b["revision"],
+                                      "approved_by": "Analist B"}).status_code == 409
+    assert client.put(url, json={"version": 1, "revision": 0, "content": seen_by_b["draft"]}).status_code == 409
+    body = get(client, report_id, ws).json()
+    assert body["strategy_state"] == "draft" and body["sections"]["strategy"]["revision"] == 1
+    assert body["sections"]["strategy"]["edited"]["summary"][0]["meaning"] == "A'nın yeni metni"
+    res = client.post(approve, json={"version": 1, "revision": 1, "approved_by": "Analist B"}).json()
+    assert res["strategy_state"] == "approved" and res["sections"]["strategy"]["approval"]["revision"] == 1
+
+
+def test_input_outside_model_catalogue_still_makes_strategy_stale(client, db_session, make_workspace, dispatched,
+                                                                  monkeypatch):
+    from app.core.digital_audit import strategy
+
+    monkeypatch.setattr(strategy, "MAX_CATALOGUE", 7)  # kisit+brif+rakam+segment (6) + tek olcum satiri
+    ws = make_workspace("Marka")
+    audit, report_id, url, ai = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    record = get(client, report_id, ws).json()["sections"]["strategy"]
+    kinds = [c["kind"] for c in record["catalogue"]]
+    # Kisit ve brif kesilmez; rakip olcumu disarida kalir ve bu acik eksik olarak yazilir
+    assert "Dış kaynak (reklam kısıtı)" in kinds and "Analist brifi" in kinds and "Rakip gözlemi" not in kinds
+    assert "Ücretli öne çıkarma yasak" in ai.prompts["audit_strategy"]
+    assert any("taslak üretiminde kullanılmadı" in gap for gap in record["gaps"])
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).json()[
+        "strategy_state"] == "approved"
+    # Modele GITMEYEN satir degisir: strateji ve onay yine de guncelligini kaybeder
+    rival = db_session.query(DigitalAuditTarget).filter_by(audit_id=audit.id, kind="competitor").one()
+    rival.findings = [_finding("seo.titles", "Sayfa başlıkları", "warning", value={"missing": 9})]
+    db_session.commit()
+    assert get(client, report_id, ws).json()["strategy_state"] == "stale"

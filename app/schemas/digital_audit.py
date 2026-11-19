@@ -46,9 +46,11 @@ class BriefsRequest(BaseModel):
 class StrategyEditRequest(BaseModel):
     """Analist duzeltmesi: tum icerik (ozet, yorum, SWOT, karar, aksiyon) tek govdede."""
     version: int
+    revision: int  # ekranda gorulen icerik revizyonu; baskasi duzelttiyse istek 409 alir
     content: Dict
 
 
 class StrategyApproveRequest(BaseModel):
     version: int
+    revision: int  # onaylanan, analistin ekranda gordugu revizyondur
     approved_by: str = Field(..., min_length=2, max_length=120)

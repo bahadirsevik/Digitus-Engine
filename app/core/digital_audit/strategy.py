@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -33,6 +34,11 @@ SECTIONS = {"site": "Web sitesi", "seo": "SEO", "tracking": "Ölçümleme", "con
             "audience": "Hedef kitle"}
 SWOT = {"strengths": "Güçlü yönler", "weaknesses": "Zayıf yönler", "opportunities": "Fırsatlar", "threats": "Tehditler"}
 AD_STATUSES = ("önerilebilir", "koşullu", "değerlendirilmedi", "önerilmez")
+# Yayin turu bos ya da celiskili olsa da UCRETLI sayilan aksiyon: kontrol etiket eksikligiyle asilamaz.
+_PAID_TEXT = re.compile(r"google ads|reklam|sponsor|ücretli|remarketing|yeniden pazarlama|ppc|kampanya", re.IGNORECASE)
+# Model katalogu kisalsa da bunlar HER ZAMAN gider (kisit ve brif kesilemez).
+_KEEP_KINDS = ("Dış kaynak (reklam kısıtı)", "Analist brifi", "Müşteri beyanı", "Analist doğrulaması",
+               "Hipotez (segment)", "Dış kaynak (rakam)")
 AD_OPTIONS = ["Analist/uzman değerlendirmesinden sonra başlat", "Yalnız organik yayınla", "Başlatma"]
 
 # Liste -> (metin alanlari, en fazla oge). 'refs' her ogede zorunludur.
@@ -69,11 +75,14 @@ def _sha(value) -> str:
 # --- dayanak katalogu -------------------------------------------------------
 
 def catalogue(workspace, audit, report) -> List[Dict]:
-    """Stratejinin dayanabilecegi her sey, tur etiketiyle. Olculemeyen kontrol dayanak OLAMAZ."""
+    """Stratejinin dayanabilecegi her sey, tur etiketiyle. Olculemeyen kontrol dayanak OLAMAZ.
+
+    TAM listedir (sinirsiz): guncellik parmak izi bundan hesaplanir. Modele giden kisa hali
+    model_catalogue verir; boylece disarida kalan bir girdi degisince de strateji bayatlar."""
     items: List[Dict] = []
 
     def add(kind: str, text: str) -> None:
-        if text and len(items) < MAX_CATALOGUE:
+        if text:
             items.append({"id": f"B{len(items) + 1}", "kind": kind, "text": " ".join(str(text).split())[:400]})
 
     if audit is not None:
@@ -118,6 +127,14 @@ def catalogue(workspace, audit, report) -> List[Dict]:
     for s in synthesis.get("segments") or []:
         add("Hipotez (segment)", f"{s['name']}: {s['need']}")
     return items
+
+
+def model_catalogue(full: List[Dict]) -> List[Dict]:
+    """Modele gonderilen en fazla MAX_CATALOGUE satir; kisit, brif, rakam ve segment once korunur."""
+    keep = [c for c in full if c["kind"] in _KEEP_KINDS]
+    rest = [c for c in full if c["kind"] not in _KEEP_KINDS][:max(MAX_CATALOGUE - len(keep), 0)]
+    chosen = {c["id"] for c in keep + rest}
+    return [c for c in full if c["id"] in chosen]
 
 
 def gaps(audit, report) -> List[str]:
@@ -235,7 +252,12 @@ def normalize(raw: Dict, cat: List[Dict], base_status: str, strict: bool) -> Dic
             continue
         action["channel"] = action["channel"] if action["channel"] in CHANNELS else ""
         action["publication"] = action["publication"].lower() if action["publication"].lower() in ("organik", "sponsorlu") else ""
-        if action["publication"] == "sponsorlu":
+        # Ucretli mi? Etikete guvenilmez: arama agi her zaman ucretlidir; kanal yazilip yayin turu
+        # bos birakilmissa ya da metin reklamdan soz ediyorsa da ucretli sayilir (celiski = beklet).
+        paid = (action["publication"] == "sponsorlu" or action["channel"] == "google_search"
+                or (action["channel"] and not action["publication"]) or bool(_PAID_TEXT.search(action["action"])))
+        if paid:
+            action["publication"] = "sponsorlu"
             basis = research._text(source.get("ad_basis"), 300) if strict else ""  # yalniz analist karari
             cleared = basis and source.get("ad_status") == "önerilebilir"
             action["ad_status"] = "önerilebilir" if cleared else base_status
@@ -294,7 +316,8 @@ _RULES = (
 
 def generate(ai, workspace, audit, report, usage: Dict) -> Dict:
     """Tek ucretli cagri. Donus: sections['strategy'] kaydi (taslak, onaysiz)."""
-    cat = catalogue(workspace, audit, report)
+    full = catalogue(workspace, audit, report)
+    cat = model_catalogue(full)
     if not cat:
         raise ResearchError("Strateji için dayanak yok.")
     usage["json_calls"] = usage.get("json_calls", 0) + 1
@@ -308,9 +331,12 @@ def generate(ai, workspace, audit, report, usage: Dict) -> Dict:
         raise ResearchError("Strateji taslağı dayanağı olan madde üretmedi.")
     previous = (report.sections or {}).get("strategy") or {}
     return {
-        "status": "ok", "version": int(previous.get("version") or 0) + 1,
+        "status": "ok", "version": int(previous.get("version") or 0) + 1, "revision": 0,
         "generated_at": datetime.now(timezone.utc).isoformat(), "audit_id": report.audit_id,
-        "inputs_sha": _sha(cat), "catalogue": cat, "gaps": gaps(audit, report),
+        # Parmak izi TAM listeden: modele gitmeyen satir degisse de strateji ve onay bayatlar.
+        "inputs_sha": _sha(full), "catalogue": cat,
+        "gaps": gaps(audit, report) + ([f"Dayanak listesi uzun olduğu için {len(full) - len(cat)} ölçüm satırı "
+                                        "taslak üretiminde kullanılmadı."] if len(full) > len(cat) else []),
         "ad_base_status": ad_base_status(report.sections or {}),
         "draft": content, "edited": None, "approval": None,
     }
@@ -328,7 +354,7 @@ def _current_sha(report) -> Optional[str]:
         return None
     db = state.session
     audit = db.get(DigitalAudit, report.audit_id) if report.audit_id else None
-    return _sha(catalogue(db.get(BrandProfile, report.brand_profile_id), audit, report))
+    return _sha(catalogue(db.get(BrandProfile, report.brand_profile_id), audit, report))  # TAM liste
 
 
 def state(report) -> str:
