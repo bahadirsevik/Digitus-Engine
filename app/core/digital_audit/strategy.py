@@ -196,6 +196,17 @@ def gaps(audit, report) -> List[str]:
 ad_base_status = research.ad_base_status  # tek karar: research.ad_base_status
 
 
+def live_gaps(report, record: Dict) -> List[str]:
+    """Acik eksikler GUNCEL kapsamdan hesaplanir; strateji metniyle birlikte donmaz. Boylece
+    kapsam kurali degisince (or. musteri sorularinin kaldirilmasi) liste yeni AI cagrisi olmadan guncellenir.
+    Uretime ozgu not (modele gitmeyen satir sayisi) kayittan korunur."""
+    state = sa_inspect(report, raiseerr=False)
+    if state is None or state.session is None:
+        return list(record.get("gaps") or [])
+    audit = state.session.get(DigitalAudit, report.audit_id) if report.audit_id else None
+    return gaps(audit, report) + [g for g in record.get("gaps") or [] if "taslak üretiminde kullanılmadı" in g]
+
+
 # --- normalizasyon (AI ciktisi ve analist duzeltmesi ayni kapidan gecer) -----
 
 def _item(raw: Dict, fields: Tuple[str, ...], ids: set) -> Optional[Dict]:

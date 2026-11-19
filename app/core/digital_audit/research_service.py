@@ -425,8 +425,11 @@ def serialize(report: DigitalResearch, detail: bool = False) -> Dict:
         "created_at": report.created_at, "completed_at": report.completed_at,
     }
     if detail:
+        sections = dict(report.sections or {})
+        if (sections.get("strategy") or {}).get("status") == "ok":  # ekran da guncel eksik listesini gorur
+            sections["strategy"] = {**sections["strategy"], "gaps": strategy.live_gaps(report, sections["strategy"])}
         data.update(
-            audit_id=report.audit_id, sections=report.sections or {}, briefs=report.briefs,
+            audit_id=report.audit_id, sections=sections, briefs=report.briefs,
             claim_overrides=report.claim_overrides or [], usage=report.usage or {},
             synthesis_stale=research.synthesis_stale(report), briefs_stale=research.briefs_stale(report),
             strategy_state=strategy.state(report),

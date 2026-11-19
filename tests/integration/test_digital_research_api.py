@@ -919,3 +919,22 @@ def test_paid_ad_suggestions_are_withheld_in_every_document_when_the_sector_is_r
     other = make_workspace("Diger")
     free_id = completed_report(client, db_session, other, dispatched)
     assert "Google Ads önerisi [Hipotez]" in _blocks(db_session, other, free_id)
+
+
+def test_open_gaps_follow_current_scope_without_regenerating(client, db_session, make_workspace, dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    # Eski kapsamla donmus bir satir: kayitta durur ama ekrana ve belgeye GITMEZ
+    report = db_session.get(DigitalResearch, report_id)
+    record = dict(report.sections["strategy"])
+    record["gaps"] = ["Müşteriye sorulacak 8 hesap sorusu cevaplanmadı.", "Dayanak listesi uzun olduğu için 3 ölçüm satırı "
+                      "taslak üretiminde kullanılmadı."]
+    report.sections = {**report.sections, "strategy": record}
+    db_session.commit()
+    shown = get(client, report_id, ws).json()
+    assert shown["strategy_state"] == "draft" and len(dispatched) == 2  # bayatlamaz, yeni gorev yok
+    gaps = shown["sections"]["strategy"]["gaps"]
+    assert not any("hesap sorusu" in g for g in gaps) and any("Arama görünürlüğü ölçülmedi" in g for g in gaps)
+    assert any("taslak üretiminde kullanılmadı" in g for g in gaps)  # uretime ozgu not korunur
+    text = _view_text(db_session, ws, report_id, "executive")
+    assert "hesap sorusu" not in text and "Arama görünürlüğü ölçülmedi." in text

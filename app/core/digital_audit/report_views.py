@@ -209,7 +209,7 @@ def _executive(audit, report, record: Dict, state: str) -> List[Block]:
                         "değerlendirilmemiş ücretli reklam önerileri plana alınmaz, burada karar olarak yer alır."))
 
     blocks += _plan(c["actions"])
-    blocks += [("h1", "Açık eksikler ve veri ihtiyaçları"), ("bullets", record.get("gaps") or [])]
+    blocks += [("h1", "Açık eksikler ve veri ihtiyaçları"), ("bullets", strategy.live_gaps(report, record))]
     used = _used(c["summary"] + c["opportunities"] + c["competition"] + c["decisions"] + c["actions"]
                  + [i for items in c["swot"].values() for i in items])
     return blocks + _appendix(record, used)
