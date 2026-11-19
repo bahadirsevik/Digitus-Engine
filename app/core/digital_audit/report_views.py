@@ -414,13 +414,20 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
         status = status_of(brief["channel"])
         blocks += [("h2", f"Kreatif brief: {brief['segment']} · {brief['channel']}"), ("bullets", [
             f"Sponsorlu kullanım için öneri durumu: {status}",
-            *checklist(brief, status, "belirtilmedi (organik yayımlanabilir; sponsorlu kullanım yukarıdaki duruma tabidir)"),
+            *checklist(brief, status, _brief_publication(brief, "organik yayımlanabilir; sponsorlu kullanım yukarıdaki duruma tabidir")),
             f"Biçim: {brief['format']}; süre: {brief['duration']}", f"Açılış: {brief['hook']}",
             f"Görsel yön: {brief['visual_direction']}", f"Çekim listesi: {'; '.join(brief['shot_list'])}",
             f"Metin: {brief['copy']}", f"Gereken gerçek kanıt: {'; '.join(brief['proof_needed'])}",
             f"Ölçüm planı (A/B varyantı): {brief['ab_variant']}",
             *[f"Uyarı, kanıtı olmayan iddia: {w}" for w in brief["warnings"]]])]
     return blocks + _content_plan(current, briefs)
+
+
+def _brief_publication(brief: Dict, note: str) -> str:
+    # Arama agi yalniz reklam yayimlar: bu kanaldaki brief "organik yayimlanabilir" diye yazilamaz
+    if brief["channel"] == research.CHANNELS["google_search"]:
+        return "sponsorlu (arama ağı reklamıdır; organik yayımlanamaz)"
+    return f"belirtilmedi ({note})"
 
 
 def _content_plan(current: Dict, briefs: Dict) -> List[Block]:
@@ -440,7 +447,7 @@ def _content_plan(current: Dict, briefs: Dict) -> List[Block]:
             for a in sorted(actions, key=lambda a: a["period"])
             if a.get("kind") in ("içerik", "reklam") or a.get("publication") == "sponsorlu"]
     rows += [["Karara bağlı" if b.get("restriction_note") else "Planlanacak",
-              f"{b['format']} · {b['hook']}", b["channel"], "belirtilmedi (kreatif brief)", "İçerik ekibi"]
+              f"{b['format']} · {b['hook']}", b["channel"], _brief_publication(b, "kreatif brief"), "İçerik ekibi"]
              for b in briefs.get("creative_briefs") or []]
     blocks.append(("table", ["Dönem", "İçerik", "Yer", "Yayın türü", "Sorumlu (rol)"], rows) if rows
                   else ("p", "Güncel stratejide içerik aksiyonu ve kreatif brief yok; içerik planı oluşturulamadı."))

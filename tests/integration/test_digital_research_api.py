@@ -1404,3 +1404,7 @@ def test_content_plan_does_not_depend_on_briefs_and_prints_the_real_publication_
     assert run(db_session, dispatched) == "completed"
     found, _ = tables()
     assert any("Dişiniz mi ağrıyor?" in row[1] for row in found["Dönem"]) and "Blog yazısı yayımla" in {r[1] for r in found["Dönem"]}
+    # Arama agindaki brief organik sayilmaz
+    from app.core.digital_audit import report_views
+    assert report_views._brief_publication({"channel": "Google Arama Ağı"}, "x").startswith("sponsorlu")
+    assert report_views._brief_publication({"channel": "Instagram / Facebook"}, "x") == "belirtilmedi (x)"
