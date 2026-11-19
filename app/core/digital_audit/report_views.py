@@ -255,8 +255,8 @@ def _ad_readiness(audit, report) -> List[Block]:
         ("site.cta", "Açılış sayfasında iletişim yolu"), ("contact.forms", "Form"),
         ("site.speed_mobile", "Mobil açılış hızı")) if own is not None]
     status = strategy.ad_base_status(report.sections or {})
-    rows += [["Dönüşüm olayları", "Bilinmiyor: hesap ya da Tag Assistant kanıtı yok"],
-             ["Reklam performansı (harcama, sonuç, maliyet)", "Hesap erişimi yok; değerlendirilmedi"],
+    rows += [["Dönüşüm olayları", "Bilinmiyor: bu analizde hesap ya da Tag Assistant kanıtı alınmadı"],
+             ["Reklam performansı (harcama, sonuç, maliyet)", "Hesap verisi bu analize alınmadı; performans değerlendirilmedi"],
              ["Ücretli reklamın uygunluk durumu", f"{status}: {_AD_CHECK[status]}"]]
     return [("h1", "Reklam hazırlığı [Gözlem]"), ("table", ["Konu", "Durum"], rows),
             ("p", "Etiket satırları yalnız sayfa kodunda görüleni gösterir; etiketin çalıştığını ve verinin hesaba "

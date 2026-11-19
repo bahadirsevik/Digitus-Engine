@@ -139,9 +139,11 @@ def catalogue(workspace, audit, report) -> List[Dict]:
         add("Dış kaynak (reklam kısıtı)", r["text"], section="sector")
     for c in research.verified_claims(sector, report.claim_overrides):
         add("Dış kaynak (rakam)", f"{c['claim']}: {c['value']} {c['unit']} ({c['year']}, {c['geography']})", section="sector")
+    tokens = research.brand_tokens(workspace)
     for key in ("needs", "hesitations"):
-        for text in research._texts(audience.get(key), "theme"):
-            add("Sektör örneklemi (hedef kitle)", text, section="audience")
+        for item in research.attributable(audience.get(key), tokens):  # dogrulanmamis marka atfi dayanak olamaz
+            add("Marka hakkında (kaynakta doğrulanan alıntı)" if research.brand_scope(item, tokens) == "brand"
+                else "Sektör örneklemi (hedef kitle)", item["theme"], section="audience")
     for q in (audience.get("question_keywords") or [])[:5]:
         add("Ölçüm (arama hacmi)", f"“{q['keyword']}” aylık {q['monthly_volume']} arama", section="audience")
     demand = sections.get("demand") or {}
@@ -525,10 +527,15 @@ def state(report) -> str:
     if research.synthesis_stale(report) or (current is not None and current != strategy.get("inputs_sha")):
         return "stale"
     approval = strategy.get("approval") or {}
-    if approval.get("version") == strategy.get("version") and approval.get("content_sha") == _sha(content(strategy)):
+    if approval.get("version") == strategy.get("version") and approval.get("review_sha") == review_sha(report, strategy):
         return "approved"
     return "draft"
 
 
-def content_sha(strategy: Dict) -> str:
-    return _sha(content(strategy))
+def review_sha(report, record: Dict) -> str:
+    """Analistin inceledigi BELGE icerigi: strateji metni + rapora giren mevzuat teyitleri + brieflere gore eklenen
+    karar noktalari. Bunlardan biri onaydan sonra degisirse (teyit eklendi/kaldirildi, yeni brief uretildi) rapor
+    incelenmemis icerik tasir; onay duser ve yeniden inceleme gerekir. Yeni AI uretimi gerekmez."""
+    restrictions = ((report.sections or {}).get("sector") or {}).get("restrictions") or []
+    return _sha([content(record), [r.get("verification") for r in restrictions],
+                 [d["question"] for d in brief_ad_decisions(report, record, "draft")]])

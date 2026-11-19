@@ -390,10 +390,7 @@ def verification_text(restriction: Dict) -> str:
             f"teyit eden {v['verified_by']}, {v['verified_at']})")
 
 
-def brand_tokens(workspace) -> List[str]:
-    profile = workspace.profile_data if isinstance(getattr(workspace, "profile_data", None), dict) else {}
-    raw = [workspace.name, _host(workspace.company_url).split("/")[0], profile.get("company_name")]
-    return [t.casefold() for t in raw if t and len(t) >= 5]
+brand_tokens = research.brand_tokens  # tek tanim: research.brand_tokens
 
 
 def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -> List[Block]:
@@ -456,18 +453,22 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
     if audience.get("status") == "ok":
         blocks.append(("h1", "Hedef kitle analizi"))
 
+        hidden = sum(1 for key in ("needs", "hesitations") for i in research.usable(audience.get(key))
+                     if research.brand_scope(i, brand) == "unverified")
+
         def themed(items) -> List[str]:
             out = []
-            for i in research.usable(items):
-                text = f"{i['theme']} {i.get('quote') or ''} {i.get('source_name') or ''}".casefold()
-                scope = "[Marka hakkında]" if any(t in text for t in brand) else "[Sektör geneli]"
+            for i in research.attributable(items, brand):
+                scope = "[Marka hakkında]" if research.brand_scope(i, brand) == "brand" else "[Sektör geneli]"
                 quote = re.split(r"(?<=[.!?])\s", (i.get("quote") or "").strip())[0]  # en fazla bir cumle
                 out.append(f"{scope} {i['theme']}" + (f" — “{quote}” ({i['source_name']})" if i.get("quote_found") else ""))
             return out
 
         blocks.append(("p", "Kapsam etiketi: [Sektör geneli] başka işletmelerin müşterilerinden derlenen içgörüdür ve bu "
-                            "markaya ait bir şikâyet ya da görüş değildir. [Marka hakkında] yalnız kaynakta marka adı "
-                            "geçtiğinde kullanılır."))
+                            "markaya ait bir şikâyet ya da görüş değildir. [Marka hakkında] yalnız kaynakta birebir "
+                            "doğrulanan alıntıda marka adı geçtiğinde kullanılır."
+                            + (f" {hidden} içgörü, markaya atıf yaptığı hâlde bu ilişki kaynakta doğrulanamadığı için "
+                               "rapora alınmadı." if hidden else "")))
 
         blocks += _bullets("İhtiyaç ve problemler", themed(audience.get("needs")))
         blocks += _bullets("Tereddüt ve şikayetler", themed(audience.get("hesitations")))

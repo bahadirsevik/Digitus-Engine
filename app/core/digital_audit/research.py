@@ -224,6 +224,36 @@ def build_audience(raw: Dict, sources: List[Dict], question_keywords: List[Dict]
     return section
 
 
+_TITLES = re.compile(r"\b(prof|doç|uzm|op|dt|dr)\.\s*", re.IGNORECASE)
+
+
+def brand_tokens(workspace) -> List[str]:
+    """Markayi metinde tanimak icin adlar (kucuk harf): calisma adi, alan adi, profil adi (unvansiz hali dahil)."""
+    profile = workspace.profile_data if isinstance(getattr(workspace, "profile_data", None), dict) else {}
+    host = re.sub(r"^https?://(www\.)?", "", workspace.company_url or "").strip("/").split("/")[0]
+    company = profile.get("company_name") or ""
+    raw = [workspace.name, host, company, _TITLES.sub("", company).strip()]
+    return list(dict.fromkeys(t.casefold() for t in raw if t and len(t) >= 5))
+
+
+def brand_scope(item: Dict, tokens) -> str:
+    """Hedef kitle icgorusunun kapsami: 'brand' | 'sector' | 'unverified'.
+
+    'brand' yalniz KAYNAKTA BIREBIR dogrulanan alintida marka adi geciyorsa verilir. Modelin yazdigi tema ya da
+    kaynak adi kanit degildir: orada marka adi gecip dogrulanmis alintida gecmiyorsa iliski gosterilemiyor
+    demektir ('unverified'); boyle bir icgoru markaya atfedilmez, rapora ve modele girmez."""
+    quote = (item.get("quote") or "").casefold()
+    if item.get("quote_found") and any(t in quote for t in tokens):
+        return "brand"
+    text = f"{item.get('theme') or ''} {item.get('source_name') or ''} {quote}".casefold()
+    return "unverified" if any(t in text for t in tokens) else "sector"
+
+
+def attributable(items, tokens) -> List[Dict]:
+    """Rapora/modele girebilen icgoruler: rakami dogrulanan ve markaya dogrulanmamis atif yapmayanlar."""
+    return [i for i in usable(items) if brand_scope(i, tokens) != "unverified"]
+
+
 def usable(items: List[Dict]) -> List[Dict]:
     """Icindeki rakam dogrulanamayan anlati maddesi rapora/senteze girmez."""
     return [item for item in items or [] if item.get("numbers_ok") is not False]
@@ -538,8 +568,9 @@ def build_facts(workspace, audit, sections: Dict, overrides: Optional[List[str]]
                    "platformlar": _texts(sector.get("directories"))},
         "reklam_kisitlari": [r["text"] for r in sector.get("restrictions") or []],
         "dogrulanmis_rakamlar": [{k: c[k] for k in ("claim", "value", "unit", "year", "geography")} for c in claims],
-        "hedef_kitle": {"ihtiyaclar": _texts(audience.get("needs"), "theme"),
-                        "tereddutler": _texts(audience.get("hesitations"), "theme"),
+        # Markaya dogrulanmamis atif yapan icgoru senteze de gitmez (research.brand_scope)
+        "hedef_kitle": {"ihtiyaclar": [i["theme"] for i in attributable(audience.get("needs"), brand_tokens(workspace))],
+                        "tereddutler": [i["theme"] for i in attributable(audience.get("hesitations"), brand_tokens(workspace))],
                         "sorular": _texts(audience.get("questions")), "guven": _texts(audience.get("trust")),
                         "soru_aramalari": audience.get("question_keywords") or []},
         "arama_talebi": ({"yuksek_aylar": demand.get("peak_months"), "dusuk_aylar": demand.get("low_months")}

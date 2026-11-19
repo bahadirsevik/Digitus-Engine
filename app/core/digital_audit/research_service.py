@@ -238,7 +238,7 @@ def approve_strategy(db: Session, report: DigitalResearch, version: int, revisio
         raise
     _write_strategy(db, report, {**current, "approval": {
         "approved_by": approved_by.strip()[:120], "approved_at": _now().isoformat(),
-        "version": version, "revision": revision, "content_sha": strategy.content_sha(current)}})
+        "version": version, "revision": revision, "review_sha": strategy.review_sha(report, current)}})
 
 
 def _requeue(db: Session, report: DigitalResearch, stage: str, briefs: Optional[Dict]) -> None:

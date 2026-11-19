@@ -1009,20 +1009,74 @@ def test_pending_ad_ideas_get_a_decision_point_and_two_scenarios(client, db_sess
     assert "Ücretli reklam: iki senaryo" in text and "izinli senaryo" in text and "izinsiz senaryo" in text
     assert "İlgili karar yönetici raporunun karar noktalarındadır." in _view_text(db_session, ws, report_id, "implementation")
     detail = _view_text(db_session, ws, report_id, "detail")
-    assert "Reklam hazırlığı [Gözlem]" in detail and "Hesap erişimi yok; değerlendirilmedi" in detail
+    # Hesap verisinin toplanmamis olmasi "erisim yok" diye yazilmaz
+    assert "Reklam hazırlığı [Gözlem]" in detail and "Hesap verisi bu analize alınmadı; performans değerlendirilmedi" in detail
+    assert "Hesap erişimi yok" not in detail
 
 
 def test_audience_insights_carry_scope_and_segments_their_basis(client, db_session, make_workspace, dispatched,
                                                                 monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys.modules[__name__], "SOURCE_TEXT", SOURCE_TEXT + " Marka kliniğinde iki saat bekledim.")
     audience = {**AUDIENCE, "needs": AUDIENCE["needs"] + [
-        {"theme": "Marka kliniğinde bekleme süresi", "quote": "Randevu almak çok zor", "source_name": "Forum"}]}
+        # Kaynakta marka gecmiyor; marka adini tema metnine MODEL yazmis: iliski dogrulanamaz
+        {"theme": "Marka kliniğinde bekleme süresi", "quote": "Randevu almak çok zor", "source_name": "Forum"},
+        # Kaynakta birebir dogrulanan alintida marka adi geciyor: gercek kaynak-marka iliskisi
+        {"theme": "Bekleme süresi şikâyeti", "quote": "Marka kliniğinde iki saat bekledim", "source_name": "Forum"}]}
     monkeypatch.setitem(PAYLOADS, "audit_audience_research", audience)
     ws = make_workspace("Marka")
-    report_id = completed_report(client, db_session, ws, dispatched)
+    ai = FakeAI()
+    report_id = start(client, ws).json()["research_id"]
+    assert run(db_session, dispatched, ai) == "completed"
     text = _blocks(db_session, ws, report_id)
-    assert "[Sektör geneli] Randevu bulma" in text and "[Marka hakkında] Marka kliniğinde bekleme süresi" in text
-    assert "başka işletmelerin müşterilerinden derlenen içgörüdür" in text
+    assert "[Sektör geneli] Randevu bulma" in text and "[Marka hakkında] Bekleme süresi şikâyeti" in text
+    # Dogrulanmamis marka atfi rapora girmez (ne marka ne sektor etiketiyle) ve sayisi yazilir
+    assert "Marka kliniğinde bekleme süresi" not in text
+    assert "1 içgörü, markaya atıf yaptığı hâlde bu ilişki kaynakta doğrulanamadığı için rapora alınmadı" in text
+    # Ayni icgoru segment sentezine ve strateji dayanaklarina da gitmez
+    assert "Marka kliniğinde bekleme süresi" not in ai.prompts["audit_synthesis"]
+    from app.core.digital_audit import strategy
+
+    kinds = {c["text"]: c["kind"] for c in strategy.catalogue(ws, None, db_session.get(DigitalResearch, report_id))}
+    assert "Marka kliniğinde bekleme süresi" not in kinds
+    assert kinds["Bekleme süresi şikâyeti"] == "Marka hakkında (kaynakta doğrulanan alıntı)"
+    assert kinds["Randevu bulma"] == "Sektör örneklemi (hedef kitle)"
     assert "Dayanak türü: [Hipotez] sektör kaynaklarından türetilmiş yorum; müşteri verisiyle doğrulanmadı" in text
+
+
+def test_approval_covers_everything_the_document_prints(client, db_session, make_workspace, dispatched, monkeypatch):
+    briefs = json.loads(json.dumps(BRIEFS))
+    briefs["ad_ideas"].append({**briefs["ad_ideas"][0], "channel": "Instagram / Facebook"})
+    monkeypatch.setitem(PAYLOADS, "audit_briefs", briefs)
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    verify = f"/api/v1/digital-audit/research/{report_id}/restrictions/0/verification?brand_profile_id={ws.id}"
+    full = {"primary_source_url": "https://www.resmigazete.gov.tr/x", "regulation_date": "2025-11-05",
+            "verified_by": "Analist A", "verified_at": "2026-11-18"}
+
+    def approved():
+        body = {"version": 1, "revision": 0, "approved_by": "Analist A"}
+        assert client.post(approve, json=body).json()["strategy_state"] == "approved"
+
+    approved()
+    # 1) Onaydan sonra mevzuat teyidi eklenir: rapora yeni icerik girer, onay duser (strateji bayatlamaz)
+    assert client.put(verify, json=full).json()["strategy_state"] == "draft"
+    assert "Analist onaylı" not in _view_text(db_session, ws, report_id, "executive")
+    approved()
+    # 2) Teyit kaldirilir: yine yeniden inceleme gerekir
+    assert client.put(verify, json={}).json()["strategy_state"] == "draft"
+    approved()
+    # 3) Onaydan sonra brief uretilir: yonetici raporuna yeni reklam karari eklenir, onay duser
+    assert client.post(_urls(report_id, ws)["briefs"], json={"segments": [0], "channels": ["meta"]}).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    body = get(client, report_id, ws).json()
+    assert body["strategy_state"] == "draft" and len(dispatched) == 3  # yeni strateji uretimi gerekmedi
+    text = _view_text(db_session, ws, report_id, "executive")
+    assert "Ücretli reklam (Instagram / Facebook) başlatılsın mı?" in text and "TASLAK: analist onayı yok" in text
+    approved()
+    assert "Analist onaylı (Analist A" in _view_text(db_session, ws, report_id, "executive")
 
 
 def test_regulation_is_never_marked_verified_without_a_complete_analyst_record(client, db_session, make_workspace,
