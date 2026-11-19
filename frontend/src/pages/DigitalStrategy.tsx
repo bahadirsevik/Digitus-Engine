@@ -209,6 +209,7 @@ export default function DigitalStrategy(props: Props) {
         workspaceId,
         record.version,
         record.revision,
+        detail.strategy_review_sha || '',
         approver.trim()
       )
       onDetail(res.data)

@@ -268,7 +268,7 @@ def approve_strategy(report_id: int, request: StrategyApproveRequest, brand_prof
     """Analist incelenen surumu isaretler."""
     report = _get_research(db, report_id, brand_profile_id)
     _strategy_call(lambda: research_service.approve_strategy(
-        db, report, request.version, request.revision, request.approved_by))
+        db, report, request.version, request.revision, request.review_sha, request.approved_by))
     return research_service.serialize(report, detail=True)
 
 

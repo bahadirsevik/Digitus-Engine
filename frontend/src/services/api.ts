@@ -2497,6 +2497,8 @@ export interface DigitalResearchDetail extends DigitalResearchSummary {
   }
   /** none | failed | stale | draft | approved: onay yalnız incelenen sürüm için geçerlidir */
   strategy_state?: 'none' | 'failed' | 'stale' | 'draft' | 'approved'
+  /** Ekranda görülen belgenin parmak izi; onay isteği bunu taşır, içerik değiştiyse sunucu reddeder */
+  strategy_review_sha?: string | null
   briefs: ResearchBriefs | null
   claim_overrides: string[]
   /** Rakam kararları üretimden sonra değişti: bölüm rapora girmez, yenilenmesi gerekir */
@@ -2588,11 +2590,12 @@ export const digitalResearchApi = {
     brand_profile_id: number,
     version: number,
     revision: number,
+    review_sha: string,
     approved_by: string
   ) =>
     api.post<DigitalResearchDetail>(
       `/digital-audit/research/${reportId}/strategy/approve`,
-      { version, revision, approved_by },
+      { version, revision, review_sha, approved_by },
       { params: { brand_profile_id } }
     ),
 

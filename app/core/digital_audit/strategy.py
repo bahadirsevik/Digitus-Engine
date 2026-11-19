@@ -537,5 +537,10 @@ def review_sha(report, record: Dict) -> str:
     karar noktalari. Bunlardan biri onaydan sonra degisirse (teyit eklendi/kaldirildi, yeni brief uretildi) rapor
     incelenmemis icerik tasir; onay duser ve yeniden inceleme gerekir. Yeni AI uretimi gerekmez."""
     restrictions = ((report.sections or {}).get("sector") or {}).get("restrictions") or []
+    briefs = report.briefs or {}
+    # Uygulama belgesine giren brief ve kreatif METINLERI de incelemenin parcasidir: ayni kanal ve sayiyla
+    # yeniden uretilen brief karar sorularini degistirmez ama metni degistirir.
+    printed = ({k: briefs.get(k) for k in ("selection", "ad_ideas", "creative_briefs")}
+               if briefs.get("status") == "ok" and not research.briefs_stale(report) else None)
     return _sha([content(record), [r.get("verification") for r in restrictions],
-                 [d["question"] for d in brief_ad_decisions(report, record, "draft")]])
+                 [d["question"] for d in brief_ad_decisions(report, record, "draft")], printed])

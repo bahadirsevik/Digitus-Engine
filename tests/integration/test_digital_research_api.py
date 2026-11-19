@@ -541,6 +541,12 @@ def _strategy_payload(cat):
     }
 
 
+def _seen(client, report_id, ws, revision, approved_by):
+    """Onay govdesi: analistin o anda ekranda gordugu belgenin parmak iziyle."""
+    return {"version": 1, "revision": revision, "approved_by": approved_by,
+            "review_sha": get(client, report_id, ws).json()["strategy_review_sha"] or "yok-yok-yok"}
+
+
 def strategy_ready(client, db, ws, dispatched, monkeypatch, answers=None):
     from app.core.digital_audit import strategy
 
@@ -620,7 +626,7 @@ def test_analyst_edits_approves_and_can_clear_a_held_ad(client, db_session, make
     bad["actions"][0]["refs"] = []
     assert client.put(url, json={"version": 1, "revision": 1, "content": bad}).status_code == 400
 
-    res = client.post(approve, json={"version": 1, "revision": 1, "approved_by": "Analist A"})
+    res = client.post(approve, json=_seen(client, report_id, ws, 1, "Analist A"))
     assert res.status_code == 200 and res.json()["strategy_state"] == "approved"
     assert "Analist onaylı (Analist A" in _view_text(db_session, ws, report_id, "executive")
     # Onaydan sonraki duzeltme onayi dusurur
@@ -642,7 +648,7 @@ def test_changed_inputs_drop_strategy_and_approval(client, db_session, make_work
     ws = make_workspace("Marka")
     audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
     approve = url.replace("/strategy?", "/strategy/approve?")
-    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).json()["strategy_state"] == "approved"
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
 
     answers = f"/api/v1/digital-audit/audits/{audit.id}/answers?brand_profile_id={ws.id}"
     assert client.put(answers, json={"answers": {"business_model": {"value": "E-ticaret"},
@@ -650,7 +656,7 @@ def test_changed_inputs_drop_strategy_and_approval(client, db_session, make_work
     assert get(client, report_id, ws).json()["strategy_state"] == "stale"
     text = _view_text(db_session, ws, report_id, "executive")
     assert "GÜNCEL DEĞİL" in text and "Sayfa başlıkları eksik" not in text and "Analist onaylı" not in text
-    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).status_code == 409
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).status_code == 409
     assert client.put(url, json={"version": 1, "revision": 0, "content": {}}).status_code == 409
 
     # Segmentler yenilenir, strateji yeniden uretilir: yeni brif modele gider, eski onay tasinmaz
@@ -726,7 +732,7 @@ def test_strategy_views_share_context_and_respect_isolation(client, db_session, 
     assert client.post(foreign).status_code == 404
     assert client.put(foreign, json={"version": 1, "revision": 0, "content": {}}).status_code == 404
     assert client.post(foreign.replace("/strategy?", "/strategy/approve?"),
-                       json={"version": 1, "revision": 0, "approved_by": "X Y"}).status_code == 404
+                       json=_seen(client, report_id, ws, 0, "X Y")).status_code == 404
     assert client.get(base.replace(f"brand_profile_id={ws.id}", f"brand_profile_id={other.id}") + "&view=executive").status_code == 404
 
 
@@ -834,9 +840,9 @@ def test_draft_with_open_warnings_cannot_be_approved(client, db_session, make_wo
     bad["summary"][0]["meaning"] = "Dönüşüm %40 artar"  # dayanakta olmayan rakam
     res = client.put(url, json={"version": 1, "revision": 0, "content": bad})
     assert res.status_code == 200 and res.json()["sections"]["strategy"]["edited"]["summary"][0]["warnings"]
-    assert client.post(approve, json={"version": 1, "revision": 1, "approved_by": "Analist A"}).status_code == 400
+    assert client.post(approve, json=_seen(client, report_id, ws, 1, "Analist A")).status_code == 400
     assert client.put(url, json={"version": 1, "revision": 1, "content": draft}).status_code == 200
-    assert client.post(approve, json={"version": 1, "revision": 2, "approved_by": "Analist A"}).json()[
+    assert client.post(approve, json=_seen(client, report_id, ws, 2, "Analist A")).json()[
         "strategy_state"] == "approved"
 
 
@@ -846,17 +852,17 @@ def test_analyst_cannot_approve_text_changed_by_someone_else(client, db_session,
     audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
     approve = url.replace("/strategy?", "/strategy/approve?")
     seen_by_b = get(client, report_id, ws).json()["sections"]["strategy"]
+    screen_of_b = _seen(client, report_id, ws, seen_by_b["revision"], "Analist B")  # B'nin actigi ekran
     edited = json.loads(json.dumps(seen_by_b["draft"]))
     edited["summary"][0]["meaning"] = "A'nın yeni metni"
     assert client.put(url, json={"version": 1, "revision": 0, "content": edited}).status_code == 200
     # B eski ekranindan: ne onaylayabilir ne A'nin metnini ezebilir
-    assert client.post(approve, json={"version": 1, "revision": seen_by_b["revision"],
-                                      "approved_by": "Analist B"}).status_code == 409
+    assert client.post(approve, json=screen_of_b).status_code == 409
     assert client.put(url, json={"version": 1, "revision": 0, "content": seen_by_b["draft"]}).status_code == 409
     body = get(client, report_id, ws).json()
     assert body["strategy_state"] == "draft" and body["sections"]["strategy"]["revision"] == 1
     assert body["sections"]["strategy"]["edited"]["summary"][0]["meaning"] == "A'nın yeni metni"
-    res = client.post(approve, json={"version": 1, "revision": 1, "approved_by": "Analist B"}).json()
+    res = client.post(approve, json=_seen(client, report_id, ws, 1, "Analist B")).json()
     assert res["strategy_state"] == "approved" and res["sections"]["strategy"]["approval"]["revision"] == 1
 
 
@@ -874,7 +880,7 @@ def test_input_outside_model_catalogue_still_makes_strategy_stale(client, db_ses
     assert "Ücretli öne çıkarma yasak" in ai.prompts["audit_strategy"]
     assert any("taslak üretiminde kullanılmadı" in gap for gap in record["gaps"])
     approve = url.replace("/strategy?", "/strategy/approve?")
-    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).json()[
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()[
         "strategy_state"] == "approved"
     # Modele GITMEYEN satir degisir: strateji ve onay yine de guncelligini kaybeder
     rival = db_session.query(DigitalAuditTarget).filter_by(audit_id=audit.id, kind="competitor").one()
@@ -1057,8 +1063,7 @@ def test_approval_covers_everything_the_document_prints(client, db_session, make
             "verified_by": "Analist A", "verified_at": "2026-11-18"}
 
     def approved():
-        body = {"version": 1, "revision": 0, "approved_by": "Analist A"}
-        assert client.post(approve, json=body).json()["strategy_state"] == "approved"
+        assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
 
     approved()
     # 1) Onaydan sonra mevzuat teyidi eklenir: rapora yeni icerik girer, onay duser (strateji bayatlamaz)
@@ -1123,3 +1128,47 @@ def test_regulation_is_never_marked_verified_without_a_complete_analyst_record(c
     # Bos kayit teyidi kaldirir
     assert client.put(put, json={}).status_code == 200
     assert "Teyit edildi" not in _blocks(db_session, ws, report_id)
+
+
+def test_stale_screen_cannot_approve_a_regulation_record_it_never_saw(client, db_session, make_workspace, dispatched,
+                                                                     monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    verify = f"/api/v1/digital-audit/research/{report_id}/restrictions/0/verification?brand_profile_id={ws.id}"
+    screen_of_a = _seen(client, report_id, ws, 0, "Analist A")  # A ekrani acar
+    # B bu arada mevzuat teyidini degistirir; stratejinin surum ve revizyonu AYNI kalir
+    assert client.put(verify, json={"primary_source_url": "https://www.resmigazete.gov.tr/x", "regulation_date": "2025-11-05",
+                                    "verified_by": "Analist B", "verified_at": "2026-11-18"}).status_code == 200
+    record = get(client, report_id, ws).json()["sections"]["strategy"]
+    assert (record["version"], record["revision"]) == (1, 0)
+    # A'nin eski ekranindan gelen onay reddedilir: gormedigi teyidi onaylayamaz
+    assert client.post(approve, json=screen_of_a).status_code == 409
+    assert get(client, report_id, ws).json()["strategy_state"] == "draft"
+    # Guncel icerigi gorunce onaylayabilir
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
+    assert client.post(approve, json={"version": 1, "revision": 0, "approved_by": "Analist A"}).status_code == 422
+
+
+def test_regenerated_brief_text_drops_the_approval_even_with_the_same_decisions(client, db_session, make_workspace,
+                                                                                dispatched, monkeypatch):
+    ws = make_workspace("Marka")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    request = {"segments": [0], "channels": ["meta"]}
+    assert client.post(_urls(report_id, ws)["briefs"], json=request).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
+    questions = [d for d in _view_text(db_session, ws, report_id, "executive").split("başlatılsın mı?")]
+    # Ayni segment, ayni kanal, ayni sayida fikir; yalniz reklam METNI farkli
+    changed = json.loads(json.dumps(BRIEFS))
+    changed["ad_ideas"][0]["message"] = "İncelenmemiş yeni reklam metni"
+    monkeypatch.setitem(PAYLOADS, "audit_briefs", changed)
+    assert client.post(_urls(report_id, ws)["briefs"], json=request).status_code == 202
+    assert run(db_session, dispatched) == "completed"
+    after = _view_text(db_session, ws, report_id, "executive")
+    assert len(after.split("başlatılsın mı?")) == len(questions)  # karar sorulari degismedi
+    assert "İncelenmemiş yeni reklam metni" in _view_text(db_session, ws, report_id, "implementation")
+    # Belgede incelenmemis metin var: onay duser
+    assert get(client, report_id, ws).json()["strategy_state"] == "draft"
+    assert "TASLAK: analist onayı yok" in _view_text(db_session, ws, report_id, "implementation")

@@ -225,11 +225,17 @@ def save_strategy_edit(db: Session, report: DigitalResearch, version: int, revis
     _write_strategy(db, report, {**current, "edited": edited, "approval": None, "revision": revision + 1})
 
 
-def approve_strategy(db: Session, report: DigitalResearch, version: int, revision: int, approved_by: str) -> None:
+def approve_strategy(db: Session, report: DigitalResearch, version: int, revision: int, review_sha: str,
+                     approved_by: str) -> None:
     """Analist EKRANDA GORDUGU revizyonu isaretler. Onay icerik ozetine baglidir: sonraki duzeltme,
     yenileme ya da girdi degisikligi onayi gecersiz kilar."""
     try:
         current = _locked_strategy(db, report, version, revision)
+        # Onaylanan, analistin EKRANDA gordugu belgedir: strateji surumu ayni kalsa da mevzuat teyidi ya da brief
+        # bu arada degistiyse (baskasi degistirdi, yeni brief uretildi) istek reddedilir.
+        if strategy.review_sha(report, current) != review_sha:
+            raise ResearchStateError("Belgenin içeriği siz incelerken değişti (mevzuat teyidi ya da briefler). "
+                                     "Sayfayı yenileyip güncel içeriği inceleyin.")
         waiting = strategy.open_warnings(strategy.content(current))
         if waiting:
             raise ResearchInputError(f"Uyarısı duran {waiting} madde var; düzeltin ya da çıkarın, sonra işaretleyin.")
@@ -478,6 +484,9 @@ def serialize(report: DigitalResearch, detail: bool = False) -> Dict:
             claim_overrides=report.claim_overrides or [], usage=report.usage or {},
             synthesis_stale=research.synthesis_stale(report), briefs_stale=research.briefs_stale(report),
             strategy_state=strategy.state(report),
+            # Onay isteginin tasimasi gereken parmak izi: ekranda gorulen belge icerigi
+            strategy_review_sha=(strategy.review_sha(report, sections["strategy"])
+                                 if (sections.get("strategy") or {}).get("status") == "ok" else None),
             channels=research.CHANNELS,
         )
     return data

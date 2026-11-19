@@ -53,6 +53,7 @@ class StrategyEditRequest(BaseModel):
 class StrategyApproveRequest(BaseModel):
     version: int
     revision: int  # onaylanan, analistin ekranda gordugu revizyondur
+    review_sha: str = Field(..., min_length=8, max_length=64)  # ekranda incelenen belgenin parmak izi
     approved_by: str = Field(..., min_length=2, max_length=120)
 
 
