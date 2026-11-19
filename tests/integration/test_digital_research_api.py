@@ -881,3 +881,21 @@ def test_input_outside_model_catalogue_still_makes_strategy_stale(client, db_ses
     rival.findings = [_finding("seo.titles", "Sayfa başlıkları", "warning", value={"missing": 9})]
     db_session.commit()
     assert get(client, report_id, ws).json()["strategy_state"] == "stale"
+
+
+def test_ecommerce_rows_reach_no_model_unless_the_site_is_a_shop(client, db_session, make_workspace, dispatched,
+                                                                 monkeypatch):
+    from app.core.digital_audit import report_doc, strategy
+
+    ws = make_workspace("Marka")
+    audit, report_id, url, ai = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    shop_row = _finding("ecommerce.platform", "E-ticaret altyapısı", "info", state="not_observed")
+    audit.targets[0].findings = [*audit.targets[0].findings, shop_row]
+    db_session.commit()
+    report = db_session.get(DigitalResearch, report_id)
+    full = strategy.catalogue(ws, audit, report)
+    assert any(c.get("check") == "ecommerce.platform" for c in full)  # parmak izi tam listeden
+    assert not any(c.get("check") == "ecommerce.platform" for c in strategy.model_catalogue(full, report_doc.is_ecommerce(audit)))
+    assert "E-ticaret" not in json.dumps(research.audit_facts(audit), ensure_ascii=False)  # segment sentezi yolu
+    audit.answers = {**audit.answers, "business_model": {"value": "E-ticaret", "note": None}}
+    assert "E-ticaret altyapısı" in json.dumps(research.audit_facts(audit), ensure_ascii=False)

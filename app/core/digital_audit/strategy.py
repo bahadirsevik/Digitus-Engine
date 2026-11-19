@@ -150,11 +150,9 @@ def catalogue(workspace, audit, report) -> List[Dict]:
     return items
 
 
-def model_catalogue(full: List[Dict]) -> List[Dict]:
+def model_catalogue(full: List[Dict], shop: bool = True) -> List[Dict]:
     """Modele gonderilen en fazla MAX_CATALOGUE satir; kisit, brif, rakam ve segment once korunur."""
     # E-ticaret sitesi degilse e-ticaret satirlari modele GITMEZ (tam listede kalir: parmak izi degismez)
-    shop = any((c.get("check") == "ecommerce.platform" and c["kind"] == "Ölçüm (marka sitesi)" and c.get("state") == "gözlendi")
-               or (c["kind"] == "Analist brifi" and "İş modeli" in c["text"] and "E-ticaret" in c["text"]) for c in full)
     full = [c for c in full if shop or not str(c.get("check") or "").startswith("ecommerce.")]
     keep = [c for c in full if c["kind"] in _KEEP_KINDS]
     rest = [c for c in full if c["kind"] not in _KEEP_KINDS][:max(MAX_CATALOGUE - len(keep), 0)]
@@ -412,7 +410,7 @@ _RULES = (
 def generate(ai, workspace, audit, report, usage: Dict) -> Dict:
     """Tek ucretli cagri. Donus: sections['strategy'] kaydi (taslak, onaysiz)."""
     full = catalogue(workspace, audit, report)
-    cat = model_catalogue(full)
+    cat = model_catalogue(full, report_doc.is_ecommerce(audit))  # kapsam karari tek yerde
     if not cat:
         raise ResearchError("Strateji için dayanak yok.")
     usage["json_calls"] = usage.get("json_calls", 0) + 1

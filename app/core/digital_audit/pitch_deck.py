@@ -19,21 +19,21 @@ INK, MUTED, PAPER, LINE = "#1F2933", "#6B7780", "#F5F7F9", "#DDE3E8"
 
 # kontrol -> (sade baslik, neden onemli, biz ne yapacagiz)
 PLAIN: Dict[str, tuple] = {
-    "site.reachable": ("Site açılmıyor ya da hata veriyor", "Ziyaretçi siteye ulaşamadığında başka bir firmaya gider.",
+    "site.reachable": ("Site açılmıyor ya da hata veriyor", "Siteye ulaşamayan ziyaretçi başka bir firmaya yönelebilir.",
                        "Erişim sorununu barındırma tarafıyla birlikte gideriyoruz."),
-    "site.ssl": ("Güvenlik sertifikası (SSL)", "Tarayıcılar güvensiz siteyi uyarıyla gösterir; ziyaretçi geri döner.",
+    "site.ssl": ("Güvenlik sertifikası (SSL)", "Tarayıcılar sertifikası sorunlu siteyi uyarıyla gösterebilir.",
                  "Sertifikayı kurup otomatik yenilenecek şekilde ayarlıyoruz."),
-    "site.speed_mobile": ("Site telefonda yavaş açılıyor", "Ziyaretçilerin çoğu telefondan gelir; yavaş açılan sayfa terk edilir.",
+    "site.speed_mobile": ("Site telefonda yavaş açılıyor", "Telefondan gelen ziyaretçi yavaş açılan sayfayı beklemeden kapatabilir.",
                           "Görselleri ve sayfa kodunu hafifleterek telefonda açılış hızını iyileştiriyoruz."),
-    "site.speed_desktop": ("Site bilgisayarda yavaş açılıyor", "Yavaş sayfa ziyaretçiyi bekletir ve güveni azaltır.",
+    "site.speed_desktop": ("Site bilgisayarda yavaş açılıyor", "Yavaş açılan sayfa ziyaretçiyi bekletir.",
                            "Sayfa yükünü azaltarak açılış hızını iyileştiriyoruz."),
-    "site.mobile_viewport": ("Telefon görünümü ayarı eksik", "Sayfa telefonda küçük ve okunmaz görünür.",
+    "site.mobile_viewport": ("Telefon görünümü ayarı eksik", "Bu ayar olmadan sayfa telefonda küçük ve zor okunur görünebilir.",
                              "Tüm sayfaları telefona uyumlu hale getiriyoruz."),
     "site.structure": ("Temel sayfalar eksik", "Ziyaretçi sizi tanıyacağı ya da size ulaşacağı sayfayı bulamıyor.",
                        "Eksik temel sayfaları (İletişim, Hakkımızda) hazırlıyoruz."),
-    "site.cta": ("Ziyaretçiyi harekete geçiren buton yok", "Arama, WhatsApp ya da form butonu olmayan sitede ziyaretçi talep bırakmaz.",
+    "site.cta": ("Ziyaretçiyi harekete geçiren buton yok", "Arama, WhatsApp ya da form butonu olmayan sitede ziyaretçinin size ulaşması zorlaşır.",
                  "Her sayfaya görünür arama, WhatsApp ve form butonları ekliyoruz."),
-    "site.broken_links": ("Çalışmayan bağlantılar var", "Tıklanan sayfa açılmazsa ziyaretçi siteyi terk eder.",
+    "site.broken_links": ("Çalışmayan bağlantılar var", "Tıklanan sayfa açılmazsa ziyaretçi aradığını bulamaz.",
                           "Kırık bağlantıları düzeltip doğru sayfalara yönlendiriyoruz."),
     "seo.titles": ("Sayfa başlıklarında eksik ya da tekrar var", "Google'da görünen ilk satır budur; eksikse sayfa aramada zayıf kalır.",
                    "Her sayfaya kendine özgü, açıklayıcı bir başlık yazıyoruz."),
@@ -41,7 +41,7 @@ PLAIN: Dict[str, tuple] = {
                               "Her sayfa için tıklamaya davet eden açıklamalar yazıyoruz."),
     "seo.h1": ("Sayfa ana başlıkları düzensiz", "Arama motoru sayfanın konusunu ana başlıktan anlar.",
                "Her sayfada tek ve net bir ana başlık düzenliyoruz."),
-    "seo.noindex": ("Bazı sayfalar Google'a kapalı", "Kapalı sayfa aramada hiç çıkmaz.",
+    "seo.noindex": ("Bazı sayfalar Google'a kapalı", "Aramaya kapatılmış sayfa arama sonuçlarında gösterilmez.",
                     "Yanlışlıkla kapatılmış sayfaları aramaya açıyoruz."),
     "seo.structured_data": ("Google'a işletme bilgisi işaretlemesi görülmedi", "Bu işaretleme adres, saat ve hizmet bilgisinin aramada doğru görünmesine yardım eder.",
                             "İşletme bilgilerinizi Google'ın okuyacağı biçimde ekliyoruz."),
@@ -61,15 +61,15 @@ PLAIN: Dict[str, tuple] = {
                                "Mevzuata uygun çerez bildirimi ekliyoruz."),
     "tracking.privacy_page": ("KVKK / gizlilik sayfası görülmedi", "Kişisel veri toplayan sitede aydınlatma metni beklenir.",
                               "KVKK aydınlatma ve gizlilik sayfalarını hazırlıyoruz."),
-    "contact.phone": ("Tıklanabilir telefon numarası görülmedi", "Telefondaki ziyaretçi tek dokunuşla arayamıyor.",
+    "contact.phone": ("Tıklanabilir telefon numarası görülmedi", "Telefondaki ziyaretçi numaraya tek dokunuşla ulaşamayabilir.",
                       "Telefon numarasını her sayfada tıklanabilir hale getiriyoruz."),
-    "contact.whatsapp": ("WhatsApp bağlantısı görülmedi", "Birçok müşteri aramak yerine yazmayı tercih eder.",
+    "contact.whatsapp": ("WhatsApp bağlantısı görülmedi", "Aramak yerine yazmak isteyen ziyaretçi için kolay bir yol görülmedi.",
                          "Siteye WhatsApp ile yazma butonu ekliyoruz."),
     "contact.email": ("E-posta adresi görülmedi", "Kurumsal iletişim için e-posta beklenir.",
                       "Kurumsal e-posta adresini iletişim alanlarına ekliyoruz."),
-    "contact.forms": ("İletişim formu görülmedi", "Mesai dışında gelen ziyaretçi talep bırakamıyor.",
+    "contact.forms": ("İletişim formu görülmedi", "Form yoksa mesai dışında gelen ziyaretçi talep bırakmakta zorlanır.",
                       "Kısa ve çalışan bir iletişim formu ekliyoruz."),
-    "contact.social_links": ("Sosyal medya bağlantıları görülmedi", "Ziyaretçi sizi sosyal medyada bulup güven oluşturamıyor.",
+    "contact.social_links": ("Sosyal medya bağlantıları görülmedi", "Sitede bağlantı yoksa ziyaretçi sosyal medya hesaplarınıza kolayca geçemez.",
                              "Sosyal medya hesaplarınızı siteyle bağlıyoruz."),
 }
 # "Gorulmedi" oldugunda musteriye soylenmeye deger kontroller. Reklam pikselleri BILEREK yok:
@@ -77,13 +77,15 @@ PLAIN: Dict[str, tuple] = {
 _ABSENT_MATTERS = {"seo.structured_data", "seo.blog", "seo.sitemap", "tracking.gtm", "tracking.ga4",
                    "tracking.cookie_banner", "tracking.privacy_page", "contact.phone", "contact.whatsapp",
                    "contact.forms", "contact.social_links", "site.cta"}
-_GOOD_TITLE = {"site.reachable": "Site sorunsuz açılıyor", "site.ssl": "Güvenlik sertifikası geçerli",
+_GOOD_TITLE = {"site.reachable": "Site açılıyor", "site.ssl": "Güvenlik sertifikası geçerli",
                "site.speed_mobile": "Telefonda açılış hızı iyi", "site.speed_desktop": "Bilgisayarda açılış hızı iyi",
-               "site.mobile_viewport": "Telefon görünümü ayarı doğru", "site.structure": "Temel sayfalar mevcut",
-               "site.cta": "Arama, WhatsApp ve form butonları var", "site.broken_links": "Kırık bağlantı yok",
-               "seo.titles": "Sayfa başlıkları düzgün", "seo.meta_descriptions": "Arama sonucu açıklamaları tam",
-               "seo.h1": "Sayfa ana başlıkları düzgün", "seo.noindex": "Sayfalar Google'a açık",
-               "seo.image_alt": "Görsel açıklamaları büyük ölçüde tam", "seo.robots_txt": "Arama motoru yönlendirmesi doğru",
+               "site.mobile_viewport": "Telefon görünümü ayarı sayfa kodunda mevcut", "site.structure": "Temel sayfalar mevcut",
+               "site.broken_links": "Kontrol edilen site içi bağlantılarda kırık bulunmadı",
+               "seo.titles": "İncelenen sayfalarda başlık eksiği yok",
+               "seo.meta_descriptions": "İncelenen sayfalarda arama sonucu açıklaması eksiği yok",
+               "seo.h1": "İncelenen sayfalarda ana başlık eksiği yok",
+               "seo.noindex": "İncelenen sayfalar aramaya kapatılmamış",
+               "seo.image_alt": "Görsel açıklamaları büyük ölçüde tam", "seo.robots_txt": "Arama motoru yönlendirme dosyası mevcut",
                "seo.sitemap": "Site haritası mevcut", "contact.phone": "Tıklanabilir telefon var",
                "contact.whatsapp": "WhatsApp bağlantısı var", "contact.email": "E-posta adresi var",
                "tracking.privacy_page": "KVKK / gizlilik sayfası var", "tracking.cookie_banner": "Çerez bildirimi var"}
@@ -112,6 +114,12 @@ def build(audit) -> Dict:
                 title = "Telefonda açılış hızı iyileştirilebilir"
             seen = report_doc._summary(f, pages) or ("Sayfa kodunda görülmedi." if f["state"] == "not_observed" else "")
             issues.append({"check": check, "level": level, "title": title, "seen": seen, "why": why, "fix": fix})
+        elif f.get("assessment") == "ok" and check == "site.cta":
+            # Kontrol ucunden BIRINI gormekle "iyi" doner: yalniz gorulenler yazilir
+            value = f.get("value") or {}
+            seen_cta = [name for name, key in (("telefon", "phone"), ("WhatsApp", "whatsapp"), ("form", "forms")) if value.get(key)]
+            if seen_cta:
+                good.append("Sitede görülen iletişim yolu: " + ", ".join(seen_cta))
         elif f.get("assessment") == "ok" and check in _GOOD_TITLE:
             good.append(_GOOD_TITLE[check])
     # Arama gorunurlugu olculduyse: sitenin ilk sonuclarda GORULMEDIGI aramalar (adresi okunamayan
@@ -125,17 +133,28 @@ def build(audit) -> Dict:
         if unseen:
             top = max((r.get("checked_top") or 0) for r in serp["keywords"]) or 10
             issues.insert(0, {
-                "check": "visibility.serp", "level": 1, "title": "Sizi arayanlar sitenizi ilk sonuçlarda görmüyor",
-                "seen": "Ölçtüğümüz aramalarda sitenizi ilk " + str(top) + " sonuçta görmedik: "
-                        + ", ".join(f"“{k}”" for k in unseen[:4]) + ".",
-                "why": "Hizmetinizi arayan kişi çoğunlukla ilk sayfadaki sonuçlardan birini seçer.",
+                "check": "visibility.serp", "level": 1,
+                "title": f"Ölçtüğümüz {len(unseen)} aramada sitenizi ilk {top} sonuçta görmedik",
+                "seen": ", ".join(f"“{k}”" for k in unseen[:4]) + ". Anlık ölçümdür; sıra konuma ve güne göre değişir.",
+                "why": "Arama yapan kişi önce ilk sonuçları görür; orada olmayan site daha az ziyaret alır.",
                 "fix": "Bu aramalar için sayfa içi ve yerel arama (SEO) çalışması yapıyoruz."})
-    issues.sort(key=lambda i: i["level"])
-    urgent, other = issues[:6], issues[6:14]
+    # ACIL yalniz gercekten "sorun" olanlardir; hepsi acil bolumunde kalir (sayi kac olursa olsun).
+    # Uyari ve "gorulmedi" olanlar ONCELIKLI IYILESTIRMEdir. Iyi sitede zorla acil sorun uretilmez.
+    urgent = [i for i in issues if i["level"] == 0]
+    priority = sorted((i for i in issues if i["level"] > 0), key=lambda i: i["level"])
+    # Site okunamadiysa (ya da kontrollerin cogu olculemediyse) eksik bulunmamis gibi gosterilmez
+    measured_count = len(findings) - unmeasured
+    limited = bool(own) and (own.status != "completed" or unmeasured > measured_count)
+    first = [i["fix"] for i in urgent] or [i["fix"] for i in priority[:3]]
+    rest = [i["fix"] for i in (priority if urgent else priority[3:])]
+    if limited:
+        first = ["Sitenize erişimi ve teknik doğrulamayı sizinle birlikte sağlıyor, incelemeyi tamamlıyoruz."] + first
     plan = [
-        ("İlk 30 gün", "Acil düzeltmeler", [i["fix"] for i in urgent][:6]),
-        ("30-60 gün", "İyileştirme", [i["fix"] for i in other][:5]
-         or ["Yapılan düzeltmelerin etkisini ölçüyor, eksik kalanları tamamlıyoruz."]),
+        ("İlk 30 gün", "Acil düzeltmeler" if urgent else "İnceleme ve erişim" if limited and not priority
+         else "Öncelikli iyileştirmeler", first[:7] or ["Tespit edilen acil bir sorun yok; ölçüm altyapısını doğruluyoruz."]),
+        ("30-60 gün", "İyileştirme", rest[:6]
+         or (["İnceleme sonucuna göre düzeltme planını sizinle birlikte netleştiriyoruz."] if limited else
+             ["Yapılan düzeltmelerin etkisini ölçüyor, eksik kalanları tamamlıyoruz."])),
         ("60-90 gün", "Takip ve raporlama", ["Hız, arama görünürlüğü ve ölçüm kontrollerini düzenli tekrarlıyoruz.",
                                            "Yapılan işleri ve ölçülen sonuçları sizinle aylık olarak paylaşıyoruz."]),
     ]
@@ -147,10 +166,10 @@ def build(audit) -> Dict:
             speed.append({"site": report_doc._host(t.url), "own": t.kind == "own", "score": int(score)})
     measured = audit.completed_at or audit.created_at
     return {"host": report_doc._host(own.url) if own else "", "date": measured.strftime("%d.%m.%Y") if measured else "-",
-            "pages": pages, "urgent": urgent, "other": other, "good": good[:12], "plan": plan, "speed": speed,
-            "counts": {"urgent": sum(1 for i in issues if i["level"] == 0),
-                       "improve": sum(1 for i in issues if i["level"] > 0), "good": len(good)},
-            "unmeasured": unmeasured}
+            "pages": pages, "urgent": urgent, "priority": priority, "good": good[:12], "plan": plan, "speed": speed,
+            "counts": {"urgent": len(urgent), "improve": len(priority), "good": len(good)},
+            "unmeasured": unmeasured, "limited": limited,
+            "status": report_doc._TARGET_STATUS.get(own.status, own.status) if own else "denetlenmedi"}
 
 
 def render(workspace, audit) -> bytes:
@@ -215,12 +234,15 @@ def render(workspace, audit) -> bytes:
          13, "#C9D5DD", width=560)
 
     # 2) Ozet
-    slide("Bir bakışta siteniz", f"Sitenizin dışarıdan görülebilen {data['pages']} sayfasını inceledik.")
+    slide("Bir bakışta siteniz", "Site içeriğini yeterince inceleyemedik; aşağıdaki sayılar yalnız okunabilen kısım içindir."
+          if data["limited"] else f"Sitenizin dışarıdan görülebilen {data['pages']} sayfasını inceledik.")
     tiles = [(str(data["counts"]["urgent"]), "Acil düzeltilmeli", RED),
              (str(data["counts"]["improve"]), "İyileştirilebilir", AMBER),
              (str(data["counts"]["good"]), "İyi durumda", GREEN)]
     own_speed = next((s for s in data["speed"] if s["own"]), None)
-    if own_speed:
+    if data["limited"] or (data["unmeasured"] and not own_speed):
+        tiles.append((str(data["unmeasured"]), "İncelenemeyen kontrol", MUTED))
+    elif own_speed:
         tiles.append((f"{own_speed['score']}", "Telefonda açılış hızı (100 üzerinden)", NAVY))
     width = (W - 96 - 20 * (len(tiles) - 1)) / len(tiles)
     for i, (number, label, color) in enumerate(tiles):
@@ -229,43 +251,57 @@ def render(workspace, audit) -> bytes:
         box(x, 400, width, 10, color, 4)
         text(x + 22, 318, number, 64, color, bold)
         text(x + 22, 262, label, 13.5, INK, width=width - 40)
-    if data["urgent"]:
-        text(48, 170, "En önce ele alınacak konu", 12, MUTED)
-        text(48, 144, data["urgent"][0]["title"], 20, NAVY, bold, width=W - 96)
-        text(48, 118, data["urgent"][0]["why"], 13, INK, width=W - 96)
+    lead = (data["urgent"] or data["priority"] or [None])[0]
+    if data["limited"]:
+        text(48, 170, "Önce yapılacak", 12, MUTED)
+        text(48, 144, f"Site içeriğini yeterince inceleyemedik (durum: {data['status']})", 20, NAVY, bold, width=W - 96)
+        text(48, 118, "Bu, sitenizde eksik olmadığı anlamına gelmez. İlk adımda erişimi birlikte sağlayıp incelemeyi tamamlıyoruz.",
+             13, INK, width=W - 96)
+    elif lead:
+        text(48, 170, "En önce ele alınacak konu" if data["urgent"] else "Acil bir sorun görmedik. İlk ele alınacak iyileştirme",
+             12, MUTED)
+        text(48, 144, lead["title"], 20, NAVY, bold, width=W - 96)
+        text(48, 118, lead["why"], 13, INK, width=W - 96)
+    if data["unmeasured"] and not data["limited"]:
+        text(48, 84, f"{data['unmeasured']} kontrol ölçülemedi; bunlar eksik sayılmadı.", 10.5, MUTED)
 
-    # 3) Acil duzeltilecekler (slayt basina 3 kart)
+    # 3) Acil sorunlar ve oncelikli iyilestirmeler AYRI basliklarda (slayt basina 3 kart)
     colors = {0: RED, 1: AMBER, 2: TEAL}
-    labels = {0: "ACİL", 1: "ÖNCELİKLİ", 2: "EKSİK GÖRÜNÜYOR"}
-    for start in range(0, len(data["urgent"]), 3):
-        slide("İvedilikle çözülmesi gerekenler" + (" (devam)" if start else ""),
-              "Sitenize gelen ziyaretçiyi ve aramadaki görünürlüğünüzü doğrudan etkileyen konular.")
-        cards = data["urgent"][start:start + 3]
-        cw = (W - 96 - 40) / 3
-        for i, item in enumerate(cards):
-            x = 48 + i * (cw + 20)
-            box(x, 60, cw, 360, PAPER, 12)
-            box(x, 60, 7, 360, colors[item["level"]], 3)
-            text(x + 24, 392, labels[item["level"]], 9.5, colors[item["level"]], bold)
-            y = text(x + 24, 366, item["title"], 16.5, NAVY, bold, width=cw - 44, max_lines=3)
-            for head, body in (("Gördüğümüz", item["seen"]), ("Neden önemli", item["why"]), ("Çözümümüz", item["fix"])):
-                if not body:
-                    continue
-                y = text(x + 24, y - 12, head, 9.5, MUTED, bold)
-                y = text(x + 24, y - 2, body, 11.5, INK, width=cw - 44, max_lines=5)
+    labels = {0: "ACİL", 1: "ÖNCELİKLİ", 2: "GÖRÜLMEDİ"}
 
-    # 4) Diger iyilestirmeler + iyi durumda olanlar
-    if data["other"] or data["good"]:
-        slide("Diğer bulgular", "Acil olmayan iyileştirme alanları ve sitenizde iyi durumda olanlar.")
+    def cards(title: str, subtitle: str, items: List[Dict]) -> None:
+        for start in range(0, len(items), 3):
+            slide(title + (" (devam)" if start else ""), subtitle)
+            cw = (W - 96 - 40) / 3
+            for i, item in enumerate(items[start:start + 3]):
+                x = 48 + i * (cw + 20)
+                box(x, 60, cw, 360, PAPER, 12)
+                box(x, 60, 7, 360, colors[item["level"]], 3)
+                text(x + 24, 392, labels[item["level"]], 9.5, colors[item["level"]], bold)
+                y = text(x + 24, 366, item["title"], 16.5, NAVY, bold, width=cw - 44, max_lines=3)
+                for head, body in (("Gördüğümüz", item["seen"]), ("Neden önemli", item["why"]), ("Çözümümüz", item["fix"])):
+                    if body:
+                        y = text(x + 24, y - 12, head, 9.5, MUTED, bold)
+                        y = text(x + 24, y - 2, body, 11.5, INK, width=cw - 44, max_lines=5)
+
+    cards("İvedilikle çözülmesi gerekenler", "Sitenizin çalışmasını ya da aramada görünmesini doğrudan engelleyen sorunlar.",
+          data["urgent"])
+    shown = data["priority"][:6]
+    cards("Öncelikli iyileştirmeler", "Acil değil; ancak ziyaretçi deneyimini ve görünürlüğü güçlendirecek konular.", shown)
+
+    # 4) Kalan iyilestirmeler + iyi durumda olanlar
+    more = data["priority"][6:14]
+    if more or data["good"]:
+        slide("Diğer bulgular", "Kalan iyileştirme alanları ve sitenizde iyi durumda olanlar.")
         half = (W - 96 - 30) / 2
-        text(48, 400, "İyileştirilebilecek alanlar", 15, AMBER, bold)
+        text(48, 400, "Diğer iyileştirme alanları", 15, AMBER, bold)
         y = 372
-        for item in data["other"][:8] or [{"title": "Acil başlıkların dışında öne çıkan bir eksik görmedik."}]:
+        for item in more or [{"title": "Önceki sayfalardakilerin dışında öne çıkan bir eksik görmedik."}]:
             box(48, y + 1, 6, 6, AMBER, 3)
             y = text(64, y, item["title"], 12, INK, width=half - 20, max_lines=2) - 7
         text(48 + half + 30, 400, "İyi durumda olanlar", 15, GREEN, bold)
         y = 372
-        for title in data["good"] or ["Bu incelemede öne çıkan bir güçlü yön ölçülemedi."]:
+        for title in data["good"] or ["Bu incelemede iyi durumda olduğunu ölçebildiğimiz bir kontrol yok."]:
             box(48 + half + 30, y + 1, 6, 6, GREEN, 3)
             y = text(64 + half + 30, y, title, 12, INK, width=half - 20, max_lines=2) - 7
 
@@ -298,7 +334,9 @@ def render(workspace, audit) -> bytes:
             y = text(x + 36, y, item, 11, INK, width=cw - 56, max_lines=4, leading=14) - 6
             if y < 96:
                 break
-    text(48, 56, f"Bu ön inceleme sitenizin dışarıdan görülebilen {data['pages']} sayfasına ve {data['date']} tarihli ölçüme dayanır. "
+    text(48, 56, ("Site içeriği yeterince incelenemedi; plan, erişim sağlanıp inceleme tamamlandığında güncellenecektir. "
+                  if data["limited"] else "")
+         + f"Bu ön inceleme sitenizin dışarıdan görülebilen {data['pages']} sayfasına ve {data['date']} tarihli ölçüme dayanır. "
                  "Analitik ve reklam hesaplarınızın içi incelenmemiştir; ilk adımda birlikte kontrol edilir. Plan, yapılacak işleri "
                  "gösterir; sıralama ya da satış sonucu garantisi değildir.", 8.5, MUTED, width=W - 96, leading=11)
     c.save()

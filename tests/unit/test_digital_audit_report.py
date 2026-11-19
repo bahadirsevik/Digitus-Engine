@@ -153,32 +153,72 @@ def test_ecommerce_section_is_hidden_unless_the_brand_site_is_a_shop():
     assert ("h2", "E-ticaret") in report_doc.build_blocks(WORKSPACE, brief, None)
 
 
-def test_pitch_deck_is_plain_urgent_first_and_ends_with_the_plan():
+def _pitch(findings, status="completed", visibility=None):
     from app.core.digital_audit import pitch_deck
 
-    audit = _audit()
-    audit.targets[0].findings += [
-        finding("site", "site.broken_links2", "x", "observed", "ok"),
+    stamp = datetime(2026, 11, 16, tzinfo=timezone.utc)
+    audit = SimpleNamespace(created_at=stamp, completed_at=stamp, answers={}, visibility=visibility, targets=[
+        SimpleNamespace(url="https://www.marka.test/", kind="own", status=status, pages_checked=10, findings=findings)])
+    assert pitch_deck.render(WORKSPACE, audit).startswith(b"%PDF")
+    return pitch_deck.build(audit)
+
+
+def test_pitch_deck_keeps_urgent_and_improvement_apart():
+    data = _pitch(_audit().targets[0].findings + [
         finding("seo", "seo.noindex_home", "x", "unknown"),
         finding("tracking", "tracking.meta_pixel", "Meta Pixel izi", "not_observed"),
         finding("ecommerce", "ecommerce.platform", "E-ticaret altyapısı", "not_observed", "info"),
-        finding("site", "site.ssl", "SSL sertifikası", "observed", "problem", value={"expires": "2026-11-01", "days_left": -15}),
-    ]
-    data = pitch_deck.build(audit)
-    titles = [i["title"] for i in data["urgent"]]
-    # Sorun once, uyari sonra, "gorulmedi" en sonda; sade dil
-    assert titles[0] == "Güvenlik sertifikası (SSL)" and titles[-1].startswith("Ziyaretçi ölçümü (Google Analytics)")
+    ])
+    # Normal site: "sorun" yoksa acil bolumu BOS kalir; uyarilar oncelikli iyilestirmedir
+    assert data["urgent"] == [] and data["counts"]["urgent"] == 0
+    titles = [i["title"] for i in data["priority"]]
     assert "Telefonda açılış hızı iyileştirilebilir" in titles  # 79/100 "yavas" diye yazilmaz
-    ga4 = data["urgent"][-1]
+    ga4 = next(i for i in data["priority"] if i["check"] == "tracking.ga4")
     assert "görülmedi" in ga4["seen"] and "kontrol ediyor, eksikse" in ga4["fix"]  # kesin yokluk iddiasi yok
     text = repr(data)
     assert "E-ticaret" not in text and "Meta Pixel" not in text  # magaza degil; reklam pikseli eksik sayilmaz
-    assert data["unmeasured"] == 2 and data["counts"]["urgent"] == 1  # olculemeyen eksik sayilmaz
-    assert "Kırık bağlantı yok" in data["good"]
-    # Son bolum her zaman 90 gunluk plan; ilk adim acil duzeltmelerin karsiligi
-    assert [p[0] for p in data["plan"]] == ["İlk 30 gün", "30-60 gün", "60-90 gün"]
-    assert data["plan"][0][2] == [i["fix"] for i in data["urgent"]]
-    assert pitch_deck.render(WORKSPACE, audit).startswith(b"%PDF")
+    assert data["unmeasured"] == 2 and data["limited"] is False  # olculemeyen eksik sayilmaz
+    # Plan son bolumdur ve ayni siniflamayi kullanir: acil yokken ilk adim "oncelikli iyilestirmeler"
+    assert [(p[0], p[1]) for p in data["plan"]][0] == ("İlk 30 gün", "Öncelikli iyileştirmeler")
+    assert data["plan"][0][2] == [i["fix"] for i in data["priority"][:3]]
+    assert data["plan"][1][2] == ([i["fix"] for i in data["priority"][3:]][:6]
+                                  or ["Yapılan düzeltmelerin etkisini ölçüyor, eksik kalanları tamamlıyoruz."])
+
+
+def test_pitch_deck_never_pushes_a_real_problem_out_of_the_urgent_section():
+    problems = [finding("site", check, check, "observed", "problem") for check in (
+        "site.reachable", "site.ssl", "site.speed_mobile", "site.broken_links", "seo.noindex", "seo.titles",
+        "seo.meta_descriptions", "seo.h1")]
+    data = _pitch(problems + [finding("seo", "seo.sitemap", "Sitemap", "not_observed")])
+    assert len(data["urgent"]) == 8 and all(i["level"] == 0 for i in data["urgent"])  # sekizi de acil kalir
+    assert [i["check"] for i in data["priority"]] == ["seo.sitemap"]
+    assert data["plan"][0][1] == "Acil düzeltmeler" and data["plan"][1][2] == [data["priority"][0]["fix"]]
+
+
+def test_pitch_deck_does_not_claim_more_than_the_measurement():
+    data = _pitch([
+        finding("site", "site.cta", "CTA", "observed", "ok", value={"phone": True, "whatsapp": False, "forms": 0}),
+        finding("site", "site.broken_links", "Kırık bağlantılar", "observed", "ok", value={"checked": 20, "broken": []}),
+    ], visibility={"sites": ["marka.test"], "serp": {"status": "ok", "keywords": [
+        {"keyword": "diş hekimi", "positions": {"marka.test": None}, "checked_top": 20, "unresolved": 0},
+        {"keyword": "implant", "positions": {"marka.test": None}, "checked_top": 20, "unresolved": 3},
+        {"keyword": "kanal", "positions": {"marka.test": 4}, "checked_top": 20, "unresolved": 0}]}})
+    # Yalniz telefon gorulduyse "arama, WhatsApp ve form var" denmez
+    assert data["good"] == ["Sitede görülen iletişim yolu: telefon", "Kontrol edilen site içi bağlantılarda kırık bulunmadı"]
+    serp = data["priority"][0]
+    # Adresi okunamayan sonucu olan arama sayilmaz; baslik olcumun kapsamini soyler
+    assert serp["title"] == "Ölçtüğümüz 1 aramada sitenizi ilk 20 sonuçta görmedik" and "implant" not in serp["seen"]
+
+
+def test_pitch_deck_says_so_when_the_site_could_not_be_read():
+    note = "Sayfa içeriği okunamadığı için değerlendirilemedi."
+    data = _pitch([finding("seo", "seo.titles", "Sayfa başlıkları", "blocked", note=note),
+                   finding("tracking", "tracking.ga4", "GA4 izi", "blocked", note=note),
+                   finding("site", "site.ssl", "SSL sertifikası", "observed", "ok")], status="blocked")
+    assert data["limited"] is True and data["unmeasured"] == 2 and data["urgent"] == [] and data["priority"] == []
+    # Eksik bulunmamis gibi gorunmez: ilk adim erisim ve incelemeyi tamamlamak
+    assert data["plan"][0][1] == "İnceleme ve erişim" and "incelemeyi tamamlıyoruz" in data["plan"][0][2][0]
+    assert data["status"] == "site erişimi engelledi"
 
 
 @pytest.mark.parametrize("fmt", ["docx", "pdf"])

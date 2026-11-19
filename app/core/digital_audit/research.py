@@ -478,10 +478,15 @@ def audit_facts(audit) -> Dict:
     """
     if audit is None:
         return {}
+    from app.core.digital_audit import report_doc  # gec import: report_doc bu modulu yukler
+
+    shop = report_doc.is_ecommerce(audit)
     sites = []
     for target in audit.targets:
         checks, unmeasured = [], []
         for f in target.findings or []:
+            if not shop and f["check"].startswith("ecommerce."):
+                continue  # magaza degilse "var/yok" satiri segment sentezine de gitmez
             if f.get("state") not in _CHECK_STATE:
                 unmeasured.append(f["label"])
                 continue

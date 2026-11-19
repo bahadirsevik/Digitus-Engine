@@ -310,8 +310,29 @@ def _implementation(workspace, report, record: Dict, state: str) -> List[Block]:
     return blocks
 
 
+def _without_ecommerce(record: Dict) -> Dict:
+    """Magaza olmayan sitede, YALNIZ e-ticaret satirina dayanan maddeler belgelere girmez
+    (bu kural gelmeden once uretilmis stratejiler icin; kayit degismez, yalniz gorunum)."""
+    shop_rows = {c["id"] for c in record.get("catalogue") or [] if str(c.get("check") or "").startswith("ecommerce.")
+                 or "E-ticaret altyapısı" in c["text"]}
+
+    def keep(items):
+        return [i for i in items or [] if not i.get("refs") or not set(i["refs"]) <= shop_rows]
+
+    def prune(content):
+        if not content:
+            return content
+        return {**content, **{k: keep(content.get(k)) for k in strategy.LISTS},
+                "section_notes": [n for n in keep(content.get("section_notes")) if n["section"] != "ecommerce"],
+                "swot": {k: keep(v) for k, v in (content.get("swot") or {}).items()}}
+
+    return {**record, "draft": prune(record.get("draft")), "edited": prune(record.get("edited"))}
+
+
 def build(workspace, audit, report, view: str) -> List[Block]:
     record = (report.sections or {}).get("strategy") or {}
+    if record.get("status") == "ok" and not report_doc.is_ecommerce(audit):
+        record = _without_ecommerce(record)
     state = strategy.state(report)
     body = {"executive": lambda: _executive(audit, report, record, state),
             "detail": lambda: _detail(audit, report, record, state),
