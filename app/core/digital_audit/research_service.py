@@ -160,6 +160,36 @@ def _locked_strategy(db: Session, report: DigitalResearch, version: int, revisio
     return current
 
 
+def save_opportunity_exclusion(db: Session, report: DigitalResearch, index: int, reason: str, excluded_by: str) -> None:
+    """Analist, segment asamasinin urettigi bir firsat maddesini gerekcesiyle rapordan cikarir (ya da bos gerekceyle
+    geri alir). Madde SILINMEZ: kayit kalir, belgeye basilmaz. Bu maddeler strateji dayanagi ya da brief girdisi
+    degildir; bu yuzden uretimler bayatlamaz, yalniz belge degistigi icin onceki onay duser (review_sha)."""
+    reason, excluded_by = (reason or "").strip()[:300], (excluded_by or "").strip()[:80]
+    if reason and (len(reason) < 10 or not excluded_by):
+        raise ResearchInputError("Çıkarma için en az 10 karakterlik gerekçe ve analist adı gerekir.")
+    db.rollback()
+    row = (db.query(DigitalResearch).filter(DigitalResearch.id == report.id)
+           .with_for_update().populate_existing().one())
+    if row.status not in FINAL:
+        db.rollback()
+        raise ResearchStateError("Bu marka çalışmasında süren bir araştırma var.")
+    sections = dict(row.sections or {})
+    synthesis = dict(sections.get("synthesis") or {})
+    items = [dict(o) for o in synthesis.get("opportunities") or []]
+    if not 0 <= index < len(items):
+        db.rollback()
+        raise ResearchInputError("Fırsat maddesi bulunamadı.")
+    if reason:
+        items[index]["excluded"] = {"reason": reason, "by": excluded_by, "at": datetime.now(timezone.utc).isoformat()}
+    else:
+        items[index].pop("excluded", None)
+    synthesis["opportunities"] = items
+    sections["synthesis"] = synthesis
+    report.sections = sections
+    db.commit()
+    db.refresh(report)
+
+
 def save_claim_review(db: Session, report: DigitalResearch, claim_id: str, source_type: str, note: str) -> None:
     """Analistin bir rakam icin belirledigi kaynak turu ve notu (or. celisen degerin aciklamasi). Rakami, kaynak
     kontrolunu ya da rapora girme kararini DEGISTIRMEZ. Belgeye basildigi icin onceki onay duser (review_sha)."""

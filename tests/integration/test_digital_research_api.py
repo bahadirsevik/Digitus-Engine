@@ -1409,3 +1409,30 @@ def test_content_plan_does_not_depend_on_briefs_and_prints_the_real_publication_
     from app.core.digital_audit import report_views
     assert report_views._brief_publication({"channel": "Google Arama Ağı"}, "x").startswith("sponsorlu")
     assert report_views._brief_publication({"channel": "Instagram / Facebook"}, "x") == "belirtilmedi (x)"
+
+
+def test_analyst_can_exclude_a_segment_stage_opportunity_with_a_reason(client, db_session, make_workspace, dispatched,
+                                                                       monkeypatch):
+    ws, other = make_workspace("Marka"), make_workspace("Diger")
+    audit, report_id, url, _ = strategy_ready(client, db_session, ws, dispatched, monkeypatch)
+    approve = url.replace("/strategy?", "/strategy/approve?")
+    path = "/api/v1/digital-audit/research/{}/synthesis/opportunities/{}/exclusion?brand_profile_id={}"
+    assert "Soru içerikleri (dayanak: soru aramaları)" in _blocks(db_session, ws, report_id)
+    assert client.post(approve, json=_seen(client, report_id, ws, 0, "Analist A")).json()["strategy_state"] == "approved"
+    body = {"reason": "Harita sırası ölçülmedi; iddianın dayanağı yok.", "excluded_by": "Analist A"}
+    assert client.put(path.format(report_id, 0, other.id), json=body).status_code == 404
+    assert client.put(path.format(report_id, 9, ws.id), json=body).status_code == 400
+    assert client.put(path.format(report_id, 0, ws.id), json={**body, "reason": "kısa"}).status_code == 400
+    assert client.put(path.format(report_id, 0, ws.id), json={**body, "excluded_by": ""}).status_code == 400
+    res = client.put(path.format(report_id, 0, ws.id), json=body)
+    # Belge degisti: onay duser. Uretimler BAYATLAMAZ (madde dayanak ya da brief girdisi degil): yeni AI gerekmez
+    assert res.status_code == 200 and res.json()["strategy_state"] == "draft"
+    assert not res.json()["synthesis_stale"] and not res.json()["briefs_stale"]
+    text = _blocks(db_session, ws, report_id)
+    assert "Soru içerikleri (dayanak" not in text
+    assert "Analist bir fırsat maddesini rapordan çıkardı. Gerekçe: Harita sırası ölçülmedi; iddianın dayanağı yok. (Analist A)" in text
+    stored = db_session.get(DigitalResearch, report_id).sections["synthesis"]["opportunities"][0]
+    assert stored["text"] == "Soru içerikleri" and stored["excluded"]["by"] == "Analist A"  # kayit silinmez
+    # Bos gerekce cikarmayi geri alir
+    assert client.put(path.format(report_id, 0, ws.id), json={}).status_code == 200
+    assert "Soru içerikleri (dayanak: soru aramaları)" in _blocks(db_session, ws, report_id)

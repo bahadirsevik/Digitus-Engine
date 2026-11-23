@@ -2393,7 +2393,11 @@ export interface ResearchSegment {
 
 export interface SynthesisSection extends ResearchSectionBase {
   segments?: ResearchSegment[]
-  opportunities?: { text: string; evidence: string }[]
+  opportunities?: {
+    text: string
+    evidence: string
+    excluded?: { reason: string; by: string; at: string }
+  }[]
   google_ads?: {
     keyword_groups: { group: string; keywords: string[] }[]
     negatives: string[]

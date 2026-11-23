@@ -587,6 +587,11 @@ def review_sha(report, record: Dict) -> str:
     printed = ({k: briefs.get(k) for k in ("selection", "ad_ideas", "creative_briefs")}
                if briefs.get("status") == "ok" and not research.briefs_stale(report) else None)
     claims = ((report.sections or {}).get("sector") or {}).get("claims") or []
+    # Analistin rapordan cikardigi segment-asamasi firsatlari: belge icerigini degistirir. Yalniz varsa eklenir
+    # (hic cikarma yapilmamis eski onaylar bozulmaz).
+    excluded = [[o.get("text"), o["excluded"].get("reason")]
+                for o in ((report.sections or {}).get("synthesis") or {}).get("opportunities") or [] if o.get("excluded")]
     return _sha([content(record), [r.get("verification") for r in restrictions],
                  [[c.get("source_type"), c.get("analyst_note")] for c in claims],
-                 [d["question"] for d in brief_ad_decisions(report, record, "draft")], printed])
+                 [d["question"] for d in brief_ad_decisions(report, record, "draft")], printed]
+                + ([excluded] if excluded else []))

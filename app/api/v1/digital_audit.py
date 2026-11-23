@@ -15,6 +15,7 @@ from app.schemas.digital_audit import (
     BriefsRequest,
     ClaimOverridesRequest,
     ClaimReviewRequest,
+    OpportunityExclusionRequest,
     RestrictionVerificationRequest,
     StrategyApproveRequest,
     StrategyEditRequest,
@@ -224,6 +225,16 @@ def start_briefs(
         raise HTTPException(status_code=409, detail=str(exc))
     _dispatch_research(db, report)
     return {"research_id": report.id, "status": report.status}
+
+
+@router.put("/research/{report_id}/synthesis/opportunities/{index}/exclusion")
+def put_opportunity_exclusion(report_id: int, index: int, request: OpportunityExclusionRequest,
+                              brand_profile_id: int = Query(...), db: Session = Depends(get_db)):
+    """Analist, segment asamasinin urettigi bir firsat maddesini gerekcesiyle rapordan cikarir (AI cagirmaz)."""
+    report = _get_research(db, report_id, brand_profile_id)
+    _strategy_call(lambda: research_service.save_opportunity_exclusion(
+        db, report, index, request.reason or "", request.excluded_by or ""))
+    return research_service.serialize(report, detail=True)
 
 
 @router.put("/research/{report_id}/claim-review")

@@ -65,6 +65,12 @@ class RestrictionVerificationRequest(BaseModel):
     verified_at: Optional[str] = Field(None, max_length=10)
 
 
+class OpportunityExclusionRequest(BaseModel):
+    """Analistin segment asamasi firsat maddesini rapordan cikarmasi; bos gerekce cikarmayi geri alir."""
+    reason: Optional[str] = Field(None, max_length=300)
+    excluded_by: Optional[str] = Field(None, max_length=80)
+
+
 class ClaimReviewRequest(BaseModel):
     """Analistin bir rakam icin belirledigi kaynak turu ve notu."""
     claim_id: str = Field(..., min_length=1, max_length=40)

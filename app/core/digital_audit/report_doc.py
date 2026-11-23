@@ -535,8 +535,12 @@ def _research_blocks(report, briefs: bool = True, brand: Tuple[str, ...] = ()) -
                                        f"Değer teklifi: {s['value_proposition']}",
                                        *[f"Mesaj: {m}" for m in s["messages"]],
                                        *[f"Uyarı, kanıtı olmayan iddia: {w}" for w in s.get("warnings") or []]]))
+        opportunities = synthesis.get("opportunities") or []
         blocks += _bullets("Fırsat ve farklılaşma [Hipotez]",
-                           [f"{o['text']} (dayanak: {o['evidence']})" for o in synthesis.get("opportunities") or []])
+                           [f"{o['text']} (dayanak: {o['evidence']})" for o in opportunities if not o.get("excluded")])
+        # Analistin cikardigi madde basilmaz; yalniz cikarildigi ve gerekcesi yazilir (yanlis iddia tekrarlanmaz)
+        blocks += [("p", f"Analist bir fırsat maddesini rapordan çıkardı. Gerekçe: {o['excluded']['reason']} "
+                         f"({o['excluded']['by']})") for o in opportunities if o.get("excluded")]
         ads = synthesis.get("google_ads") or {}
         paid = (_bullets("Google Ads önerisi [Hipotez]",
                          [f"{g['group']}: {', '.join(g['keywords'])}" for g in ads.get("keyword_groups") or []]

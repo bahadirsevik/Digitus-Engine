@@ -656,7 +656,9 @@ export default function DigitalResearch({ workspaceId, auditId }: Props) {
               <ItemList
                 title="Fırsat ve farklılaşma"
                 items={synthesis.opportunities?.map((o) => ({
-                  text: `${o.text} (dayanak: ${o.evidence})`,
+                  text: o.excluded
+                    ? `Analist bu maddeyi rapordan çıkardı. Gerekçe: ${o.excluded.reason} (${o.excluded.by})`
+                    : `${o.text} (dayanak: ${o.evidence})`,
                 }))}
               />
               <ItemList
