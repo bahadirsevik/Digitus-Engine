@@ -434,7 +434,11 @@ class SEOGeoContent(Base):
     subheading_count = Column(Integer)
     keyword_count = Column(Integer)
     keyword_density = Column(Numeric(4, 2))  # Ã–rn: 1.58%
-    
+
+    # Kabul edilen kullanıcı revizyonu sayısı (aynı id yerinde güncellenir):
+    # export kimliği + revizyon kabulünde kaynak-sürüm kontrolü bunu okur
+    revision_count = Column(Integer, nullable=False, default=0, server_default="0")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -509,6 +513,56 @@ class GEOComplianceResult(Base):
     seo_geo_content = relationship("SEOGeoContent", back_populates="geo_compliance")
 
 
+class ContentRevision(Base):
+    """Kullanıcı geri bildirimli içerik revizyonu (SEO; ileride sosyal).
+
+    Akış: generating → ready (önizleme) → accepted | discarded; hata/lease aşımı → failed.
+    Canlı içerik yalnız KABULDE, aynı id üzerinde güncellenir. `source_version` kabulde
+    kaynak içeriğin sayacıyla (SEO: SEOGeoContent.revision_count) eşleşmeli — eski öneri
+    yeni içeriği ezemez. Worker yazımları `attempt_token` + status='generating' koşullu.
+    """
+    __tablename__ = "content_revisions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel = Column(String(20), nullable=False)  # 'SEO'
+    source_content_id = Column(Integer, nullable=False)  # kanal tablosundaki içerik id'si
+    scoring_run_id = Column(Integer, ForeignKey("scoring_runs.id", ondelete="CASCADE"), nullable=False)
+    brand_profile_id = Column(Integer, ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False)
+    feedback = Column(Text, nullable=False)
+    scope = Column(JSON, nullable=False)
+    source_version = Column(Integer, nullable=False)
+    proposed_payload = Column(JSON)   # önizleme: birleşmiş içerik + kontrol sonuçları
+    previous_payload = Column(JSON)   # kabulde yazılır: değiştirilen içeriğin önceki hali
+    status = Column(String(20), nullable=False, server_default="generating")
+    error_message = Column(Text)
+    attempt_token = Column(String(64), nullable=False)
+    idempotency_key = Column(String(64))
+    task_id = Column(String(155))
+    lease_expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True))
+    accepted_at = Column(DateTime(timezone=True))
+
+    __table_args__ = (
+        # Aynı içerikte aynı anda TEK üretim
+        Index(
+            "uq_content_revision_generating",
+            "channel", "source_content_id",
+            unique=True,
+            postgresql_where=text("status = 'generating'"),
+        ),
+        # Aynı istek tekrarı aynı revizyonu döndürür
+        Index(
+            "uq_content_revision_idempotency",
+            "channel", "source_content_id", "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("idx_content_revision_source", "channel", "source_content_id", "status"),
+    )
+
+
 # ==================== GOOGLE ADS MODELS ====================
 
 class AdGenerationSet(Base):
@@ -546,6 +600,14 @@ class AdGenerationSet(Base):
     # Relationships
     scoring_run = relationship("ScoringRun")
     ad_groups = relationship("AdGroup", back_populates="generation_set")
+
+    @property
+    def revision(self):
+        """Geri bildirimli grup revizyonu bilgisi (kolon değil; snapshot'tan okunur)."""
+        snap = self.request_snapshot or {}
+        if not snap.get("feedback"):
+            return None
+        return {k: snap.get(k) for k in ("feedback", "scope", "source_set_id", "source_group_id")}
 
     __table_args__ = (
         UniqueConstraint(
@@ -724,6 +786,8 @@ class SocialIdea(Base):
     trend_alignment = Column(Float, default=0.0)  # 0.00 - 1.00, güncel trendlerle uyum
     
     is_selected = Column(Boolean, default=False)
+    # Kampanya fikri: {offer_type, offer_rationale, cta_type}; NULL = organik fikir
+    campaign_payload = Column(JSON, nullable=True)
     regeneration_count = Column(Integer, default=0)  # Regenerate sayacı
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -753,7 +817,12 @@ class SocialContent(Base):
     duration_status = Column(String(30), nullable=True)
     actual_duration_sec = Column(Integer, nullable=True)
     validation_warnings = Column(JSON, nullable=True)
-    
+    # Kampanya: üretimde kullanılan teklif snapshot'ı {offer_terms, cta_type, usage}
+    campaign_payload = Column(JSON, nullable=True)
+    # Görsel üretim aracına kopyalanacak ayrıntılı talimat
+    image_prompt = Column(Text, nullable=True)
+    overlay_text = Column(JSON, nullable=True)
+
     # JSONB hooks - esnek, genişletilebilir
     # Format: [{"text": "...", "style": "question", "ab_score": null}]
     hooks = Column(JSON)
@@ -804,6 +873,8 @@ class SocialBrief(Base):
     brand_context_snapshot = Column(Text, nullable=True)
     channel_assignment_version = Column(Integer, nullable=False, default=1, server_default="1")
     format_matrix_version = Column(String(50), nullable=False, default="v1", server_default="v1")
+    # Kampanya modu (plan_sosyal_kampanya_akisi.md); NULL = organik brief
+    campaign_spec = Column(JSON, nullable=True)
     locked_at = Column(DateTime(timezone=True), nullable=True)
     is_stale = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1993,3 +2064,118 @@ class User(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - tani amacli
         return f"<User id={self.id} email={self.email!r} active={self.is_active}>"
+
+
+# ==================== DIGITAL AUDIT (Dijital varlik denetimi) ====================
+
+class DigitalAudit(Base):
+    """
+    Dijital varlik denetimi calismasi. ScoringRun'dan BAGIMSIZDIR; workspace'e baglanir.
+
+    status: pending | running | completed | partial | failed
+    Worker olurse `lease_expires_at` dolunca okuma aninda uzlastirilir
+    (app/core/digital_audit/service.py::reconcile_expired).
+    """
+    __tablename__ = "digital_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    brand_profile_id = Column(
+        Integer, ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    # Baslangicta dondurulan kapsam: {"method_version", "limits"}
+    scope = Column(JSON, nullable=True)
+    # Musteri/analist beyani: {soru_anahtari: {"value", "note"}}. Otomatik bulgulardan AYRI durur.
+    answers = Column(JSON, nullable=True)
+    # Faz 3 (istege bagli): arama gorunurlugu, YouTube, Google profil kimlikleri.
+    # Places icin YALNIZ place_id saklanir (app/integrations/places.py).
+    visibility = Column(JSON, nullable=True)
+    task_id = Column(String(155), nullable=True, unique=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    targets = relationship(
+        "DigitalAuditTarget", back_populates="audit",
+        cascade="all, delete-orphan", order_by="DigitalAuditTarget.position",
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_digital_audit_active", "brand_profile_id",
+            unique=True, postgresql_where=text("status IN ('pending', 'running')"),
+        ),
+        Index("idx_digital_audit_workspace", "brand_profile_id", "created_at"),
+    )
+
+
+class DigitalAuditTarget(Base):
+    """Denetlenen tek site (marka ya da rakip) ve bulgulari.
+
+    status: pending | completed | blocked | failed
+    """
+    __tablename__ = "digital_audit_targets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(
+        Integer, ForeignKey("digital_audits.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position = Column(Integer, nullable=False, default=0)
+    kind = Column(String(12), nullable=False)  # own | competitor
+    url = Column(String(500), nullable=False)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    pages_checked = Column(Integer, nullable=False, default=0, server_default="0")
+    findings = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    audit = relationship("DigitalAudit", back_populates="targets")
+
+
+class DigitalResearch(Base):
+    """
+    Kaynakli sektor/hedef kitle arastirmasi, segmentler ve reklam/kreatif briefler.
+    ScoringRun'dan BAGIMSIZDIR. Yasam dongusu: app/core/digital_audit/research_service.py
+
+    status: pending | running | completed | partial | failed
+    stage:  research (arastirma + sentez) | briefs (secilen segmentler icin brief)
+    """
+    __tablename__ = "digital_research_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    brand_profile_id = Column(
+        Integer, ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    # Sentezin dayandigi site denetimi (istege bagli)
+    audit_id = Column(Integer, ForeignKey("digital_audits.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    stage = Column(String(20), nullable=False, default="research", server_default="research")
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    inputs = Column(JSON, nullable=True)      # {sector, geography, focus}
+    # {demand, sector, audience, synthesis}: her biri {"status": ok|failed|unavailable, ...}
+    sections = Column(JSON, nullable=True)
+    # Kaydedilmis basarili bolum sayisi: bayat uzlastirmada kismi/basarisiz ayrimi
+    sections_done = Column(Integer, nullable=False, default=0, server_default="0")
+    briefs = Column(JSON, nullable=True)      # {status, selection, ad_ideas, creative_briefs}
+    # Analistin varsayilan karari tersine cevirdigi iddia kimlikleri:
+    # 'found' -> rapordan cikar, 'short' (kisa rakam) -> baglami okuyup rapora al
+    claim_overrides = Column(JSON, nullable=True)
+    usage = Column(JSON, nullable=True)       # cagri sayaclari
+    task_id = Column(String(155), nullable=True, unique=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_digital_research_active", "brand_profile_id",
+            unique=True, postgresql_where=text("status IN ('pending', 'running')"),
+        ),
+        Index("idx_digital_research_workspace", "brand_profile_id", "created_at"),
+    )
+

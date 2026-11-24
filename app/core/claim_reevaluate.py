@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.compliance.publish_review import CLAIM_CRITERION, legacy_seo_checks
 from app.core.channel.brand_defense import load_grounding_facts
+from app.core.social.campaign_spec import offer_terms_grounding_text
 from app.database.models import (
     AdGenerationSet,
     AdGroup,
@@ -177,6 +178,7 @@ def _social_texts(row: SocialContent) -> List[str]:
     texts = [h.get("text") for h in (row.hooks or []) if isinstance(h, dict)]
     texts += [row.caption, row.cta_text, row.visual_suggestion]
     texts += list(row.hashtags or [])
+    texts += list((row.overlay_text or {}).values())
     payload = row.format_payload if isinstance(row.format_payload, dict) else {}
     for seg in payload.get("segments") or []:
         texts += [seg.get("on_screen_text"), seg.get("voiceover")]
@@ -210,7 +212,9 @@ def _content_facts(db: Session, run: ScoringRun, attempt) -> str:
     parts = [load_grounding_facts(db, run)]
     if attempt is not None:
         request = (attempt.coverage or {}).get("request") or {}
-        parts += [request.get("product_facts") or "", request.get("trusted_brand_usp") or ""]
+        parts += [request.get("product_facts") or "", request.get("trusted_brand_usp") or "",
+                  # kampanya: kullanıcının onayladığı teklif yeniden değerlendirmede de dayanaktır
+                  offer_terms_grounding_text(request.get("offer_terms"))]
     return "\n".join(p for p in parts if p)
 
 
@@ -233,6 +237,9 @@ def _reevaluate_social(db: Session, run: ScoringRun) -> Dict[str, int]:
                 .all()
             )
         facts = _content_facts(db, run, _producing_attempt(attempts_by_brief[row.brief_id], row.idea_id))
+        if row.campaign_payload:  # kampanya: brief'te onaylı "pakete dahil" özellikler de dayanaktır
+            spec = db.get(SocialBrief, row.brief_id).campaign_spec or {}
+            facts = "\n".join(filter(None, [facts, spec.get("included_features")]))
         idea = db.query(SocialIdea).filter(SocialIdea.id == row.idea_id).first()
         keyword = (
             db.query(Keyword).filter(Keyword.id == idea.keyword_id).first()

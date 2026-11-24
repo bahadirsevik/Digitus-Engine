@@ -120,6 +120,19 @@ OPTIONAL_ROOT_FIELDS: frozenset[str] = frozenset({
 
 ALLOWED_ROOT_FIELDS: frozenset[str] = REQUIRED_ROOT_FIELDS | OPTIONAL_ROOT_FIELDS
 
+# Kampanya içeriğinin görsel üretim prompt'u (plan_sosyal_kampanya_akisi.md §6). Sözleşmede
+# opsiyoneldir (kayıtlı satırlar da buradan geçer); zorunluluğu/yasağı üretici uygular.
+# Denetim yalnız tip + boş olmama + uzunluk: iddia/rakam taraması YOK (teknik talimat).
+IMAGE_PROMPT_FIELD: str = "image_prompt"
+IMAGE_PROMPT_MAX_LENGTH: int = 2000
+
+# Kampanya statik içeriğinin (post/story) görsel üstü metni: başlık + tek fayda + kısa CTA.
+# Teklif oranı/şart/tarih bu alana GİRMEZ; okuma katmanı kilitli tekliften kodla ekler.
+OVERLAY_FIELD: str = "overlay_text"
+OVERLAY_KEYS: tuple[str, ...] = ("headline", "benefit", "cta")
+OVERLAY_MAX_LENGTHS: dict[str, int] = {"headline": 70, "benefit": 120, "cta": 30}
+OVERLAY_FORMATS: frozenset[str] = frozenset({"post", "story"})
+
 REQUIRED_HOOK_FIELDS: frozenset[str] = frozenset({"text", "style"})
 ALLOWED_HOOK_FIELDS: frozenset[str] = frozenset({"text", "style", "ab_score"})
 
@@ -343,6 +356,8 @@ class ValidatedSocialContent:
     actual_duration_sec: int | None
     validation_warnings: tuple[str, ...]
     scenario: str | None
+    image_prompt: str | None = None
+    overlay_text: dict[str, str] | None = None
 
 
 # ==================== JSON PERSISTENCE SERIALIZER ====================
@@ -490,6 +505,7 @@ def _reject_constant(c: str) -> None:
 
 def build_social_content_response_schema(
     target_spec: ContentTargetSpec,
+    campaign: bool = False,
 ) -> dict[str, Any]:
     """Gemini API için formata özel dinamik, izole ve deep-copy güvenli JSON schema üretir."""
     validate_content_target_spec(target_spec)
@@ -707,6 +723,21 @@ def build_social_content_response_schema(
         ],
         "additionalProperties": False,
     }
+    if campaign:
+        schema["properties"][IMAGE_PROMPT_FIELD] = {
+            "type": "string",
+            "description": "Görsel üretim aracı için İngilizce ayrıntılı prompt (görselde yazı yok)",
+        }
+        schema["required"].append(IMAGE_PROMPT_FIELD)
+        if fmt in OVERLAY_FORMATS:
+            schema["properties"][OVERLAY_FIELD] = {
+                "type": "object",
+                "description": "Görselin üstüne yazılacak kısa metinler (teklif oranı/şart/tarih YOK)",
+                "properties": {k: {"type": "string"} for k in OVERLAY_KEYS},
+                "required": list(OVERLAY_KEYS),
+                "additionalProperties": False,
+            }
+            schema["required"].append(OVERLAY_FIELD)
 
     return copy.deepcopy(schema)
 
@@ -763,7 +794,7 @@ def validate_social_content_output(
     root_keys = set(parsed.keys())
 
     # Bilinmeyen alan kontrolü
-    extra_keys = root_keys - ALLOWED_ROOT_FIELDS
+    extra_keys = root_keys - ALLOWED_ROOT_FIELDS - {IMAGE_PROMPT_FIELD, OVERLAY_FIELD}
     if extra_keys:
         first_extra = sorted(extra_keys)[0]
         raise SocialContentOutputValidationError(
@@ -997,6 +1028,7 @@ def validate_social_content_output(
         "video_concept",
         "industry_posting_suggestion",
         "platform_notes",
+        IMAGE_PROMPT_FIELD,
     ):
         opt_val = parsed.get(opt_field)
         if opt_val is not None:
@@ -1013,7 +1045,15 @@ def validate_social_content_output(
                     error_code=CONTENT_CONTRACT_INVALID_TEXT,
                     field=opt_field,
                 )
+            if opt_field == IMAGE_PROMPT_FIELD and len(opt_val) > IMAGE_PROMPT_MAX_LENGTH:
+                raise SocialContentOutputValidationError(
+                    "image_prompt is too long.",
+                    error_code=CONTENT_CONTRACT_INVALID_TEXT,
+                    field=opt_field,
+                )
         optional_fields[opt_field] = opt_val
+
+    overlay_text = _validate_overlay(parsed.get(OVERLAY_FIELD))
 
     # 7. Formata özel format_payload ve süre doğrulaması
     fmt = target_spec.content_format
@@ -1429,4 +1469,29 @@ def validate_social_content_output(
         actual_duration_sec=actual_duration_sec,
         validation_warnings=tuple(validation_warnings),
         scenario=scenario_text,
+        image_prompt=optional_fields[IMAGE_PROMPT_FIELD],
+        overlay_text=overlay_text,
     )
+
+
+def _validate_overlay(raw: Any) -> dict[str, str] | None:
+    """overlay_text: null ya da tam olarak OVERLAY_KEYS anahtarlı, boş olmayan, sınırlı metinler."""
+    if raw is None:
+        return None
+    if type(raw) is not dict or set(raw) != set(OVERLAY_KEYS):
+        raise SocialContentOutputValidationError(
+            "overlay_text must be an object with headline, benefit and cta.",
+            error_code=CONTENT_CONTRACT_INVALID_TEXT,
+            field=OVERLAY_FIELD,
+        )
+    out: dict[str, str] = {}
+    for key in OVERLAY_KEYS:
+        val = raw[key]
+        if type(val) is not str or not val.strip() or len(val.strip()) > OVERLAY_MAX_LENGTHS[key]:
+            raise SocialContentOutputValidationError(
+                "overlay_text field is empty or too long.",
+                error_code=CONTENT_CONTRACT_INVALID_TEXT,
+                field=f"{OVERLAY_FIELD}.{key}",
+            )
+        out[key] = val.strip()
+    return out

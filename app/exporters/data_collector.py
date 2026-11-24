@@ -15,6 +15,7 @@ from app.compliance.publish_review import (
 )
 from app.core import markets
 from app.generators.claim_review import social_warning_display
+from app.exporters.social_format import campaign_offer_text, overlay_text_block
 from app.schemas.export import (
     AdSetWarningData,
     ExportSectionEnum, FullReport, SummaryData, ScoringData,
@@ -116,9 +117,11 @@ def collect_exportable_identity(
     - ads:         (generation_set_id, group_id) ciftleri — aktif +
                    non-stale set gruplari VE bagli ContentOutput stale degil;
                    set aktivasyonu grup sayisi ayni kalsa da kumeyi degistirir
-    - seo_content: `collect_run_seo_contents` icerik id'leri (run izolasyonu +
-                   legacy dislama + stale filtresi + dedup; regenerate YENI
-                   satir urettigi icin id yeterli)
+    - seo_content: `collect_run_seo_contents` (icerik id, revision_count) ciftleri
+                   (run izolasyonu + legacy dislama + stale filtresi + dedup).
+                   Regenerate YENI satir uretir; kullanici revizyonu kabulu ise
+                   AYNI id'yi yerinde gunceller — sayac kimlige girmeseydi export
+                   hazirlanirken kabul edilen revizyon fark edilmezdi (Codex 11.11)
     - social:      non-stale kategori→fikir→icerik zinciri + bagli
                    ContentOutput stale degil — (content_id,
                    content_regen_count, idea_regen_count) ucluleri.
@@ -133,11 +136,17 @@ def collect_exportable_identity(
     dahil ediyorsa kume de dahil eder (yanlis NO_CONTENT uretilmez).
     """
     if section == 'seo_content':
-        return frozenset(
+        ids = [
             content.id
-            for content in collect_run_seo_contents(
-                db, scoring_run_id, include_stale_content
-            )
+            for content in collect_run_seo_contents(db, scoring_run_id, include_stale_content)
+        ]
+        if not ids:
+            return frozenset()
+        # KOLON sorgusu: identity-map'teki eski revision_count yerinde güncellemeyi maskelemesin
+        return frozenset(
+            (cid, count or 0)
+            for cid, count in db.query(SEOGeoContent.id, SEOGeoContent.revision_count)
+            .filter(SEOGeoContent.id.in_(ids))
         )
     if section == 'ads':
         from app.generators.ads.generation_sets import active_ad_groups
@@ -928,6 +937,9 @@ class ExportDataCollector:
                 duration_status=c.duration_status,
                 validation_warnings=social_warning_display(c.validation_warnings),
                 format_payload=c.format_payload,
+                offer_text=campaign_offer_text(c.campaign_payload) or None,
+                image_prompt=c.image_prompt,
+                overlay_text=overlay_text_block(c.overlay_text, c.campaign_payload) or None,
             )
             content_data.append(item)
 

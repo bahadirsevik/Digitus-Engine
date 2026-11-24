@@ -91,7 +91,7 @@ const topPick = (keyword: string) =>
 
 async function openBriefForm() {
   fireEvent.click(await screen.findByText("İlk Brief'i Oluştur"))
-  await screen.findByText('Yeni Sosyal Brief Oluştur')
+  await screen.findByText('Yeni Sosyal Medya İçeriği')
 }
 
 describe('Social Havuzu kartı ↔ brief formu (tek seçim durumu)', () => {

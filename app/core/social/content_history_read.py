@@ -24,6 +24,7 @@ from typing import Any, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.social.campaign_spec import overlay_display
 from app.database.models import (
     BrandProfile,
     Keyword,
@@ -86,6 +87,10 @@ class SocialContentHistoryItem:
     validation_warnings: tuple[str, ...]
     is_stale: bool
     created_at: Optional[datetime]
+    # Kampanya içeriği (organik/legacy satırda None)
+    image_prompt: Optional[str] = None
+    campaign_payload: Optional[dict[str, Any]] = None
+    overlay_text: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -242,6 +247,12 @@ def load_social_content_history(
                 hashtags=_safe_str_list(content.hashtags),
                 industry_posting_suggestion=content.industry_posting_suggestion,
                 platform_notes=content.platform_notes,
+                image_prompt=content.image_prompt,
+                campaign_payload=content.campaign_payload if isinstance(content.campaign_payload, dict) else None,
+                overlay_text=overlay_display(
+                    content.overlay_text,
+                    content.campaign_payload if isinstance(content.campaign_payload, dict) else None,
+                ),
                 duration_status=content.duration_status,
                 actual_duration_sec=_safe_duration(content.actual_duration_sec),
                 duration_min_sec=_safe_duration(dur_min),

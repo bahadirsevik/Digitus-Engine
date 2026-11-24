@@ -336,6 +336,7 @@ def prepare_social_idea_worker_inputs(
             brand_context_snapshot=brief.brand_context_snapshot,
             keywords=keyword_snapshots_tuple,
             target_specs=tuple(cat_target_specs),
+            campaign=brief.campaign_spec,
         )
         prompt_inputs_list.append(prompt_input)
 

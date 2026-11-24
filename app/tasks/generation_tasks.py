@@ -222,6 +222,207 @@ def generate_seo_chunk_task(self, scoring_run_id: int, keyword_ids: List[int], t
         _close_ai(ai)
         db.close()
 
+SEO_REVISION_FAILED = "Revizyon üretilemedi; içerik değişmedi. Yeniden deneyebilirsiniz."
+SEO_REVISION_AI_FAILED = "Yapay zekâ yanıtı işlenemedi; içerik değişmedi. Yeniden deneyebilirsiniz."
+
+
+@celery_app.task(
+    bind=True, name="generation.seo_revise",
+    soft_time_limit=540, time_limit=600, max_retries=0,
+)
+def revise_seo_content_task(self, revision_id: int, attempt_token: str):
+    """SEO kullanıcı revizyonu: öneriyi üretir ve revizyonu 'ready' yapar (canlı içerik DEĞİŞMEZ).
+
+    Bütün yazımlar attempt_token + status='generating' koşullu: lease'i dolup failed
+    edilmiş ya da yeni talepte iptal edilmiş revizyona geç kalan worker yazamaz.
+    """
+    from app.core import content_revisions as cr
+    from app.core.channel.ai_json import AIJsonParseError
+    from app.database.models import ContentOutput, ContentRevision, SEOGeoContent
+    from app.generators.ai_service import AIResponseError, get_ai_service
+    from app.generators.seo_geo.revision import RevisionScopeError
+    from app.generators.seo_geo.seo_geo_generator import SEOGeoGenerator
+
+    db = SessionLocal()
+    ai = None
+    collector = None
+    try:
+        rev = db.get(ContentRevision, revision_id)
+        if rev is None or rev.status != cr.GENERATING or rev.attempt_token != attempt_token:
+            return {"status": "aborted"}
+        refusal = _legacy_refusal(db, rev.scoring_run_id)
+        if refusal is not None:
+            cr.mark_failed(db, revision_id, attempt_token, refusal["message"])
+            return {"status": "failed", "reason": refusal["reason"]}
+        content = db.get(SEOGeoContent, rev.source_content_id)
+        output = db.get(ContentOutput, content.content_output_id) if content else None
+        if content is None or output is None:
+            cr.mark_failed(db, revision_id, attempt_token, "Revize edilecek içerik bulunamadı.")
+            return {"status": "failed", "reason": "missing_source"}
+        if (content.revision_count or 0) != rev.source_version:
+            # Talep sonrası içerik başka bir kabulle değişti: AI harcamadan dur
+            cr.mark_failed(db, revision_id, attempt_token,
+                           "İçerik bu talepten sonra değişti; güncel içerik üzerinden yeniden revize edin.")
+            return {"status": "failed", "reason": "source_changed"}
+
+        from app.core.telemetry import UsageCollector
+        collector = UsageCollector(scoring_run_id=rev.scoring_run_id, task_id=self.request.id)
+        ai = get_ai_service()
+        ai.collector = collector
+        try:
+            proposed = SEOGeoGenerator(db, ai).revise_content(
+                content, output, rev.feedback, rev.scope,
+            )
+        except RevisionScopeError as e:
+            db.rollback()
+            logger.error(f"SEO revizyon kapsam ihlali: revision={revision_id} {e}")
+            cr.mark_failed(db, revision_id, attempt_token, str(e))
+            return {"status": "failed", "reason": "revision_scope_violation"}
+        except (AIJsonParseError, AIResponseError, ValueError) as e:
+            db.rollback()
+            logger.warning(f"SEO revizyon üretilemedi: revision={revision_id} {e}")
+            cr.mark_failed(db, revision_id, attempt_token, SEO_REVISION_AI_FAILED)
+            return {"status": "failed", "reason": "ai_output"}
+        proposed["usage"] = collector.finalize()
+        db.rollback()  # okuma oturumu; öneri tek koşullu UPDATE ile yazılır
+        if not cr.mark_ready(db, revision_id, attempt_token, proposed):
+            logger.warning(f"SEO revizyon artık bu denemeye ait değil, öneri yazılmadı: {revision_id}")
+            return {"status": "aborted"}
+        return {"status": "ready", "revision_id": revision_id}
+    except Exception:
+        logger.exception(f"SEO revizyon görevi beklenmeyen hata: revision={revision_id}")
+        try:
+            db.rollback()
+            cr.mark_failed(db, revision_id, attempt_token, SEO_REVISION_FAILED)
+        except Exception as inner:
+            logger.error(f"SEO revizyon failed yazılamadı: {inner}")
+        raise
+    finally:
+        if collector is not None:
+            collector.flush()
+        _close_ai(ai)
+        db.close()
+
+
+@celery_app.task(
+    bind=True, name="generation.social_content_revise",
+    soft_time_limit=540, time_limit=600, max_retries=0,
+)
+def revise_social_content_task(self, attempt_id: int):
+    """Sosyal içerik kullanıcı revizyonu: öneriyi content_revisions'a 'ready' yazar (canlı içerik DEĞİŞMEZ).
+
+    Lease/sahiplik SocialGenerationAttempt (stage='content_revision') üzerindedir: geç kalan
+    worker lock_attempt_for_write'tan geçemez, kapatılmış revizyona öneri yazamaz.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.core.social import content_revision as scr
+    from app.database.models import ScoringRun, SocialBrief, SocialGenerationAttempt
+    from app.generators.output_language import output_context_for_run
+    from app.generators.social.attempt_state import (
+        AttemptNotClaimableError,
+        AttemptNotWritableError,
+        claim_attempt,
+        finalize_content_revision_attempt_failure,
+    )
+
+    task_id = self.request.id
+    db = SessionLocal()
+    ai = None
+    collector = None
+    claimed = False
+
+    def fail(reason: str, message: Optional[str] = None) -> dict:
+        # Claim öncesi hata: pending attempt'i yalnız pending'e izinli bir sebep kapatabilir
+        if not claimed and reason not in ("legacy_run_read_only",):
+            reason = "worker_bootstrap_failed"
+        db.rollback()
+        try:
+            finalize_content_revision_attempt_failure(
+                db, attempt_id=attempt_id, task_id=task_id, reason_code=reason,
+                error_message=message or scr.FAILURE_MESSAGES.get(reason, scr.DEFAULT_FAILURE_MESSAGE),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Sosyal revizyon başarısız durumu kaydedilemedi")
+        return {"status": "failed", "reason": reason}
+
+    try:
+        attempt = db.get(SocialGenerationAttempt, attempt_id)
+        if attempt is None or attempt.stage != scr.STAGE:
+            return {"status": "aborted"}
+        brief = db.get(SocialBrief, attempt.brief_id)
+        refusal = _legacy_refusal(db, brief.scoring_run_id) if brief is not None else None
+        if refusal is not None:
+            return fail("legacy_run_read_only", refusal["message"])
+        try:
+            claimed_attempt = claim_attempt(db, attempt_id=attempt_id, task_id=task_id)
+            # Lease görev sınırına (600 sn) yakın tutulur: öldürülen worker brief'i
+            # (brief başına tek revizyon) 25 dk değil ~11 dk kilitler
+            claimed_attempt.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=660)
+            db.commit()
+            claimed = True
+        except AttemptNotClaimableError:
+            db.commit()  # süresi dolmuş lease'in failed yazımı kalıcı olsun
+            return {"status": "aborted"}
+
+        try:
+            work = scr.prepare_revision_work(db, attempt)
+        except scr.SocialRevisionError as e:
+            return fail(e.reason_code)
+        except Exception:
+            logger.exception("Sosyal revizyon girdisi hazırlanamadı")
+            return fail("revision_input_invalid")
+
+        run = db.get(ScoringRun, work.scoring_run_id)
+        output_ctx = output_context_for_run(db, run.id)
+        from app.core.telemetry import UsageCollector
+        from app.generators.ai_service import get_ai_service
+        collector = UsageCollector(
+            scoring_run_id=run.id, brand_profile_id=run.brand_profile_id, task_id=task_id,
+        )
+        ai = get_ai_service()
+        if hasattr(ai, "collector"):
+            ai.collector = collector
+        db.rollback()  # AI çağrısı süresince okuma transaction'ı açık kalmasın
+
+        try:
+            outcome = scr.execute_social_content_revision(
+                ai_service=ai, prompt_input=work.prompt_input, grounding=work.grounding,
+                source=work.source, feedback=work.request["feedback"], scope=work.request["scope"],
+                output_ctx=output_ctx,
+            )
+        except scr.SocialRevisionError as e:
+            logger.warning(f"Sosyal revizyon önerisi üretilemedi: attempt={attempt_id} {e.code}")
+            return fail(e.reason_code)
+
+        try:
+            revision = scr.write_revision_ready(
+                db, attempt_id=attempt_id, task_id=task_id, outcome=outcome,
+            )
+            db.flush()
+            revision_id = revision.id
+            db.commit()
+        except AttemptNotWritableError:
+            db.commit()  # lock_attempt_for_write'ın yazdığı kapanış durumu
+            logger.warning(f"Sosyal revizyon artık bu worker'a ait değil, öneri yazılmadı: {attempt_id}")
+            return {"status": "aborted"}
+        return {"status": "ready", "attempt_id": attempt_id, "revision_id": revision_id}
+    except Exception:
+        logger.exception(f"Sosyal revizyon görevi beklenmeyen hata: attempt={attempt_id}")
+        fail("revision_failed")
+        raise
+    finally:
+        if collector is not None:
+            try:
+                collector.flush()
+            except Exception:
+                logger.warning("Sosyal revizyon telemetrisi yazılamadı.")
+        _close_ai(ai)
+        db.close()
+
+
 @celery_app.task(name="generation.seo_finalize")
 def finalize_seo_bulk(results: List[dict], parent_task_id: str, scoring_run_id: int):
     """Tüm SEO chunk'ları bitince çağrılır."""
@@ -394,6 +595,8 @@ def generate_ads_task(
     source_set_id: Optional[int] = None,
     source_group_id: Optional[int] = None,
     trusted_brand_usp: Optional[str] = None,
+    feedback: Optional[str] = None,
+    scope: Optional[list] = None,
 ):
     """
     Google Ads RSA üretimi (async Celery task — versiyonlanmış, Faz E).
@@ -514,11 +717,24 @@ def generate_ads_task(
                 source_set_id, gen_set.id, exclude_group_id=source_group_id
             )
             update_task_status(task_id, progress=40)
-            regenerated = generator.regenerate_group_into_set(
-                source_group, gen_set.id,
-                brand_name=brand_name or "", brand_usp=brand_usp or "",
-                trusted_brand_usp=trusted_brand_usp or "",
-            )
+            from app.generators.ads.revision import RevisionScopeError
+            try:
+                regenerated = generator.regenerate_group_into_set(
+                    source_group, gen_set.id,
+                    brand_name=brand_name or "", brand_usp=brand_usp or "",
+                    trusted_brand_usp=trusted_brand_usp or "",
+                    feedback=feedback, scope=scope,
+                )
+            except RevisionScopeError as scope_error:
+                # Kapsam dışı bölüm değişti: hiçbir grup yazılmaz (rollback), set failed
+                logger.error(f"ADS revizyon kapsam ihlali: set={gen_set.id} {scope_error}")
+                finalize_ads_failure(
+                    db, gen_set, error_message=str(scope_error),
+                    extra_result_data={"operation": "group_regenerate",
+                                       "reason": "revision_scope_violation",
+                                       "usage": collector.finalize()},
+                )
+                return {"status": "failed", "reason": "revision_scope_violation"}
             cloned_review = generator.cloned_claim_review
             set_warnings = ads_set_warnings(
                 regenerated.dropped_negatives,
@@ -530,6 +746,7 @@ def generate_ads_task(
             extra = {"operation": "group_regenerate",
                      "source_set_id": source_set_id,
                      "source_group_id": source_group_id,
+                     "revision_scope": scope if feedback else None,
                      "standard_shortfalls": _standard_shortfalls([regenerated]),
                      "keyword_decisions": _keyword_decisions([regenerated]),
                      "usage": collector.finalize()}

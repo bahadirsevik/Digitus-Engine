@@ -29,6 +29,7 @@ google-ads==30.0.0
 # Export
 python-docx==1.1.0
 reportlab==4.0.8
+pypdf==5.1.0
 openpyxl==3.1.2
 
 # Utilities

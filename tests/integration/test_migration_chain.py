@@ -331,13 +331,13 @@ def _run_alembic(*args):
 
 
 def test_single_head_after_lean_focus_merge(fresh_schema):
-    """Merge sonrasi tek head 20261029_002 olmali (20261028_003 + lean 20261029_001
+    """Merge sonrasi tek head 20261124_001 olmali (20261028_003 + lean 20261029_001
     birlesimi; iki head kalirsa uygulama acilisindaki upgrade durur)."""
     heads = [
         line for line in _run_alembic("heads").splitlines() if "(head)" in line
     ]
     assert len(heads) == 1, heads
-    assert heads[0].startswith("20261029_002"), heads
+    assert heads[0].startswith("20261124_001"), heads
 
 
 def test_user_session_version_column_and_idempotent_migration(fresh_schema, db_engine):
@@ -417,7 +417,7 @@ def test_upgrade_from_server_revision_20261006_002_to_head(fresh_schema, db_engi
             row = conn.execute(text(
                 "SELECT session_version FROM users WHERE email = 'server@example.test'"
             )).scalar()
-        assert version == "20261029_002"
+        assert version == "20261124_001"
         assert row == 0
     finally:
         with db_engine.begin() as conn:
@@ -428,7 +428,7 @@ def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schem
     """Sunucunun 20.10 itibariyla revizyonu 20261010_003 (auth-lean-merge 13c636d).
 
     Lean kolonlari yokken bu revizyondan head'e yukseltme ai_usage_events.provider ve
-    ad_groups.fill_keyword_ids'i eklemeli ve tek head'de (20261029_002) bitmeli.
+    ad_groups.fill_keyword_ids'i eklemeli ve tek head'de (20261124_001) bitmeli.
     """
     with db_engine.begin() as conn:
         conn.execute(text("ALTER TABLE ad_groups DROP COLUMN IF EXISTS fill_keyword_ids"))
@@ -441,7 +441,7 @@ def test_upgrade_from_server_revision_20261010_003_adds_lean_columns(fresh_schem
     assert "provider" in {c["name"] for c in inspector.get_columns("ai_usage_events")}
     with db_engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == "20261029_002"
+    assert version == "20261124_001"
 
 
 def test_brand_profile_crawl_scope_column_and_idempotent_migration(fresh_schema, db_engine):
@@ -560,7 +560,7 @@ def test_upgrade_from_server_revision_20261020_001_adds_focus_columns(fresh_sche
     Kapsam/odak kolonlari yokken bu revizyondan head'e yukseltme crawl_scope,
     parent_brand_profile_id ve archived_with_parent'i eklemeli; mevcut marka
     'site' kapsamli ve ebeveynsiz kalmali; bekleyen alt sayfa alanlari eklenmeli;
-    tek head 20261029_002'de bitmeli.
+    tek head 20261124_001'de bitmeli.
     """
     with db_engine.begin() as conn:
         conn.execute(text(
@@ -586,7 +586,7 @@ def test_upgrade_from_server_revision_20261020_001_adds_focus_columns(fresh_sche
             "SELECT crawl_scope, parent_brand_profile_id, archived_with_parent "
             "FROM brand_profiles WHERE name = 'server_brand'"
         )).one()
-    assert version == "20261029_002"
+    assert version == "20261124_001"
     assert tuple(row) == ("site", None, False)
 
 

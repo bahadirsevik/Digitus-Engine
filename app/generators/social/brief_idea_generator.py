@@ -122,10 +122,11 @@ class SocialBriefIdeaGenerator:
             build_social_idea_response_schema(
                 target_specs=prompt_input.target_specs,
                 allowed_keyword_ids=allowed_keyword_ids,
+                campaign=prompt_input.campaign,
             )
         )
 
-        retry_prompt = prompt + "\n\n" + build_idea_retry_correction()
+        retry_prompt = prompt + "\n\n" + build_idea_retry_correction(campaign=prompt_input.campaign is not None)
 
         ai_calls_used = 0
         last_validation_error_code: str | None = None
@@ -167,6 +168,7 @@ class SocialBriefIdeaGenerator:
                         raw_response,
                         target_specs=prompt_input.target_specs,
                         allowed_keyword_ids=allowed_keyword_ids,
+                        campaign=prompt_input.campaign,
                     )
                 except SocialIdeaOutputValidationError as val_exc:
                     # Yapısal (kategori düzeyi) bozukluk: 1 düzeltme tekrarı hakkı

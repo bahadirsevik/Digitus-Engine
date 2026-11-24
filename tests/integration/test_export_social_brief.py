@@ -385,3 +385,106 @@ def test_brief_export_endpoint_downloads_and_scopes_workspace(
     )
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "NO_CONTENT"
+
+
+# ---------- Kampanya modu (plan_sosyal_kampanya_akisi.md kabul testi 9) ----------
+
+_OFFER = "Yüzde indirim — %20 · kapsam: Başlangıç paketi · 500 TL üzeri · bitiş: 30 Kasım 2026"
+_IMAGE = "Two products on marble, empty space left. Aspect ratio 4:5."
+
+
+def _campaign_chain(db_session, make_workspace, make_keyword, make_scoring_run, name):
+    ws = make_workspace(name=name)
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+    keyword = make_keyword(f"{name.lower()} kelime", brand_profile_id=ws.id)
+    brief, content, _ = _build_brief_and_legacy_chain(db_session, run, keyword)
+    content.image_prompt = _IMAGE
+    content.overlay_text = {"headline": "Paketle tanışın", "benefit": "Üç adımlık bakım.", "cta": "Mesaj yazın"}
+    content.campaign_payload = {
+        "offer_terms": {"type": "percent_discount", "value": "%20", "applies_to": "Başlangıç paketi",
+                        "conditions": "500 TL üzeri", "ends": "2026-11-30"},
+        "cta_type": "message", "usage": "paid",
+    }
+    db_session.commit()
+    return run
+
+
+def test_campaign_offer_text_formats():
+    from app.exporters.social_format import campaign_offer_text
+
+    assert campaign_offer_text(None) == ""
+    assert campaign_offer_text({"offer_terms": {"type": "none"}, "cta_type": "call", "usage": "organic"}) == (
+        "Teklifsiz içerik | CTA: Ara | Organik gönderi"
+    )
+
+
+def test_campaign_export_shows_offer_and_image_prompt_in_all_formats(
+    db_session, make_workspace, make_keyword, make_scoring_run, tmp_path, monkeypatch
+):
+    import zipfile
+
+    from docx import Document
+    from openpyxl import load_workbook
+
+    from app.exporters.csv_exporter import CsvExporter
+    from app.exporters.docx_exporter import DocxExporter
+    from app.exporters.excel_exporter import ExcelExporter
+    from app.exporters.pdf_exporter import PdfExporter
+    from app.schemas.export import ExportSectionEnum
+
+    run = _campaign_chain(db_session, make_workspace, make_keyword, make_scoring_run, "Kampanya WS")
+    offer = f"{_OFFER} | CTA: Mesaj yaz | Ücretli reklam"
+
+    CsvExporter(db_session).export(run.id, [ExportSectionEnum.SOCIAL], str(tmp_path / "s.zip"))
+    with zipfile.ZipFile(tmp_path / "s.zip") as zf:
+        csv_text = zf.read("sosyal_icerikler.csv").decode("utf-8-sig")
+    assert "Teklif" in csv_text and offer in csv_text and _IMAGE in csv_text
+    assert "Başlık: Paketle tanışın" in csv_text and "Teklif: Başlangıç paketi için %20" in csv_text
+
+    ExcelExporter(db_session).export(run.id, [ExportSectionEnum.SOCIAL], str(tmp_path / "s.xlsx"))
+    rows = [[c.value for c in r] for r in load_workbook(tmp_path / "s.xlsx")["Sosyal İçerikler"].iter_rows()]
+    idx = {h: i for i, h in enumerate(rows[0])}
+    campaign_row = next(r for r in rows[1:] if r[idx["Teklif"]])
+    assert campaign_row[idx["Teklif"]] == offer
+    assert campaign_row[idx["Görsel Prompt'u"]] == _IMAGE
+    assert "Şartlar: 500 TL üzeri · 30 Kasım 2026 tarihine kadar" in campaign_row[idx["Görsel Üstü Metin"]]
+    legacy_row = next(r for r in rows[1:] if r[idx["Brief"]] == "Eski (brief'siz)")
+    assert not legacy_row[idx["Teklif"]] and not legacy_row[idx["Görsel Prompt'u"]]
+
+    DocxExporter(db_session).export(run.id, [ExportSectionEnum.SOCIAL], str(tmp_path / "s.docx"))
+    docx_text = "\n".join(p.text for p in Document(tmp_path / "s.docx").paragraphs)
+    assert f"Teklif: {offer}" in docx_text and _IMAGE in docx_text
+    assert "GÖRSEL ÜSTÜ METİN" in docx_text and "Düğme: Mesaj yazın" in docx_text
+
+    pdf = PdfExporter(db_session)
+    seen: list[str] = []
+    real_p = pdf._p
+    monkeypatch.setattr(pdf, "_p", lambda text, bold=False: seen.append(str(text)) or real_p(text, bold))
+    pdf.export(run.id, [ExportSectionEnum.SOCIAL], str(tmp_path / "s.pdf"))
+    assert f"Teklif: {offer}" in seen and _IMAGE in seen and "Başlık: Paketle tanışın" in seen
+
+
+def test_organic_export_has_no_campaign_columns(
+    db_session, make_workspace, make_keyword, make_scoring_run, tmp_path
+):
+    import zipfile
+
+    from openpyxl import load_workbook
+
+    from app.exporters.csv_exporter import CsvExporter
+    from app.exporters.excel_exporter import ExcelExporter
+    from app.schemas.export import ExportSectionEnum
+
+    ws = make_workspace(name="Organik WS")
+    run = make_scoring_run(brand_profile_id=ws.id, status="channel_assigned")
+    _build_brief_and_legacy_chain(db_session, run, make_keyword("organik kelime", brand_profile_id=ws.id))
+
+    CsvExporter(db_session).export(run.id, [ExportSectionEnum.SOCIAL], str(tmp_path / "o.zip"))
+    with zipfile.ZipFile(tmp_path / "o.zip") as zf:
+        header = zf.read("sosyal_icerikler.csv").decode("utf-8-sig").splitlines()[0]
+    assert "Format Detayı" in header and "Teklif" not in header and "Prompt" not in header
+
+    ExcelExporter(db_session).export(run.id, [ExportSectionEnum.SOCIAL], str(tmp_path / "o.xlsx"))
+    header_row = [c.value for c in next(load_workbook(tmp_path / "o.xlsx")["Sosyal İçerikler"].iter_rows())]
+    assert "Format Detayı" in header_row
+    assert "Teklif" not in header_row and "Görsel Prompt'u" not in header_row

@@ -8,7 +8,7 @@ Sonrasında aynı metin üzerinde iki ayrı kontrol çalıştırılır.
 from typing import Dict, Any, List, Optional, Callable
 from decimal import Decimal
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from loguru import logger
 from sqlalchemy.orm import Session
@@ -306,6 +306,98 @@ class SEOGEOGenerator:
             'generated_at': saved_content.created_at.isoformat()
         }
     
+    def revise_content(
+        self,
+        content_row: SEOGeoContent,
+        content_output: ContentOutput,
+        feedback: str,
+        scope: List[str],
+    ) -> Dict[str, Any]:
+        """Kullanıcı revizyonu: talep YALNIZ izinli alanlara uygulanır → önizleme yükü.
+
+        Sıra: öneri üret → izinli alanları kaynakla birleştir → koruma kapısı →
+        SEO/GEO + iddia kontrolü BİRLEŞMİŞ içerikte (onarım kapsamla sınırlı) →
+        koruma kapısı tekrar. İlk üretimin hedefli revizyon/genişletme turları
+        ÇALIŞMAZ (korunması istenen bölümlere dokunabilirler). DB'ye YAZMAZ.
+        """
+        from app.generators.seo_geo import revision as rev
+        from app.generators.seo_geo.prompt_templates import SEO_GEO_USER_REVISION_PROMPT
+
+        scope = rev.normalize_scope(scope)
+        if not scope:
+            raise ValueError("Revize edilecek bölüm seçilmedi.")
+        allowed = rev.allowed_fields(scope)
+        keyword = content_row.keyword.keyword
+        scoring_run_id = content_output.scoring_run_id
+        source = dict(content_output.content_data or {})
+        defaults = SEOGEOGenerateRequest.model_fields
+        wmin = defaults['word_count_min'].default
+        wmax = defaults['word_count_max'].default
+
+        self._output_ctx = output_context_for_run(self.db, scoring_run_id)
+        run = self.db.query(ScoringRun).filter(ScoringRun.id == scoring_run_id).first()
+        grounding_facts = load_grounding_facts(self.db, run)
+        prompt = with_output_block(SEO_GEO_USER_REVISION_PROMPT.format(
+            keyword=keyword,
+            content_json=json.dumps(source, ensure_ascii=False),
+            feedback=rev.sanitize_feedback(feedback),
+            editable_fields="\n".join(f"- {f}" for f in allowed),
+            evaluation=rev.evaluation_block(content_row.seo_compliance, content_row.geo_compliance),
+            grounding_facts=grounding_facts or "— (marka bilgisi yok: hiçbir hizmet/sertifika/iddia kullanma)",
+            claim_rule=CLAIM_REPAIR_RULE,
+            word_count_min=wmin,
+            word_count_max=wmax,
+        ), self._output_ctx)
+
+        required = rev.required_fields(scope)
+        response = self.ai_service.complete_json(prompt, max_tokens=SEO_GEO_MAX_TOKENS)
+        try:
+            revised = self._parse_content_json(response, required)
+        except (ValueError, AIJsonParseError) as first_error:
+            logger.warning(f"SEO revizyon JSON parse edilemedi, yeniden deneniyor | {first_error}")
+            response = self.ai_service.complete_json(prompt, max_tokens=SEO_GEO_MAX_TOKENS)
+            revised = self._parse_content_json(response, required)
+
+        merged = rev.merge_scoped(source, revised, scope)
+        self._recompute_word_stats(merged, keyword)
+        rev.verify_preserved(source, merged, scope)  # kapı 1
+
+        seo_result = self.seo_checker.check(
+            content=merged, keyword=keyword, word_count_min=wmin, word_count_max=wmax,
+        )
+        geo_result = self.geo_checker.check(
+            content=merged, keyword=keyword, output_ctx=self._output_ctx,
+        )
+        merged, seo_result, geo_result, claim_check = self._claim_gate(
+            keyword=keyword, content=merged, seo_result=seo_result, geo_result=geo_result,
+            scoring_run_id=scoring_run_id, word_count_min=wmin, word_count_max=wmax,
+            link_pool=[], allowed_fields=allowed,
+        )
+        rev.verify_preserved(source, merged, scope)  # kapı 2 (onarım sonrası)
+
+        def _score(row):
+            return float(row.total_score) if row is not None and row.total_score is not None else 0.0
+
+        return {
+            'content': merged,
+            'seo_compliance': seo_result,
+            'geo_compliance': geo_result,
+            'claim_check': claim_check,
+            'publish_review': publish_review_from_results(seo_result, geo_result),
+            'changes': rev.changed_fields(source, merged, scope),
+            # Önizleme: önceden geçip bozulan kontroller (yalnız gösterilir; ek üretim yok)
+            'regressions': rev.check_regressions(
+                rev.evaluation_items(content_row.seo_compliance, content_row.geo_compliance),
+                rev.evaluation_items(seo_result, geo_result),
+            ),
+            'scores': {
+                'seo_before': _score(content_row.seo_compliance),
+                'geo_before': _score(content_row.geo_compliance),
+                'seo_after': float(seo_result.get('score', 0)),
+                'geo_after': float(geo_result.get('score', 0)),
+            },
+        }
+
     def generate_bulk(
         self,
         scoring_run_id: int,
@@ -767,8 +859,12 @@ class SEOGEOGenerator:
         word_count_min: int,
         word_count_max: int,
         link_pool: List[Dict[str, str]],
+        allowed_fields: Optional[List[str]] = None,
     ):
         """İddia kapısı (rev.4): tara → RİSK varsa en fazla 1 onarım → yeniden tara.
+
+        allowed_fields (kullanıcı revizyonu): onarım YALNIZ bu alanlara yazılabilir;
+        kapsam dışı alandaki risk onarılmaz, bulgu olarak kalır.
 
         Yalnız risk (garanti/mutlak sonuç) onarım tetikler ve yalnız risk span'ları
         prompt'a gider; profilde doğrulanamayan (unverified) iddia AI açmaz. Onarılmış
@@ -795,6 +891,10 @@ class SEOGEOGenerator:
                 keyword, content, [f.raw for f in risks], grounding_facts,
                 word_count_min, word_count_max, link_pool,
             )
+            if repaired is not None and allowed_fields is not None:
+                # Kapsamı koruyan onarım: yalnız izinli alanların düzeltmesi alınır
+                repaired = {**content, **{k: repaired[k] for k in allowed_fields if k in repaired}}
+                self._recompute_word_stats(repaired, keyword)
             if repaired is not None:
                 after = self._classify_content_claims(repaired, grounding_facts, exempt)
                 if sum(f.kind == 'risk' for f in after) < len(risks):
@@ -878,74 +978,18 @@ class SEOGEOGenerator:
         scoring_run_id: Optional[int] = None
     ) -> SEOGeoContent:
         """Üretilen içeriği ve sonuçları DB'ye kaydeder."""
-        
-        # Ana içerik kaydı
-        seo_geo_content = SEOGeoContent(
-            keyword_id=keyword.id,
-            title=content.get('title', '')[:100],
-            url_suggestion=content.get('url_suggestion', '')[:200],
-            intro_paragraph=content.get('intro_paragraph', ''),
-            body_content='\n\n'.join(content.get('body_sections', [])),
-            subheadings=content.get('subheadings', []),
-            body_sections=content.get('body_sections', []),
-            bullet_points=content.get('bullet_points', []),
-            internal_link_anchor=content.get('internal_link_anchor'),
-            internal_link_url=content.get('internal_link_suggestion'),
-            external_link_anchor=content.get('external_link_anchor'),
-            external_link_url=content.get('external_link_url'),
-            meta_description=content.get('meta_description', '')[:160],
-            faq_items=content.get('faq_items') or [],
-            image_alt_texts=content.get('image_alt_texts') or [],
-            word_count=content.get('word_count', 0),
-            subheading_count=len(content.get('subheadings', [])),
-            keyword_count=content.get('keyword_count', 0),
-            keyword_density=Decimal(str(content.get('keyword_density', 0)))
-        )
-        
+        # Alan eşlemeleri revizyon kabulüyle ORTAK (apply_revision) — iki yol ayrışmasın
+        seo_geo_content = SEOGeoContent(keyword_id=keyword.id, **content_columns(content))
         self.db.add(seo_geo_content)
         self.db.flush()  # ID almak için
-        
-        # SEO uyumluluk kaydı
-        seo_compliance = SEOComplianceResult(
-            seo_geo_content_id=seo_geo_content.id,
-            title_has_keyword=seo_result.get('title_has_keyword', False),
-            title_length_ok=seo_result.get('title_length_ok', False),
-            url_has_keyword=seo_result.get('url_has_keyword', False),
-            intro_keyword_count=seo_result.get('intro_keyword_count', 0),
-            word_count_in_range=seo_result.get('word_count_in_range', False),
-            subheading_count_ok=seo_result.get('subheading_count_ok', False),
-            subheadings_have_kw=seo_result.get('subheadings_have_kw', False),
-            has_internal_link=seo_result.get('has_internal_link', False),
-            has_external_link=seo_result.get('has_external_link', False),
-            has_bullet_list=seo_result.get('has_bullet_list', False),
-            sentences_readable=seo_result.get('sentences_readable', False),
-            total_passed=seo_result.get('total_passed', 0),
-            total_score=Decimal(str(seo_result.get('score', 0))),
-            improvement_notes=seo_result.get('improvement_notes', ''),
-            # Checklist kriterleri dahil TUM kriter listesi kalici kayit (codex)
-            checks_json=seo_result.get('checks') or []
-        )
-        
-        self.db.add(seo_compliance)
-        
-        # GEO uyumluluk kaydı
-        geo_compliance = GEOComplianceResult(
-            seo_geo_content_id=seo_geo_content.id,
-            intro_answers_question=geo_result.get('intro_answers_question', False),
-            snippet_extractable=geo_result.get('snippet_extractable', False),
-            info_hierarchy_strong=geo_result.get('info_hierarchy_strong', False),
-            tone_is_informative=geo_result.get('tone_is_informative', False),
-            no_fluff_content=geo_result.get('no_fluff_content', False),
-            direct_answer_present=geo_result.get('direct_answer_present', False),
-            has_verifiable_info=geo_result.get('has_verifiable_info', False),
-            total_passed=geo_result.get('total_passed', 0),
-            total_score=Decimal(str(geo_result.get('score', 0))),
-            ai_snippet_preview=geo_result.get('ai_snippet_preview', '')[:500] if geo_result.get('ai_snippet_preview') else None,
-            improvement_notes=geo_result.get('improvement_notes', '')
-        )
-        
-        self.db.add(geo_compliance)
-        
+
+        self.db.add(SEOComplianceResult(
+            seo_geo_content_id=seo_geo_content.id, **seo_compliance_columns(seo_result)
+        ))
+        self.db.add(GEOComplianceResult(
+            seo_geo_content_id=seo_geo_content.id, **geo_compliance_columns(geo_result)
+        ))
+
         # ContentOutput tablosuna da kaydet (eski sistemle uyumluluk için)
         content_output = ContentOutput(
             keyword_id=keyword.id,
@@ -966,6 +1010,101 @@ class SEOGEOGenerator:
         self.db.commit()
         
         return seo_geo_content
+
+
+def content_columns(content: Dict[str, Any]) -> Dict[str, Any]:
+    """İçerik sözlüğü → SEOGeoContent kolonları (yeni kayıt ve revizyon kabulü ortak)."""
+    return dict(
+        title=content.get('title', '')[:100],
+        url_suggestion=content.get('url_suggestion', '')[:200],
+        intro_paragraph=content.get('intro_paragraph', ''),
+        body_content='\n\n'.join(content.get('body_sections', [])),
+        subheadings=content.get('subheadings', []),
+        body_sections=content.get('body_sections', []),
+        bullet_points=content.get('bullet_points', []),
+        internal_link_anchor=content.get('internal_link_anchor'),
+        internal_link_url=content.get('internal_link_suggestion'),
+        external_link_anchor=content.get('external_link_anchor'),
+        external_link_url=content.get('external_link_url'),
+        meta_description=content.get('meta_description', '')[:160],
+        faq_items=content.get('faq_items') or [],
+        image_alt_texts=content.get('image_alt_texts') or [],
+        word_count=content.get('word_count', 0),
+        subheading_count=len(content.get('subheadings', [])),
+        keyword_count=content.get('keyword_count', 0),
+        keyword_density=Decimal(str(content.get('keyword_density', 0))),
+    )
+
+
+def seo_compliance_columns(seo_result: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(
+        title_has_keyword=seo_result.get('title_has_keyword', False),
+        title_length_ok=seo_result.get('title_length_ok', False),
+        url_has_keyword=seo_result.get('url_has_keyword', False),
+        intro_keyword_count=seo_result.get('intro_keyword_count', 0),
+        word_count_in_range=seo_result.get('word_count_in_range', False),
+        subheading_count_ok=seo_result.get('subheading_count_ok', False),
+        subheadings_have_kw=seo_result.get('subheadings_have_kw', False),
+        has_internal_link=seo_result.get('has_internal_link', False),
+        has_external_link=seo_result.get('has_external_link', False),
+        has_bullet_list=seo_result.get('has_bullet_list', False),
+        sentences_readable=seo_result.get('sentences_readable', False),
+        total_passed=seo_result.get('total_passed', 0),
+        total_score=Decimal(str(seo_result.get('score', 0))),
+        improvement_notes=seo_result.get('improvement_notes', ''),
+        # Checklist kriterleri dahil TUM kriter listesi kalici kayit (codex)
+        checks_json=seo_result.get('checks') or [],
+    )
+
+
+def geo_compliance_columns(geo_result: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(
+        intro_answers_question=geo_result.get('intro_answers_question', False),
+        snippet_extractable=geo_result.get('snippet_extractable', False),
+        info_hierarchy_strong=geo_result.get('info_hierarchy_strong', False),
+        tone_is_informative=geo_result.get('tone_is_informative', False),
+        no_fluff_content=geo_result.get('no_fluff_content', False),
+        direct_answer_present=geo_result.get('direct_answer_present', False),
+        has_verifiable_info=geo_result.get('has_verifiable_info', False),
+        total_passed=geo_result.get('total_passed', 0),
+        total_score=Decimal(str(geo_result.get('score', 0))),
+        ai_snippet_preview=(
+            geo_result.get('ai_snippet_preview', '')[:500]
+            if geo_result.get('ai_snippet_preview') else None
+        ),
+        improvement_notes=geo_result.get('improvement_notes', ''),
+    )
+
+
+def apply_revision(
+    content_row: SEOGeoContent,
+    content_output: ContentOutput,
+    proposed: Dict[str, Any],
+) -> None:
+    """Kabul edilen öneriyi AYNI id'li satırlara yazar (commit ETMEZ — çağıranın transaction'ı).
+
+    İçerik kolonları + ContentOutput.content_data/skorları + SEO/GEO uyumluluk kayıtları
+    birlikte güncellenir; revision_count artar (export kimliği değişir).
+    """
+    content = proposed['content']
+    seo_result, geo_result = proposed['seo_compliance'], proposed['geo_compliance']
+    for key, value in content_columns(content).items():
+        setattr(content_row, key, value)
+    for rel, cls, columns in (
+        ('seo_compliance', SEOComplianceResult, seo_compliance_columns(seo_result)),
+        ('geo_compliance', GEOComplianceResult, geo_compliance_columns(geo_result)),
+    ):
+        row = getattr(content_row, rel)
+        if row is None:
+            setattr(content_row, rel, cls(**columns))
+        else:
+            for key, value in columns.items():
+                setattr(row, key, value)
+            row.checked_at = datetime.now(timezone.utc)
+    content_output.content_data = content
+    content_output.seo_compliance_score = Decimal(str(seo_result.get('score', 0)))
+    content_output.geo_compliance_score = Decimal(str(geo_result.get('score', 0)))
+    content_row.revision_count = (content_row.revision_count or 0) + 1
 
 
 # Legacy alias

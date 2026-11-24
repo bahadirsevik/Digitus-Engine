@@ -317,6 +317,10 @@ class SocialContentData(BaseModel):
     format_payload: Optional[Dict[str, Any]] = Field(
         default=None, description="Formata özel yapılandırılmış çıktı (video/carousel/thread)"
     )
+    # Kampanya modu (plan_sosyal_kampanya_akisi.md §7): organik içerikte boş kalır
+    offer_text: Optional[str] = None
+    image_prompt: Optional[str] = None
+    overlay_text: Optional[str] = None
 
 
 class SocialBriefKeywordData(BaseModel):

@@ -24,6 +24,14 @@ import {
   type BriefKeywordSelection,
 } from './socialBrief/useBriefKeywordSelection'
 import ClaimReevaluateButton from './ClaimReevaluateButton'
+import CampaignBriefFields from './socialBrief/CampaignBriefFields'
+import BriefKindChooser, { type BriefKind } from './socialBrief/BriefKindChooser'
+import {
+  EMPTY_CAMPAIGN,
+  campaignFormError,
+  toCampaignRequest,
+  type CampaignFormState,
+} from './socialBrief/campaignForm'
 import './SocialBriefWorkspace.css'
 
 export interface SocialBriefWorkspaceProps {
@@ -114,6 +122,20 @@ export default function SocialBriefWorkspace({
   const [brandContext, setBrandContext] = useState<string>('')
   const brandContextLength = brandContext.trim().length
   const brandContextTooLong = brandContextLength > BRAND_CONTEXT_MAX
+  const [campaign, setCampaign] = useState<CampaignFormState>(EMPTY_CAMPAIGN)
+  // Kampanya sunucuda açıksa form öncesi tür seçilir; null = henüz seçilmedi
+  const [briefKind, setBriefKind] = useState<BriefKind | null>(null)
+  const startNewBrief = () => {
+    setBriefKind(null)
+    setCampaign({ ...EMPTY_CAMPAIGN, usage: 'paid' })
+    setIsCreatingNew(true)
+  }
+  const needsKindChoice = !!matrix?.campaign_enabled && briefKind === null
+  const chooseBriefKind = (kind: BriefKind) => {
+    setBriefKind(kind)
+    // Tür değişimi girilen kampanya bilgilerini silmez; yalnız gönderilip gönderilmeyeceği değişir
+    setCampaign((prev) => ({ ...prev, enabled: kind === 'campaign' }))
+  }
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -187,8 +209,8 @@ export default function SocialBriefWorkspace({
     if (matrix) setMaxKeywords(matrix.limits.max_keywords)
   }, [matrix, setMaxKeywords])
   useEffect(() => {
-    setComposing(isCreatingNew)
-  }, [isCreatingNew, setComposing])
+    setComposing(isCreatingNew && !needsKindChoice)
+  }, [isCreatingNew, needsKindChoice, setComposing])
   useEffect(() => () => setComposing(false), [setComposing])
   // Havuzdan düşen kelime seçimde kalmaz (üst karttan silme dahil)
   useEffect(() => {
@@ -246,6 +268,7 @@ export default function SocialBriefWorkspace({
     setIsSubmitting(false)
     setBrandName(activeWorkspace?.name || '')
     setBrandContext('')
+    setCampaign(EMPTY_CAMPAIGN)
     void fetchBriefs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, currentWorkspaceId])
@@ -377,6 +400,11 @@ export default function SocialBriefWorkspace({
       setFormError(`Lütfen ${minTg} ile ${maxTg} arasında hedef platform/format belirleyin.`)
       return
     }
+    const campaignError = campaignFormError(campaign)
+    if (campaignError) {
+      setFormError(campaignError)
+      return
+    }
 
     const token = scopeRef.current
     setIsSubmitting(true)
@@ -389,6 +417,7 @@ export default function SocialBriefWorkspace({
         targets: selectedTargets,
         brand_name: brandName.trim() || undefined,
         brand_context: brandContext.trim() || undefined,
+        ...(campaign.enabled ? { campaign: toCampaignRequest(campaign) } : {}),
       }
 
       const res = await socialBriefApi.createBrief(payload, currentWorkspaceId)
@@ -402,6 +431,7 @@ export default function SocialBriefWorkspace({
       selection.clear()
       setSelectedTargets([])
       setBrandContext('')
+      setCampaign(EMPTY_CAMPAIGN)
     } catch (err) {
       if (scopeRef.current !== token) return
       setFormError(socialErrorText(err, 'Sosyal brief oluşturulamadı.'))
@@ -474,341 +504,365 @@ export default function SocialBriefWorkspace({
                 Vazgeç
               </button>
               <div>
-                <h2 className="sb-card-title">Yeni Sosyal Brief Oluştur</h2>
+                <h2 className="sb-card-title">
+                  {needsKindChoice
+                    ? 'Ne hazırlamak istiyorsunuz?'
+                    : campaign.enabled
+                      ? 'Yeni Reklam Kampanyası'
+                      : 'Yeni Sosyal Medya İçeriği'}
+                </h2>
                 <p className="sb-card-subtitle">
-                  Sosyal kanal havuzundan anahtar kelimeler ve hedef platform/formatları belirleyin.
+                  {needsKindChoice
+                    ? 'Seçiminize göre ilgili adımlarla devam edeceksiniz.'
+                    : 'Sosyal kanal havuzundan anahtar kelimeler ve hedef platform/formatları belirleyin.'}
                 </p>
               </div>
             </div>
+            {matrix?.campaign_enabled && !needsKindChoice && (
+              <button
+                type="button"
+                className="sb-btn sb-btn-ghost"
+                onClick={() => setBriefKind(null)}
+              >
+                Türü değiştir
+              </button>
+            )}
           </div>
 
-          <form onSubmit={handleCreateBrief}>
-            {formError && (
-              <div
-                className="channels-alert channels-alert-error"
-                style={{ marginBottom: 18 }}
-                role="alert"
-              >
-                {formError}
-              </div>
-            )}
-            {selection.notice && (
-              <div
-                className="channels-alert channels-alert-error"
-                style={{ marginBottom: 18 }}
-                role="alert"
-              >
-                {selection.notice}
-              </div>
-            )}
-
-            {/* Bölüm 1: Anahtar Kelime Seçimi (1-5 adet) */}
-            <div className="sb-form-group">
-              <div className="sb-form-heading">
-                <span>1. Hedef Anahtar Kelimeler</span>
-                <span className="sb-form-counter">
-                  Seçilen: <b>{selectedKeywordIds.length}</b> / {maxKeywords} (en az 1, en fazla{' '}
-                  {maxKeywords})
-                </span>
-              </div>
-              <p className="sb-form-desc">
-                Sosyal medya havuzundan brief'e eklemek istediğiniz 1–{maxKeywords} kelimeyi seçin.
-                Yukarıdaki Sosyal Medya Havuzu kartlarına tıklayarak da seçebilirsiniz.
-              </p>
-
-              {/* Seçilen Kelimeler Çipleri */}
-              {selectedKeywordIds.length > 0 && (
-                <div className="sb-chip-container" style={{ marginBottom: 10 }}>
-                  {selectedKeywordIds.map((kwId) => {
-                    const kwItem = pool.find((p) => p.keyword_id === kwId)
-                    return (
-                      <span key={kwId} className="sb-chip sb-chip-selected">
-                        <Tag size={12} />
-                        <b>{kwItem?.keyword || `#${kwId}`}</b>
-                        <button
-                          type="button"
-                          className="sb-chip-remove"
-                          onClick={() => handleRemoveKeyword(kwId)}
-                          aria-label={`Kaldır: ${kwItem?.keyword || kwId}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    )
-                  })}
+          {needsKindChoice ? (
+            <BriefKindChooser onChoose={chooseBriefKind} />
+          ) : (
+            <form onSubmit={handleCreateBrief}>
+              {formError && (
+                <div
+                  className="channels-alert channels-alert-error"
+                  style={{ marginBottom: 18 }}
+                  role="alert"
+                >
+                  {formError}
+                </div>
+              )}
+              {selection.notice && (
+                <div
+                  className="channels-alert channels-alert-error"
+                  style={{ marginBottom: 18 }}
+                  role="alert"
+                >
+                  {selection.notice}
                 </div>
               )}
 
-              {/* Üst Social Havuzu bu sayfanın tek seçicisidir. Bağımsız kullanılan
-                  bileşenlerde üst havuz yoksa eski seçici erişilebilir kalır. */}
-              {!keywordSelection && (
-                <div className="sb-kw-picker">
-                  <div className="sb-kw-search">
-                    <input
-                      id="kw-search-input"
-                      type="text"
-                      className="sb-input"
-                      placeholder="Havuzda kelime ara..."
-                      value={kwSearch}
-                      onChange={(e) => setKwSearch(e.target.value)}
-                    />
-                  </div>
+              {/* Bölüm 1: Anahtar Kelime Seçimi (1-5 adet) */}
+              <div className="sb-form-group">
+                <div className="sb-form-heading">
+                  <span>1. Hedef Anahtar Kelimeler</span>
+                  <span className="sb-form-counter">
+                    Seçilen: <b>{selectedKeywordIds.length}</b> / {maxKeywords} (en az 1, en fazla{' '}
+                    {maxKeywords})
+                  </span>
+                </div>
+                <p className="sb-form-desc">
+                  Sosyal medya havuzundan brief'e eklemek istediğiniz 1–{maxKeywords} kelimeyi
+                  seçin. Yukarıdaki Sosyal Medya Havuzu kartlarına tıklayarak da seçebilirsiniz.
+                </p>
 
-                  {loadingPool ? (
-                    <p className="sb-empty-text" role="status">
-                      Kanal havuzu yükleniyor...
-                    </p>
-                  ) : poolError ? (
-                    <div className="channels-alert channels-alert-error" role="alert">
-                      {poolError}{' '}
-                      {retryPool && (
-                        <button
-                          type="button"
-                          className="sb-btn sb-btn-secondary sb-btn-xs"
-                          onClick={retryPool}
-                        >
-                          <RefreshCw size={12} />
-                          Tekrar dene
-                        </button>
-                      )}
-                    </div>
-                  ) : filteredPool.length === 0 ? (
-                    <p className="sb-empty-text">
-                      {pool.length === 0
-                        ? 'Sosyal kanal havuzunda kelime bulunamadı.'
-                        : 'Aramaya uygun kelime bulunamadı.'}
-                    </p>
-                  ) : (
-                    <div className="sb-kw-list">
-                      {filteredPool.map((item) => {
-                        const isSelected = selectedKeywordIds.includes(item.keyword_id)
-                        return (
+                {/* Seçilen Kelimeler Çipleri */}
+                {selectedKeywordIds.length > 0 && (
+                  <div className="sb-chip-container" style={{ marginBottom: 10 }}>
+                    {selectedKeywordIds.map((kwId) => {
+                      const kwItem = pool.find((p) => p.keyword_id === kwId)
+                      return (
+                        <span key={kwId} className="sb-chip sb-chip-selected">
+                          <Tag size={12} />
+                          <b>{kwItem?.keyword || `#${kwId}`}</b>
                           <button
-                            key={item.id}
                             type="button"
-                            className={`sb-kw-option ${isSelected ? 'is-selected' : ''}`}
-                            aria-pressed={isSelected}
-                            onClick={() => handleToggleKeyword(item.keyword_id)}
+                            className="sb-chip-remove"
+                            onClick={() => handleRemoveKeyword(kwId)}
+                            aria-label={`Kaldır: ${kwItem?.keyword || kwId}`}
                           >
-                            <span>{item.keyword}</span>
-                            {item.volume != null && (
-                              <span className="sb-kw-volume">
-                                ({Number(item.volume).toLocaleString('tr-TR')} hacim)
-                              </span>
-                            )}
-                            {isSelected && <CheckCircle2 size={12} />}
+                            <X size={12} />
                           </button>
-                        )
-                      })}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Üst Social Havuzu bu sayfanın tek seçicisidir. Bağımsız kullanılan
+                  bileşenlerde üst havuz yoksa eski seçici erişilebilir kalır. */}
+                {!keywordSelection && (
+                  <div className="sb-kw-picker">
+                    <div className="sb-kw-search">
+                      <input
+                        id="kw-search-input"
+                        type="text"
+                        className="sb-input"
+                        placeholder="Havuzda kelime ara..."
+                        value={kwSearch}
+                        onChange={(e) => setKwSearch(e.target.value)}
+                      />
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
 
-            {/* Bölüm 2: Hedef Platform ve Formatlar (1-6 adet) */}
-            <div className="sb-form-group">
-              <label htmlFor="target-platform-select">
-                <span>2. Hedef Platform ve Formatlar</span>
-                <span className="sb-form-counter">
-                  Seçilen: <b>{selectedTargets.length}</b> / 6 (en az 1, en fazla 6)
-                </span>
-              </label>
-              <p className="sb-form-desc">
-                İçerik üretilecek platform ve formatları ekleyin. Video formatlarında süre seçimi
-                zorunludur.
-              </p>
-
-              {/* Seçilen Hedefler Listesi */}
-              {selectedTargets.length > 0 && (
-                <div className="sb-chip-container" style={{ marginBottom: 12 }}>
-                  {selectedTargets.map((target, idx) => {
-                    const pLabel = getPlatformLabel(target.platform)
-                    const fLabel = getFormatLabel(target.platform, target.content_format)
-                    const dLabel = getPresetLabel(
-                      target.platform,
-                      target.content_format,
-                      target.duration_preset_id
-                    )
-                    return (
-                      <span key={idx} className="sb-chip sb-chip-target">
-                        <b>{pLabel}</b> · {fLabel}
-                        {dLabel && <span className="sb-badge sb-badge-accent">{dLabel}</span>}
-                        <button
-                          type="button"
-                          className="sb-chip-remove"
-                          onClick={() => handleRemoveTarget(idx)}
-                          aria-label={`Hedefi kaldır: ${pLabel} ${fLabel}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* Hedef Ekleme Kontrolleri */}
-              {loadingMatrix ? (
-                <p className="sb-empty-text">Format seçenekleri yükleniyor...</p>
-              ) : matrix ? (
-                <div className="sb-target-builder">
-                  <div className="sb-target-builder-field">
-                    <label htmlFor="target-platform-select">Platform</label>
-                    <select
-                      id="target-platform-select"
-                      className="sb-select"
-                      value={targetPlatform}
-                      onChange={(e) => handlePlatformChange(e.target.value)}
-                    >
-                      {matrix.platforms.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
+                    {loadingPool ? (
+                      <p className="sb-empty-text" role="status">
+                        Kanal havuzu yükleniyor...
+                      </p>
+                    ) : poolError ? (
+                      <div className="channels-alert channels-alert-error" role="alert">
+                        {poolError}{' '}
+                        {retryPool && (
+                          <button
+                            type="button"
+                            className="sb-btn sb-btn-secondary sb-btn-xs"
+                            onClick={retryPool}
+                          >
+                            <RefreshCw size={12} />
+                            Tekrar dene
+                          </button>
+                        )}
+                      </div>
+                    ) : filteredPool.length === 0 ? (
+                      <p className="sb-empty-text">
+                        {pool.length === 0
+                          ? 'Sosyal kanal havuzunda kelime bulunamadı.'
+                          : 'Aramaya uygun kelime bulunamadı.'}
+                      </p>
+                    ) : (
+                      <div className="sb-kw-list">
+                        {filteredPool.map((item) => {
+                          const isSelected = selectedKeywordIds.includes(item.keyword_id)
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`sb-kw-option ${isSelected ? 'is-selected' : ''}`}
+                              aria-pressed={isSelected}
+                              onClick={() => handleToggleKeyword(item.keyword_id)}
+                            >
+                              <span>{item.keyword}</span>
+                              {item.volume != null && (
+                                <span className="sb-kw-volume">
+                                  ({Number(item.volume).toLocaleString('tr-TR')} hacim)
+                                </span>
+                              )}
+                              {isSelected && <CheckCircle2 size={12} />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
+                )}
+              </div>
 
-                  <div className="sb-target-builder-field">
-                    <label htmlFor="target-format-select">Format</label>
-                    <select
-                      id="target-format-select"
-                      className="sb-select"
-                      value={targetFormat}
-                      onChange={(e) => handleFormatChange(e.target.value)}
-                    >
-                      {currentPlatformObj?.formats.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
+              {/* Bölüm 2: Hedef Platform ve Formatlar (1-6 adet) */}
+              <div className="sb-form-group">
+                <label htmlFor="target-platform-select">
+                  <span>2. Hedef Platform ve Formatlar</span>
+                  <span className="sb-form-counter">
+                    Seçilen: <b>{selectedTargets.length}</b> / 6 (en az 1, en fazla 6)
+                  </span>
+                </label>
+                <p className="sb-form-desc">
+                  İçerik üretilecek platform ve formatları ekleyin. Video formatlarında süre seçimi
+                  zorunludur.
+                </p>
+
+                {/* Seçilen Hedefler Listesi */}
+                {selectedTargets.length > 0 && (
+                  <div className="sb-chip-container" style={{ marginBottom: 12 }}>
+                    {selectedTargets.map((target, idx) => {
+                      const pLabel = getPlatformLabel(target.platform)
+                      const fLabel = getFormatLabel(target.platform, target.content_format)
+                      const dLabel = getPresetLabel(
+                        target.platform,
+                        target.content_format,
+                        target.duration_preset_id
+                      )
+                      return (
+                        <span key={idx} className="sb-chip sb-chip-target">
+                          <b>{pLabel}</b> · {fLabel}
+                          {dLabel && <span className="sb-badge sb-badge-accent">{dLabel}</span>}
+                          <button
+                            type="button"
+                            className="sb-chip-remove"
+                            onClick={() => handleRemoveTarget(idx)}
+                            aria-label={`Hedefi kaldır: ${pLabel} ${fLabel}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      )
+                    })}
                   </div>
+                )}
 
-                  {/* Süre Seçimi: Yalnızca requires_duration=true ise görünür */}
-                  {currentFormatObj?.requires_duration && (
+                {/* Hedef Ekleme Kontrolleri */}
+                {loadingMatrix ? (
+                  <p className="sb-empty-text">Format seçenekleri yükleniyor...</p>
+                ) : matrix ? (
+                  <div className="sb-target-builder">
                     <div className="sb-target-builder-field">
-                      <label htmlFor="target-duration-select">Süre Ön Ayarı</label>
+                      <label htmlFor="target-platform-select">Platform</label>
                       <select
-                        id="target-duration-select"
+                        id="target-platform-select"
                         className="sb-select"
-                        value={targetDurationPresetId}
-                        onChange={(e) => setTargetDurationPresetId(e.target.value)}
+                        value={targetPlatform}
+                        onChange={(e) => handlePlatformChange(e.target.value)}
                       >
-                        {currentFormatObj.duration_presets.map((d: DurationPresetResponse) => (
-                          <option key={d.id} value={d.id}>
-                            {d.label} ({d.min_sec}–{d.max_sec} sn)
+                        {matrix.platforms.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
                           </option>
                         ))}
                       </select>
                     </div>
-                  )}
 
-                  <button
-                    type="button"
-                    className="sb-btn sb-btn-primary"
-                    onClick={handleAddTarget}
-                    disabled={
-                      selectedTargets.length >= (matrix.limits.max_targets ?? 6) || currentPairTaken
-                    }
-                    title={currentPairTaken ? 'Bu platform ve format zaten eklenmiş' : undefined}
-                  >
-                    <Plus size={14} />
-                    Hedef Ekle
-                  </button>
-                  {currentPairTaken && (
-                    <p className="sb-form-desc sb-target-dup-note" role="note">
-                      Bu platform/format zaten ekli. Her platform-format çifti bir kez eklenebilir;
-                      süreyi değiştirmek için mevcut hedefi kaldırın.
-                    </p>
-                  )}
-                </div>
-              ) : matrixError ? (
-                <div className="channels-alert channels-alert-error" role="alert">
-                  {matrixError}
-                </div>
-              ) : null}
-            </div>
+                    <div className="sb-target-builder-field">
+                      <label htmlFor="target-format-select">Format</label>
+                      <select
+                        id="target-format-select"
+                        className="sb-select"
+                        value={targetFormat}
+                        onChange={(e) => handleFormatChange(e.target.value)}
+                      >
+                        {currentPlatformObj?.formats.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-            {/* Bölüm 3: Marka Bilgileri */}
-            <div className="sb-form-group">
-              <label htmlFor="brief-brand-name">Marka Adı (Opsiyonel)</label>
-              <input
-                id="brief-brand-name"
-                type="text"
-                className="sb-input"
-                maxLength={200}
-                placeholder="Örn: Acme Tech"
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
-              />
-            </div>
+                    {/* Süre Seçimi: Yalnızca requires_duration=true ise görünür */}
+                    {currentFormatObj?.requires_duration && (
+                      <div className="sb-target-builder-field">
+                        <label htmlFor="target-duration-select">Süre Ön Ayarı</label>
+                        <select
+                          id="target-duration-select"
+                          className="sb-select"
+                          value={targetDurationPresetId}
+                          onChange={(e) => setTargetDurationPresetId(e.target.value)}
+                        >
+                          {currentFormatObj.duration_presets.map((d: DurationPresetResponse) => (
+                            <option key={d.id} value={d.id}>
+                              {d.label} ({d.min_sec}–{d.max_sec} sn)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-            <div className="sb-form-group">
-              <label htmlFor="brief-brand-context">
-                <span>Marka Bağlamı / Özel Notlar (Opsiyonel)</span>
-                <span className="sb-form-counter">
-                  <b>{brandContextLength.toLocaleString('tr-TR')}</b> /{' '}
-                  {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter
-                </span>
-              </label>
-              <textarea
-                id="brief-brand-context"
-                className="sb-textarea"
-                rows={3}
-                placeholder="Kampanya amacı, hedef kitle veya tonlama notları..."
-                value={brandContext}
-                onChange={(e) => setBrandContext(e.target.value)}
-                aria-invalid={brandContextTooLong}
-              />
-              {brandContextTooLong && (
-                <div className="channels-alert channels-alert-error" role="alert">
-                  Notlar en fazla {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter olabilir (
-                  {(brandContextLength - BRAND_CONTEXT_MAX).toLocaleString('tr-TR')} karakter
-                  fazla). Metni kısaltın; marka profili zaten içerik üretiminde kullanılıyor.
-                </div>
-              )}
-            </div>
+                    <button
+                      type="button"
+                      className="sb-btn sb-btn-primary"
+                      onClick={handleAddTarget}
+                      disabled={
+                        selectedTargets.length >= (matrix.limits.max_targets ?? 6) ||
+                        currentPairTaken
+                      }
+                      title={currentPairTaken ? 'Bu platform ve format zaten eklenmiş' : undefined}
+                    >
+                      <Plus size={14} />
+                      Hedef Ekle
+                    </button>
+                    {currentPairTaken && (
+                      <p className="sb-form-desc sb-target-dup-note" role="note">
+                        Bu platform/format zaten ekli. Her platform-format çifti bir kez
+                        eklenebilir; süreyi değiştirmek için mevcut hedefi kaldırın.
+                      </p>
+                    )}
+                  </div>
+                ) : matrixError ? (
+                  <div className="channels-alert channels-alert-error" role="alert">
+                    {matrixError}
+                  </div>
+                ) : null}
+              </div>
 
-            {/* Kaydet ve İptal Butonları */}
-            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-              <button
-                type="submit"
-                className="sb-btn sb-btn-primary"
-                disabled={
-                  isSubmitting ||
-                  brandContextTooLong ||
-                  selectedKeywordIds.length < 1 ||
-                  selectedKeywordIds.length > maxKeywords ||
-                  selectedTargets.length < 1 ||
-                  selectedTargets.length > 6
-                }
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw size={14} className="chx-spin" />
-                    Kaydediliyor...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={15} />
-                    Brief'i Kaydet ve Aç
-                  </>
+              {/* Bölüm 3: Marka Bilgileri */}
+              {campaign.enabled && <CampaignBriefFields value={campaign} onChange={setCampaign} />}
+
+              <div className="sb-form-group">
+                <label htmlFor="brief-brand-name">Marka Adı (Opsiyonel)</label>
+                <input
+                  id="brief-brand-name"
+                  type="text"
+                  className="sb-input"
+                  maxLength={200}
+                  placeholder="Örn: Acme Tech"
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
+                />
+              </div>
+
+              <div className="sb-form-group">
+                <label htmlFor="brief-brand-context">
+                  <span>Marka Bağlamı / Özel Notlar (Opsiyonel)</span>
+                  <span className="sb-form-counter">
+                    <b>{brandContextLength.toLocaleString('tr-TR')}</b> /{' '}
+                    {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter
+                  </span>
+                </label>
+                <textarea
+                  id="brief-brand-context"
+                  className="sb-textarea"
+                  rows={3}
+                  placeholder="Kampanya amacı, hedef kitle veya tonlama notları..."
+                  value={brandContext}
+                  onChange={(e) => setBrandContext(e.target.value)}
+                  aria-invalid={brandContextTooLong}
+                />
+                {brandContextTooLong && (
+                  <div className="channels-alert channels-alert-error" role="alert">
+                    Notlar en fazla {BRAND_CONTEXT_MAX.toLocaleString('tr-TR')} karakter olabilir (
+                    {(brandContextLength - BRAND_CONTEXT_MAX).toLocaleString('tr-TR')} karakter
+                    fazla). Metni kısaltın; marka profili zaten içerik üretiminde kullanılıyor.
+                  </div>
                 )}
-              </button>
-              <button
-                type="button"
-                className="sb-btn sb-btn-ghost"
-                onClick={() => {
-                  setIsCreatingNew(false)
-                  setFormError(null)
-                }}
-                disabled={isSubmitting}
-              >
-                İptal
-              </button>
-            </div>
-          </form>
+              </div>
+
+              {/* Kaydet ve İptal Butonları */}
+              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                <button
+                  type="submit"
+                  className="sb-btn sb-btn-primary"
+                  disabled={
+                    isSubmitting ||
+                    brandContextTooLong ||
+                    selectedKeywordIds.length < 1 ||
+                    selectedKeywordIds.length > maxKeywords ||
+                    selectedTargets.length < 1 ||
+                    selectedTargets.length > 6
+                  }
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw size={14} className="chx-spin" />
+                      Kaydediliyor...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={15} />
+                      Brief'i Kaydet ve Aç
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="sb-btn sb-btn-ghost"
+                  onClick={() => {
+                    setIsCreatingNew(false)
+                    setFormError(null)
+                  }}
+                  disabled={isSubmitting}
+                >
+                  İptal
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     )
@@ -828,7 +882,7 @@ export default function SocialBriefWorkspace({
         onBack={handleBackToList}
         onNewBrief={() => {
           handleBackToList()
-          setIsCreatingNew(true)
+          startNewBrief()
         }}
         onBriefChanged={fetchBriefs}
       />
@@ -850,7 +904,7 @@ export default function SocialBriefWorkspace({
             <button
               type="button"
               className="sb-btn sb-btn-primary"
-              onClick={() => setIsCreatingNew(true)}
+              onClick={startNewBrief}
               disabled={disabled}
             >
               <Plus size={15} />
@@ -900,7 +954,7 @@ export default function SocialBriefWorkspace({
               type="button"
               className="sb-btn sb-btn-primary"
               style={{ marginTop: 8 }}
-              onClick={() => setIsCreatingNew(true)}
+              onClick={startNewBrief}
               disabled={disabled}
             >
               <Plus size={14} />
@@ -924,6 +978,9 @@ export default function SocialBriefWorkspace({
                   <div className="sb-brief-item-head">
                     <div className="sb-brief-item-title">
                       <span>Brief #{brief.id}</span>
+                      {brief.campaign_spec && (
+                        <span className="sb-badge sb-badge-accent">Reklam kampanyası</span>
+                      )}
                       {brief.is_stale ? (
                         <span className="sb-badge sb-badge-stale">Güncel değil</span>
                       ) : brief.locked_at ? (

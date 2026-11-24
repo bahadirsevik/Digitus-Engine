@@ -27,6 +27,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.channel.brand_defense import load_product_definition
+from app.core.social.campaign_spec import CampaignSpecError, validate_content_offer_terms
+from app.core.social.campaign_offer_lock import load_locked_offer_terms
 from app.core.social.content_worker_input import (
     extract_social_content_request_snapshot,
 )
@@ -59,6 +61,13 @@ CONTENT_IDEA_NOT_ELIGIBLE = "CONTENT_IDEA_NOT_ELIGIBLE"
 CONTENT_GROUNDING_INVALID = "CONTENT_GROUNDING_INVALID"
 CONTENT_ATTEMPT_SNAPSHOT_INVALID = "CONTENT_ATTEMPT_SNAPSHOT_INVALID"
 CONTENT_ATTEMPT_REQUEST_MISMATCH = "CONTENT_ATTEMPT_REQUEST_MISMATCH"
+# Kampanya (plan_sosyal_kampanya_akisi.md §2): mesajları kullanıcıya AYNEN gösterilir (dinamik veri yok)
+CONTENT_OFFER_NOT_ALLOWED = "CONTENT_OFFER_NOT_ALLOWED"
+CONTENT_OFFER_TERMS_REQUIRED = "CONTENT_OFFER_TERMS_REQUIRED"
+CONTENT_OFFER_TERMS_INVALID = "CONTENT_OFFER_TERMS_INVALID"
+CONTENT_OFFER_EXPIRED = "CONTENT_OFFER_EXPIRED"
+CONTENT_OFFER_TYPE_MISMATCH = "CONTENT_OFFER_TYPE_MISMATCH"
+CONTENT_OFFER_LOCKED = "CONTENT_OFFER_LOCKED"
 
 
 # ==================== DOMAIN HATA SINIFI ====================
@@ -373,6 +382,59 @@ def begin_social_content_generation(
                 field="idea_ids",
             )
 
+    # 3b. Kampanya: teklif koşulları içerik isteğinde kesinleşir (K3); koşulsuz üretim başlamaz (K4)
+    offer_terms: dict[str, Any] | None = None
+    if brief.campaign_spec is None:
+        if request.offer_terms is not None:
+            raise SocialContentFlowError(
+                "Teklif koşulları yalnız kampanya brief'lerinde kullanılabilir.",
+                error_code=CONTENT_OFFER_NOT_ALLOWED,
+                field="offer_terms",
+            )
+    else:
+        if request.offer_terms is None:
+            raise SocialContentFlowError(
+                "Kampanya içeriği için teklif koşullarını girin veya 'teklifsiz devam et' seçin.",
+                error_code=CONTENT_OFFER_TERMS_REQUIRED,
+                field="offer_terms",
+            )
+        try:
+            offer_terms = validate_content_offer_terms(request.offer_terms)
+        except CampaignSpecError as exc:
+            raise SocialContentFlowError(
+                exc.message,
+                error_code=(
+                    CONTENT_OFFER_EXPIRED
+                    if exc.error_code == "CAMPAIGN_OFFER_EXPIRED"
+                    else CONTENT_OFFER_TERMS_INVALID
+                ),
+                field=exc.field,
+            ) from exc
+        locked_offer = load_locked_offer_terms(db, brief.id)
+        if locked_offer is not None and offer_terms != locked_offer:
+            raise SocialContentFlowError(
+                "Bu kampanyanın teklifi içerik üretildiği için sabitlendi. "
+                "Farklı teklif için yeni brief oluşturun.",
+                error_code=CONTENT_OFFER_LOCKED,
+                field="offer_terms",
+            )
+        for idea_id in request.idea_ids:
+            idea_campaign = ideas_by_id[idea_id].campaign_payload
+            if not isinstance(idea_campaign, dict) or "cta_type" not in idea_campaign:
+                raise SocialContentFlowError(
+                    "Seçilen fikir kampanya bilgisi taşımıyor.",
+                    error_code=CONTENT_IDEA_NOT_ELIGIBLE,
+                    field="idea_ids",
+                )
+            # Bir istekte tek teklif: türü farklı fikirler ayrı istekle üretilir. none = açık istisna.
+            if offer_terms["type"] != "none" and idea_campaign.get("offer_type") != offer_terms["type"]:
+                raise SocialContentFlowError(
+                    "Seçilen fikirlerin teklif türü girdiğiniz teklifle aynı olmalı. "
+                    "Bir brief'te tek teklif kullanılır; farklı teklif türü için yeni brief oluşturun.",
+                    error_code=CONTENT_OFFER_TYPE_MISMATCH,
+                    field="offer_terms",
+                )
+
     # 4. Grounding snapshot hazırlığı
     product_facts = load_product_definition(db, scoring_run)
     if product_facts is not None:
@@ -411,6 +473,8 @@ def begin_social_content_generation(
                 "idea_ids": list(request.idea_ids),
                 "product_facts": product_facts,
                 "trusted_brand_usp": trusted_brand_usp,
+                # Organik brief'te anahtar hiç yazılmaz (snapshot bugünküyle bayt bayt aynı)
+                **({"offer_terms": offer_terms} if offer_terms is not None else {}),
             },
         }
         # Worker snapshot parser doğrulaması (parite garantisi)
@@ -459,6 +523,13 @@ def begin_social_content_generation(
                 "Aynı idempotency anahtarı ile farklı marka USP'si gönderilemez.",
                 error_code=CONTENT_ATTEMPT_REQUEST_MISMATCH,
                 field="trusted_brand_usp",
+            )
+
+        if snapshot.offer_terms != offer_terms:
+            raise SocialContentFlowError(
+                "Aynı idempotency anahtarı ile farklı teklif koşulları gönderilemez.",
+                error_code=CONTENT_ATTEMPT_REQUEST_MISMATCH,
+                field="offer_terms",
             )
 
     return SocialContentGenerationStart(

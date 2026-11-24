@@ -114,7 +114,7 @@ describe('SocialBriefWorkspace — brief oluşturma ve kategori (H.1 + düzeltme
   it('format matrisi yüklenir; süre seçimi yalnız video formatında görünür', async () => {
     render(<SocialBriefWorkspace runId={RUN_ID} pool={POOL} />)
     fireEvent.click(await screen.findByText("İlk Brief'i Oluştur"))
-    expect(await screen.findByText('Yeni Sosyal Brief Oluştur')).toBeInTheDocument()
+    expect(await screen.findByText('Yeni Sosyal Medya İçeriği')).toBeInTheDocument()
     expect(screen.queryByLabelText('Süre Ön Ayarı')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Format'), { target: { value: 'reels' } })
     expect(await screen.findByLabelText('Süre Ön Ayarı')).toBeInTheDocument()

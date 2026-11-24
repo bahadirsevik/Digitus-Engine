@@ -52,6 +52,14 @@ const REASON_TEXT: Record<string, string> = {
   dispatch_failed: 'Üretim başlatılamadı. Yeniden deneyebilirsiniz.',
   voiceover_duration_mismatch:
     'Seslendirme metninin uzunluğu seçilen süreyle kabaca uyuşmuyor (uyarı, içerik kaydedildi).',
+  offer_mismatch:
+    'İçerik girdiğiniz teklif koşullarıyla çelişti; düzeltme denemesinden sonra da sürdüğü için kaydedilmedi.',
+  offer_scope_review:
+    'Teklifin geçerli olduğu ürün/kapsam metinde açıkça geçmiyor — yayın öncesi kontrol edin.',
+  offer_gift_review:
+    'Hediye metinde tam olarak girdiğiniz biçimde geçmiyor — yayın öncesi kontrol edin.',
+  on_screen_text_dense:
+    'Bazı sahnelerde ekran yazısı süreye göre uzun; izleyici okuyamayabilir — kısaltmayı veya sahneyi uzatmayı düşünün.',
 }
 
 export function reasonText(code: string | null | undefined): string {
@@ -251,6 +259,80 @@ const HOOK_STYLE_LABEL: Record<string, string> = {
 export function hookStyleLabel(id: string | null | undefined): string {
   if (!id) return ''
   return HOOK_STYLE_LABEL[id] ?? id
+}
+
+// ---- Kampanya modu etiketleri (backend app/core/social/campaign_spec.py ile aynı kodlar) ----
+export const OFFER_TYPE_LABEL: Record<string, string> = {
+  percent_discount: 'Yüzde indirim',
+  bundle: 'Paket / çoklu alım',
+  free_shipping: 'Ücretsiz kargo',
+  gift: 'Hediye',
+  none: 'Teklifsiz',
+}
+
+export const CTA_TYPE_LABEL: Record<string, string> = {
+  buy: 'Satın al',
+  learn_more: 'Daha fazla bilgi',
+  fill_form: 'Form doldur',
+  message: 'Mesaj yaz',
+  call: 'Ara',
+  visit_store: 'Mağazaya gel',
+  follow: 'Takip et',
+}
+
+export const USAGE_LABEL: Record<string, string> = {
+  paid: 'Ücretli reklam',
+  organic: 'Organik gönderi',
+}
+
+export const OBJECTIVE_LABEL: Record<string, string> = {
+  sales: 'Satış',
+  lead: 'Talep toplama',
+  awareness: 'Bilinirlik',
+}
+
+export const DESTINATION_LABEL: Record<string, string> = {
+  site: 'Web sitesi',
+  form: 'Form',
+  whatsapp: 'WhatsApp',
+  phone: 'Telefon',
+  store: 'Mağaza',
+  profile: 'Sosyal medya profili',
+}
+
+const OFFER_VIOLATION_LABEL: Record<string, string> = {
+  offer_not_in_terms: 'Koşullarda olmayan teklif',
+  offer_in_no_offer: 'Teklifsiz içerikte teklif dili',
+  offer_condition_missing: 'Eksik şart',
+  offer_end_date_missing: 'Bitiş tarihi yazılmamış',
+  offer_end_date_wrong_year: 'Bitiş tarihi yanlış yıl',
+  offer_scope_conflict: 'Kapsam genişletilmiş',
+  offer_relative_urgency: 'Göreli aciliyet dili',
+}
+
+/** "kod:ifade" biçimli teklif ihlalini okunur metne çevirir. */
+export function offerViolationText(raw: string): string {
+  const i = raw.indexOf(':')
+  const code = i < 0 ? raw : raw.slice(0, i)
+  const span = i < 0 ? '' : raw.slice(i + 1)
+  const label = OFFER_VIOLATION_LABEL[code]
+  if (!label) return raw
+  return span ? `${label}: “${span}”` : label
+}
+
+/** Teklif koşullarının tek satırlık özeti (içerik kartı, fikir paneli). */
+export function offerSummary(terms: {
+  type: string
+  value?: string | null
+  applies_to?: string | null
+  conditions?: string | null
+  ends?: string | null
+}): string {
+  if (terms.type === 'none') return 'Teklifsiz içerik'
+  const parts = [terms.value, terms.applies_to && `kapsam: ${terms.applies_to}`, terms.conditions]
+  if (terms.ends)
+    parts.push(`bitiş: ${new Date(`${terms.ends}T00:00:00`).toLocaleDateString('tr-TR')}`)
+  return `${OFFER_TYPE_LABEL[terms.type] ?? terms.type} — ${parts.filter(Boolean).join(' · ')}`
 }
 
 export function formatSeconds(sec: number): string {

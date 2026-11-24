@@ -3,6 +3,7 @@ Content generation endpoints.
 Roadmap2.md - Bölüm 6, 7 güncellemesi dahil.
 """
 import math
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from loguru import logger
@@ -30,7 +31,7 @@ from app.schemas.content import (
     ContentGenerationSummary
 )
 from app.schemas.seo_geo import (
-    SEOGEOGenerateRequest, SEOGEOBulkRequest,
+    SEOGEOGenerateRequest, SEOGEOBulkRequest, SEORevisionRequest,
     SEOGEOContentResponse, SEOGEOBulkResponse,
     ComplianceReportResponse
 )
@@ -57,6 +58,8 @@ from app.schemas.social_brief import (
     SocialBriefStateResponse,
     SocialContentHistoryItemResponse,
     SocialContentHistoryResponse,
+    SocialContentRevisionListResponse,
+    SocialContentRevisionRequest,
     SocialHistoryHookResponse,
     SocialBriefCategoriesGenerateRequest,
     SocialBriefContentsAttemptResponse,
@@ -110,6 +113,7 @@ from app.core.social import (
     serialize_content_format_payload,
     social_brief_to_response,
 )
+from app.core.social.campaign_spec import overlay_display
 from app.core.social.idea_retry_flow import (
     SocialIdeaRetryFlowError,
     begin_social_idea_retry,
@@ -521,6 +525,8 @@ def list_seo_geo_contents(
             'publish_review': publish_review_from_rows(
                 content.seo_compliance, content.geo_compliance
             ),
+            # Değerlendiricinin KAYITLI notu (AI değerlendirmesi yapıldıysa); kart gösterir
+            'geo_notes': _stored_geo_notes(content.geo_compliance),
             'created_at': content.created_at.isoformat() if content.created_at else None,
             # Kart ozeti alanlari (tam govde bilerek dahil edilmez)
             'intro_paragraph': content.intro_paragraph,
@@ -539,8 +545,26 @@ def list_seo_geo_contents(
                 'anchor': content.external_link_anchor,
                 'url': content.external_link_url,
             } if content.external_link_anchor or content.external_link_url else None,
+            'revision_count': content.revision_count or 0,
         })
-    
+
+    # Kullanıcı revizyonu durumu (okuma anında lease'i dolanlar failed yapılır)
+    pending = _latest_seo_revisions(db, [c.id for c in contents])
+    # Kabul aynı satırı günceller (created_at = üretim tarihi kalır); son kabul tarihi ayrıca döner
+    from sqlalchemy import func
+    from app.database.models import ContentRevision
+    revised = dict(
+        db.query(ContentRevision.source_content_id, func.max(ContentRevision.accepted_at))
+        .filter(ContentRevision.channel == "SEO", ContentRevision.status == "accepted",
+                ContentRevision.source_content_id.in_([c.id for c in contents] or [0]))
+        .group_by(ContentRevision.source_content_id)
+        .all()
+    )
+    for item in results:
+        item['pending_revision'] = _revision_summary(pending.get(item['id']))
+        revised_at = revised.get(item['id'])
+        item['revised_at'] = revised_at.isoformat() if revised_at else None
+
     return {
         'scoring_run_id': scoring_run_id,
         'total': total,
@@ -548,6 +572,241 @@ def list_seo_geo_contents(
         'limit': limit,
         'items': results
     }
+
+
+# ==================== SEO KULLANICI REVİZYONU ("Revize Et") ====================
+# Akış: POST revise (202) → worker öneriyi üretir (ready) → kullanıcı önizler →
+# accept (canlı içerik AYNI id ile, tek transaction) | discard. Liste ucu durumu taşır.
+
+_REVISION_STATUS_409 = {
+    "generating": "Revizyon hâlâ hazırlanıyor; bitmesini bekleyin.",
+    "discarded": "Bu öneri iptal edildi.",
+    "failed": "Bu revizyon başarısız oldu; yeniden deneyin.",
+}
+
+
+def _seo_content_in_workspace(db: Session, content_id: int, brand_profile_id: int, lock: bool = False):
+    query = db.query(SEOGeoContent).filter(SEOGeoContent.id == content_id)
+    if lock:
+        query = query.with_for_update()
+    content = query.first()
+    output = (
+        db.query(ContentOutput).filter(ContentOutput.id == content.content_output_id).first()
+        if content and content.content_output_id else None
+    )
+    if content is None or output is None or not output.scoring_run_id:
+        raise HTTPException(status_code=404, detail="İçerik bulunamadı.")
+    verify_scoring_run(db, output.scoring_run_id, brand_profile_id)
+    return content, output
+
+
+def _latest_seo_revisions(db: Session, content_ids: List[int]) -> dict:
+    from app.core import content_revisions as cr
+    from app.database.models import ContentRevision
+
+    if not content_ids:
+        return {}
+    if cr.fail_expired(db, "SEO", content_ids):
+        db.commit()
+    latest: dict = {}
+    for rev in (
+        db.query(ContentRevision)
+        .filter(ContentRevision.channel == "SEO", ContentRevision.source_content_id.in_(content_ids))
+        .order_by(ContentRevision.id.desc())
+    ):
+        latest.setdefault(rev.source_content_id, rev)
+    return latest
+
+
+def _stored_geo_notes(geo_row) -> Optional[str]:
+    from app.compliance.publish_review import geo_evaluation_source
+
+    if geo_evaluation_source(geo_row) != "ai":
+        return None
+    return (geo_row.improvement_notes or "").strip() or None
+
+
+def _revision_summary(rev) -> Optional[dict]:
+    """Kartta gösterilecek bekleyen revizyon (kabul/iptal edilmişse None)."""
+    if rev is None or rev.status not in ("generating", "ready", "failed"):
+        return None
+    payload = (rev.proposed_payload or {}) if rev.status == "ready" else {}
+    return {
+        'id': rev.id,
+        'status': rev.status,
+        'feedback': rev.feedback,
+        'scope': rev.scope,
+        'error_message': rev.error_message,
+        'created_at': rev.created_at.isoformat() if rev.created_at else None,
+        'changes': payload.get('changes') or [],
+        'scores': payload.get('scores'),
+        'publish_review': payload.get('publish_review'),
+        'regressions': payload.get('regressions') or [],
+    }
+
+
+@router.post("/seo-geo/{content_id}/revise", status_code=202)
+def revise_seo_geo_content(
+    content_id: int,
+    request: SEORevisionRequest,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Kullanıcı talebiyle revizyon başlatır (async). Canlı içerik kabul edilene kadar DEĞİŞMEZ."""
+    import uuid
+
+    from app.core import content_revisions as cr
+    from app.tasks.generation_tasks import revise_seo_content_task
+
+    try:
+        content, output = _seo_content_in_workspace(db, content_id, brand_profile_id)
+        if output.is_stale:
+            raise HTTPException(
+                status_code=409,
+                detail="Bu içerik güncel değil (kanal ataması yenilendi); revize edilemez.",
+            )
+        _guard_generation_dispatch(db, output.scoring_run_id)
+        try:
+            rev, created = cr.create_revision(
+                db, channel="SEO", source_content_id=content.id,
+                scoring_run_id=output.scoring_run_id, brand_profile_id=brand_profile_id,
+                feedback=request.feedback, scope=list(request.scope),
+                source_version=content.revision_count or 0,
+                idempotency_key=request.idempotency_key,
+            )
+        except cr.RevisionConflict as conflict:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(conflict), "revision_id": conflict.revision_id},
+            )
+        db.commit()
+        if created:
+            task_id = str(uuid.uuid4())
+            try:
+                revise_seo_content_task.apply_async(
+                    kwargs={"revision_id": rev.id, "attempt_token": rev.attempt_token},
+                    task_id=task_id,
+                )
+            except Exception as enqueue_error:
+                cr.mark_failed(db, rev.id, rev.attempt_token,
+                               "Revizyon başlatılamadı. Yeniden deneyin.")
+                raise HTTPException(
+                    status_code=500,
+                    detail=safe_500_detail(enqueue_error, "Revizyon başlatılamadı"),
+                )
+            rev.task_id = task_id
+            db.commit()
+        return {'revision_id': rev.id, 'status': rev.status, 'created': created}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=safe_500_detail(e, "Revizyon başlatılamadı"))
+
+
+@router.post("/seo-geo/revisions/{revision_id}/accept")
+def accept_seo_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Öneriyi canlı içeriğe uygular — TEK transaction, kaynak sürüm kontrolüyle.
+
+    Tekrar eden kabul ikinci güncelleme yapmaz. İçerik öneriden sonra değiştiyse
+    (başka bir revizyon kabul edildi) eski öneri yeni içeriği EZMEZ: 409.
+    """
+    from app.core import content_revisions as cr
+    from app.database.models import ContentRevision
+    from app.generators.seo_geo.seo_geo_generator import apply_revision
+
+    try:
+        run_id = (
+            db.query(ContentRevision.scoring_run_id)
+            .filter(ContentRevision.id == revision_id, ContentRevision.channel == "SEO")
+            .scalar()
+        )
+        if run_id is None:
+            raise HTTPException(status_code=404, detail="Revizyon bulunamadı.")
+        verify_scoring_run(db, run_id, brand_profile_id)
+        # Kilit sırası revize ucuyla AYNI: önce workspace (brand_profiles) kilidi + güncellik
+        # kapısı, sonra revizyon/içerik satırları — ters sıra deadlock üretiyordu (QA 11.11)
+        _guard_generation_dispatch(db, run_id)
+        rev = (
+            db.query(ContentRevision)
+            .filter(ContentRevision.id == revision_id)
+            .with_for_update()
+            .first()
+        )
+        content, output = _seo_content_in_workspace(
+            db, rev.source_content_id, brand_profile_id, lock=True
+        )
+        if rev.status == cr.ACCEPTED:
+            return {'content_id': content.id, 'revision_count': content.revision_count,
+                    'status': rev.status}
+        if rev.status != cr.READY:
+            raise HTTPException(status_code=409, detail=_REVISION_STATUS_409[rev.status])
+        if output.is_stale:
+            raise HTTPException(
+                status_code=409,
+                detail="Bu içerik güncel değil (kanal ataması yenilendi); öneri uygulanmadı.",
+            )
+        if (content.revision_count or 0) != rev.source_version:
+            rev.status = cr.DISCARDED
+            db.commit()
+            raise HTTPException(
+                status_code=409,
+                detail="İçerik bu öneri hazırlandıktan sonra değişti; öneri uygulanmadı. "
+                       "Güncel içerik üzerinden yeniden revize edin.",
+            )
+        rev.previous_payload = {
+            'content': output.content_data,
+            'seo_score': float(output.seo_compliance_score or 0),
+            'geo_score': float(output.geo_compliance_score or 0),
+            'revision_count': content.revision_count or 0,
+        }
+        apply_revision(content, output, rev.proposed_payload)
+        rev.status = cr.ACCEPTED
+        rev.accepted_at = datetime.now(timezone.utc)
+        db.commit()
+        return {'content_id': content.id, 'revision_count': content.revision_count,
+                'status': rev.status}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=safe_500_detail(e, "Öneri uygulanamadı"))
+
+
+@router.post("/seo-geo/revisions/{revision_id}/discard")
+def discard_seo_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Öneriyi (ya da süren/başarısız revizyonu) kapatır; canlı içerik değişmez.
+    Süren revizyon kapatılırsa worker'ın geç yazımı token koşulu nedeniyle düşer."""
+    from app.core import content_revisions as cr
+    from app.database.models import ContentRevision
+
+    rev = (
+        db.query(ContentRevision)
+        .filter(ContentRevision.id == revision_id, ContentRevision.channel == "SEO")
+        .with_for_update()
+        .first()
+    )
+    if rev is None:
+        raise HTTPException(status_code=404, detail="Revizyon bulunamadı.")
+    verify_scoring_run(db, rev.scoring_run_id, brand_profile_id)
+    if rev.status == cr.ACCEPTED:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bu öneri zaten uygulandı.")
+    if rev.status != cr.DISCARDED:
+        rev.status = cr.DISCARDED
+        rev.completed_at = datetime.now(timezone.utc)
+    db.commit()
+    return {'revision_id': rev.id, 'status': rev.status}
 
 
 # ==================== GOOGLE ADS RSA ENDPOINTS (Roadmap2 Bölüm 7) ====================
@@ -919,6 +1178,10 @@ def regenerate_ads_group(
             request.brand_usp if request else None
         ) or ""
         effective_brand_usp = trusted_brand_usp or defaults.get("brand_usp", "")
+        # Geri bildirimli revizyon: yalnız seçili bölümler değişir (revision.py)
+        feedback = request.feedback if request else None
+        # Yalnız talep varsa eklenir: eski kodla çalışan worker düz regenerate'te TypeError atmasın
+        revision = {"feedback": feedback, "scope": list(request.scope)} if feedback else {}
 
         return _dispatch_ads(
             db,
@@ -930,12 +1193,14 @@ def regenerate_ads_group(
                 "trusted_brand_usp": trusted_brand_usp,
                 "source_set_id": source_set.id,
                 "source_group_id": group_id,
+                **revision,
             },
             snapshot_extra={
                 "source_set_id": source_set.id,
                 "source_group_id": group_id,
                 "display_brand_usp": effective_brand_usp,
                 "trusted_brand_usp": trusted_brand_usp,
+                **revision,
             },
         )
     except HTTPException:
@@ -1219,7 +1484,9 @@ def generate_social_bulk(
 )
 def get_social_format_matrix():
     """Sosyal brief platform, format ve süre matrisi (read-only, deterministik)."""
-    return get_format_matrix()
+    return get_format_matrix().model_copy(
+        update={"campaign_enabled": bool(settings.ENABLE_SOCIAL_CAMPAIGN_BRIEF)}
+    )
 
 
 @router.post(
@@ -1239,6 +1506,16 @@ def create_social_brief_endpoint(
             detail={
                 "code": "FEATURE_DISABLED",
                 "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
+            },
+        )
+
+    if request.campaign is not None and not settings.ENABLE_SOCIAL_CAMPAIGN_BRIEF:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "CAMPAIGN_DISABLED",
+                "message": "Kampanya modu bu sunucuda açık değil. Sistem yöneticinize başvurun.",
+                "field": "campaign",
             },
         )
 
@@ -1556,6 +1833,7 @@ def get_social_brief_state_endpoint(
         idea_retry_attempts=[_attempt_summary_to_response(a) for a in state.idea_retry_attempts],
         content_attempts=[_attempt_summary_to_response(a) for a in state.content_attempts],
         content_idea_ids=list(state.content_idea_ids),
+        locked_offer_terms=state.locked_offer_terms,
     )
 
 
@@ -1633,6 +1911,9 @@ def get_social_content_history_endpoint(
                 hashtags=list(it.hashtags),
                 industry_posting_suggestion=it.industry_posting_suggestion,
                 platform_notes=it.platform_notes,
+                image_prompt=it.image_prompt,
+                campaign_payload=it.campaign_payload,
+                overlay_text=it.overlay_text,
                 duration_status=it.duration_status,
                 actual_duration_sec=it.actual_duration_sec,
                 duration_min_sec=it.duration_min_sec,
@@ -2116,6 +2397,7 @@ def social_idea_read_to_response(
             content_format=i.content_format,
             trend_alignment=i.trend_alignment,
             is_stale=i.is_stale,
+            campaign_payload=i.campaign_payload,
         )
         for i in result.ideas
     ]
@@ -2882,6 +3164,9 @@ def social_content_read_to_response(
                 hashtags=list(c.hashtags),
                 industry_posting_suggestion=c.industry_posting_suggestion,
                 platform_notes=c.platform_notes,
+                image_prompt=c.image_prompt,
+                campaign_payload=c.campaign_payload,
+                overlay_text=overlay_display(c.overlay_text, c.campaign_payload),
                 duration_status=c.duration_status,
                 actual_duration_sec=c.actual_duration_sec,
                 validation_warnings=list(c.validation_warnings),
@@ -3007,6 +3292,10 @@ def generate_social_brief_contents_async(
         http_status, default_msg = status_code_map.get(
             e.error_code, (409, "İçerik üretim kuralı ihlali.")
         )
+        if e.error_code.startswith("CONTENT_OFFER_"):
+            # Kampanya teklif hataları: mesaj sabit ve kullanıcıya dönük (dinamik veri taşımaz)
+            http_status = 409 if e.error_code == "CONTENT_OFFER_LOCKED" else 400
+            default_msg = e.message
         raise HTTPException(
             status_code=http_status,
             detail={"code": e.error_code, "message": default_msg},
@@ -3310,6 +3599,185 @@ def get_social_brief_contents_attempt(
                 "message": "İçerik sonuçları okunurken beklenmeyen bir hata oluştu. Sayfayı yenileyin.",
             },
         )
+
+
+# ==================== SOSYAL İÇERİK REVİZYONU ("Revize Et") ====================
+
+_SOCIAL_REVISION_HTTP = {
+    "NOT_FOUND": 404,
+    "REVISION_INVALID_SCOPE": 400,
+    "REVISION_OFFER_EXPIRED": 400,
+}
+
+
+def _require_social_brief_flow() -> None:
+    if not getattr(settings, "ENABLE_SOCIAL_BRIEF_FLOW", False):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "FEATURE_DISABLED",
+                "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
+            },
+        )
+
+
+def _social_revision_http(e) -> HTTPException:
+    return HTTPException(
+        status_code=_SOCIAL_REVISION_HTTP.get(e.code, 409),
+        detail={"code": e.code, "message": e.message},
+    )
+
+
+def _social_revision_list(db: Session, brief_id: int, brand_profile_id: int) -> SocialContentRevisionListResponse:
+    from app.core.social.content_revision import list_brief_revisions
+
+    items = list_brief_revisions(db, brief_id=brief_id, brand_profile_id=brand_profile_id)
+    db.commit()  # okuma anında lease'i dolan revizyonların failed yazımı
+    return SocialContentRevisionListResponse(brief_id=brief_id, items=items)
+
+
+@router.post(
+    "/social/briefs/{brief_id}/contents/{content_id}/revise",
+    response_model=SocialContentRevisionListResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def revise_social_brief_content(
+    brief_id: int,
+    content_id: int,
+    request: SocialContentRevisionRequest,
+    response: Response,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Kayıtlı içerik için geri bildirimli revizyon başlatır. Öneri kabul edilene kadar
+    canlı içerik DEĞİŞMEZ. Yanıt: brief'in güncel revizyon durumları."""
+    from app.core.social.content_revision import SocialRevisionError, begin_social_content_revision
+    from app.generators.social.attempt_state import finalize_content_revision_attempt_failure
+    from app.tasks.generation_tasks import revise_social_content_task
+
+    _require_social_brief_flow()
+    require_non_legacy_brief(db, brief_id, brand_profile_id)
+    try:
+        attempt, created = begin_social_content_revision(
+            db, brief_id=brief_id, content_id=content_id, brand_profile_id=brand_profile_id,
+            feedback=request.feedback, scope=list(request.scope),
+            idempotency_key=request.idempotency_key,
+        )
+        attempt_id = attempt.id
+        db.commit()
+    except SocialRevisionError as e:
+        db.rollback()
+        raise _social_revision_http(e)
+    except AttemptConflictError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ATTEMPT_CONFLICT",
+                "message": "Bu brief'te süren bir revizyon var; bitince yeniden deneyin.",
+            },
+        )
+    except AttemptNotWritableError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ATTEMPT_NOT_WRITABLE", "message": "Bu içerik şu an revize edilemiyor; sayfayı yenileyin."},
+        )
+
+    if created:
+        task_id = str(uuid.uuid4())
+        try:
+            revise_social_content_task.apply_async(args=[attempt_id], task_id=task_id)
+        except Exception:
+            logger.exception("Sosyal revizyon görevi kuyruğa alınamadı")
+            try:
+                finalize_content_revision_attempt_failure(
+                    db, attempt_id=attempt_id, task_id=task_id, reason_code="dispatch_failed",
+                    error_message="Sosyal revizyon görevi kuyruğa alınamadı.",
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Kuyruğa alınamayan sosyal revizyon kapatılamadı")
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "REVISION_DISPATCH_FAILED", "message": "Revizyon başlatılamadı. Yeniden deneyin."},
+            )
+    else:
+        response.status_code = status.HTTP_200_OK
+    return _social_revision_list(db, brief_id, brand_profile_id)
+
+
+@router.get(
+    "/social/briefs/{brief_id}/revisions",
+    response_model=SocialContentRevisionListResponse,
+)
+def list_social_brief_revisions(
+    brief_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Brief içeriklerinin en son revizyon durumları (süren / hazır öneri / başarısız)."""
+    from app.core.social.content_revision import SocialRevisionError
+
+    _require_social_brief_flow()
+    try:
+        return _social_revision_list(db, brief_id, brand_profile_id)
+    except SocialRevisionError as e:
+        db.rollback()
+        raise _social_revision_http(e)
+
+
+@router.post("/social/revisions/{revision_id}/accept")
+def accept_social_content_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Öneriyi canlı içeriğe yazar (aynı içerik; regeneration_count +1). Tekrar kabul no-op."""
+    from app.core.social.content_contract import SocialContentOutputValidationError
+    from app.core.social.content_persistence import SocialContentPersistenceError
+    from app.core.social.content_revision import SocialRevisionError, accept_social_revision
+
+    _require_social_brief_flow()
+    try:
+        content = accept_social_revision(db, attempt_id=revision_id, brand_profile_id=brand_profile_id)
+        result = {"status": "accepted", "content_id": content.id,
+                  "regeneration_count": content.regeneration_count}
+        db.commit()
+        return result
+    except SocialRevisionError as e:
+        if e.commit:
+            db.commit()
+        else:
+            db.rollback()
+        raise _social_revision_http(e)
+    except (SocialContentOutputValidationError, SocialContentPersistenceError):
+        db.rollback()
+        logger.exception("Sosyal revizyon kabul doğrulaması başarısız")
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "REVISION_INVALID", "message": "Öneri doğrulanamadı; içerik değişmedi. Yeniden revize edin."},
+        )
+
+
+@router.post("/social/revisions/{revision_id}/discard")
+def discard_social_content_revision(
+    revision_id: int,
+    brand_profile_id: int = Query(..., description="Workspace scope"),
+    db: Session = Depends(get_db),
+):
+    """Hazır öneriden vazgeçer ya da başarısız revizyon bildirimini kapatır."""
+    from app.core.social.content_revision import SocialRevisionError, discard_social_revision
+
+    _require_social_brief_flow()
+    try:
+        discard_social_revision(db, attempt_id=revision_id, brand_profile_id=brand_profile_id)
+        db.commit()
+    except SocialRevisionError as e:
+        db.rollback()
+        raise _social_revision_http(e)
+    return {"status": "discarded"}
 
 
 

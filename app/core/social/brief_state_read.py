@@ -24,6 +24,7 @@ from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from app.core.social.campaign_offer_lock import load_locked_offer_terms
 
 from app.core.social.category_persistence import (
     PersistedSocialCategory,
@@ -69,6 +70,7 @@ class SocialBriefStateResult:
     idea_retry_attempts: tuple[SocialAttemptSummary, ...]
     content_attempts: tuple[SocialAttemptSummary, ...]
     content_idea_ids: tuple[int, ...]
+    locked_offer_terms: Optional[dict] = None
 
 
 def _to_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -187,4 +189,5 @@ def load_social_brief_state(
         idea_retry_attempts=tuple(_summarize(a, current_time) for a in retry_rows),
         content_attempts=tuple(_summarize(a, current_time) for a in content_rows),
         content_idea_ids=content_idea_ids,
+        locked_offer_terms=(load_locked_offer_terms(db, brief.id) if brief.campaign_spec is not None else None),
     )

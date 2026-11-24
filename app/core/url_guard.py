@@ -46,6 +46,10 @@ class TlsVerificationError(UnsafeUrlError):
     """TLS sertifika doğrulaması başarısız (verify=True bilinçli)."""
 
 
+class UnsupportedContentType(UnsafeUrlError):
+    """Sunucu yanit verdi ama icerik turu izinli degil (hedef ERISILEBILIR)."""
+
+
 class FetchBudgetExceeded(UnsafeUrlError):
     """İstek sayısı / toplam süre bütçesi aşıldı; istek GÖNDERİLMEDEN fırlatılır."""
 
@@ -85,6 +89,7 @@ class FetchResult:
     content_type: str  # yalnız medya türü, küçük harf (parametresiz)
     content_encoding: str  # küçük harf; çağıran fail-closed kararını verir
     text: str
+    content: bytes = b""  # ham govde (PDF gibi ikili icerik icin)
 
 
 def assert_ip_is_public(ip_str: str) -> None:
@@ -193,7 +198,7 @@ def safe_fetch(
                         raise HttpStatusError(resp.status_code)
                     content_type = _media_type(resp.headers)
                     if content_type not in allowed:
-                        raise UnsafeUrlError(
+                        raise UnsupportedContentType(
                             "Yalnızca HTML içerik desteklenir"
                             if allowed <= HTML_TYPES
                             else "Desteklenmeyen içerik türü"
@@ -217,6 +222,7 @@ def safe_fetch(
                         content_type=content_type,
                         content_encoding=(resp.headers.get("content-encoding") or "").strip().lower(),
                         text=body.decode(encoding, errors="replace"),
+                        content=body,
                     )
             raise UnsafeUrlError("URL çok fazla yönlendirme içeriyor")
     except UnsafeUrlError:

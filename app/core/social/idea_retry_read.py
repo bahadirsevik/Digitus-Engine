@@ -863,6 +863,7 @@ def load_social_idea_retry_result(
             content_format=i.content_format,
             trend_alignment=ta_by_idea_id[i.id],
             is_stale=bool(i.is_stale),
+            campaign_payload=i.campaign_payload,
         )
         for i in sorted_ideas
     )

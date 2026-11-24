@@ -527,6 +527,7 @@ def prepare_social_idea_retry_worker_inputs(
                 brand_context_snapshot=brief.brand_context_snapshot,
                 keywords=keyword_snapshots_tuple,
                 target_specs=tuple(target_specs),
+                campaign=brief.campaign_spec,
             )
         )
 

@@ -28,7 +28,14 @@ import BriefCategoriesSection from './BriefCategoriesSection'
 import BriefIdeasSection from './BriefIdeasSection'
 import { MAX_CONTENT_SELECTION } from './briefRules'
 import BriefContentsSection from './BriefContentsSection'
-import { formatSeconds, socialErrorText } from './labels'
+import {
+  DESTINATION_LABEL,
+  OBJECTIVE_LABEL,
+  USAGE_LABEL,
+  formatSeconds,
+  offerSummary,
+  socialErrorText,
+} from './labels'
 import { useAliveRef } from './usePolling'
 
 interface Props {
@@ -316,6 +323,34 @@ export default function SocialBriefDetail({
               ))}
             </div>
           </div>
+          {brief.campaign_spec && (
+            <div className="sb-brief-summary-wide">
+              <span className="sb-brief-item-label">Kampanya</span>
+              <div className="sb-chip-container">
+                <span className="sb-chip">
+                  {brief.campaign_spec.mode === 'defined' ? 'Kampanya belli' : 'Kampanya önerisi'}
+                </span>
+                <span className="sb-chip">{USAGE_LABEL[brief.campaign_spec.usage]}</span>
+                <span className="sb-chip">{OBJECTIVE_LABEL[brief.campaign_spec.objective]}</span>
+                <span className="sb-chip">
+                  {DESTINATION_LABEL[brief.campaign_spec.destination]}
+                </span>
+                <span className="sb-chip">
+                  <b>{brief.campaign_spec.promoted_item}</b>
+                </span>
+              </div>
+              {brief.campaign_spec.offer_draft && (
+                <p className="sb-muted">
+                  Teklif taslağı: {offerSummary(brief.campaign_spec.offer_draft)}
+                </p>
+              )}
+              {brief.campaign_spec.included_features && (
+                <p className="sb-muted sb-prewrap">
+                  Pakete dahil özellikler (onaylı): {brief.campaign_spec.included_features}
+                </p>
+              )}
+            </div>
+          )}
           {brief.brand_context_snapshot && (
             <div className="sb-brief-summary-wide">
               <span className="sb-brief-item-label">Marka notları</span>

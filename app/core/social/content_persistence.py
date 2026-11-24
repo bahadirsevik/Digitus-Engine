@@ -28,6 +28,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.social.campaign_offer_lock import load_locked_offer_terms
 from app.core.social.content_contract import (
     ALLOWED_HOOK_STYLES,
     ContentTargetSpec,
@@ -145,6 +146,9 @@ class PersistedSocialContent:
     actual_duration_sec: int | None
     validation_warnings: tuple[str, ...]
     is_stale: bool
+    image_prompt: str | None = None
+    campaign_payload: dict | None = None
+    overlay_text: dict | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hooks", tuple(self.hooks))
@@ -424,6 +428,8 @@ def validate_and_build_persisted_social_content(
         "video_concept": row.video_concept,
         "industry_posting_suggestion": row.industry_posting_suggestion,
         "platform_notes": row.platform_notes,
+        "image_prompt": row.image_prompt,
+        "overlay_text": row.overlay_text,
     }
 
     try:
@@ -543,6 +549,9 @@ def validate_and_build_persisted_social_content(
         actual_duration_sec=row.actual_duration_sec,
         validation_warnings=tuple(row.validation_warnings),
         is_stale=row.is_stale,
+        image_prompt=revalidated.image_prompt,
+        campaign_payload=row.campaign_payload,
+        overlay_text=revalidated.overlay_text,
     )
 
 
@@ -877,6 +886,8 @@ def persist_social_content(
         "video_concept": content.video_concept,
         "industry_posting_suggestion": content.industry_posting_suggestion,
         "platform_notes": content.platform_notes,
+        "image_prompt": content.image_prompt,
+        "overlay_text": content.overlay_text,
     }
     try:
         revalidated_incoming = validate_social_content_output(raw_incoming_dict, target_spec)
@@ -906,6 +917,8 @@ def persist_social_content(
         or content.hashtags != revalidated_incoming.hashtags
         or content.industry_posting_suggestion != revalidated_incoming.industry_posting_suggestion
         or content.platform_notes != revalidated_incoming.platform_notes
+        or content.image_prompt != revalidated_incoming.image_prompt
+        or content.overlay_text != revalidated_incoming.overlay_text
         or content.duration_status != revalidated_incoming.duration_status
         or content.actual_duration_sec != revalidated_incoming.actual_duration_sec
         or content.validation_warnings != revalidated_incoming.validation_warnings
@@ -916,6 +929,49 @@ def persist_social_content(
             error_code=CONTENT_PERSISTENCE_INCONSISTENT,
             idea_id=idea_id,
             brief_id=brief_id,
+        )
+
+    # 4c. Kampanya snapshot'ı: üretimde kullanılan teklif içerik satırına yazılır (repair, revizyon,
+    # export buradan okur). Kaynak: kilitli brief + fikir + bu attempt'in istek snapshot'ı.
+    campaign_payload: dict[str, Any] | None = None
+    if brief.campaign_spec is not None:
+        offer_terms = ((attempt.coverage or {}).get("request") or {}).get("offer_terms")
+        idea_campaign = idea.campaign_payload
+        if (
+            not isinstance(offer_terms, dict)
+            or not isinstance(idea_campaign, dict)
+            or "cta_type" not in idea_campaign
+            or content.image_prompt is None
+        ):
+            raise SocialContentPersistenceError(
+                "Kampanya içeriği teklif snapshot'ı veya görsel prompt'u olmadan kaydedilemez.",
+                error_code=CONTENT_PERSISTENCE_INCONSISTENT,
+                field="campaign_payload",
+                idea_id=idea_id,
+                brief_id=brief.id,
+            )
+        # Recheck under the canonical brief lock before saving, including late workers.
+        locked_offer = load_locked_offer_terms(db, brief.id)
+        if locked_offer is not None and offer_terms != locked_offer:
+            raise SocialContentPersistenceError(
+                "Kampanya teklifi ilk kayıtlı içerikten farklı olamaz.",
+                error_code=CONTENT_PERSISTENCE_INCONSISTENT,
+                field="campaign_payload",
+                idea_id=idea_id,
+                brief_id=brief.id,
+            )
+        campaign_payload = {
+            "offer_terms": offer_terms,
+            "cta_type": idea_campaign["cta_type"],
+            "usage": brief.campaign_spec["usage"],
+        }
+    elif content.image_prompt is not None or content.overlay_text is not None:
+        raise SocialContentPersistenceError(
+            "Organik içerik görsel prompt'u veya görsel üstü metin taşıyamaz.",
+            error_code=CONTENT_PERSISTENCE_INCONSISTENT,
+            field="image_prompt",
+            idea_id=idea_id,
+            brief_id=brief.id,
         )
 
     # 5. Idempotent Mevcut Satır Kontrolü
@@ -974,6 +1030,9 @@ def persist_social_content(
         actual_duration_sec=revalidated_incoming.actual_duration_sec,
         validation_warnings=serialized_warnings,
         regeneration_count=0,
+        image_prompt=revalidated_incoming.image_prompt,
+        campaign_payload=campaign_payload,
+        overlay_text=revalidated_incoming.overlay_text,
     )
 
     try:

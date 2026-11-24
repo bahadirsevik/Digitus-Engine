@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios'
+import type { AdRevisionScope, SeoRevisionScope } from '../types/models'
 
 const API_BASE = '/api/v1'
 
@@ -735,6 +736,28 @@ export const generationApi = {
   listSeoGeo: (runId: number, limit = 100, brand_profile_id?: number) =>
     api.get(`/generation/seo-geo/list/${runId}`, { params: { limit, brand_profile_id } }),
 
+  // SEO "Revize Et": öneri önce önizlenir; kabul edilene kadar canlı içerik değişmez
+  reviseSeoGeo: (
+    contentId: number,
+    brand_profile_id: number,
+    body: { feedback: string; scope: SeoRevisionScope[]; idempotency_key: string }
+  ) =>
+    api.post<{ revision_id: number; status: string; created: boolean }>(
+      `/generation/seo-geo/${contentId}/revise`,
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  acceptSeoRevision: (revisionId: number, brand_profile_id: number) =>
+    api.post(`/generation/seo-geo/revisions/${revisionId}/accept`, undefined, {
+      params: { brand_profile_id },
+    }),
+
+  discardSeoRevision: (revisionId: number, brand_profile_id: number) =>
+    api.post(`/generation/seo-geo/revisions/${revisionId}/discard`, undefined, {
+      params: { brand_profile_id },
+    }),
+
   bulkSeoGeo: (runId: number, limit = 10, brand_profile_id?: number, tone = 'informative') =>
     api.post(`/generation/seo-geo/bulk/${runId}`, undefined, {
       params: { limit, brand_profile_id, tone },
@@ -761,8 +784,13 @@ export const generationApi = {
       params: { scoring_run_id: scoringRunId, brand_profile_id: brandProfileId },
     }),
 
-  regenerateAdGroup: (groupId: number, brand_profile_id?: number) =>
-    api.post(`/generation/ads/rsa/group/${groupId}/regenerate`, undefined, {
+  // Geri bildirimli revizyon: yalnız `scope` bölümleri değişir, gerisi aynen korunur
+  regenerateAdGroup: (
+    groupId: number,
+    brand_profile_id?: number,
+    revision?: { feedback: string; scope: AdRevisionScope[] }
+  ) =>
+    api.post(`/generation/ads/rsa/group/${groupId}/regenerate`, revision, {
       params: { brand_profile_id },
     }),
 
@@ -1673,6 +1701,7 @@ export interface SocialFormatMatrixResponse {
   version: string
   limits: SocialFormatMatrixLimitsResponse
   platforms: SocialPlatformOptionResponse[]
+  campaign_enabled?: boolean
 }
 
 export interface SocialBriefTargetCreateRequest {
@@ -1681,12 +1710,66 @@ export interface SocialBriefTargetCreateRequest {
   duration_preset_id?: string | null
 }
 
+// ---- Kampanya modu (plan_sosyal_kampanya_akisi.md) ----
+export type SocialOfferType = 'percent_discount' | 'bundle' | 'free_shipping' | 'gift'
+export type SocialCtaType =
+  | 'buy'
+  | 'learn_more'
+  | 'fill_form'
+  | 'message'
+  | 'call'
+  | 'visit_store'
+  | 'follow'
+
+export interface SocialOfferTerms {
+  type: SocialOfferType | 'none'
+  value?: string | null
+  applies_to?: string | null
+  conditions?: string | null
+  ends?: string | null
+}
+
+export interface SocialCampaignSpec {
+  mode: 'defined' | 'suggest'
+  usage: 'paid' | 'organic'
+  objective: 'sales' | 'lead' | 'awareness'
+  destination: 'site' | 'form' | 'whatsapp' | 'phone' | 'store' | 'profile'
+  promoted_item: string
+  audience?: string | null
+  focus_note?: string | null
+  included_features?: string | null
+  disallowed_offer_types: SocialOfferType[]
+  offer_draft?: SocialOfferTerms | null
+}
+
+export interface SocialIdeaCampaignPayload {
+  offer_type: SocialOfferType
+  offer_rationale: string
+  cta_type: SocialCtaType
+}
+
+/** Kampanya statik içeriğinin görsel üstü metni; offer_line/terms_line kilitli tekliften sunucuda kurulur */
+export interface SocialOverlayText {
+  headline: string
+  benefit: string
+  offer_line?: string | null
+  terms_line?: string | null
+  cta: string
+}
+
+export interface SocialContentCampaignPayload {
+  offer_terms: SocialOfferTerms
+  cta_type: SocialCtaType
+  usage: 'paid' | 'organic'
+}
+
 export interface SocialBriefCreateRequest {
   scoring_run_id: number
   keyword_ids: number[]
   targets: SocialBriefTargetCreateRequest[]
   brand_name?: string | null
   brand_context?: string | null
+  campaign?: SocialCampaignSpec | null
 }
 
 export interface SocialBriefKeywordResponse {
@@ -1717,6 +1800,7 @@ export interface SocialBriefResponse {
   created_at?: string | null
   keywords: SocialBriefKeywordResponse[]
   targets: SocialBriefTargetResponse[]
+  campaign_spec?: SocialCampaignSpec | null
 }
 
 export interface SocialBriefCategoriesGenerateRequest {
@@ -1762,6 +1846,7 @@ export interface SocialBriefStateResponse {
   scoring_run_id: number
   is_stale: boolean
   locked_at?: string | null
+  locked_offer_terms?: SocialOfferTerms | null
   category_attempt?: SocialAttemptSummaryResponse | null
   categories: SocialGeneratedCategoryResponse[]
   ideas_attempt?: SocialAttemptSummaryResponse | null
@@ -1793,6 +1878,7 @@ export interface SocialGeneratedIdeaResponse {
   content_format: string
   trend_alignment: number
   is_stale: boolean
+  campaign_payload?: SocialIdeaCampaignPayload | null
 }
 
 export interface SocialIdeaCoverageResponse {
@@ -1825,6 +1911,7 @@ export interface SocialBriefContentsGenerateRequest {
   idempotency_key: string
   idea_ids: number[]
   trusted_brand_usp?: string | null
+  offer_terms?: SocialOfferTerms | null
 }
 
 export interface SocialContentHookResponse {
@@ -1876,6 +1963,9 @@ export interface SocialGeneratedContentItemResponse {
   hashtags: string[]
   industry_posting_suggestion?: string | null
   platform_notes?: string | null
+  image_prompt?: string | null
+  campaign_payload?: SocialContentCampaignPayload | null
+  overlay_text?: SocialOverlayText | null
   duration_status: string
   actual_duration_sec?: number | null
   validation_warnings: string[]
@@ -1926,6 +2016,9 @@ export interface SocialContentHistoryItemResponse {
   hashtags: string[]
   industry_posting_suggestion?: string | null
   platform_notes?: string | null
+  image_prompt?: string | null
+  campaign_payload?: SocialContentCampaignPayload | null
+  overlay_text?: SocialOverlayText | null
   duration_status?: string | null
   actual_duration_sec?: number | null
   duration_min_sec?: number | null
@@ -1942,6 +2035,43 @@ export interface SocialContentHistoryResponse {
   offset: number
   has_more: boolean
   items: SocialContentHistoryItemResponse[]
+}
+
+export type SocialRevisionScope = 'hooks' | 'text' | 'body' | 'production'
+
+export interface SocialRevisionProposed {
+  hooks: { text: string; style?: string | null }[]
+  caption: string
+  cta_text?: string | null
+  hashtags: string[]
+  format_payload?: SocialFormatPayload | null
+  scenario?: string | null
+  visual_suggestion?: string | null
+  video_concept?: string | null
+  industry_posting_suggestion?: string | null
+  platform_notes?: string | null
+  image_prompt?: string | null
+  overlay_text?: SocialOverlayText | null
+  duration_status?: string | null
+  actual_duration_sec?: number | null
+  validation_warnings: string[]
+}
+
+export interface SocialContentRevisionItem {
+  id: number
+  content_id: number
+  status: 'generating' | 'ready' | 'failed'
+  feedback?: string | null
+  scope: SocialRevisionScope[]
+  created_at?: string | null
+  proposed?: SocialRevisionProposed | null
+  changes: string[]
+  error_message?: string | null
+}
+
+export interface SocialContentRevisionListResponse {
+  brief_id: number
+  items: SocialContentRevisionItem[]
 }
 
 export const socialBriefApi = {
@@ -2040,6 +2170,562 @@ export const socialBriefApi = {
   ) =>
     api.get<SocialContentHistoryResponse>('/generation/social/contents/history', {
       params: { brand_profile_id, ...params },
+    }),
+
+  reviseContent: (
+    brief_id: number,
+    content_id: number,
+    data: { feedback: string; scope: SocialRevisionScope[]; idempotency_key: string },
+    brand_profile_id: number
+  ) =>
+    api.post<SocialContentRevisionListResponse>(
+      `/generation/social/briefs/${brief_id}/contents/${content_id}/revise`,
+      data,
+      { params: { brand_profile_id } }
+    ),
+
+  listRevisions: (brief_id: number, brand_profile_id: number) =>
+    api.get<SocialContentRevisionListResponse>(`/generation/social/briefs/${brief_id}/revisions`, {
+      params: { brand_profile_id },
+    }),
+
+  acceptRevision: (revision_id: number, brand_profile_id: number) =>
+    api.post<{ status: string; content_id: number; regeneration_count: number }>(
+      `/generation/social/revisions/${revision_id}/accept`,
+      null,
+      { params: { brand_profile_id } }
+    ),
+
+  discardRevision: (revision_id: number, brand_profile_id: number) =>
+    api.post<{ status: string }>(`/generation/social/revisions/${revision_id}/discard`, null, {
+      params: { brand_profile_id },
+    }),
+}
+
+// Dijital varlık denetimi (ScoringRun'dan bağımsız; workspace'e bağlı)
+export type AuditFindingState = 'observed' | 'not_observed' | 'unknown' | 'blocked' | 'error'
+export type AuditAssessment = 'ok' | 'warning' | 'problem' | 'info' | null
+
+export interface AuditFinding {
+  section: string
+  check: string
+  label: string
+  state: AuditFindingState
+  assessment: AuditAssessment
+  value: Record<string, unknown> | null
+  note: string | null
+  source: string | null
+  limits: string[]
+}
+
+export interface AuditTarget {
+  id: number
+  kind: 'own' | 'competitor'
+  url: string
+  status: 'pending' | 'completed' | 'blocked' | 'failed'
+  pages_checked: number
+  error_message: string | null
+  findings?: AuditFinding[]
+}
+
+export type AuditStatus = 'pending' | 'running' | 'completed' | 'partial' | 'failed'
+
+export interface AuditQuestion {
+  key: string
+  label: string
+  options: string[] | null
+  /** brief: analist bağlamı · account: müşteriye sorulur, kanıtla doğrulanabilir */
+  group?: 'brief' | 'account'
+}
+
+/** Analist kanıtı: ilk üçü birlikte zorunlu; dolu ise cevap "Doğrulandı", değilse "Beyan" */
+export interface AuditEvidence {
+  source?: string
+  checked_at?: string
+  verified_by?: string
+  period?: string
+  account?: string
+}
+
+export type AuditAnswers = Record<
+  string,
+  { value?: string | null; note?: string | null; evidence?: AuditEvidence }
+>
+
+export interface DigitalAuditSummary {
+  id: number
+  status: AuditStatus
+  progress: number
+  error_message: string | null
+  created_at: string
+  completed_at: string | null
+  targets: AuditTarget[]
+}
+
+export interface VisibilityKeywordRow {
+  keyword: string
+  /** site -> sıra; null = ölçülen ilk `checked_top` sonuçta gözlenmedi */
+  positions: Record<string, number | null>
+  ads: string[]
+  local_pack: boolean
+  checked_top: number
+  top: string[]
+  /** adresi okunamayan organik sonuç / reklam sayısı: varsa "gözlenmedi" kesin değildir */
+  unresolved?: number
+  ads_unresolved?: number
+  error?: string
+}
+
+interface VisibilitySection {
+  status: 'ok' | 'unavailable' | 'failed'
+  reason?: string | null
+}
+
+export interface YoutubeChannel {
+  status: 'ok' | 'unavailable' | 'failed' | 'not_observed' | 'unknown'
+  reason?: string
+  title?: string
+  subscribers?: number | null
+  video_count?: number
+  last_upload?: string | null
+  uploads_90d?: number
+  recent_avg_views?: number | null
+  recent_sample?: number
+}
+
+export interface AuditVisibility {
+  measured_at: string
+  location: string
+  sites: string[]
+  serp?: VisibilitySection & {
+    keywords: VisibilityKeywordRow[]
+    brand: {
+      query: string
+      own_position?: number | null
+      knowledge_panel?: boolean
+      other_ads?: string[]
+      unresolved?: number
+      ads_unresolved?: number
+      error?: string
+    } | null
+    reputation: {
+      query: string
+      error?: string
+      results: { position: number; title: string; domain: string; shown: string }[]
+    }[]
+    queries_used: number
+    query_limit: number
+    location_used: string | null
+    device: string
+  }
+  youtube?: VisibilitySection & { channels?: Record<string, YoutubeChannel> }
+  places?: VisibilitySection & {
+    profiles?: Record<
+      string,
+      { status: string; place_id?: string; maps_url?: string; reason?: string }
+    >
+  }
+}
+
+/** Google profilinin taze bilgisi: saklanmaz, yalnız ekranda gösterilir */
+export interface LivePlace {
+  available: boolean
+  reason?: string
+  name?: string
+  address?: string
+  phone?: string
+  rating?: number | null
+  rating_count?: number | null
+  category?: string
+}
+
+export interface VisibilityRequest {
+  keywords: string[]
+  location?: string
+  brand_name?: string
+}
+
+export interface DigitalAuditDetail extends DigitalAuditSummary {
+  answers: AuditAnswers
+  questions: AuditQuestion[]
+  visibility?: AuditVisibility | null
+}
+
+export const digitalAuditApi = {
+  start: (
+    brand_profile_id: number,
+    body: { own_url?: string; competitor_urls: string[]; visibility?: VisibilityRequest }
+  ) =>
+    api.post<{ audit_id: number; status: AuditStatus; reused: boolean }>(
+      '/digital-audit/audits',
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  list: (brand_profile_id: number) =>
+    api.get<{ audits: DigitalAuditSummary[] }>('/digital-audit/audits', {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  get: (auditId: number, brand_profile_id: number) =>
+    api.get<DigitalAuditDetail>(`/digital-audit/audits/${auditId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  livePlaces: (auditId: number, brand_profile_id: number) =>
+    api.get<{ profiles: Record<string, LivePlace> }>(`/digital-audit/audits/${auditId}/places`, {
+      params: { brand_profile_id },
+    }),
+
+  saveAnswers: (auditId: number, brand_profile_id: number, answers: AuditAnswers) =>
+    api.put<{ answers: AuditAnswers }>(
+      `/digital-audit/audits/${auditId}/answers`,
+      { answers },
+      { params: { brand_profile_id } }
+    ),
+}
+
+// --- Dijital denetim Faz 2: araştırma, segmentler, briefler ---
+
+export interface ResearchItem {
+  text: string
+  date?: string
+  source_name?: string
+  /** false: içindeki rakam kaynakta bulunamadı; null/undefined: rakam yok */
+  numbers_ok?: boolean | null
+  /** Reklam kısıtının birincil kaynak teyidi; analist dört alanı da girmedikçe yoktur */
+  verification?: RestrictionVerification
+}
+
+export interface RestrictionVerification {
+  primary_source_url: string
+  regulation_date: string
+  verified_by: string
+  verified_at: string
+}
+
+export interface ResearchTheme {
+  theme: string
+  quote: string
+  source_name: string
+  numbers_ok?: boolean | null
+  quote_found: boolean
+}
+
+export interface ResearchClaim {
+  id: string
+  claim: string
+  value: string
+  unit: string
+  year: string
+  geography: string
+  source_name: string
+  /** Analistin belirlediği kaynak türü ve notu (yoksa tür "belirlenmedi") */
+  source_type?: string
+  analyst_note?: string
+  check: {
+    status: 'found' | 'short' | 'not_found' | 'no_number'
+    source_url?: string
+    context?: string
+    year_in_context?: boolean | null
+  }
+}
+
+interface ResearchSectionBase {
+  status: 'ok' | 'failed' | 'unavailable'
+  error?: string
+  reason?: string
+}
+
+export interface SectorSection extends ResearchSectionBase {
+  verified?: boolean
+  definition?: ResearchItem[]
+  services?: ResearchItem[]
+  growth?: ResearchItem[]
+  developments?: ResearchItem[]
+  restrictions?: ResearchItem[]
+  directories?: ResearchItem[]
+  not_found?: string[]
+  claims?: ResearchClaim[]
+  sources?: { url: string; kind: string }[]
+}
+
+export interface AudienceSection extends ResearchSectionBase {
+  verified?: boolean
+  needs?: ResearchTheme[]
+  hesitations?: ResearchTheme[]
+  questions?: ResearchItem[]
+  trust?: ResearchItem[]
+  not_found?: string[]
+  question_keywords?: { keyword: string; monthly_volume: number }[]
+  sources?: { url: string; kind: string }[]
+}
+
+export interface DemandSection extends ResearchSectionBase {
+  keywords?: { keyword: string }[]
+  by_month?: { month: string; searches: number; index: number | null }[]
+  peak_months?: string[]
+  low_months?: string[]
+  bid_range?: { low_median: number; high_median: number; min: number; max: number } | null
+}
+
+export interface ResearchSegment {
+  name: string
+  need: string
+  stage: string
+  search_intent?: string
+  hesitation?: string
+  validation_method?: string
+  evidence: string
+  assumption: string
+  value_proposition: string
+  messages: string[]
+  warnings: string[]
+}
+
+export interface SynthesisSection extends ResearchSectionBase {
+  segments?: ResearchSegment[]
+  opportunities?: {
+    text: string
+    evidence: string
+    excluded?: { reason: string; by: string; at: string }
+  }[]
+  google_ads?: {
+    keyword_groups: { group: string; keywords: string[] }[]
+    negatives: string[]
+    note: string
+  }
+  meta_audiences?: {
+    segment: string
+    location: string
+    age_hypothesis: string
+    interests: string[]
+    note: string
+  }[]
+}
+
+export interface AdIdea {
+  segment: string
+  channel: string
+  insight: string
+  offer: string
+  message: string
+  cta: string
+  test_hypothesis: string
+  warnings: string[]
+  restriction_note: string | null
+}
+
+export interface CreativeBrief {
+  segment: string
+  channel: string
+  format: string
+  duration: string
+  hook: string
+  visual_direction: string
+  shot_list: string[]
+  copy: string
+  proof_needed: string[]
+  ab_variant: string
+  warnings: string[]
+  restriction_note: string | null
+}
+
+export interface ResearchBriefs {
+  status: 'pending' | 'ok' | 'failed'
+  error?: string
+  selection?: { segments: number[]; channels: string[] }
+  ad_ideas?: AdIdea[]
+  creative_briefs?: CreativeBrief[]
+}
+
+/** Karar odaklı rapor maddesi: her madde en az bir dayanağa (refs) bağlıdır */
+export interface StrategyItem {
+  refs: string[]
+  warnings?: string[]
+  options?: string[]
+  held_action?: StrategyItem
+  [field: string]: string | string[] | StrategyItem | undefined
+}
+
+export interface StrategyContent {
+  summary: StrategyItem[]
+  section_notes: StrategyItem[]
+  competition: StrategyItem[]
+  competition_conclusion?: StrategyItem[]
+  sector_meanings?: StrategyItem[]
+  opportunities: StrategyItem[]
+  decisions: StrategyItem[]
+  actions: StrategyItem[]
+  swot: Record<string, StrategyItem[]>
+  dropped?: number
+  /** Yorumu olmayan bölümler ve nedeni */
+  note_gaps?: { section: string; reason: string }[]
+}
+
+export interface StrategySection {
+  status: 'ok' | 'failed'
+  error?: string
+  last_error?: string
+  version: number
+  /** İçerik revizyonu: her düzeltmede artar; kaydetme ve onay ekranda görülen revizyonla yapılır */
+  revision: number
+  generated_at: string
+  catalogue: { id: string; kind: string; text: string }[]
+  gaps: string[]
+  ad_base_status: string
+  draft: StrategyContent
+  edited: StrategyContent | null
+  approval: { approved_by: string; approved_at: string; version: number } | null
+}
+
+export interface DigitalResearchSummary {
+  id: number
+  status: AuditStatus
+  stage: 'research' | 'synthesis' | 'briefs' | 'strategy'
+  progress: number
+  error_message: string | null
+  inputs: { sector?: string; geography?: string; focus?: string | null }
+  created_at: string
+  completed_at: string | null
+}
+
+export interface DigitalResearchDetail extends DigitalResearchSummary {
+  audit_id: number | null
+  sections: {
+    demand?: DemandSection
+    sector?: SectorSection
+    audience?: AudienceSection
+    synthesis?: SynthesisSection
+    strategy?: StrategySection
+  }
+  /** none | failed | stale | draft | approved: onay yalnız incelenen sürüm için geçerlidir */
+  strategy_state?: 'none' | 'failed' | 'stale' | 'draft' | 'approved'
+  /** Ekranda görülen belgenin parmak izi; onay isteği bunu taşır, içerik değiştiyse sunucu reddeder */
+  strategy_review_sha?: string | null
+  briefs: ResearchBriefs | null
+  claim_overrides: string[]
+  /** Rakam kararları üretimden sonra değişti: bölüm rapora girmez, yenilenmesi gerekir */
+  synthesis_stale?: boolean
+  briefs_stale?: boolean
+  usage: Record<string, number>
+  channels: Record<string, string>
+}
+
+export const digitalResearchApi = {
+  start: (brand_profile_id: number, body: { sector: string; geography: string; focus?: string }) =>
+    api.post<{ research_id: number; status: AuditStatus; reused: boolean }>(
+      '/digital-audit/research',
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  list: (brand_profile_id: number) =>
+    api.get<{ reports: DigitalResearchSummary[] }>('/digital-audit/research', {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  get: (reportId: number, brand_profile_id: number) =>
+    api.get<DigitalResearchDetail>(`/digital-audit/research/${reportId}`, {
+      params: { brand_profile_id },
+      timeout: STATUS_POLL_TIMEOUT_MS,
+    }),
+
+  saveClaimOverrides: (reportId: number, brand_profile_id: number, overrides: string[]) =>
+    api.put<{ claim_overrides: string[]; synthesis_stale?: boolean; briefs_stale?: boolean }>(
+      `/digital-audit/research/${reportId}/claims`,
+      { overrides },
+      { params: { brand_profile_id } }
+    ),
+
+  refreshSynthesis: (reportId: number, brand_profile_id: number) =>
+    api.post<{ research_id: number; status: AuditStatus }>(
+      `/digital-audit/research/${reportId}/synthesis`,
+      null,
+      { params: { brand_profile_id } }
+    ),
+
+  startBriefs: (
+    reportId: number,
+    brand_profile_id: number,
+    body: { segments: number[]; channels: string[] }
+  ) =>
+    api.post<{ research_id: number; status: AuditStatus }>(
+      `/digital-audit/research/${reportId}/briefs`,
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  saveClaimReview: (
+    reportId: number,
+    brand_profile_id: number,
+    body: { claim_id: string; source_type?: string; note?: string }
+  ) =>
+    api.put<DigitalResearchDetail>(`/digital-audit/research/${reportId}/claim-review`, body, {
+      params: { brand_profile_id },
+    }),
+
+  saveRestrictionVerification: (
+    reportId: number,
+    brand_profile_id: number,
+    index: number,
+    body: Partial<RestrictionVerification>
+  ) =>
+    api.put<DigitalResearchDetail>(
+      `/digital-audit/research/${reportId}/restrictions/${index}/verification`,
+      body,
+      { params: { brand_profile_id } }
+    ),
+
+  startStrategy: (reportId: number, brand_profile_id: number) =>
+    api.post<{ research_id: number; status: AuditStatus }>(
+      `/digital-audit/research/${reportId}/strategy`,
+      null,
+      { params: { brand_profile_id } }
+    ),
+
+  saveStrategy: (
+    reportId: number,
+    brand_profile_id: number,
+    version: number,
+    revision: number,
+    content: StrategyContent
+  ) =>
+    api.put<DigitalResearchDetail>(
+      `/digital-audit/research/${reportId}/strategy`,
+      { version, revision, content },
+      { params: { brand_profile_id } }
+    ),
+
+  approveStrategy: (
+    reportId: number,
+    brand_profile_id: number,
+    version: number,
+    revision: number,
+    review_sha: string,
+    approved_by: string
+  ) =>
+    api.post<DigitalResearchDetail>(
+      `/digital-audit/research/${reportId}/strategy/approve`,
+      { version, revision, review_sha, approved_by },
+      { params: { brand_profile_id } }
+    ),
+
+  exportReport: (
+    brand_profile_id: number,
+    params: {
+      format: 'docx' | 'pdf'
+      audit_id?: number
+      research_id?: number
+      view?: 'executive' | 'detail' | 'implementation' | 'pitch'
+    }
+  ) =>
+    api.get('/digital-audit/export', {
+      params: { brand_profile_id, ...params },
+      responseType: 'blob',
     }),
 }
 

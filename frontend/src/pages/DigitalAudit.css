@@ -1,0 +1,353 @@
+.audit-page {
+  padding-bottom: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.audit-page h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+  color: var(--text-strong);
+}
+
+.audit-start,
+.audit-status,
+.audit-section {
+  padding: 20px;
+}
+
+.audit-url-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.audit-url-grid label,
+.audit-question label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.audit-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.audit-history {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audit-status-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+}
+
+.audit-date {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.audit-status-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--warning-text);
+}
+
+.audit-targets {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.audit-targets li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.audit-target-kind {
+  width: 48px;
+  color: var(--text-muted);
+}
+
+.audit-target-host {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.audit-table-wrap {
+  overflow-x: auto;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.audit-table th,
+.audit-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.audit-table thead th {
+  border-top: none;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.audit-table thead th small {
+  display: block;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.audit-table tbody th {
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 200px;
+}
+
+.audit-table td {
+  min-width: 170px;
+  color: var(--text-secondary);
+}
+
+.audit-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.audit-chip-ok {
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+.audit-chip-warning {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.audit-chip-problem {
+  background: var(--error-soft);
+  color: var(--error-text);
+}
+
+.audit-chip-neutral {
+  background: var(--info-soft);
+  color: var(--info-text);
+}
+
+/* Engellendi / bilinmiyor: sorun rengi DEĞİL; ölçülemedi demektir */
+.audit-chip-muted {
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-strong);
+}
+
+.audit-cell-summary {
+  margin-top: 6px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.audit-cell-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.audit-limits {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.audit-limits summary {
+  cursor: pointer;
+}
+
+.audit-limits ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.audit-questions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.audit-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.audit-answer-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.audit-evidence summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.audit-evidence .input {
+  margin-top: 6px;
+  width: 100%;
+}
+
+/* --- Araştırma ve fikir --- */
+.audit-section h3 {
+  font-size: 14px;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.research-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.research-list small {
+  color: var(--text-muted);
+}
+
+.research-list .audit-chip {
+  margin-left: 8px;
+}
+
+.research-quote {
+  margin-left: 6px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.research-actions,
+.research-channels {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.research-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.research-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.research-card {
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.research-card p {
+  margin: 0;
+}
+
+.research-card small {
+  color: var(--text-muted);
+}
+
+.research-brief-form {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.research-brief-form .btn {
+  margin-top: 12px;
+}
+
+.research-restriction {
+  font-weight: 600;
+}
+
+/* --- Karar odaklı rapor --- */
+.strategy-group {
+  margin: 16px 0;
+}
+
+.strategy-item {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.strategy-text {
+  resize: vertical;
+  min-height: 64px;
+  font: inherit;
+  line-height: 1.35;
+}
+
+.strategy-meta,
+.strategy-held {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.strategy-downloads {
+  display: inline-flex;
+  gap: 6px;
+}

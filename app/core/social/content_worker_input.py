@@ -26,6 +26,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.social.campaign_spec import CONTENT_OFFER_TYPES, NO_OFFER_TERMS, content_campaign_context
 from app.core.social.content_contract import (
     ContentTargetSpec,
 )
@@ -117,6 +118,7 @@ class SocialContentRequestSnapshot:
     idea_ids: tuple[int, ...]
     product_facts: str | None
     trusted_brand_usp: str | None
+    offer_terms: dict[str, Any] | None = None  # yalnız kampanya brief'i
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "idea_ids", tuple(self.idea_ids))
@@ -193,7 +195,7 @@ def extract_social_content_request_snapshot(
         )
 
     expected_req_keys = {"idea_ids", "product_facts", "trusted_brand_usp"}
-    if set(req.keys()) != expected_req_keys:
+    if set(req.keys()) - {"offer_terms"} != expected_req_keys:
         raise SocialContentWorkerInputError(
             "Coverage request yalnızca idea_ids, product_facts ve trusted_brand_usp alanlarını içermelidir.",
             error_code=CONTENT_WORKER_INPUT_INCONSISTENT,
@@ -301,11 +303,25 @@ def extract_social_content_request_snapshot(
                 field="trusted_brand_usp",
             )
 
+    # offer_terms (yalnız kampanya brief'i; anahtar organik snapshot'ta hiç yoktur)
+    offer_terms = req.get("offer_terms")
+    if "offer_terms" in req and (
+        type(offer_terms) is not dict
+        or set(offer_terms) != set(NO_OFFER_TERMS)
+        or offer_terms["type"] not in CONTENT_OFFER_TYPES
+    ):
+        raise SocialContentWorkerInputError(
+            "offer_terms snapshot'ı geçersiz.",
+            error_code=CONTENT_WORKER_INPUT_INCONSISTENT,
+            field="offer_terms",
+        )
+
     return SocialContentRequestSnapshot(
         schema_version="contents_request_v1",
         idea_ids=tuple(cleaned_idea_ids),
         product_facts=pf,
         trusted_brand_usp=usp,
+        offer_terms=offer_terms,
     )
 
 
@@ -405,6 +421,14 @@ def prepare_social_content_worker_inputs(
         raise SocialContentWorkerInputError(
             "Brief kanal atama sürümü güncel değil; worker input hazırlanamaz.",
             error_code=CONTENT_WORKER_INPUT_INCONSISTENT,
+            brief_id=brief.id,
+        )
+
+    if (brief.campaign_spec is None) != (snapshot.offer_terms is None):
+        raise SocialContentWorkerInputError(
+            "Kampanya brief'i ile istek snapshot'ındaki teklif koşulları uyuşmuyor.",
+            error_code=CONTENT_WORKER_INPUT_INCONSISTENT,
+            field="offer_terms",
             brief_id=brief.id,
         )
 
@@ -739,6 +763,17 @@ def prepare_social_content_worker_inputs(
             keyword=kw_text,
         )
 
+        campaign = None
+        if snapshot.offer_terms is not None:
+            if not isinstance(idea.campaign_payload, dict) or "cta_type" not in idea.campaign_payload:
+                raise SocialContentWorkerInputError(
+                    "Kampanya fikri kampanya bilgisi taşımıyor.",
+                    error_code=CONTENT_WORKER_INPUT_INCONSISTENT,
+                    idea_id=idea.id,
+                    brief_id=brief.id,
+                )
+            campaign = content_campaign_context(brief.campaign_spec, idea.campaign_payload, snapshot.offer_terms)
+
         prompt_input = SocialContentPromptInput(
             attempt_id=attempt.id,
             idea_id=idea.id,
@@ -751,6 +786,7 @@ def prepare_social_content_worker_inputs(
             brand_context=brief.brand_context_snapshot,
             product_facts=snapshot.product_facts,
             trusted_brand_usp=snapshot.trusted_brand_usp,
+            campaign=campaign,
         )
 
         try:
@@ -770,6 +806,8 @@ def prepare_social_content_worker_inputs(
             primary_keyword=kw_text,
             product_facts=snapshot.product_facts,
             trusted_brand_usp=snapshot.trusted_brand_usp,
+            offer_terms=snapshot.offer_terms,
+            included_features=(campaign or {}).get("included_features"),
         )
 
         try:

@@ -131,6 +131,17 @@ export interface AdGenerationSetSummary {
   claim_risk_count?: number
   claim_unverified_count?: number
   claim_review?: ClaimReview | null
+  // Geri bildirimli grup revizyonu ("Revize Et") ile üretildiyse
+  revision?: AdGroupRevisionInfo | null
+}
+
+export type AdRevisionScope = 'headlines' | 'descriptions' | 'negatives'
+
+export interface AdGroupRevisionInfo {
+  feedback: string
+  scope: AdRevisionScope[]
+  source_set_id: number
+  source_group_id: number
 }
 
 export interface AdsSetListResult {
@@ -182,6 +193,46 @@ export interface SEOGeoItem {
   image_alt_texts?: string[]
   publish_review?: PublishReview | null
   created_at?: string | null
+  // Kabul edilmiş kullanıcı revizyonu sayısı + bekleyen ("Revize Et") revizyon
+  revision_count?: number
+  // Son kabul edilen revizyonun tarihi (created_at üretim tarihi olarak kalır)
+  revised_at?: string | null
+  // Değerlendiricinin kayıtlı notu (GEO AI değerlendirmesi yapıldıysa)
+  geo_notes?: string | null
+  pending_revision?: SeoPendingRevision | null
+}
+
+export type SeoRevisionScope = 'title_meta' | 'intro' | 'body'
+
+export interface SeoRevisionChange {
+  field: string
+  label: string
+  before: unknown
+  after: unknown
+}
+
+export interface SeoPendingRevision {
+  id: number
+  status: 'generating' | 'ready' | 'failed'
+  feedback: string
+  scope: SeoRevisionScope[]
+  error_message?: string | null
+  created_at?: string | null
+  changes: SeoRevisionChange[]
+  scores?: { seo_before: number; geo_before: number; seo_after: number; geo_after: number } | null
+  publish_review?: PublishReview | null
+  // Önceden geçip öneride bozulan kontroller (yalnız gösterilir)
+  regressions?: SeoCheckRegression[]
+}
+
+export interface SeoCheckRegression {
+  criterion: string
+  label: string
+  channel: 'SEO' | 'GEO'
+  before: string
+  after: string
+  before_detail?: string
+  after_detail?: string
 }
 
 export interface SocialIdea {
