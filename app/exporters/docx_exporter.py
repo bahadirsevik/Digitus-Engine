@@ -585,6 +585,17 @@ class DocxExporter(BaseExporter):
                 if c.cta_text:
                     doc.add_paragraph(f'CTA: "{c.cta_text}"')
 
+                # Kampanya (organik içerikte ikisi de boş)
+                if c.offer_text:
+                    doc.add_paragraph(f'Teklif: {c.offer_text}')
+                if c.overlay_text:
+                    doc.add_heading('GÖRSEL ÜSTÜ METİN', level=4)
+                    for line in c.overlay_text.splitlines():
+                        doc.add_paragraph(line)
+                if c.image_prompt:
+                    doc.add_heading("GÖRSEL PROMPT'U", level=4)
+                    doc.add_paragraph(c.image_prompt)
+
                 # Uyarılar (K8/§4 — süre tutmadığında ve grounding uyarılarında dolar)
                 if c.validation_warnings:
                     doc.add_paragraph('Uyarılar: ' + '; '.join(c.validation_warnings))

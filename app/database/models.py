@@ -786,6 +786,8 @@ class SocialIdea(Base):
     trend_alignment = Column(Float, default=0.0)  # 0.00 - 1.00, güncel trendlerle uyum
     
     is_selected = Column(Boolean, default=False)
+    # Kampanya fikri: {offer_type, offer_rationale, cta_type}; NULL = organik fikir
+    campaign_payload = Column(JSON, nullable=True)
     regeneration_count = Column(Integer, default=0)  # Regenerate sayacı
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -815,7 +817,12 @@ class SocialContent(Base):
     duration_status = Column(String(30), nullable=True)
     actual_duration_sec = Column(Integer, nullable=True)
     validation_warnings = Column(JSON, nullable=True)
-    
+    # Kampanya: üretimde kullanılan teklif snapshot'ı {offer_terms, cta_type, usage}
+    campaign_payload = Column(JSON, nullable=True)
+    # Görsel üretim aracına kopyalanacak ayrıntılı talimat
+    image_prompt = Column(Text, nullable=True)
+    overlay_text = Column(JSON, nullable=True)
+
     # JSONB hooks - esnek, genişletilebilir
     # Format: [{"text": "...", "style": "question", "ab_score": null}]
     hooks = Column(JSON)
@@ -866,6 +873,8 @@ class SocialBrief(Base):
     brand_context_snapshot = Column(Text, nullable=True)
     channel_assignment_version = Column(Integer, nullable=False, default=1, server_default="1")
     format_matrix_version = Column(String(50), nullable=False, default="v1", server_default="v1")
+    # Kampanya modu (plan_sosyal_kampanya_akisi.md); NULL = organik brief
+    campaign_spec = Column(JSON, nullable=True)
     locked_at = Column(DateTime(timezone=True), nullable=True)
     is_stale = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

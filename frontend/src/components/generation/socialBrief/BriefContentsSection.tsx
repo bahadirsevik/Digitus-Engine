@@ -24,10 +24,20 @@ import {
   ATTEMPT_STATUS_LABEL,
   isActiveStatus,
   isStaleError,
+  OFFER_TYPE_LABEL,
+  offerSummary,
+  offerViolationText,
   reasonText,
   socialErrorText,
 } from './labels'
 import SocialContentCard from './SocialContentCard'
+import OfferTermsPanel from './OfferTermsPanel'
+import {
+  buildOfferTerms,
+  commonOfferType,
+  initialOfferForm,
+  type OfferFormState,
+} from './campaignForm'
 import { MAX_CONTENT_SELECTION } from './briefRules'
 import { useAliveRef, usePolling } from './usePolling'
 
@@ -75,6 +85,8 @@ export default function BriefContentsSection({
   const [contents, setContents] = useState<SocialContentHistoryItemResponse[]>([])
   const [contentsLoaded, setContentsLoaded] = useState(false)
   const [usp, setUsp] = useState('')
+  const campaign = brief.campaign_spec ?? null
+  const [offerForm, setOfferForm] = useState<OfferFormState>(() => initialOfferForm(campaign))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [readError, setReadError] = useState<string | null>(null)
@@ -148,6 +160,10 @@ export default function BriefContentsSection({
   usePolling(active && latestId != null, loadAttempt, ctx.pollIntervalMs)
 
   const trimmedUsp = usp.trim()
+  // Bir kampanya brief'i = tek teklif: ilk içerik kaydedilince teklif kilitlenir, sonraki üretim ve
+  // yeniden deneme aynı koşulları kullanır (rapor ve içerikler tutarlı kalsın)
+  const lockedOffer = campaign ? (state?.locked_offer_terms ?? null) : null
+  const showDispatch = contents.length === 0 || selectedIdeaIds.length > 0
   const retryableIds = useMemo(() => {
     if (!attemptRes || (status !== 'partial' && status !== 'failed')) return []
     return attemptRes.unresolved_idea_ids.filter(
@@ -174,7 +190,7 @@ export default function BriefContentsSection({
   }, [viewIdeaId, contentsLoaded, contents])
 
   const dispatch = async (ideaIds: number[]) => {
-    if (busy || ctx.disabled || brief.is_stale || active) return
+    if (busy || ctx.disabled || brief.is_stale || active || !state) return
     const ids = [...new Set(ideaIds)].sort((a, b) => a - b)
     if (ids.length < 1 || ids.length > MAX_CONTENT_SELECTION) {
       setError(`İçerik üretmek için 1–${MAX_CONTENT_SELECTION} fikir seçin.`)
@@ -184,8 +200,28 @@ export default function BriefContentsSection({
       setError(`Marka USP metni en fazla ${USP_MAX} karakter olabilir.`)
       return
     }
+    let offerTerms = null
+    if (lockedOffer) {
+      const ideaType = commonOfferType(ids.map((id) => ideaById.get(id)))
+      if (lockedOffer.type !== 'none' && ideaType !== lockedOffer.type) {
+        setError(
+          `Bu kampanyanın teklifi ${OFFER_TYPE_LABEL[lockedOffer.type] ?? lockedOffer.type}; yalnız bu türdeki fikirlerden içerik üretilebilir. Farklı teklif için yeni brief oluşturun.`
+        )
+        return
+      }
+      offerTerms = lockedOffer
+    } else if (campaign) {
+      const built = buildOfferTerms(offerForm, commonOfferType(ids.map((id) => ideaById.get(id))))
+      if ('error' in built) {
+        setError(built.error)
+        return
+      }
+      offerTerms = built.terms
+    }
     const scope: SocialIdemScope = { workspaceId, briefId: brief.id, stage: 'contents' }
-    const fp = `ids=${ids.join(',')}|usp=${trimmedUsp ? textFingerprint(trimmedUsp) : '-'}`
+    const fp =
+      `ids=${ids.join(',')}|usp=${trimmedUsp ? textFingerprint(trimmedUsp) : '-'}` +
+      (offerTerms ? `|offer=${textFingerprint(JSON.stringify(offerTerms))}` : '')
     const key = getOrCreateIdemKey(scope, fp)
     setBusy(true)
     setError(null)
@@ -196,6 +232,7 @@ export default function BriefContentsSection({
           idempotency_key: key,
           idea_ids: ids,
           ...(trimmedUsp ? { trusted_brand_usp: trimmedUsp } : {}),
+          ...(offerTerms ? { offer_terms: offerTerms } : {}),
         },
         workspaceId
       )
@@ -209,7 +246,11 @@ export default function BriefContentsSection({
       if (!alive.current) return
       if (shouldReleaseIdemKey(err)) clearIdemKey(scope)
       setError(socialErrorText(err, 'İçerik üretimi başlatılamadı.'))
-      if (apiErrorCode(err) === 'ATTEMPT_CONFLICT' || isStaleError(err)) {
+      if (
+        apiErrorCode(err) === 'ATTEMPT_CONFLICT' ||
+        apiErrorCode(err) === 'CONTENT_OFFER_LOCKED' ||
+        isStaleError(err)
+      ) {
         await ctx.refreshState()
       }
     } finally {
@@ -265,6 +306,9 @@ export default function BriefContentsSection({
       durationMaxSec: c.duration_max_sec ?? target?.duration_max_sec,
       validationWarnings: c.validation_warnings,
       isStale: c.is_stale,
+      imagePrompt: c.image_prompt,
+      overlayText: c.overlay_text,
+      offerText: c.campaign_payload ? offerSummary(c.campaign_payload.offer_terms) : null,
     }
     const error = revisions.errors[c.id]
     return (
@@ -345,8 +389,35 @@ export default function BriefContentsSection({
         </div>
       )}
 
-      {hasIdeas && !brief.is_stale && (
+      {hasIdeas && !brief.is_stale && !showDispatch && (
+        <p className="sb-muted-note">
+          {lockedOffer && (
+            <>
+              Bu kampanyanın teklifi: <b>{offerSummary(lockedOffer)}</b>.{' '}
+            </>
+          )}
+          Başka fikirler için içerik üretmek isterseniz Adım 2&apos;de fikir seçin.
+        </p>
+      )}
+
+      {hasIdeas && !brief.is_stale && showDispatch && (
         <div className="sb-content-dispatch">
+          {lockedOffer ? (
+            <p className="sb-muted-note">
+              Teklif: <b>{offerSummary(lockedOffer)}</b> — içerik üretildiği için sabitlendi. Farklı
+              bir teklif için yeni brief oluşturun.
+            </p>
+          ) : (
+            campaign && (
+              <OfferTermsPanel
+                briefId={brief.id}
+                form={offerForm}
+                offerType={commonOfferType(selectedIdeaIds.map((id) => ideaById.get(id)))}
+                selectedCount={selectedIdeaIds.length}
+                onChange={setOfferForm}
+              />
+            )
+          )}
           <label htmlFor={`sb-usp-${brief.id}`} className="sb-field-label">
             Güvenilir marka USP'si (opsiyonel)
           </label>
@@ -423,7 +494,9 @@ export default function BriefContentsSection({
                     {w.claims.length > 0 && (
                       <span className="sb-claims">
                         {' '}
-                        Reddedilen ifadeler: {w.claims.map((c) => `“${c}”`).join(', ')}
+                        {w.reason_code === 'offer_mismatch'
+                          ? `Sorun: ${w.claims.map(offerViolationText).join('; ')}`
+                          : `Reddedilen ifadeler: ${w.claims.map((c) => `“${c}”`).join(', ')}`}
                       </span>
                     )}
                   </span>

@@ -12,14 +12,22 @@ Bu modül SocialBriefContentGenerator sınıfını sunar:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from celery.exceptions import SoftTimeLimitExceeded
 
+from app.core.social.campaign_spec import closing_card_text, finalize_image_prompt
 from app.core.social.content_contract import (
+    OVERLAY_FIELD,
+    OVERLAY_FORMATS,
+    ValidatedVideoPayload,
+    CONTENT_CONTRACT_INVALID_TEXT,
+    IMAGE_PROMPT_FIELD,
+    IMAGE_PROMPT_MAX_LENGTH,
     SocialContentOutputValidationError,
     ValidatedSocialContent,
+    _render_legacy_scenario_from_payload,
     build_social_content_response_schema,
     validate_social_content_output,
 )
@@ -41,6 +49,60 @@ from app.generators.social.brief_content_prompt import (
 )
 
 MAX_CONTENT_TOKENS: int = 12000
+
+
+def _apply_image_prompt_rule(
+    content: ValidatedSocialContent, prompt_input: SocialContentPromptInput
+) -> ValidatedSocialContent:
+    """Kampanya içeriğinde image_prompt ZORUNLU (oranı kod ekler); organik içerikte YASAK.
+    overlay_text: kampanya statik formatında ZORUNLU, diğer kampanya formatlarında atılır, organikte YASAK."""
+    if prompt_input.campaign is None:
+        if content.overlay_text is not None:
+            raise SocialContentOutputValidationError(
+                "overlay_text is only allowed for campaign content.",
+                error_code=CONTENT_CONTRACT_INVALID_TEXT,
+                field=OVERLAY_FIELD,
+            )
+        if content.image_prompt is None:
+            return content
+        raise SocialContentOutputValidationError(
+            "image_prompt is only allowed for campaign content.",
+            error_code=CONTENT_CONTRACT_INVALID_TEXT,
+            field=IMAGE_PROMPT_FIELD,
+        )
+    if content.image_prompt is None:
+        raise SocialContentOutputValidationError(
+            "image_prompt is required for campaign content.",
+            error_code=CONTENT_CONTRACT_INVALID_TEXT,
+            field=IMAGE_PROMPT_FIELD,
+        )
+    fmt = prompt_input.target_spec.content_format
+    if fmt in OVERLAY_FORMATS and content.overlay_text is None:
+        raise SocialContentOutputValidationError(
+            "overlay_text is required for static campaign content.",
+            error_code=CONTENT_CONTRACT_INVALID_TEXT,
+            field=OVERLAY_FIELD,
+        )
+    overlay_text = content.overlay_text if fmt in OVERLAY_FORMATS else None
+    final = finalize_image_prompt(content.image_prompt, fmt)
+    if len(final) > IMAGE_PROMPT_MAX_LENGTH:
+        raise SocialContentOutputValidationError(
+            "image_prompt is too long.",
+            error_code=CONTENT_CONTRACT_INVALID_TEXT,
+            field=IMAGE_PROMPT_FIELD,
+        )
+    # Model statik formatta video_concept'e "video planlanmamıştır" dolgusu yazıyor; video yoksa boş
+    payload = content.format_payload
+    is_video = isinstance(payload, ValidatedVideoPayload)
+    video_concept = content.video_concept if is_video else None
+    closing = closing_card_text(prompt_input.campaign.get("offer_terms"))
+    if is_video and closing and payload.segments:
+        # Kapanış kartının teklif/şart/tarih metni kilitli koşullardan; sahne ve seslendirme modelin
+        last = replace(payload.segments[-1], on_screen_text=closing)
+        payload = replace(payload, segments=(*payload.segments[:-1], last))
+    # scenario payload'dan türetilir; kayıttaki kanonik karşılaştırma ikisinin eşleşmesini ister
+    return replace(content, image_prompt=final, video_concept=video_concept, overlay_text=overlay_text,
+                   format_payload=payload, scenario=_render_legacy_scenario_from_payload(payload))
 
 
 class SocialContentGenerationError(ValueError):
@@ -126,7 +188,9 @@ class SocialBriefContentGenerator:
             ) from exc
 
         response_schema = to_gemini_response_schema(
-            build_social_content_response_schema(prompt_input.target_spec)
+            build_social_content_response_schema(
+                prompt_input.target_spec, campaign=prompt_input.campaign is not None
+            )
         )
 
         ai_calls_used = 0
@@ -155,9 +219,9 @@ class SocialBriefContentGenerator:
                 ) from exc
 
             try:
-                validated_content = validate_social_content_output(
-                    raw_response,
-                    target_spec=prompt_input.target_spec,
+                validated_content = _apply_image_prompt_rule(
+                    validate_social_content_output(raw_response, target_spec=prompt_input.target_spec),
+                    prompt_input,
                 )
                 return SocialContentAIResult(
                     attempt_id=prompt_input.attempt_id,
@@ -264,7 +328,9 @@ class SocialBriefContentGenerator:
             ) from p_exc
 
         response_schema = to_gemini_response_schema(
-            build_social_content_response_schema(prompt_input.target_spec)
+            build_social_content_response_schema(
+                prompt_input.target_spec, campaign=prompt_input.campaign is not None
+            )
         )
 
         ai_calls_used = 0
@@ -291,9 +357,9 @@ class SocialBriefContentGenerator:
 
             # 6. Çıktı yapısal doğrulaması
             try:
-                repaired_content = validate_social_content_output(
-                    raw_response,
-                    target_spec=prompt_input.target_spec,
+                repaired_content = _apply_image_prompt_rule(
+                    validate_social_content_output(raw_response, target_spec=prompt_input.target_spec),
+                    prompt_input,
                 )
             except SocialContentOutputValidationError as val_exc:
                 reason_parts = [val_exc.error_code]

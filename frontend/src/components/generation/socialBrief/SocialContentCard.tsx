@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { AlertTriangle, Check, Clock, Copy } from 'lucide-react'
-import type { SocialFormatPayload } from '../../../services/api'
+import type { SocialFormatPayload, SocialOverlayText } from '../../../services/api'
 import {
   DURATION_STATUS_TEXT,
   claimFieldLabel,
@@ -34,7 +34,41 @@ export interface SocialContentView {
   durationMaxSec?: number | null
   validationWarnings: string[]
   isStale: boolean
+  /** Kampanya içeriği: görsel üretim aracına kopyalanacak prompt */
+  imagePrompt?: string | null
+  /** Kampanya içeriği: üretimde kullanılan teklif özeti (offerSummary) */
+  offerText?: string | null
+  /** Kampanya statik içeriği: tasarımda görselin üstüne yerleştirilecek metinler */
+  overlayText?: SocialOverlayText | null
   meta?: ReactNode
+}
+
+const OVERLAY_ROWS: [keyof SocialOverlayText, string][] = [
+  ['headline', 'Başlık'],
+  ['benefit', 'Fayda'],
+  ['offer_line', 'Teklif'],
+  ['terms_line', 'Şartlar'],
+  ['cta', 'Düğme'],
+]
+
+function OverlayBlock({ overlay }: { overlay: SocialOverlayText }) {
+  const rows = OVERLAY_ROWS.filter(([key]) => overlay[key])
+  return (
+    <div className="sb-content-section">
+      <div className="sb-content-section-head">
+        <span className="sb-content-label">Görsel üstü metin (tasarımda yerleştirilir)</span>
+        <CopyButton label="Metinleri kopyala" text={rows.map(([key]) => overlay[key]).join('\n')} />
+      </div>
+      <dl className="sb-content-details sb-overlay">
+        {rows.map(([key, label]) => (
+          <div key={key} className="sb-overlay-row">
+            <dt>{label}</dt>
+            <dd>{overlay[key]}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -232,7 +266,25 @@ export default function SocialContentCard({ view }: { view: SocialContentView })
 
       <FormatBody view={view} />
 
+      {view.overlayText && <OverlayBlock overlay={view.overlayText} />}
+
+      {view.imagePrompt && (
+        <div className="sb-content-section">
+          <div className="sb-content-section-head">
+            <span className="sb-content-label">Görsel prompt'u (görsel üretim aracı için)</span>
+            <CopyButton label="Prompt'u kopyala" text={view.imagePrompt} />
+          </div>
+          <p className="sb-prewrap sb-image-prompt">{view.imagePrompt}</p>
+        </div>
+      )}
+
       <dl className="sb-content-details">
+        {view.offerText && (
+          <>
+            <dt>Teklif</dt>
+            <dd>{view.offerText}</dd>
+          </>
+        )}
         {view.ctaText && (
           <>
             <dt>Harekete geçirici çağrı</dt>

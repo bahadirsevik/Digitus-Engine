@@ -1674,6 +1674,7 @@ export interface SocialFormatMatrixResponse {
   version: string
   limits: SocialFormatMatrixLimitsResponse
   platforms: SocialPlatformOptionResponse[]
+  campaign_enabled?: boolean
 }
 
 export interface SocialBriefTargetCreateRequest {
@@ -1682,12 +1683,66 @@ export interface SocialBriefTargetCreateRequest {
   duration_preset_id?: string | null
 }
 
+// ---- Kampanya modu (plan_sosyal_kampanya_akisi.md) ----
+export type SocialOfferType = 'percent_discount' | 'bundle' | 'free_shipping' | 'gift'
+export type SocialCtaType =
+  | 'buy'
+  | 'learn_more'
+  | 'fill_form'
+  | 'message'
+  | 'call'
+  | 'visit_store'
+  | 'follow'
+
+export interface SocialOfferTerms {
+  type: SocialOfferType | 'none'
+  value?: string | null
+  applies_to?: string | null
+  conditions?: string | null
+  ends?: string | null
+}
+
+export interface SocialCampaignSpec {
+  mode: 'defined' | 'suggest'
+  usage: 'paid' | 'organic'
+  objective: 'sales' | 'lead' | 'awareness'
+  destination: 'site' | 'form' | 'whatsapp' | 'phone' | 'store' | 'profile'
+  promoted_item: string
+  audience?: string | null
+  focus_note?: string | null
+  included_features?: string | null
+  disallowed_offer_types: SocialOfferType[]
+  offer_draft?: SocialOfferTerms | null
+}
+
+export interface SocialIdeaCampaignPayload {
+  offer_type: SocialOfferType
+  offer_rationale: string
+  cta_type: SocialCtaType
+}
+
+/** Kampanya statik içeriğinin görsel üstü metni; offer_line/terms_line kilitli tekliften sunucuda kurulur */
+export interface SocialOverlayText {
+  headline: string
+  benefit: string
+  offer_line?: string | null
+  terms_line?: string | null
+  cta: string
+}
+
+export interface SocialContentCampaignPayload {
+  offer_terms: SocialOfferTerms
+  cta_type: SocialCtaType
+  usage: 'paid' | 'organic'
+}
+
 export interface SocialBriefCreateRequest {
   scoring_run_id: number
   keyword_ids: number[]
   targets: SocialBriefTargetCreateRequest[]
   brand_name?: string | null
   brand_context?: string | null
+  campaign?: SocialCampaignSpec | null
 }
 
 export interface SocialBriefKeywordResponse {
@@ -1718,6 +1773,7 @@ export interface SocialBriefResponse {
   created_at?: string | null
   keywords: SocialBriefKeywordResponse[]
   targets: SocialBriefTargetResponse[]
+  campaign_spec?: SocialCampaignSpec | null
 }
 
 export interface SocialBriefCategoriesGenerateRequest {
@@ -1763,6 +1819,7 @@ export interface SocialBriefStateResponse {
   scoring_run_id: number
   is_stale: boolean
   locked_at?: string | null
+  locked_offer_terms?: SocialOfferTerms | null
   category_attempt?: SocialAttemptSummaryResponse | null
   categories: SocialGeneratedCategoryResponse[]
   ideas_attempt?: SocialAttemptSummaryResponse | null
@@ -1794,6 +1851,7 @@ export interface SocialGeneratedIdeaResponse {
   content_format: string
   trend_alignment: number
   is_stale: boolean
+  campaign_payload?: SocialIdeaCampaignPayload | null
 }
 
 export interface SocialIdeaCoverageResponse {
@@ -1826,6 +1884,7 @@ export interface SocialBriefContentsGenerateRequest {
   idempotency_key: string
   idea_ids: number[]
   trusted_brand_usp?: string | null
+  offer_terms?: SocialOfferTerms | null
 }
 
 export interface SocialContentHookResponse {
@@ -1877,6 +1936,9 @@ export interface SocialGeneratedContentItemResponse {
   hashtags: string[]
   industry_posting_suggestion?: string | null
   platform_notes?: string | null
+  image_prompt?: string | null
+  campaign_payload?: SocialContentCampaignPayload | null
+  overlay_text?: SocialOverlayText | null
   duration_status: string
   actual_duration_sec?: number | null
   validation_warnings: string[]
@@ -1927,6 +1989,9 @@ export interface SocialContentHistoryItemResponse {
   hashtags: string[]
   industry_posting_suggestion?: string | null
   platform_notes?: string | null
+  image_prompt?: string | null
+  campaign_payload?: SocialContentCampaignPayload | null
+  overlay_text?: SocialOverlayText | null
   duration_status?: string | null
   actual_duration_sec?: number | null
   duration_min_sec?: number | null
@@ -1958,6 +2023,8 @@ export interface SocialRevisionProposed {
   video_concept?: string | null
   industry_posting_suggestion?: string | null
   platform_notes?: string | null
+  image_prompt?: string | null
+  overlay_text?: SocialOverlayText | null
   duration_status?: string | null
   actual_duration_sec?: number | null
   validation_warnings: string[]

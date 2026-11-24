@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+from app.core.social.campaign_spec import CampaignSpecError, validate_campaign_spec
 from app.generators.social.format_matrix import (
     FORMAT_MATRIX_VERSION,
     MAX_KEYWORDS,
@@ -56,6 +57,7 @@ class ValidatedSocialBriefInput:
     brand_name: Optional[str]
     brand_context: Optional[str]
     format_matrix_version: str
+    campaign_spec: Optional[dict] = None  # None = organik brief
 
 
 def validate_social_brief_request(
@@ -209,6 +211,14 @@ def validate_social_brief_request(
                 )
             )
 
+    # 4. Kampanya bölümü (opsiyonel)
+    campaign_spec = None
+    if request.campaign is not None:
+        try:
+            campaign_spec = validate_campaign_spec(request.campaign)
+        except CampaignSpecError as e:
+            raise SocialBriefValidationError(e.error_code, e.message, e.field) from e
+
     return ValidatedSocialBriefInput(
         scoring_run_id=request.scoring_run_id,
         keyword_ids=tuple(request.keyword_ids),
@@ -216,4 +226,5 @@ def validate_social_brief_request(
         brand_name=request.brand_name,
         brand_context=request.brand_context,
         format_matrix_version=FORMAT_MATRIX_VERSION,
+        campaign_spec=campaign_spec,
     )

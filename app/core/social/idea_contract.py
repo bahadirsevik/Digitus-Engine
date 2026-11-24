@@ -26,6 +26,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.channel.ai_json import AIJsonParseError, parse_ai_json_object
+from app.core.social.campaign_spec import (
+    IDEA_CAMPAIGN_FIELDS,
+    CampaignSpecError,
+    allowed_cta_types,
+    allowed_offer_types,
+    validate_idea_campaign_fields,
+)
 from app.generators.social.format_matrix import get_platform_format
 
 
@@ -83,6 +90,8 @@ class ValidatedSocialIdea:
     target_platform: str
     content_format: str
     trend_alignment: float
+    # Yalnız kampanya brief'inde dolu: {offer_type, offer_rationale, cta_type}
+    campaign_payload: dict[str, str] | None = None
 
 
 REQUIRED_IDEA_FIELDS: frozenset[str] = frozenset({
@@ -225,6 +234,7 @@ def build_social_idea_response_schema(
     *,
     target_specs: tuple[IdeaTargetSpec, ...],
     allowed_keyword_ids: tuple[int, ...],
+    campaign: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Gemini API için dinamik, izole ve derin-kopyalı response schema üretir."""
     validate_idea_target_specs(target_specs)
@@ -307,6 +317,25 @@ def build_social_idea_response_schema(
         "required": ["ideas"],
         "additionalProperties": False,
     }
+    if campaign is not None:
+        item = schema["properties"]["ideas"]["items"]
+        item["properties"].update({
+            "offer_type": {
+                "type": "string",
+                "enum": list(allowed_offer_types(campaign)),
+                "description": "Teklif türü (mekanizma; rakam yok)",
+            },
+            "offer_rationale": {
+                "type": "string",
+                "description": "Bu türün neden uygun olabileceği (koşullu dil, en fazla 500 karakter)",
+            },
+            "cta_type": {
+                "type": "string",
+                "enum": list(allowed_cta_types(campaign)),
+                "description": "Hedef kanala uygun CTA türü",
+            },
+        })
+        item["required"].extend(["offer_type", "offer_rationale", "cta_type"])
     return copy.deepcopy(schema)
 
 
@@ -433,6 +462,7 @@ def validate_idea_against_brief(
     idea_index: int,
     spec_by_id: dict[int, IdeaTargetSpec],
     allowed_keyword_ids: frozenset[int] | set[int],
+    campaign: dict[str, Any] | None = None,
 ) -> ValidatedSocialIdea:
     """Tek bir fikri brief'e karşı kapalı-güvenli doğrular (plan §3.3 merkezi doğrulayıcı).
 
@@ -448,8 +478,11 @@ def validate_idea_against_brief(
             idea_index=idx,
         )
 
+    required_fields = (
+        REQUIRED_IDEA_FIELDS | IDEA_CAMPAIGN_FIELDS if campaign is not None else REQUIRED_IDEA_FIELDS
+    )
     idea_keys = set(idea.keys())
-    extra_keys = idea_keys - REQUIRED_IDEA_FIELDS
+    extra_keys = idea_keys - required_fields
     if extra_keys:
         first_extra = sorted(extra_keys)[0]
         raise SocialIdeaOutputValidationError(
@@ -459,7 +492,7 @@ def validate_idea_against_brief(
             idea_index=idx,
         )
 
-    missing_keys = REQUIRED_IDEA_FIELDS - idea_keys
+    missing_keys = required_fields - idea_keys
     if missing_keys:
         first_missing = sorted(missing_keys)[0]
         raise SocialIdeaOutputValidationError(
@@ -633,6 +666,18 @@ def validate_idea_against_brief(
             idea_index=idx,
         )
 
+    campaign_payload = None
+    if campaign is not None:
+        try:
+            campaign_payload = validate_idea_campaign_fields(idea, campaign, texts=(title, desc))
+        except CampaignSpecError as exc:
+            raise SocialIdeaOutputValidationError(
+                exc.message,
+                error_code=exc.error_code,
+                field=exc.field,
+                idea_index=idx,
+            ) from exc
+
     return ValidatedSocialIdea(
         target_id=tid,
         primary_keyword_id=kid,
@@ -642,6 +687,7 @@ def validate_idea_against_brief(
         target_platform=spec.platform,
         content_format=spec.content_format,
         trend_alignment=score,
+        campaign_payload=campaign_payload,
     )
 
 
@@ -650,6 +696,7 @@ def filter_social_idea_output(
     *,
     target_specs: tuple[IdeaTargetSpec, ...],
     allowed_keyword_ids: tuple[int, ...],
+    campaign: dict[str, Any] | None = None,
 ) -> SocialIdeaFilterResult:
     """AI fikir çıktısını fikir-bazlı süzer (plan §3.4: uymayan fikir atılır, çevrilmez).
 
@@ -681,6 +728,7 @@ def filter_social_idea_output(
                 idea_index=idx,
                 spec_by_id=spec_by_id,
                 allowed_keyword_ids=allowed_kw_set,
+                campaign=campaign,
             )
         except SocialIdeaOutputValidationError as exc:
             if exc.error_code in OFF_BRIEF_ERROR_CODES:
@@ -708,6 +756,7 @@ def validate_social_idea_output(
     *,
     target_specs: tuple[IdeaTargetSpec, ...],
     allowed_keyword_ids: tuple[int, ...],
+    campaign: dict[str, Any] | None = None,
 ) -> tuple[ValidatedSocialIdea, ...]:
     """Tam-uyum (strict) doğrulayıcı: ilk uymayan fikirde veya kota uyuşmazlığında hata verir.
 
@@ -730,6 +779,7 @@ def validate_social_idea_output(
             idea_index=idx,
             spec_by_id=spec_by_id,
             allowed_keyword_ids=allowed_kw_set,
+            campaign=campaign,
         )
         for idx, idea in enumerate(raw_ideas)
     ]

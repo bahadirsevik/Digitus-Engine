@@ -88,3 +88,62 @@ def duration_status_text(status: Optional[str]) -> str:
     if not status:
         return "-"
     return _DURATION_STATUS_LABELS.get(status, status)
+
+
+_OFFER_TYPE_LABELS = {
+    "percent_discount": "Yüzde indirim",
+    "bundle": "Paket / çoklu alım",
+    "free_shipping": "Ücretsiz kargo",
+    "gift": "Hediye",
+}
+_CTA_TYPE_LABELS = {
+    "buy": "Satın al",
+    "learn_more": "Daha fazla bilgi",
+    "fill_form": "Form doldur",
+    "message": "Mesaj yaz",
+    "call": "Ara",
+    "visit_store": "Mağazaya gel",
+    "follow": "Takip et",
+}
+_USAGE_LABELS = {"paid": "Ücretli reklam", "organic": "Organik gönderi"}
+
+
+def campaign_offer_text(campaign_payload: Optional[Dict[str, Any]]) -> str:
+    """Kampanya içeriğinin teklif özeti (frontend `offerSummary` ile aynı biçim).
+
+    Organik içerikte (campaign_payload yok) boş string — organik export değişmez.
+    """
+    if not isinstance(campaign_payload, dict):
+        return ""
+    from app.core.social.campaign_spec import format_ends_tr
+
+    terms = campaign_payload.get("offer_terms") or {}
+    if terms.get("type") == "none":
+        offer = "Teklifsiz içerik"
+    else:
+        parts = [
+            terms.get("value"),
+            terms.get("applies_to") and f"kapsam: {terms['applies_to']}",
+            terms.get("conditions"),
+            terms.get("ends") and f"bitiş: {format_ends_tr(terms['ends'])}",
+        ]
+        label = _OFFER_TYPE_LABELS.get(terms.get("type"), terms.get("type") or "-")
+        offer = f"{label} — {' · '.join(p for p in parts if p)}"
+    extra = [
+        f"CTA: {_CTA_TYPE_LABELS.get(campaign_payload.get('cta_type'), campaign_payload.get('cta_type'))}"
+        if campaign_payload.get("cta_type") else None,
+        _USAGE_LABELS.get(campaign_payload.get("usage")),
+    ]
+    return " | ".join([offer, *(e for e in extra if e)])
+
+
+def overlay_text_block(overlay: Optional[Dict[str, Any]], campaign_payload: Optional[Dict[str, Any]]) -> str:
+    """Görsel üstü metni tasarımcıya verilecek satırlar halinde (organik içerikte boş)."""
+    from app.core.social.campaign_spec import overlay_display
+
+    shown = overlay_display(overlay, campaign_payload)
+    if not shown:
+        return ""
+    labels = (("headline", "Başlık"), ("benefit", "Fayda"), ("offer_line", "Teklif"),
+              ("terms_line", "Şartlar"), ("cta", "Düğme"))
+    return "\n".join(f"{label}: {shown[key]}" for key, label in labels if shown.get(key))

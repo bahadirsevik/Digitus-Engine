@@ -71,6 +71,9 @@ export default function SocialRevisionPanel({
     ctaText: p.cta_text,
     hashtags: p.hashtags,
     visualSuggestion: p.visual_suggestion,
+    imagePrompt: p.image_prompt ?? base.imagePrompt,
+    // Teklif/şart satırlarını sunucu kilitli tekliften kurar (eski içerikte overlay olmasa da)
+    overlayText: p.overlay_text ?? base.overlayText,
     videoConcept: p.video_concept,
     platformNotes: p.platform_notes,
     postingSuggestion: p.industry_posting_suggestion,

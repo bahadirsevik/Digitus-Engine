@@ -104,6 +104,7 @@ class SocialIdeaReadItem:
     content_format: str
     trend_alignment: float
     is_stale: bool
+    campaign_payload: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -454,6 +455,7 @@ def load_social_idea_result(
                 content_format=idea.content_format,
                 trend_alignment=fval,
                 is_stale=bool(idea.is_stale),
+                campaign_payload=idea.campaign_payload,
             )
         )
 

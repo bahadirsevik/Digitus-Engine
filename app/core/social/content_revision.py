@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from app.core.social.campaign_spec import content_campaign_context, offer_terms_expired, overlay_display
 from app.core.social.content_contract import (
     ContentTargetSpec,
     ValidatedSocialContent,
@@ -67,20 +68,24 @@ SCHEMA_VERSION = "content_revision_v1"
 TEXT_FIELDS = (
     "hooks", "caption", "cta_text", "hashtags", "format_payload",
     "visual_suggestion", "video_concept", "industry_posting_suggestion", "platform_notes",
+    "image_prompt", "overlay_text",
 )
 SCOPE_FIELDS: Dict[str, Tuple[str, ...]] = {
     "hooks": ("hooks",),
-    "text": ("caption", "cta_text", "hashtags"),
+    "text": ("caption", "cta_text", "hashtags", "overlay_text"),
     "body": ("format_payload",),
-    "production": ("visual_suggestion", "video_concept", "platform_notes", "industry_posting_suggestion"),
+    # image_prompt yalnız bu kapsamda değişir; metin revizyonunda kapsam kapısı korur.
+    # campaign_payload hiçbir kapsamda yok: teklif snapshot'ı revizyonla DEĞİŞMEZ.
+    "production": ("visual_suggestion", "video_concept", "platform_notes", "industry_posting_suggestion",
+                   "image_prompt"),
 }
 SCOPE_ORDER = tuple(SCOPE_FIELDS)
 _SCOPE_PROMPT_LABEL = {
     "hooks": "açılış kancaları (hooks)",
-    "text": "ana metin, harekete geçirici çağrı ve hashtag'ler (caption, cta_text, hashtags)",
+    "text": "ana metin, harekete geçirici çağrı ve hashtag'ler (caption, cta_text, hashtags, varsa overlay_text)",
     "body": "format gövdesi (format_payload: sahneler / slaytlar / gönderi dizisi)",
     "production": "görsel, video ve yayın notları (visual_suggestion, video_concept, platform_notes, "
-                  "industry_posting_suggestion)",
+                  "industry_posting_suggestion, varsa image_prompt)",
 }
 
 FAILURE_MESSAGES = {
@@ -96,7 +101,9 @@ FAILURE_MESSAGES = {
     "dispatch_failed": "Revizyon başlatılamadı. Yeniden deneyebilirsiniz.",
     "worker_bootstrap_failed": "Revizyon başlatılamadı. Yeniden deneyebilirsiniz.",
     "legacy_run_read_only": "Bu analiz eski motorla yapıldığı için içerikleri değiştirilemez.",
+    "offer_expired": "Teklifin bitiş tarihi geçtiği için bu içerik revize edilemez.",
 }
+OFFER_EXPIRED_MESSAGE = FAILURE_MESSAGES["offer_expired"]
 DEFAULT_FAILURE_MESSAGE = "Revizyon üretilemedi; içerik değişmedi. Yeniden deneyebilirsiniz."
 
 
@@ -151,6 +158,8 @@ def content_raw(content: ValidatedSocialContent) -> Dict[str, Any]:
         "video_concept": content.video_concept,
         "industry_posting_suggestion": content.industry_posting_suggestion,
         "platform_notes": content.platform_notes,
+        "image_prompt": content.image_prompt,
+        "overlay_text": content.overlay_text,
     }
 
 
@@ -410,6 +419,8 @@ def begin_social_content_revision(
         raise SocialRevisionError("REVISION_STALE", "Bu içerik güncel değil; revize edilemez.")
     if "body" in scope and content.format_payload is None:
         raise SocialRevisionError("REVISION_INVALID_SCOPE", "Bu formatta revize edilecek bir gövde yok.")
+    if offer_terms_expired((content.campaign_payload or {}).get("offer_terms")):
+        raise SocialRevisionError("REVISION_OFFER_EXPIRED", OFFER_EXPIRED_MESSAGE)
 
     attempt, created = create_or_get_attempt(
         db, brief_id=brief.id, stage=STAGE, idempotency_key=idempotency_key,
@@ -485,6 +496,17 @@ def prepare_revision_work(db: Session, attempt: SocialGenerationAttempt) -> Soci
     spec = target_spec_for(target)
     source = validate_social_content_output({f: getattr(content, f) for f in TEXT_FIELDS}, spec)
     product_facts, usp = _producing_facts(db, brief.id, idea.id)
+    # Kampanya: teklif içerik satırındaki snapshot'tan okunur (ilk üretimle aynı koşullar)
+    offer_terms = (content.campaign_payload or {}).get("offer_terms")
+    campaign = None
+    if offer_terms is not None:
+        if offer_terms_expired(offer_terms):
+            raise SocialRevisionError("REVISION_OFFER_EXPIRED", OFFER_EXPIRED_MESSAGE,
+                                      reason_code="offer_expired")
+        if not isinstance(brief.campaign_spec, dict) or not isinstance(idea.campaign_payload, dict):
+            raise SocialRevisionError("REVISION_INVALID", "Kampanya bilgisi okunamadı.",
+                                      reason_code="revision_input_invalid")
+        campaign = content_campaign_context(brief.campaign_spec, idea.campaign_payload, offer_terms)
     prompt_input = SocialContentPromptInput(
         attempt_id=attempt.id,
         idea_id=idea.id,
@@ -497,9 +519,11 @@ def prepare_revision_work(db: Session, attempt: SocialGenerationAttempt) -> Soci
         brand_context=brief.brand_context_snapshot,
         product_facts=product_facts,
         trusted_brand_usp=usp,
+        campaign=campaign,
     )
     grounding = SocialContentGroundingContext(
         primary_keyword=kw.keyword_snapshot, product_facts=product_facts, trusted_brand_usp=usp,
+        offer_terms=offer_terms, included_features=(campaign or {}).get("included_features"),
     )
     return SocialRevisionWork(
         request=req, scoring_run_id=brief.scoring_run_id,
@@ -593,6 +617,11 @@ def list_brief_revisions(db: Session, *, brief_id: int, brand_profile_id: int) -
             ContentRevision.attempt_token.in_([_token(a.id) for a in latest.values()] or [""]),
         )
     }
+    # Önizlemenin teklif/şart satırları kilitli tekliften (içeriğin campaign_payload'u) kurulur
+    campaign_payloads = dict(
+        db.query(SocialContent.id, SocialContent.campaign_payload)
+        .filter(SocialContent.id.in_(list(latest) or [0]))
+    )
     items: List[Dict[str, Any]] = []
     for cid, a in latest.items():
         req = revision_request(a)
@@ -607,7 +636,11 @@ def list_brief_revisions(db: Session, *, brief_id: int, brand_profile_id: int) -
         elif row is not None:
             if row.status == "ready":
                 payload = row.proposed_payload or {}
-                items.append({**base, "status": "ready", "proposed": payload.get("content"),
+                proposed = payload.get("content")
+                if proposed and proposed.get("overlay_text"):
+                    proposed = {**proposed, "overlay_text": overlay_display(
+                        proposed["overlay_text"], campaign_payloads.get(cid))}
+                items.append({**base, "status": "ready", "proposed": proposed,
                               "changes": payload.get("changes") or []})
         elif a.status == "failed":
             items.append({**base, "status": "failed",

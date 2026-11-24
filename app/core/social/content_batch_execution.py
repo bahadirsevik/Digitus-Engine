@@ -47,6 +47,7 @@ from app.core.social.content_worker_input import (
 
 BATCH_WARNING_REASON_ALLOWLIST: frozenset[str] = frozenset({
     "content_rejected",
+    "offer_mismatch",  # kampanya: teklif koşullarıyla çelişen içerik kaydedilmedi (claims = ihlaller)
     "content_input_invalid",
     "content_provider_error",
     "content_output_invalid",
@@ -130,8 +131,8 @@ class SocialContentBatchWarning:
                     "claims elemanları string olmalıdır.",
                     field="claims",
                 )
-        if self.reason_code == "content_rejected":
-            # content_rejected durumunda claims boş veya iddia tuple'ı olabilir
+        if self.reason_code in ("content_rejected", "offer_mismatch"):
+            # content_rejected / offer_mismatch durumunda claims boş veya bulgu tuple'ı olabilir
             pass
         else:
             # content_rejected dışındaki bütün hata uyarılarında claims kesinlikle boş olmalıdır
@@ -460,10 +461,11 @@ def _process_single_work_item(
             accepted_results_list.append(result)
             accepted_ids_set.add(item.idea_id)
         elif result.status == "rejected":
+            offer_violations = tuple(result.quality_decision.offer_violations)
             warnings_map[item.idea_id] = SocialContentBatchWarning(
                 idea_id=item.idea_id,
-                reason_code="content_rejected",
-                claims=tuple(result.quality_decision.claims) if result.quality_decision else (),
+                reason_code="offer_mismatch" if offer_violations else "content_rejected",
+                claims=offer_violations or tuple(result.quality_decision.claims),
                 ai_calls_used=result.ai_calls_used,
             )
         else:

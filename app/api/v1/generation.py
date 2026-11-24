@@ -113,6 +113,7 @@ from app.core.social import (
     serialize_content_format_payload,
     social_brief_to_response,
 )
+from app.core.social.campaign_spec import overlay_display
 from app.core.social.idea_retry_flow import (
     SocialIdeaRetryFlowError,
     begin_social_idea_retry,
@@ -1483,7 +1484,9 @@ def generate_social_bulk(
 )
 def get_social_format_matrix():
     """Sosyal brief platform, format ve süre matrisi (read-only, deterministik)."""
-    return get_format_matrix()
+    return get_format_matrix().model_copy(
+        update={"campaign_enabled": bool(settings.ENABLE_SOCIAL_CAMPAIGN_BRIEF)}
+    )
 
 
 @router.post(
@@ -1503,6 +1506,16 @@ def create_social_brief_endpoint(
             detail={
                 "code": "FEATURE_DISABLED",
                 "message": "Sosyal medya brief akışı bu sunucuda açık değil. Sistem yöneticinize başvurun.",
+            },
+        )
+
+    if request.campaign is not None and not settings.ENABLE_SOCIAL_CAMPAIGN_BRIEF:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "CAMPAIGN_DISABLED",
+                "message": "Kampanya modu bu sunucuda açık değil. Sistem yöneticinize başvurun.",
+                "field": "campaign",
             },
         )
 
@@ -1820,6 +1833,7 @@ def get_social_brief_state_endpoint(
         idea_retry_attempts=[_attempt_summary_to_response(a) for a in state.idea_retry_attempts],
         content_attempts=[_attempt_summary_to_response(a) for a in state.content_attempts],
         content_idea_ids=list(state.content_idea_ids),
+        locked_offer_terms=state.locked_offer_terms,
     )
 
 
@@ -1897,6 +1911,9 @@ def get_social_content_history_endpoint(
                 hashtags=list(it.hashtags),
                 industry_posting_suggestion=it.industry_posting_suggestion,
                 platform_notes=it.platform_notes,
+                image_prompt=it.image_prompt,
+                campaign_payload=it.campaign_payload,
+                overlay_text=it.overlay_text,
                 duration_status=it.duration_status,
                 actual_duration_sec=it.actual_duration_sec,
                 duration_min_sec=it.duration_min_sec,
@@ -2380,6 +2397,7 @@ def social_idea_read_to_response(
             content_format=i.content_format,
             trend_alignment=i.trend_alignment,
             is_stale=i.is_stale,
+            campaign_payload=i.campaign_payload,
         )
         for i in result.ideas
     ]
@@ -3146,6 +3164,9 @@ def social_content_read_to_response(
                 hashtags=list(c.hashtags),
                 industry_posting_suggestion=c.industry_posting_suggestion,
                 platform_notes=c.platform_notes,
+                image_prompt=c.image_prompt,
+                campaign_payload=c.campaign_payload,
+                overlay_text=overlay_display(c.overlay_text, c.campaign_payload),
                 duration_status=c.duration_status,
                 actual_duration_sec=c.actual_duration_sec,
                 validation_warnings=list(c.validation_warnings),
@@ -3271,6 +3292,10 @@ def generate_social_brief_contents_async(
         http_status, default_msg = status_code_map.get(
             e.error_code, (409, "İçerik üretim kuralı ihlali.")
         )
+        if e.error_code.startswith("CONTENT_OFFER_"):
+            # Kampanya teklif hataları: mesaj sabit ve kullanıcıya dönük (dinamik veri taşımaz)
+            http_status = 409 if e.error_code == "CONTENT_OFFER_LOCKED" else 400
+            default_msg = e.message
         raise HTTPException(
             status_code=http_status,
             detail={"code": e.error_code, "message": default_msg},
@@ -3581,6 +3606,7 @@ def get_social_brief_contents_attempt(
 _SOCIAL_REVISION_HTTP = {
     "NOT_FOUND": 404,
     "REVISION_INVALID_SCOPE": 400,
+    "REVISION_OFFER_EXPIRED": 400,
 }
 
 

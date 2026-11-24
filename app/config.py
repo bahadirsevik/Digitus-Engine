@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     # New social brief workflow. Keep false until rollout is approved.
     ENABLE_SOCIAL_BRIEF_FLOW: bool = False
 
+    # Brief'te kampanya modu (plan_sosyal_kampanya_akisi.md). Kapaliyken
+    # campaign alani tasiyan brief istegi 400 doner; organik akis etkilenmez.
+    ENABLE_SOCIAL_CAMPAIGN_BRIEF: bool = False
+
     # Legacy /social/bulk gecis bayragi (K12, plan_social_brief_akisi.md §0/§8).
     # Yeni brief akisi yayina cikip kararli hale gelene kadar TRUE tutulabilir;
     # FALSE oldugunda POST /generation/social/bulk 410 Gone doner (eski

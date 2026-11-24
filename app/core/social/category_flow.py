@@ -78,6 +78,7 @@ class SocialCategoryGenerationStart:
     brand_name_snapshot: str | None
     brand_context_snapshot: str | None
     keywords: tuple[CategoryKeywordSnapshot, ...]
+    campaign_spec: dict | None = None
 
 
 def _validate_now(now: datetime | None) -> datetime:
@@ -271,4 +272,5 @@ def begin_social_category_generation(
         brand_name_snapshot=brief.brand_name_snapshot,
         brand_context_snapshot=brief.brand_context_snapshot,
         keywords=tuple(keyword_snapshots),
+        campaign_spec=brief.campaign_spec,
     )

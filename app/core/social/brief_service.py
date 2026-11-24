@@ -95,6 +95,7 @@ def create_social_brief(
         brand_context_snapshot=eligible.brand_context,
         channel_assignment_version=eligible.channel_assignment_version,
         format_matrix_version=eligible.format_matrix_version,
+        campaign_spec=validated.campaign_spec,
         locked_at=None,
         is_stale=False,
     )
@@ -195,6 +196,7 @@ def social_brief_to_response(brief: SocialBrief) -> SocialBriefResponse:
         created_at=brief.created_at,
         keywords=keywords_list,
         targets=targets_list,
+        campaign_spec=brief.campaign_spec,
     )
 
 

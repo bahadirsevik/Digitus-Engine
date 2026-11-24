@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, History, RefreshCw, X } from 'lucide-react'
 import { socialBriefApi, type SocialContentHistoryItemResponse } from '../../../services/api'
 import SocialContentCard from './SocialContentCard'
-import { fallbackFormatLabel, fallbackPlatformLabel, socialErrorText } from './labels'
+import { fallbackFormatLabel, fallbackPlatformLabel, offerSummary, socialErrorText } from './labels'
 import { useAliveRef } from './usePolling'
 
 export const HISTORY_PAGE_SIZE = 20
@@ -164,6 +164,11 @@ export default function SocialContentHistory({ workspaceId, onClose }: Props) {
                       durationMinSec: c.duration_min_sec,
                       durationMaxSec: c.duration_max_sec,
                       validationWarnings: c.validation_warnings,
+                      imagePrompt: c.image_prompt,
+                      overlayText: c.overlay_text,
+                      offerText: c.campaign_payload
+                        ? offerSummary(c.campaign_payload.offer_terms)
+                        : null,
                       isStale: c.is_stale,
                       meta: (
                         <p className="sb-content-meta">

@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.social.campaign_spec import offer_terms_grounding_text
 from app.core.social.content_contract import (
     ValidatedCarouselPayload,
     ValidatedSocialContent,
@@ -32,7 +33,27 @@ from app.core.social.content_contract import (
     ValidatedVideoPayload,
 )
 from app.generators.ads.validators import ClaimFinding, classify_claims
+from app.core.social.offer_consistency import OfferCheck, check_offer_consistency
 from app.generators.claim_review import social_flag_entries
+
+OFFER_SCOPE_REVIEW_WARNING = "offer_scope_review"
+ON_SCREEN_TEXT_DENSE_WARNING = "on_screen_text_dense"
+# Ekran yazısı okuma hızı üst sınırı (kelime/sn); altında kısa sahneye de birkaç kelime tanınır
+_ON_SCREEN_WORDS_PER_SEC = 2.0
+_ON_SCREEN_MIN_WORDS = 4
+
+
+def on_screen_text_dense(content: ValidatedSocialContent) -> bool:
+    """Bir video sahnesinin ekran yazısı süresine göre okunamayacak kadar uzun mu (yumuşak uyarı)."""
+    fp = content.format_payload
+    if not isinstance(fp, ValidatedVideoPayload):
+        return False
+    return any(
+        len(seg.on_screen_text.split())
+        > max(_ON_SCREEN_MIN_WORDS, _ON_SCREEN_WORDS_PER_SEC * (seg.end_sec - seg.start_sec))
+        for seg in fp.segments
+        if seg.on_screen_text
+    )
 
 
 # ==================== HATA SINIFI ====================
@@ -78,6 +99,11 @@ class SocialContentGroundingContext:
     primary_keyword: str
     product_facts: str | None = None
     trusted_brand_usp: str | None = None
+    # Kampanya içeriği: kullanıcının kesinleştirdiği teklif (type="none" = teklifsiz). USP'den AYRI
+    # alan (K5); None = organik içerik, teklif denetimi hiç çalışmaz.
+    offer_terms: dict | None = None
+    # Kampanya: kullanıcının brief'te onayladığı "pakete dahil" özellikler (whitelist'e girer)
+    included_features: str | None = None
 
     def __post_init__(self) -> None:
         # primary_keyword validation
@@ -147,14 +173,11 @@ class SocialContentGroundingContext:
 
     @property
     def grounding_facts(self) -> str:
-        """Deterministik birleştirilmiş grounding gerçekleri."""
-        if self.product_facts and self.trusted_brand_usp:
-            return f"{self.product_facts}\n{self.trusted_brand_usp}"
-        if self.product_facts:
-            return self.product_facts
-        if self.trusted_brand_usp:
-            return self.trusted_brand_usp
-        return ""
+        """Deterministik birleştirilmiş grounding gerçekleri (onaylı teklif koşulları dahil)."""
+        return "\n".join(filter(None, [
+            self.product_facts, self.trusted_brand_usp, offer_terms_grounding_text(self.offer_terms),
+            self.included_features,
+        ]))
 
 
 @dataclass(frozen=True)
@@ -170,6 +193,8 @@ class SocialContentQualityDecision:
     repair_attempted: bool
     # Kalan iddia bulgulari (plan_iddia_denetimi rev.4): accept + bulgu = incelemeli kabul
     findings: tuple[ClaimFinding, ...] = ()
+    # Kampanya: kullanıcının teklif koşullarıyla çelişen ifadeler ("kod:ifade"); sert bulgu
+    offer_violations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.action not in ("accept", "repair", "reject"):
@@ -185,7 +210,7 @@ class SocialContentQualityDecision:
                 field="reason_codes",
             )
         for rc in self.reason_codes:
-            if rc not in ("ungrounded_claim", "duration_mismatch"):
+            if rc not in ("ungrounded_claim", "duration_mismatch", "offer_mismatch"):
                 raise SocialContentQualityError(
                     "Geçersiz reason_code değeri.",
                     error_code="CONTENT_QUALITY_INVALID_INPUT",
@@ -311,6 +336,7 @@ def social_labeled_texts(content: ValidatedSocialContent) -> list[tuple[str, str
     items.append(("caption", content.caption))
     items.append(("cta_text", content.cta_text))
     items.append(("visual_suggestion", content.visual_suggestion))
+    items.extend((f"overlay_{k}", v) for k, v in (content.overlay_text or {}).items())
     items.extend((f"hashtag[{i}]", h) for i, h in enumerate(content.hashtags or ()))
     items.extend((f"payload[{i}]", t) for i, t in enumerate(_payload_visible_texts(content.format_payload)))
     return items
@@ -381,6 +407,21 @@ def classify_social_content_claims(
     return tuple(unique_claims)
 
 
+def check_social_content_offer(
+    content: ValidatedSocialContent,
+    context: SocialContentGroundingContext,
+) -> OfferCheck:
+    """Kampanya içeriğinin görünür metinlerini teklif koşullarıyla karşılaştırır (plan §5).
+    Organik içerikte (offer_terms None) boş sonuç döner. visual_suggestion yönetmen notudur, taranmaz."""
+    if context.offer_terms is None:
+        return OfferCheck(hard=(), scope_review=False)
+    texts = [text for label, text in social_labeled_texts(content) if label != "visual_suggestion"]
+    return check_offer_consistency(
+        texts, context.offer_terms,
+        product_facts=context.product_facts, exempt=context.primary_keyword,
+    )
+
+
 def find_social_content_ungrounded_claims(
     content: ValidatedSocialContent,
     context: SocialContentGroundingContext,
@@ -433,6 +474,7 @@ def evaluate_social_content_quality(
     findings = classify_social_content_claims(content, context)
     risk_claims = tuple(f.raw for f in findings if f.kind == "risk")
     is_duration_mismatch = (content.duration_status == "mismatch")
+    offer = check_social_content_offer(content, context)
 
     # Mevcut soft warning'leri koru (örn. voiceover_duration_mismatch)
     warnings_list = list(content.validation_warnings or ())
@@ -440,22 +482,35 @@ def evaluate_social_content_quality(
     # rev.4: yalnız RİSK (garanti/mutlak sonuç) repair tetikler; profilde doğrulanamayan
     # (unverified) iddia AI çağrısı açmaz. Repair sonrası kalan bulgu REDDEDİLMEZ: içerik
     # kabul edilir ve claim_risk:/claim_unverified: ile incelemeye işaretlenir.
-    if not repair_attempted and (risk_claims or is_duration_mismatch):
+    if not repair_attempted and (risk_claims or is_duration_mismatch or offer.hard):
         action = "repair"
         reason_codes = (
             *(("ungrounded_claim",) if risk_claims else ()),
             *(("duration_mismatch",) if is_duration_mismatch else ()),
+            *(("offer_mismatch",) if offer.hard else ()),
         )
         claims = risk_claims  # repair prompt'una yalnız risk span'ları gider
         duration_acceptable = not is_duration_mismatch
     else:
-        action = "accept"
+        # Kampanya: onarımdan sonra süren teklif çelişkisi REDDEDİLİR (rev.4 "içerik kaybolmaz"
+        # ilkesinden bilinçli sapma — kullanıcının verdiği koşulla çelişen somut hata; plan §5).
+        action = "reject" if offer.hard else "accept"
         claims = tuple(f.raw for f in findings)
         duration_acceptable = not is_duration_mismatch
         reason_codes = (
             *(("ungrounded_claim",) if findings else ()),
             *(("duration_mismatch",) if is_duration_mismatch else ()),
+            *(("offer_mismatch",) if offer.hard else ()),
         )
+        if not offer.hard:
+            for flag, code in ((offer.scope_review, OFFER_SCOPE_REVIEW_WARNING),
+                               (offer.gift_review, "offer_gift_review")):
+                if flag and code not in warnings_list:
+                    warnings_list.append(code)
+        # Kampanya: ekran yazısı yoğunluğu yalnız uyarıdır (ret veya ek AI çağrısı yok)
+        if (context.offer_terms is not None and on_screen_text_dense(content)
+                and ON_SCREEN_TEXT_DENSE_WARNING not in warnings_list):
+            warnings_list.append(ON_SCREEN_TEXT_DENSE_WARNING)
         if is_duration_mismatch and repair_attempted and "duration_mismatch" not in warnings_list:
             warnings_list.append("duration_mismatch")
         warnings_list.extend(
@@ -471,4 +526,5 @@ def evaluate_social_content_quality(
         duration_acceptable=duration_acceptable,
         repair_attempted=repair_attempted,
         findings=tuple(findings),
+        offer_violations=offer.hard,
     )

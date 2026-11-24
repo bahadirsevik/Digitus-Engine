@@ -594,6 +594,14 @@ class PdfExporter(BaseExporter):
                     elements.append(self._p('Hashtagler: ' + ' '.join(f'#{t}' for t in c.hashtags)))
                 if c.cta_text:
                     elements.append(self._p(f'CTA: {c.cta_text}'))
+                if c.offer_text:
+                    elements.append(self._p(f'Teklif: {c.offer_text}'))
+                if c.overlay_text:
+                    elements.append(self._p('Gorsel Ustu Metin', bold=True))
+                    elements.extend(self._p(line) for line in c.overlay_text.splitlines())
+                if c.image_prompt:
+                    elements.append(self._p("Gorsel Prompt'u", bold=True))
+                    elements.append(self._p(c.image_prompt))
                 if c.validation_warnings:
                     elements.append(self._p('Uyarilar: ' + '; '.join(c.validation_warnings)))
 

@@ -55,6 +55,9 @@ class SocialFormatMatrixResponse(BaseModel):
         default_factory=list,
         description="Desteklenen platformlar ve format listeleri"
     )
+    campaign_enabled: bool = Field(
+        False, description="Kampanya brief'i bu sunucuda açık mı (ENABLE_SOCIAL_CAMPAIGN_BRIEF)"
+    )
 
 
 # ==================== REQUEST SCHEMAS (F1-D.2) ====================
@@ -71,9 +74,57 @@ class SocialBriefTargetCreateRequest(BaseModel):
     )
 
 
+class SocialBriefOfferTermsRequest(BaseModel):
+    """Teklif koşulları. Enum/uzunluk/tarih kuralları app/core/social/campaign_spec.py'de."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    type: str = Field(..., description="percent_discount | bundle | free_shipping | gift")
+    value: str = Field(..., description="Teklif detayı, örn: %20, 2 al 1 öde")
+    applies_to: str = Field(..., description="Teklifin geçerli olduğu ürün/paket/kapsam")
+    conditions: Optional[str] = Field(None, description="Şartlar, örn: 500 TL üzeri, kod: YAZ20")
+    ends: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-AA-GG)")
+
+
+class SocialBriefContentOfferTermsRequest(BaseModel):
+    """İçerik isteğinde kesinleşen teklif. type="none" = teklifsiz devam (diğer alanlar boş)."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    type: str = Field(..., description="percent_discount | bundle | free_shipping | gift | none")
+    value: Optional[str] = Field(None, description="Teklif detayı, örn: %20, 2 al 1 öde")
+    applies_to: Optional[str] = Field(None, description="Teklifin geçerli olduğu ürün/paket/kapsam")
+    conditions: Optional[str] = Field(None, description="Şartlar, örn: 500 TL üzeri, kod: YAZ20")
+    ends: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-AA-GG)")
+
+
+class SocialBriefCampaignRequest(BaseModel):
+    """Brief'in kampanya bölümü (opsiyonel). Kurallar app/core/social/campaign_spec.py'de."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    mode: str = Field(..., description="defined (kampanyam belli) | suggest (kampanya öner)")
+    usage: str = Field(..., description="paid | organic")
+    objective: str = Field(..., description="sales | lead | awareness")
+    destination: str = Field(..., description="site | form | whatsapp | phone | store | profile")
+    promoted_item: str = Field(..., description="Tanıtılacak ürün veya hizmet")
+    audience: Optional[str] = Field(None, description="Hedef kitle")
+    focus_note: Optional[str] = Field(None, description="Reklamda odaklanılacak nokta")
+    included_features: Optional[str] = Field(
+        None, description="Kullanıcının onayladığı, bu pakete dahil özellikler"
+    )
+    disallowed_offer_types: List[str] = Field(
+        default_factory=list, description="Önerilmemesi gereken teklif türleri (yalnız suggest)"
+    )
+    offer_draft: Optional[SocialBriefOfferTermsRequest] = Field(
+        None, description="Teklif taslağı (yalnız defined; içerik adımında onaylanır)"
+    )
+
+
 class SocialBriefCreateRequest(BaseModel):
     """Sosyal brief oluşturma isteği."""
     model_config = ConfigDict(extra="forbid", strict=True)
+
+    campaign: Optional[SocialBriefCampaignRequest] = Field(
+        None, description="Kampanya modu (yoksa organik brief)"
+    )
 
     scoring_run_id: int = Field(..., gt=0, description="Bağlı scoring run kimliği")
     keyword_ids: List[int] = Field(..., description="Hedeflenen anahtar kelime kimlikleri (1-5 adet)")
@@ -127,6 +178,9 @@ class SocialBriefResponse(BaseModel):
     created_at: Optional[datetime] = None
     keywords: List[SocialBriefKeywordResponse] = Field(default_factory=list)
     targets: List[SocialBriefTargetResponse] = Field(default_factory=list)
+    campaign_spec: Optional[Dict[str, Any]] = Field(
+        None, description="Kampanya ayarları; null = organik brief"
+    )
 
 
 # ==================== CATEGORIES GENERATE REQUEST (F1-E.1) ====================
@@ -272,6 +326,10 @@ class SocialBriefContentsGenerateRequest(BaseModel):
         max_length=5000,
         description="Opsiyonel kullanıcı marka USP'si (en fazla 5000 karakter, trim edilmiş)",
     )
+    offer_terms: Optional[SocialBriefContentOfferTermsRequest] = Field(
+        default=None,
+        description="Kampanya brief'inde zorunlu: kesinleşen teklif koşulları veya type=none",
+    )
 
     @field_validator("idempotency_key")
     @classmethod
@@ -361,6 +419,10 @@ class SocialGeneratedIdeaResponse(BaseModel):
     content_format: str = Field(..., min_length=1, max_length=50, description="Hedef içerik formatı")
     trend_alignment: float = Field(..., ge=0.0, le=1.0, description="Trend uyum skoru (0.0 - 1.0)")
     is_stale: bool = Field(..., description="Fikrin stale (eski/geçersizleşmiş) olma durumu")
+    campaign_payload: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Kampanya fikri alanları: offer_type, offer_rationale, cta_type (organik fikirde null)",
+    )
 
 
 class SocialIdeaCoverageResponse(BaseModel):
@@ -454,6 +516,13 @@ class SocialGeneratedContentItemResponse(BaseModel):
     hashtags: List[str] = Field(default_factory=list, description="Hashtag listesi")
     industry_posting_suggestion: Optional[str] = Field(None, description="Sektörel paylaşım önerisi")
     platform_notes: Optional[str] = Field(None, description="Platforma özel notlar")
+    image_prompt: Optional[str] = Field(None, description="Görsel üretim aracı için prompt (kampanya)")
+    campaign_payload: Optional[Dict[str, Any]] = Field(
+        None, description="Üretimde kullanılan teklif snapshot'ı: offer_terms, cta_type, usage (kampanya)"
+    )
+    overlay_text: Optional[Dict[str, Any]] = Field(
+        None, description="Görsel üstü metin: headline, benefit, offer_line, terms_line, cta (kampanya statik)"
+    )
     duration_status: str = Field(..., description="Süre durumu")
     actual_duration_sec: Optional[int] = Field(None, ge=0, description="Varsa hesaplanan süre (saniye)")
     validation_warnings: List[str] = Field(default_factory=list, description="Doğrulama uyarıları")
@@ -519,6 +588,7 @@ class SocialBriefStateResponse(BaseModel):
     scoring_run_id: int
     is_stale: bool
     locked_at: Optional[datetime] = None
+    locked_offer_terms: Optional[Dict[str, Any]] = None
     category_attempt: Optional[SocialAttemptSummaryResponse] = None
     categories: List[SocialGeneratedCategoryResponse] = Field(default_factory=list)
     ideas_attempt: Optional[SocialAttemptSummaryResponse] = None
@@ -568,6 +638,9 @@ class SocialContentHistoryItemResponse(BaseModel):
     hashtags: List[str] = Field(default_factory=list)
     industry_posting_suggestion: Optional[str] = None
     platform_notes: Optional[str] = None
+    image_prompt: Optional[str] = None
+    campaign_payload: Optional[Dict[str, Any]] = None
+    overlay_text: Optional[Dict[str, Any]] = None
     duration_status: Optional[str] = None
     actual_duration_sec: Optional[int] = None
     duration_min_sec: Optional[int] = None
@@ -628,6 +701,8 @@ class SocialRevisionProposedContent(BaseModel):
     video_concept: Optional[str] = None
     industry_posting_suggestion: Optional[str] = None
     platform_notes: Optional[str] = None
+    image_prompt: Optional[str] = None
+    overlay_text: Optional[Dict[str, Any]] = None
     duration_status: Optional[str] = None
     actual_duration_sec: Optional[int] = None
     validation_warnings: List[str] = Field(default_factory=list)

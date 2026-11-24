@@ -671,6 +671,8 @@ def test_d1_canonical_format_payloads_serialize_correctly():
         fake_content.hashtags = ("tag1",)
         fake_content.industry_posting_suggestion = None
         fake_content.platform_notes = None
+        fake_content.image_prompt = None
+        fake_content.campaign_payload = None
         fake_content.duration_status = "valid"
         fake_content.actual_duration_sec = 5
         fake_content.validation_warnings = ()

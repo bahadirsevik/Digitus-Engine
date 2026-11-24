@@ -1111,3 +1111,125 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* ── Kampanya modu (brief formu, fikir kartı, teklif paneli, içerik kartı) ── */
+.sb-kind-chooser {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.sb-kind-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 22px 20px;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.sb-kind-card svg {
+  color: var(--accent);
+}
+
+.sb-kind-card:hover,
+.sb-kind-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.sb-kind-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sb-kind-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sb-campaign-fields,
+.sb-offer-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sb-campaign-fields fieldset,
+.sb-offer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.sb-campaign-fields legend,
+.sb-offer-panel legend {
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sb-campaign-fields fieldset label,
+.sb-offer-panel > label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sb-offer-panel {
+  margin-bottom: 8px;
+}
+
+.sb-offer-fields label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sb-offer-fields .sb-muted {
+  font-size: 12.5px;
+  margin: 0 0 4px;
+}
+
+.sb-chip-offer {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.sb-idea-rationale {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sb-image-prompt {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Satırlar .sb-content-details ızgarasına katılır (dt/dd sarmalayıcısı düzeni bozmasın) */
+.sb-overlay-row {
+  display: contents;
+}

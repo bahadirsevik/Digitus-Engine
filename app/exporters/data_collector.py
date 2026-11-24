@@ -15,6 +15,7 @@ from app.compliance.publish_review import (
 )
 from app.core import markets
 from app.generators.claim_review import social_warning_display
+from app.exporters.social_format import campaign_offer_text, overlay_text_block
 from app.schemas.export import (
     AdSetWarningData,
     ExportSectionEnum, FullReport, SummaryData, ScoringData,
@@ -936,6 +937,9 @@ class ExportDataCollector:
                 duration_status=c.duration_status,
                 validation_warnings=social_warning_display(c.validation_warnings),
                 format_payload=c.format_payload,
+                offer_text=campaign_offer_text(c.campaign_payload) or None,
+                image_prompt=c.image_prompt,
+                overlay_text=overlay_text_block(c.overlay_text, c.campaign_payload) or None,
             )
             content_data.append(item)
 

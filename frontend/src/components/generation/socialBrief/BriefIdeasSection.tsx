@@ -15,6 +15,8 @@ import {
 } from './idempotency'
 import {
   ATTEMPT_STATUS_LABEL,
+  CTA_TYPE_LABEL,
+  OFFER_TYPE_LABEL,
   isActiveStatus,
   isStaleError,
   reasonText,
@@ -568,7 +570,25 @@ export default function BriefIdeasSection({
                             <span className="sb-chip sb-chip-sm">
                               Trend uyumu %{Math.round(idea.trend_alignment * 100)}
                             </span>
+                            {idea.campaign_payload && (
+                              <>
+                                <span className="sb-chip sb-chip-sm sb-chip-offer">
+                                  {OFFER_TYPE_LABEL[idea.campaign_payload.offer_type] ??
+                                    idea.campaign_payload.offer_type}
+                                </span>
+                                <span className="sb-chip sb-chip-sm">
+                                  CTA:{' '}
+                                  {CTA_TYPE_LABEL[idea.campaign_payload.cta_type] ??
+                                    idea.campaign_payload.cta_type}
+                                </span>
+                              </>
+                            )}
                           </span>
+                          {idea.campaign_payload && (
+                            <span className="sb-idea-rationale">
+                              Neden bu teklif: {idea.campaign_payload.offer_rationale}
+                            </span>
+                          )}
                         </label>
                         {hasContent && (
                           <button

@@ -1017,6 +1017,7 @@ def persist_social_ideas(
             target_platform=idea.target_platform,
             content_format=idea.content_format,
             trend_alignment=ta,
+            campaign_payload=idea.campaign_payload,
             is_stale=False,
             is_selected=False,
             regeneration_count=0,

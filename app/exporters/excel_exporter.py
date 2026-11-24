@@ -507,6 +507,10 @@ class ExcelExporter(BaseExporter):
                    'Hashtagler', 'Sektör Paylaşım Önerisi', 'Platform Notları',
                    'İstenen Süre', 'Gerçek Süre', 'Süre Durumu', 'Uyarılar',
                    'Format Detayı']
+        # Kampanya kolonları yalnız kampanya içeriği varsa: organik çıktı aynı kalır
+        has_campaign = any(c.offer_text or c.image_prompt for c in social.contents)
+        if has_campaign:
+            headers += ['Teklif', "Görsel Prompt'u", 'Görsel Üstü Metin']
         ws.append(headers)
         self._style_header(ws, 1, len(headers))
 
@@ -535,8 +539,11 @@ class ExcelExporter(BaseExporter):
                     _sx(duration_status_text(c.duration_status)),
                     _sx('; '.join(c.validation_warnings) if c.validation_warnings else ''),
                     _sx(format_payload_text(c.format_payload)),
-                ])
+                ] + ([_sx(c.offer_text or ''), _sx(c.image_prompt or ''), _sx(c.overlay_text or '')]
+                     if has_campaign else []))
 
         widths = [30, 35, 14, 12, 20, 55, 70, 70, 40, 40, 30, 45, 40, 40, 16, 14, 16, 40, 55]
+        if has_campaign:
+            widths += [45, 70, 45]
         for i, width in enumerate(widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = width

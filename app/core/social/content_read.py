@@ -143,7 +143,7 @@ class SocialContentReadWarning:
                     error_code=CONTENT_READ_INCONSISTENT,
                     field="claims",
                 )
-        if self.reason_code != "content_rejected" and len(self.claims) != 0:
+        if self.reason_code not in ("content_rejected", "offer_mismatch") and len(self.claims) != 0:
             raise SocialContentReadError(
                 "content_rejected dışındaki uyarılar için claims boş tuple olmalıdır.",
                 error_code=CONTENT_READ_INCONSISTENT,
@@ -272,7 +272,7 @@ def _parse_and_validate_warnings(
                     error_code=CONTENT_READ_INCONSISTENT,
                     field="claims",
                 )
-        if rc != "content_rejected" and len(claims_raw) != 0:
+        if rc not in ("content_rejected", "offer_mismatch") and len(claims_raw) != 0:
             raise SocialContentReadError(
                 "content_rejected dışındaki uyarılar için claims boş olmalıdır.",
                 error_code=CONTENT_READ_INCONSISTENT,

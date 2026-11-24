@@ -297,6 +297,10 @@ class CsvExporter(BaseExporter):
         headers = ['Brief', 'Fikir', 'Platform', 'Format', 'Ana Kelime', 'Hook 1',
                     'Caption', 'Hashtagler', 'CTA', 'İstenen Süre', 'Gerçek Süre',
                     'Süre Durumu', 'Uyarılar', 'Format Detayı']
+        # Kampanya kolonları yalnız kampanya içeriği varsa: organik çıktı aynı kalır
+        has_campaign = any(c.offer_text or c.image_prompt for c in social.contents)
+        if has_campaign:
+            headers += ['Teklif', "Görsel Prompt'u", 'Görsel Üstü Metin']
         rows = []
         for g in social.brief_groups:
             for c in g.contents:
@@ -314,7 +318,8 @@ class CsvExporter(BaseExporter):
                     duration_status_text(c.duration_status),
                     '; '.join(c.validation_warnings) if c.validation_warnings else '',
                     format_payload_text(c.format_payload),
-                ])
+                ] + ([c.offer_text or '', c.image_prompt or '', c.overlay_text or '']
+                     if has_campaign else []))
         files.append(self._write_csv(filepath, headers, rows))
 
         return files

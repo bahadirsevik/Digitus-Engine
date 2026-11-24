@@ -129,6 +129,28 @@ describe('Geçmiş Sosyal İçerikler (workspace geneli)', () => {
     expect(within(region).queryByText('Daha fazla göster')).not.toBeInTheDocument()
   })
 
+  it('kampanya içeriği açılınca görsel prompt’u ve teklif özetini gösterir', async () => {
+    mocks.getContentHistory.mockResolvedValue({
+      data: historyPage([
+        historyItem(9, {
+          idea_title: 'Kampanya içeriği',
+          image_prompt: 'Two products on marble. Aspect ratio 4:5.',
+          campaign_payload: {
+            offer_terms: { type: 'none' },
+            cta_type: 'message',
+            usage: 'paid',
+          },
+        }),
+      ]),
+    })
+    render(<SocialPanel runId={RUN_ID} pool={POOL} />)
+    const region = await openHistory()
+    fireEvent.click(await within(region).findByRole('button', { name: /Kampanya içeriği/ }))
+    const card = within(region).getByRole('article', { name: 'Kampanya içeriği' })
+    expect(within(card).getByText(/Two products on marble/)).toBeInTheDocument()
+    expect(within(card).getByText('Teklifsiz içerik')).toBeInTheDocument()
+  })
+
   it('uzun veya başlıksız içerikleri kısa başlıkla listeler; metni yalnız açılınca gösterir', async () => {
     const longTitle = 'Uzun sosyal içerik başlığı '.repeat(6)
     mocks.getContentHistory.mockResolvedValue({
