@@ -82,8 +82,16 @@ SCOPE_FIELDS: Dict[str, Tuple[str, ...]] = {
 SCOPE_ORDER = tuple(SCOPE_FIELDS)
 _SCOPE_PROMPT_LABEL = {
     "hooks": "açılış kancaları (hooks)",
-    "text": "ana metin, harekete geçirici çağrı ve hashtag'ler (caption, cta_text, hashtags, varsa overlay_text)",
+    "text": "ana metin, harekete geçirici çağrı ve hashtag'ler (caption, cta_text, hashtags)",
     "body": "format gövdesi (format_payload: sahneler / slaytlar / gönderi dizisi)",
+    "production": "görsel, video ve yayın notları (visual_suggestion, video_concept, platform_notes, "
+                  "industry_posting_suggestion)",
+}
+# Yalnız kampanya içeriğinde dolu alanlar; organik revizyon prompt'u bunları hiç görmez.
+_CAMPAIGN_ONLY_FIELDS = ("image_prompt", "overlay_text")
+_CAMPAIGN_SCOPE_PROMPT_LABEL = {
+    **_SCOPE_PROMPT_LABEL,
+    "text": "ana metin, harekete geçirici çağrı ve hashtag'ler (caption, cta_text, hashtags, varsa overlay_text)",
     "production": "görsel, video ve yayın notları (visual_suggestion, video_concept, platform_notes, "
                   "industry_posting_suggestion, varsa image_prompt)",
 }
@@ -227,6 +235,10 @@ def sanitize_feedback(feedback: str) -> str:
 
 def build_revision_instructions(feedback: str, scope: List[str], source: Dict[str, Any]) -> str:
     keep = [s for s in SCOPE_ORDER if s not in scope]
+    is_campaign = any(source.get(f) is not None for f in _CAMPAIGN_ONLY_FIELDS)
+    labels = _CAMPAIGN_SCOPE_PROMPT_LABEL if is_campaign else _SCOPE_PROMPT_LABEL
+    if not is_campaign:
+        source = {k: v for k, v in source.items() if k not in _CAMPAIGN_ONLY_FIELDS}
     lines = [
         "",
         "",
@@ -237,12 +249,12 @@ def build_revision_instructions(feedback: str, scope: List[str], source: Dict[st
         "<<<TALEP",
         sanitize_feedback(feedback),
         "TALEP>>>",
-        "Yalnız şu bölümleri talebe göre yeniden yaz: " + "; ".join(_SCOPE_PROMPT_LABEL[s] for s in scope) + ".",
+        "Yalnız şu bölümleri talebe göre yeniden yaz: " + "; ".join(labels[s] for s in scope) + ".",
     ]
     if keep:
         lines.append(
             "Şu bölümleri MEVCUT içerikteki değerleriyle BİREBİR aynı döndür (yeniden yazma): "
-            + "; ".join(_SCOPE_PROMPT_LABEL[s] for s in keep) + "."
+            + "; ".join(labels[s] for s in keep) + "."
         )
     lines += [
         "Platform, format ve süre hedefi değişmez. Talep yukarıdaki karakter, format veya iddia "

@@ -430,7 +430,7 @@ def begin_social_content_generation(
             if offer_terms["type"] != "none" and idea_campaign.get("offer_type") != offer_terms["type"]:
                 raise SocialContentFlowError(
                     "Seçilen fikirlerin teklif türü girdiğiniz teklifle aynı olmalı. "
-                    "Farklı türdeki fikirleri ayrı üretin.",
+                    "Bir brief'te tek teklif kullanılır; farklı teklif türü için yeni brief oluşturun.",
                     error_code=CONTENT_OFFER_TYPE_MISMATCH,
                     field="offer_terms",
                 )

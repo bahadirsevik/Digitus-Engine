@@ -196,6 +196,8 @@ def test_full_flow_scope_preview_accept_and_export_identity(
     prompt = ai.prompts[0]
     assert "Kancaları daha merak uyandırıcı yap" in prompt and SOURCE_CAPTION in prompt
     assert "BİREBİR aynı döndür" in prompt
+    # organik içerik: kampanya alanları prompt'a hiç girmez
+    assert "image_prompt" not in prompt and "overlay_text" not in prompt
 
     [item] = _list(client, ws, brief)
     assert item["status"] == "ready" and item["changes"] == ["hooks"]
